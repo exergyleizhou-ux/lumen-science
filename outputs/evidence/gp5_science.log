@@ -1,0 +1,11 @@
+Running `env -u <provider credentials> cargo test -p xai-grok-science`
+
+running 61 tests
+test connectors::chembl::tests::live_probe_chembl_real_search ... ignored, live network probe against ChEMBL; run explicitly
+test connectors::pubmed::tests::live_probe_pubmed_real_search ... ignored, live network probe against NCBI; run explicitly
+... 59 non-live tests passed ...
+
+test result: ok. 59 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 4.97s
+
+Doc-tests xai_grok_science
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out

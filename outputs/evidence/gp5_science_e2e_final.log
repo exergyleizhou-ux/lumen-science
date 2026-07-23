@@ -1,0 +1,39 @@
+   Compiling xai-grok-tools-api v0.1.222 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-tools-api)
+   Compiling xai-grok-science v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-science)
+   Compiling xai-tool-runtime v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/common/xai-tool-runtime)
+   Compiling xai-computer-hub-core v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/common/xai-computer-hub-core)
+   Compiling xai-computer-hub-sdk v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/common/xai-computer-hub-sdk)
+   Compiling xai-grok-tools v0.1.222 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-tools)
+   Compiling xai-computer-hub-mcp-adapter v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/common/xai-computer-hub-mcp-adapter)
+   Compiling xai-grok-workspace-client v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-workspace-client)
+   Compiling xai-grok-sampling-types v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-sampling-types)
+   Compiling xai-grok-announcements v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-announcements)
+   Compiling xai-grok-hooks v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-hooks)
+   Compiling xai-grok-sampler v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-sampler)
+   Compiling xai-grok-agent v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-agent)
+   Compiling xai-chat-state v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-chat-state)
+   Compiling xai-grok-subagent-resolution v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-subagent-resolution)
+   Compiling xai-grok-telemetry v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-telemetry)
+   Compiling xai-grok-plugin-marketplace v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-plugin-marketplace)
+   Compiling xai-grok-mcp v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-mcp)
+   Compiling xai-grok-config-types v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-config-types)
+   Compiling xai-grok-workspace v0.1.222 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-workspace)
+   Compiling xai-grok-shared v0.0.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-shared)
+   Compiling xai-grok-shell-base v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-shell-base)
+   Compiling xai-grok-http v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-http)
+   Compiling xai-grok-memory v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-memory)
+   Compiling xai-grok-shell-session-support v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-shell-session-support)
+   Compiling xai-grok-shell v0.1.222 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-shell)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 38s
+     Running tests/test_built_binary_e2e.rs (target/debug/deps/test_built_binary_e2e-430ab8533e53ec68)
+
+running 7 tests
+test test_stdio_science_csv_timeout_product_path ... ok
+test test_stdio_science_csv_deny_product_path ... ok
+test test_stdio_science_ssh_timeout_cancel_product_path ... ok
+test test_stdio_science_csv_allow_product_path ... ok
+test test_stdio_science_ssh_put_get_product_path ... ok
+test test_stdio_science_connector_fetch_product_path ... ok
+test test_stdio_science_import_csv_fasta_product_path ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 27 filtered out; finished in 8.89s

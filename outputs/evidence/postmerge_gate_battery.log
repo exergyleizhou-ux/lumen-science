@@ -1,0 +1,34 @@
+=== G1 cargo test -p xai-grok-science ===
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+=== G2 cargo test -p xai-grok-shell --lib ===
+
+test result: FAILED. 5670 passed; 4 failed; 13 ignored; 0 measured; 0 filtered out; finished in 635.76s
+
+error: test failed, to rerun pass `-p xai-grok-shell --lib`
+=== G3 clippy science ===
+    Checking reqwest v0.12.24
+    Checking xai-grok-science v0.1.0 (/Users/lei/code/lumen/agent/crates/codegen/xai-grok-science)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 9m 17s
+=== G4 build pager-bin ===
+   Compiling xai-grok-pager-minimal v0.1.0 (/Users/lei/code/lumen/agent/crates/codegen/xai-grok-pager-minimal)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 23m 05s
+=== G5 e2e science ===
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5m 41s
+     Running tests/test_built_binary_e2e.rs (target/debug/deps/test_built_binary_e2e-430ab8533e53ec68)
+
+running 7 tests
+test test_stdio_science_csv_timeout_product_path ... ok
+test test_stdio_science_csv_deny_product_path ... ok
+test test_stdio_science_ssh_timeout_cancel_product_path ... ok
+test test_stdio_science_ssh_put_get_product_path ... ok
+test test_stdio_science_csv_allow_product_path ... ok
+test test_stdio_science_import_csv_fasta_product_path ... ok
+test test_stdio_science_connector_fetch_product_path ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 27 filtered out; finished in 8.52s
+
+=== GATE DONE ===

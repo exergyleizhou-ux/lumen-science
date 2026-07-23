@@ -1,0 +1,71 @@
+   Compiling xai-grok-science v0.1.0 (/Users/lei/code/lumen/.worktrees/science-kernel/agent/crates/codegen/xai-grok-science)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.20s
+     Running unittests src/lib.rs (target/debug/deps/xai_grok_science-e0b7a9639ffc4671)
+
+running 58 tests
+test connector::tests::egress_and_malformed_targets_fail_closed ... ok
+test connector::tests::durable_audit_is_redacted_and_stable ... ok
+test connector::tests::exact_project_owner_host_key_and_timeout_are_required ... ok
+test api::tests::token_file_is_0600_and_removed_on_drop ... ok
+test connector::tests::denied_admission_creates_no_pending_permission ... ok
+test connectors::chembl::tests::parse_search_fails_closed_on_malformed ... ok
+test connectors::chembl::tests::parse_search_reads_records_and_total ... ok
+test connectors::chembl::tests::search_path_encodes_terms_and_paginates ... ok
+test connector::tests::admission_is_durable_redacted_and_never_executes_a_transport ... ok
+test connectors::fetch::tests::exchange_count_is_enforced_per_protocol ... ok
+test connector::tests::permission_decision_is_replayable_and_allow_starts_no_transport ... ok
+test connector::tests::denied_permission_closes_run_without_transport_ticket ... ok
+test connectors::pubmed::tests::esearch_path_encodes_terms_and_paginates ... ok
+test connectors::pubmed::tests::live_probe_pubmed_real_search ... ignored, live network probe against NCBI; run explicitly
+test connectors::pubmed::tests::parse_esearch_fails_closed_on_server_error_and_malformed ... ok
+test connectors::pubmed::tests::parse_esearch_reads_count_and_ids ... ok
+test connectors::pubmed::tests::parse_esummary_fails_closed_on_missing_record ... ok
+test connectors::pubmed::tests::parse_esummary_reads_records_in_uid_order ... ok
+test connectors::tests::audit_record_is_redacted_and_stable ... ok
+test connectors::tests::descriptor_validation_rejects_http_and_bad_paths ... ok
+test connectors::tests::every_registered_descriptor_passes_validation ... ok
+test connectors::tests::registry_contains_first_batch_in_stable_order ... ok
+test connectors::tests::unknown_connector_and_bad_paths_fail_closed ... ok
+test connectors::tests::validate_request_builds_bounded_request ... ok
+test connector::tests::restart_interrupts_approved_ticket_and_prevents_transport_resume ... ok
+test api::tests::all_read_surfaces_require_auth_and_owner ... ok
+test api::tests::query_token_host_origin_and_traversal_are_rejected ... ok
+test api::tests::real_loopback_listener_holds_and_cleans_token ... ok
+test connectors::fetch::tests::malformed_response_fails_run_closed ... ok
+test preview::tests::csv_stats_and_ragged_detection ... ok
+test preview::tests::fasta_malformed_fails_closed ... ok
+test preview::tests::fasta_stats_and_warnings ... ok
+test preview::tests::json_must_parse_to_be_json ... ok
+test preview::tests::non_utf8_is_binary_not_text ... ok
+test preview::tests::oversized_content_is_rejected ... ok
+test preview::tests::sniffs_png_by_magic_not_name ... ok
+test preview::tests::svg_detected_as_image ... ok
+test preview::tests::tsv_is_distinguished_from_csv ... ok
+test preview::tests::utf8_boundary_multibyte_text ... ok
+test connectors::fetch::tests::chembl_fetch_single_exchange ... ok
+test import::tests::import_without_allowance_is_rejected ... ok
+test tests::approval_is_owner_scoped_terminal_and_idempotent ... ok
+test csv::tests::fixture_is_deterministic_across_reopen ... ok
+test connectors::fetch::tests::pubmed_fetch_records_citation_evidence_and_replays ... ok
+test import::tests::csv_import_records_preview_evidence_and_replays ... ok
+test import::tests::malformed_content_fails_run_closed_without_artifact ... ok
+test import::tests::fasta_import_records_sequence_stats ... ok
+test transport::tests::operation_binding_is_direction_and_path_sensitive ... ok
+test transport::tests::remote_path_rejects_option_and_control_injection ... ok
+test api::tests::artifact_preview_requires_auth_owner_and_registered_record ... ok
+test tests::corrupt_event_store_fails_closed ... ok
+test tests::traversal_and_cross_run_reads_are_rejected ... ok
+test tests::registered_symlink_artifact_is_rejected_on_read ... ok
+test tests::restart_replay_is_stable_and_pending_becomes_interrupted ... ok
+test connector::tests::offline_transport_is_redacted_and_has_explicit_terminal_outcomes ... ok
+test tests::explicit_denied_timeout_and_cancel_terminal_states ... ok
+test tests::concurrent_projects_do_not_cross ... ok
+test tests::concurrent_appends_to_one_run_have_unique_monotonic_sequences ... ok
+
+test result: ok. 57 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 4.60s
+
+   Doc-tests xai_grok_science
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
