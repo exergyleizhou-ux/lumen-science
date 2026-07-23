@@ -1,0 +1,1 @@
+Fix `Fetch` in package `fetcher`: the HTTP client must have a timeout set (e.g. 5s via http.Client{Timeout: ...}). Currently it has no timeout and could hang forever. Do not modify the test.

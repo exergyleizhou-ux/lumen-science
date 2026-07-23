@@ -1,0 +1,1 @@
+strutil.Reverse is unimplemented (returns its input unchanged), so TestReverse and TestReverseUnicode fail. Implement Reverse to reverse a string by runes (so multi-byte characters are preserved, not corrupted). Do not modify the tests.

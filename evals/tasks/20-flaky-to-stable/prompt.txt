@@ -1,0 +1,1 @@
+The Ticker in ticker/tick.go never delivers ticks on C (broken producer). Fix NewTicker to use the standard library time.NewTicker and forward ticks until Stop, so TestTickerFires is deterministic. Do not modify the tests.

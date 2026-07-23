@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lumen Science · 绿洲 Oasis</title><!-- -->
+  <link rel="stylesheet" href="assets/fonts.css" />
+  <link rel="stylesheet" href="assets/app.css?v=14" />
+</head>
+<body>
+  <div class="shell" id="shell">
+    <header class="top" data-drag>
+      <b class="brand-title" style="font-size:16px;font-weight:700;flex-shrink:0">Lumen</b>
+      <span style="color:#8c8478;font-size:12px;flex-shrink:0">Science · 绿洲桥接</span>
+      <span style="flex:1;min-width:4px"></span>
+      <a class="btn-ghost" href="/lumen-lab/" id="labLink">实验室 <span id="labDot" style="font-size:10px">·</span></a>
+      <button class="btn-ghost" id="quitBtn" type="button">退出</button>
+    </header>
+
+    <main class="panel-main">
+      <div class="page-hd reveal">
+        <p class="kicker">对标 Claude Science · CSSwitch 0.4 行为 · 绿洲官方</p>
+        <h1 class="display-sm">科研运行时<br />第三方模型桥接</h1>
+        <p class="lede">协议与模型策略对齐 <a href="https://github.com/SuperJJ007/CSSwitch" target="_blank" rel="noopener">CSSwitch 0.4</a>。绿洲网页请点顶栏 <a href="/lumen-lab/">实验室</a> 做科研对话；本机 Mac 安装 Claude Science 桌面版后才可「一键开始」沙箱。</p>
+      </div>
+
+      <div class="telemetry reveal" id="telemetry" aria-live="polite">
+        <span class="stat"><span class="stat-k">线路</span><b id="telProvider">—</b></span>
+        <span class="stat mono"><span class="stat-k">代理</span><b id="telProxy">:—</b></span>
+        <span class="stat mono"><span class="stat-k">沙箱</span><b id="telSandbox">:—</b></span>
+        <span class="stat"><span class="stat-k">模式</span><b id="telMode">—</b></span>
+        <span class="stat mono"><span class="stat-k">对标</span><b id="telParity">CS 0.4</b></span>
+        <span class="stat mono"><span class="stat-k">运行</span><b id="telUptime">00:00:00</b></span>
+      </div>
+
+      <nav class="tabs" role="tablist" aria-label="运行模式">
+        <button class="tab active" data-mode="proxy" type="button" role="tab">第三方模型</button>
+        <button class="tab" data-mode="official" type="button" role="tab">官方 Claude</button>
+        <button class="tab" data-mode="lab" type="button" role="tab" id="labTab">实验室</button>
+      </nav>
+
+      <p class="alert info official-only">官方模式直连你的 Claude Science 订阅，Lumen 不托管官方登录。</p>
+
+      <!-- Lab iframe container -->
+      <div id="labContainer" style="display:none; position:absolute; top:48px; left:0; right:0; bottom:0; z-index:10;">
+        <iframe id="labFrame" src="about:blank" style="width:100%;height:100%;border:none;"
+          title="Lumen Science 实验室" allow="clipboard-read; clipboard-write"></iframe>
+      </div>
+
+      <div class="settings-grid" id="bridgeContent">
+        <div class="controls-grid">
+          <section class="card tp-only reveal" id="profilesCard">
+            <p class="card-kicker">profiles · 对标 CSSwitch 0.4</p>
+            <div id="profileList" class="profile-list" role="list"></div>
+            <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:6px;">
+              <button class="btn secondary compact" id="addProfileBtn" type="button">＋ 新建配置</button>
+            </div>
+            <label class="field" style="margin-top:10px;">
+              <span class="field-label">模板来源</span>
+              <select id="templateSelect"></select>
+            </label>
+            <select id="profileSelect" hidden aria-hidden="true"></select>
+            <p class="field-hint" id="profileHint" style="font-size:12px;color:#5f5f68;margin:8px 0 0;">多配置管理：设为当前前自动探测上游</p>
+          </section>
+
+          <section class="card tp-only reveal">
+            <p class="card-kicker">route</p>
+            <label class="field">
+              <span class="field-label">模型线路（兼容）</span>
+              <select id="provider"></select>
+            </label>
+          </section>
+
+          <section class="card tp-only reveal">
+            <p class="card-kicker">auth</p>
+            <label class="field">
+              <span class="field-label" id="keyLabel" style="font-size:11px;opacity:.7">API Key</span>
+              <div class="row">
+                <input id="keyInput" type="password" placeholder="粘贴 key，仅存本地" autocomplete="off" />
+                <button class="btn secondary" id="saveKeyBtn" type="button">保存</button>
+                <button class="btn primary compact" id="verifyKeyBtn" type="button">验证</button>
+              </div>
+            </label>
+            <label class="field" id="baseUrlRow" hidden style="margin-top:10px;">
+              <span class="field-label">地址 base_url</span>
+              <input id="baseUrlInput" type="url" placeholder="https://…" spellcheck="false" />
+              <p class="field-hint" id="baseUrlHint" style="font-size:12px;color:#5f5f68;margin:6px 0 0;"></p>
+            </label>
+            <label class="field" id="relayModelRow" hidden style="margin-top:10px;">
+              <span class="field-label">中转模型</span>
+              <div class="row" style="flex-wrap:wrap;gap:6px;">
+                <select id="relayModelSelect" style="flex:1;min-width:160px;"></select>
+                <button class="btn ghost compact" id="fetchRelayModelsBtn" type="button">拉取模型</button>
+              </div>
+            </label>
+          </section>
+        </div>
+
+        <details class="card tp-only reveal" open>
+          <summary>高级设置</summary>
+          <div class="grid2">
+            <label class="field"><span class="field-label">代理端口</span><input id="proxyPort" inputmode="numeric" /></label>
+            <label class="field"><span class="field-label">沙箱端口</span><input id="sandboxPort" inputmode="numeric" /></label>
+          </div>
+          <label class="chk"><input type="checkbox" id="cacheBoost" checked /> DeepSeek 缓存增强</label>
+          <label class="field" style="margin-top:10px;">
+            <span class="field-label">DSML 工具兜底</span>
+            <select id="tooluseShim">
+              <option value="off">off（默认，零回归）</option>
+              <option value="detect">detect（遥测）</option>
+              <option value="rewrite">rewrite（修复泄漏）</option>
+            </select>
+          </label>
+        </details>
+
+        <section class="card reveal">
+          <button class="btn primary hero" id="heroBtn" type="button">
+            <span class="hero-label">一键开始</span>
+            <span aria-hidden="true">→</span>
+          </button>
+          <button class="btn secondary wide" id="stopBtn" type="button">全部停止</button>
+        </section>
+      </div>
+
+      <section class="card runtime-card tp-only reveal">
+        <div class="runtime-hd">
+          <div>
+            <p class="card-kicker forest">runtime · 运行状态</p>
+            <span class="live-pill" id="connDot" title="实时连接">实时</span>
+          </div>
+          <span class="orb" id="brandDot" aria-hidden="true"></span>
+        </div>
+
+        <div class="flow-stack">
+          <div class="flow-row" id="stProxy">
+            <div class="flow-icon">⇄</div>
+            <div class="flow-body">
+              <p class="flow-mono" id="flowProxy">PROXY · :18991</p>
+              <p class="flow-sub">Anthropic 协议代理</p>
+            </div>
+            <span class="badge" id="badgeProxy">待机</span>
+          </div>
+
+          <div class="flow-sandbox" id="stSandbox">
+            <p class="sandbox-kicker">沙箱 · 数据不出域</p>
+            <div class="flow-row inner" id="stSandboxInner">
+              <div class="flow-icon">⬡</div>
+              <div class="flow-body">
+                <p class="flow-mono" id="flowSandbox">SANDBOX · :8990</p>
+                <p class="flow-sub">隔离 Claude Science 实例</p>
+              </div>
+              <span class="badge" id="badgeSandbox">待机</span>
+            </div>
+          </div>
+
+          <div class="flow-row" id="stUpstream">
+            <div class="flow-icon">◎</div>
+            <div class="flow-body">
+              <p class="flow-mono">UPSTREAM · API</p>
+              <p class="flow-sub">模型线路可达性</p>
+            </div>
+            <span class="badge" id="badgeUpstream">待机</span>
+          </div>
+        </div>
+
+        <a class="flow-cert" id="urlBar" href="#" target="_blank" rel="noopener" hidden>
+          <div>
+            <p class="cert-id url-text">—</p>
+            <p class="cert-sub">打开沙箱 Science 会话</p>
+          </div>
+          <span class="cert-arrow" aria-hidden="true">→</span>
+        </a>
+
+        <div class="cache-wrap" id="cacheBar" hidden>
+          <div class="cache"><div class="cache-fill" id="cacheFill"></div></div>
+          <p class="cache-txt" id="cacheTxt">缓存 0%</p>
+        </div>
+
+        <p class="msg" id="msg">就绪，随时可以启动</p>
+      </section>
+
+      <!-- Oasis marketplace auth (PR-5: postMessage token bridge) -->
+      <section class="card oasis-auth-card reveal" id="oasisAuthCard">
+        <p class="card-kicker forest">绿洲数据 · 自有 MCP</p>
+        <h3 style="margin:0 0 8px;font-size:15px;">科研工作台数据集接入</h3>
+        <p style="margin:0 0 12px;font-size:13px;color:#5f5f68;">自有 MCP 舰队：PubMed · ChEMBL · GEO · 绿洲 · C2D。匿名可搜文献/化合物/表达数据/已验证数据集；预览样本与 C2D 算法需登录绿洲。</p>
+        <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap;">
+          <span class="badge" id="oasisAuthBadge">未连接</span>
+          <span class="mono" id="oasisTokenMasked" style="font-size:12px;color:#5f5f68;">—</span>
+        </div>
+        <ul id="nativeFleetList" class="fleet-list" style="margin:12px 0 0;padding:0;list-style:none;font-size:12px;color:#5f5f68;">加载舰队状态…</ul>
+        <div class="row" style="margin-top:12px;">
+          <button class="btn primary compact" id="oasisLoginBtn" type="button">连接绿洲账号</button>
+          <button class="btn secondary compact" id="oasisDisconnectBtn" type="button" hidden>断开</button>
+          <button class="btn ghost compact" id="oasisNativeVerifyBtn" type="button">验证 MCP</button>
+          <button class="btn secondary compact" id="oasisBriefBtn" type="button">生成简报</button>
+        </div>
+        <label class="field" style="margin-top:12px;">
+          <span class="field-label">课题关键词</span>
+          <input id="oasisBriefTopic" type="text" placeholder="例：EGFR 抑制剂临床前证据" />
+        </label>
+        <label class="field" style="margin-top:8px;">
+          <span class="field-label">数据集 ID（登录后预览 / C2D 算法）</span>
+          <input id="oasisDatasetId" type="text" placeholder="例：ds_xxx" />
+        </label>
+        <div class="row" style="margin-top:8px;">
+          <button class="btn ghost compact" id="oasisProbeBtn" type="button">预览样本</button>
+          <button class="btn ghost compact" id="oasisC2DAlgoBtn" type="button">C2D 算法列表</button>
+        </div>
+      </section>
+
+      <!-- Oasis Integration (added for demo.oasisdata2026.xyz) -->
+      <section class="card oasis-card reveal">
+        <p class="card-kicker forest">Oasis 集成</p>
+        <h3 style="margin:0 0 8px;font-size:15px;">将 Science 桥接发布为可信 C2D Agent</h3>
+        <p style="margin:0 0 12px;font-size:13px;color:#5f5f68;">把代理+沙箱+第三方模型能力打包成经审核的算法镜像，直接上架绿洲市场。买家可在沙箱内用 Claude 体验 + DeepSeek 等模型对私有数据做“可用不可见”分析，只产出带 VO 存证的结果。</p>
+        <div class="row">
+          <button class="btn primary" id="oasisPublishBtn" type="button">发布到绿洲市场</button>
+          <button class="btn secondary" id="oasisResearchBtn" type="button">查看科研资源包</button>
+          <a class="btn ghost" href="https://demo.oasisdata2026.xyz/c2d" target="_blank" rel="noopener">浏览 C2D 货架 →</a>
+        </div>
+        <p style="margin:8px 0 0;font-size:12px;color:#5f5f68;">示例证书风格：<code>VO-XXXXXXXXXXXX</code> · 绑定镜像 digest + 数据集指纹</p>
+      </section>
+    </main>
+
+    <footer class="site-foot">
+      <div class="foot-brand">
+        <p class="foot-title">Lumen Science</p>
+        <p class="foot-zh">科研运行时</p>
+        <p class="foot-slogan">Research runtime, locally verified.</p>
+        <p class="foot-slogan-zh">科研沙箱本地运行，配置仅存本机。</p>
+      </div>
+      <nav class="foot-nav">
+        <button class="foot-link" id="openBrowserBtn" type="button">打开 Science</button>
+        <button class="foot-link" id="doctorBtn" type="button">自检</button>
+        <button class="foot-link" id="logsBtn" type="button">日志</button>
+        <button class="foot-link" id="researchBtn" type="button">科研资源</button>
+        <button class="foot-link" id="updateBtn" type="button">更新</button>
+        <button class="foot-link" id="reportBtn" type="button">反馈</button>
+        <button class="foot-link" id="oasisPublishFootBtn" type="button">发布绿洲</button>
+        <button class="foot-link" id="oasisResearchFootBtn" type="button">C2D 货架</button>
+      </nav>
+      <p class="foot-rule">science bridge · lumen · 全程本地</p>
+    </footer>
+
+    <dialog id="modal">
+      <div class="modal-hd">
+        <span id="modalTitle">日志</span>
+        <div class="modal-tabs" id="modalTabs" hidden>
+          <button type="button" data-log="proxy" class="tab active">代理</button>
+          <button type="button" data-log="sandbox" class="tab">沙箱</button>
+        </div>
+        <button class="modal-close" id="modalClose" type="button" aria-label="关闭">✕</button>
+      </div>
+      <pre id="modalBody"></pre>
+    </dialog>
+  </div>
+  <script src="assets/app.js?v=14" defer></script>
+</body>
+</html>

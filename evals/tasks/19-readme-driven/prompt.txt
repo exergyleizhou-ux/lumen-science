@@ -1,0 +1,1 @@
+Read `workspace/README.md`. It specifies a small Go `greeter` package API. Implement the package in `greeter/greeter.go` to match the spec exactly. Tests are already written. Do not modify the tests or the README.

@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "codex/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # Do not cancel in-progress runs: rapid successive pushes/re-runs were
+  # starving the queue and never finishing when runners are scarce.
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  expert-gate:
+    name: Expert v2 gate (check + focused tests)
+    # ubuntu-latest has broader runner pool than a fixed 24.04 label.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
+      - name: Install protoc
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y protobuf-compiler
+          protoc --version
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            agent/target
+          key: ${{ runner.os }}-cargo-expert-${{ hashFiles('agent/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-expert-
+
+      - name: cargo check xai-grok-shell
+        working-directory: agent
+        run: cargo check -p xai-grok-shell
+
+      - name: Expert unit gate
+        working-directory: agent
+        run: |
+          set -euo pipefail
+          cargo test -p xai-grok-shell --lib expert_consultant_tools -- --test-threads=1
+          cargo test -p xai-grok-shell --lib expert_model_restore -- --test-threads=1
+          cargo test -p xai-grok-shell --lib zero_http -- --test-threads=1
+          cargo test -p xai-grok-shell --lib dual_two -- --test-threads=1
+          cargo test -p xai-grok-shell --lib session::expert:: -- --test-threads=1

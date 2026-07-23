@@ -1,0 +1,130 @@
+name: Build Windows Team Package
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/windows-team-build.yml"
+      - "agent/**"
+      - "VERSION"
+
+concurrency:
+  group: windows-team-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-amd64:
+    name: Windows 11 x64 build and smoke test
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install protoc
+        shell: pwsh
+        run: |
+          choco install protoc --no-progress -y
+          $protoc = (Get-Command protoc -ErrorAction Stop).Source
+          "PROTOC=$protoc" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & $protoc --version
+
+      - name: Cache Cargo inputs and Windows build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            agent/target
+          key: windows-amd64-release-${{ hashFiles('agent/Cargo.lock') }}
+          restore-keys: |
+            windows-amd64-release-
+
+      - name: Build release binary
+        working-directory: agent
+        shell: pwsh
+        env:
+          CARGO_BUILD_JOBS: "4"
+          # MSVC creates a PDB for debug information.  The monolithic CLI
+          # exceeds the PDB public-symbol limit, while this distributable does
+          # not ship a matching symbol bundle.  Force a symbol-free release
+          # specifically for the Windows team package.
+          CARGO_PROFILE_RELEASE_DEBUG: "0"
+          CARGO_PROFILE_RELEASE_STRIP: "symbols"
+        run: |
+          cargo build --locked --release `
+            --package xai-grok-pager-bin `
+            --features release-dist `
+            --target x86_64-pc-windows-msvc
+
+      - name: Smoke test native Windows binary
+        shell: pwsh
+        run: |
+          $binary = "agent/target/x86_64-pc-windows-msvc/release/lumen.exe"
+          if (-not (Test-Path $binary)) { throw "missing Windows binary: $binary" }
+          & $binary --version
+          & $binary models | Select-String -SimpleMatch "kimi-k3"
+
+      - name: Assemble team package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $binary = "agent/target/x86_64-pc-windows-msvc/release/lumen.exe"
+          $stage = "dist/lumen-windows-amd64"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item $binary "$stage/lumen.exe"
+          Copy-Item agent/LICENSE "$stage/LICENSE.txt"
+          Copy-Item agent/THIRD-PARTY-NOTICES "$stage/THIRD-PARTY-NOTICES.txt"
+          $sha = (Get-FileHash "$stage/lumen.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$sha  lumen.exe" | Set-Content "$stage/SHA256SUMS.txt" -Encoding ascii
+          @"
+          Lumen for Windows x64
+          =====================
+
+          Source commit: $env:GITHUB_SHA
+          Target: x86_64-pc-windows-msvc
+          Supported OS: Windows 10/11 x64
+
+          Install
+          -------
+          1. Extract this package to a stable folder such as C:\Tools\Lumen.
+          2. Add that folder to the user PATH.
+          3. Open a new PowerShell window and run: lumen --version
+
+          Kimi K3
+          -------
+          Set the key for the current PowerShell session:
+            `$env:KIMI_CODE_API_KEY = "your-kimi-code-key"
+            lumen -m kimi-k3
+
+          To save the key for future sessions:
+            [Environment]::SetEnvironmentVariable("KIMI_CODE_API_KEY", "your-kimi-code-key", "User")
+
+          Security
+          --------
+          Never commit API keys to Git. Verify lumen.exe against SHA256SUMS.txt
+          before distributing it within the team. This package is currently
+          unsigned, so Windows SmartScreen may require an explicit approval.
+          "@ | Set-Content "$stage/INSTALL-WINDOWS.txt" -Encoding utf8
+          Compress-Archive -Path "$stage/*" -DestinationPath "dist/lumen-windows-amd64.zip" -CompressionLevel Optimal
+          Get-FileHash "dist/lumen-windows-amd64.zip" -Algorithm SHA256 | Format-List
+
+      - name: Upload Windows team package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: lumen-windows-amd64-${{ github.run_number }}
+          path: dist/lumen-windows-amd64.zip
+          if-no-files-found: error
+          retention-days: 30

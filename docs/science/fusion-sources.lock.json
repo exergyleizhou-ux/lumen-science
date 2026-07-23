@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "purpose": "Lumen Science capability-source admission lock; this file grants no runtime authority to an upstream source.",
+  "product_base": {
+    "repository": "https://github.com/exergyleizhou-ux/lumen.git",
+    "commit": "8bd51b51ff874ecf035f52398898c2fbd40e9390",
+    "runtime_authority": "rust-lumen-tui-only"
+  },
+  "admission_policy": {
+    "default": "pending-deny",
+    "gpl": "rejected",
+    "unknown_file_license": "rejected",
+    "external_data_terms": "separate-review-required",
+    "upstream_runtime": "never-admitted"
+  },
+  "sources": [
+    {
+      "id": "synsci-openscience",
+      "repository": "https://github.com/synthetic-sciences/openscience.git",
+      "commit": "083ef91ac29e7083c01aa97ae7db835dc87a6e94",
+      "root_license": "Apache-2.0",
+      "intended_use": [
+        "connector-semantics-reference",
+        "skill-content-review",
+        "renderer-data-semantics-reference"
+      ],
+      "observed_inventory": {
+        "skill_md_count": 293,
+        "gpl_keyword_skill_count": 12
+      },
+      "admission": "pending-per-asset-review",
+      "runtime_authority": "none"
+    },
+    {
+      "id": "aipoch-open-science",
+      "repository": "https://github.com/aipoch/open-science.git",
+      "commit": "b4dc16933aa78c84b6cdbb2ba91d4167ec91c9d3",
+      "root_license": "Apache-2.0",
+      "intended_use": [
+        "notebook-contract-reference",
+        "artifact-contract-reference",
+        "reviewer-and-mcp-contract-reference"
+      ],
+      "admission": "pending-per-asset-review",
+      "runtime_authority": "none",
+      "local_residual_checkout": "excluded-from-m0-no-recovery-or-modification"
+    },
+    {
+      "id": "motif",
+      "repository": "https://github.com/jvogan/motif.git",
+      "commit": null,
+      "root_license": "unverified",
+      "intended_use": [
+        "html-artifact-workbench-reference",
+        "molecular-biology-workflow-reference"
+      ],
+      "admission": "pending-identity-license-dependency-and-data-term-review",
+      "runtime_authority": "none"
+    }
+  ],
+  "data_services": [
+    {
+      "id": "ncbi-pubmed-eutils",
+      "service_owner": "National Center for Biotechnology Information (NCBI)",
+      "service_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/",
+      "local_implementation": [
+        "agent/crates/codegen/xai-grok-science/src/connectors/pubmed.rs",
+        "agent/crates/codegen/xai-grok-science/src/connectors/fetch.rs",
+        "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs"
+      ],
+      "source_code_imported": false,
+      "runtime_authority": "rust-lumen-tui-only",
+      "data_class": "public_reference",
+      "credential_class": "none",
+      "terms_reviewed_at": "2026-07-23",
+      "terms_urls": [
+        "https://www.ncbi.nlm.nih.gov/home/about/policies/",
+        "https://www.ncbi.nlm.nih.gov/books/NBK25497/"
+      ],
+      "implemented_controls": {
+        "exact_https_host_allowlist": true,
+        "rate_limit": "3 requests per 1000ms",
+        "offline_fixture_product_proof": "G5: 7 passed, 0 failed"
+      },
+      "unmet_live_admission_conditions": [
+        "registered NCBI tool and developer email identity",
+        "user-visible NCBI disclaimer and copyright notice in the TUI"
+      ],
+      "admission": "pending-deny-live; offline-fixture-only",
+      "live_probe": "not-run-without-explicit-live-network-authorization"
+    }
+  ]
+}

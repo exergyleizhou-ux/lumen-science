@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "check_id": "R0_min",
+  "pass": true,
+  "scope": "minimal+full_signed",
+  "driven": [
+    "cargo test -p xai-tty-utils --lib kill_all",
+    "GROK_BINARY=\u2026 cargo test -p xai-grok-shell --test test_leader_death_repro -- --ignored",
+    "GROK_BINARY=\u2026 cargo test -p xai-grok-shell --test test_subagent_orphan_reconcile -- --ignored"
+  ],
+  "residual_full_r0": [],
+  "superseded_by": "R0-full.json",
+  "generated_at": "2026-07-16T17:01:17Z",
+  "note": "R4/R6/R7 residuals closed by smoke-r0.sh full contract."
+}

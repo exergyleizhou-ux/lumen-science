@@ -1,0 +1,11 @@
+# Exact historical fingerprints reviewed 2026-07-16. Each finding is a
+# synthetic test/redaction fixture; do not replace these with path/rule globs.
+aa3f68b158d150350a3513649461d8b6479414a1:packs/science/gui/api_profiles_test.go:generic-api-key:127
+853a3053b6616858fc32c132094e94a650e2276a:agent/crates/codegen/xai-grok-secrets/src/sanitizer.rs:generic-api-key:389
+853a3053b6616858fc32c132094e94a650e2276a:agent/crates/codegen/xai-grok-secrets/src/sanitizer.rs:jwt:457
+853a3053b6616858fc32c132094e94a650e2276a:agent/crates/codegen/xai-grok-shell/tests/test_built_binary_e2e.rs:generic-api-key:1173
+853a3053b6616858fc32c132094e94a650e2276a:agent/crates/codegen/xai-grok-telemetry/src/external/tests.rs:generic-api-key:532
+853a3053b6616858fc32c132094e94a650e2276a:agent/crates/codegen/xai-grok-telemetry/src/otel_layer/redact.rs:generic-api-key:513
+853a3053b6616858fc32c132094e94a650e2276a:agent/crates/codegen/xai-grok-tools/src/implementations/web_search/types.rs:generic-api-key:79
+853a3053b6616858fc32c132094e94a650e2276a:agent/crates/codegen/xai-grok-workspace/src/hub_auth.rs:generic-api-key:255
+853a3053b6616858fc32c132094e94a650e2276a:agent/crates/codegen/xai-grok-workspace/src/hub_auth.rs:generic-api-key:301

@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "check_id": "L5_full",
+  "pass": true,
+  "scope": "full_contract_soak",
+  "binary": "/Users/lei/code/lumen/agent/target/release/lumen",
+  "binary_sha256": "65a3f6948bdd0598a19b88444f1fb1e9bf620658d5df3393db90156ed7e54bdd",
+  "session_id": "6099ed24-c821-4887-b016-8eb0110b9e05",
+  "resume_same_session": true,
+  "compaction_request": "/Users/lei/code/lumen/artifacts/readiness/L5-full-case-soak/grok-home/sessions/%2FUsers%2Flei%2Fcode%2Flumen%2Fartifacts%2Freadiness%2FL5-full-case-soak%2Fworkspace/6099ed24-c821-4887-b016-8eb0110b9e05/compaction_requests/142b4337-ba7c-4855-855e-65b86acea2ee.json",
+  "compaction_checkpoint": "/Users/lei/code/lumen/artifacts/readiness/L5-full-case-soak/grok-home/sessions/%2FUsers%2Flei%2Fcode%2Flumen%2Fartifacts%2Freadiness%2FL5-full-case-soak%2Fworkspace/6099ed24-c821-4887-b016-8eb0110b9e05/compaction_checkpoints/2dfcb8ea-f861-4da3-aca8-eeb7d2c7a536.json",
+  "compaction_persisted": true,
+  "cache_read_tokens_samples": [
+    512,
+    512,
+    512,
+    512,
+    512,
+    512,
+    512,
+    512,
+    512,
+    512,
+    512,
+    512,
+    1024,
+    512,
+    1024,
+    512,
+    1024,
+    512,
+    512,
+    512
+  ],
+  "cache_visible": true,
+  "update_event_id_count": 352,
+  "update_event_ids_unique": true,
+  "event_id_resume_contract": {
+    "seed_update_count": 10,
+    "seed_event_highwater": 13,
+    "post_seed_event_lowwater": 16,
+    "post_seed_all_above_seed_highwater": true
+  },
+  "after_seq_contract_tests": [
+    "duplicate_event_id_is_dropped_and_highwater_advances",
+    "reconnect_reload_cursor_tail_appends_to_kept_transcript"
+  ],
+  "runtime_resume_contract": "real persisted eventId highwater continues across a new --resume process",
+  "artifact_contract": {
+    "selected_artifact": "/Users/lei/code/lumen/artifacts/readiness/L5-long-session.json",
+    "selected_case_dir": "/Users/lei/code/lumen/artifacts/readiness/L5-full-case-soak",
+    "canonical_soak_artifact": "/Users/lei/code/lumen/artifacts/readiness/L5-long-session.json",
+    "canonical_soak_case_dir": "/Users/lei/code/lumen/artifacts/readiness/L5-full-case-soak",
+    "short_must_not_overwrite_canonical": true
+  },
+  "soak": {
+    "executed": true,
+    "required_seconds": 3600,
+    "requested_seconds": 3600,
+    "elapsed_seconds": 3600,
+    "resume_turns": 117,
+    "started_at": "2026-07-16T15:45:09Z",
+    "finished_at": "2026-07-16T16:45:09Z"
+  },
+  "note": "Explicit soak mode ran for at least one hour and repeatedly resumed the same session.",
+  "generated_at": "2026-07-16T16:45:09Z"
+}

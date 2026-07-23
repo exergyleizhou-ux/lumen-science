@@ -1,0 +1,1 @@
+Two packages `calc` and `stats` each define a `Mean` function, but `stats.Mean` accidentally calls `calc.Mean` (which has a divide-by-zero bug) instead of its own implementation. Fix only `stats/stats.go` so it uses its own logic. Do NOT modify calc or the tests.

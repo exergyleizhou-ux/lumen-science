@@ -1,0 +1,1 @@
+In package shapes, TestAreas fails for the rectangle: Rect.Area returns the perimeter instead of the area. The Shape interface and the Circle implementation are correct — only Rect.Area is wrong. Fix Rect.Area to return the area (width × height). Don't change the tests.

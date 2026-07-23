@@ -1,0 +1,8 @@
+{
+  "header": {"type": "esummary", "version": "0.3"},
+  "result": {
+    "uids": ["41234567", "41234568"],
+    "41234567": {"uid": "41234567", "title": "Base editing advances", "fulljournalname": "Nature"},
+    "41234568": {"uid": "41234568", "title": "Prime editing review", "fulljournalname": "Cell"}
+  }
+}

@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "check_id": "eval_live",
+  "pass": true,
+  "pass_count": 20,
+  "fail_count": 0,
+  "total": 20,
+  "min_required": 18,
+  "silent_corruption": 0,
+  "tasks": [
+    {
+      "task": "01-average-empty",
+      "result": "PASS",
+      "agent_ec": 0
+    },
+    {
+      "task": "02-stack-lifo",
+      "result": "PASS",
+      "agent_ec": 0
+    },
+    {
+      "task": "03-reverse-runes",
+      "result": "PASS",
+      "agent_ec": 0
+    },
+    {
+      "task": "04-binary-search",
+      "result": "PASS",
+      "agent_ec": 0
+    },
+    {
+      "task": "05-counter-race",
+      "result": "PASS",
+      "agent_ec": 0
+    },
+    {
+      "task": "06-stringer-impl",
+      "result": "PASS",
+      "agent_ec": 0
+    },
+    {
+      "task": "07-nilmap-write",
+      "result": "PASS",
+      "agent_ec": 0
+    },
+    {
+      "task": "08-multifile-shapes",
+      "result": "PASS",
+      "agent_ec": 0
+    },
+    {
+      "task": "09-py-divzero",
+      "result": "PASS",
+      "agent_ec": 0
+    },
+    {
+      "task": "10-py-json-merge",
+      "result": "PASS",
+      "agent_ec": 0
+    },
+    {
+      "task": "11-ts-optional-chain",
+      "result": "PASS",
+      "agent_ec": 0
+    },
+    {
+      "task": "12-ts-async-race",
+      "result": "PASS",
+      "agent_ec": 0
+    },
+    {
+      "task": "13-go-context-cancel",
+      "result": "PASS",
+      "agent_ec": 0
+    },
+    {
+      "task": "14-go-error-wrap",
+      "result": "PASS",
+      "agent_ec": 0
+    },
+    {
+      "task": "15-py-path-traversal-fix",
+      "result": "PASS",
+      "agent_ec": 0
+    },
+    {
+      "task": "16-go-http-timeout",
+      "result": "PASS",
+      "agent_ec": 0
+    },
+    {
+      "task": "17-multi-pkg-go",
+      "result": "PASS",
+      "agent_ec": 0
+    },
+    {
+      "task": "18-fix-only-regression",
+      "result": "PASS",
+      "agent_ec": 0
+    },
+    {
+      "task": "19-readme-driven",
+      "result": "PASS",
+      "agent_ec": 0
+    },
+    {
+      "task": "20-flaky-to-stable",
+      "result": "PASS",
+      "agent_ec": 0
+    }
+  ],
+  "binary": "/Users/lei/.local/bin/lumen",
+  "generated_at": "2026-07-16T17:06:02Z",
+  "note": "Live agent solves; PASS only when deterministic workspace tests pass after agent edit."
+}

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>OnlyOffice Editor — Lumen Lab</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  #editor-placeholder{width:100%;height:100%}
+  .error-box{
+    display:flex;align-items:center;justify-content:center;
+    height:100%;padding:20px;color:#b42318;font-size:14px;
+    text-align:center;flex-direction:column;gap:10px;
+  }
+  .error-box .hint{color:#706b78;font-size:12px}
+  .loading{
+    display:flex;align-items:center;justify-content:center;
+    height:100%;color:#706b78;font-size:14px;gap:8px;
+  }
+  .loading .spinner{
+    width:14px;height:14px;border:2px solid #e0d8f0;
+    border-top-color:#4c1d95;border-radius:50%;
+    animation:spin 0.7s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div id="editor-placeholder">
+  <div class="loading"><span class="spinner"></span>加载 OnlyOffice 编辑器…</div>
+</div>
+
+<script>
+(function(){
+  var params = new URLSearchParams(location.search);
+  var dsUrl = params.get("ds") || "";           // Document Server root URL
+  var fileUrl = params.get("url") || "";         // file download URL
+  var fileName = params.get("title") || "document.docx";
+  var fileExt = params.get("ext") || "docx";
+  var mode = params.get("mode") || "view";       // view | edit
+  var callbackUrl = params.get("cb") || "";       // callback URL for edit saves (server-minted preferred)
+  var docKeyParam = params.get("key") || "";      // stable key from Lab (path+mtime)
+
+  if (!dsUrl || !fileUrl) {
+    showError("缺少参数：ds（Document Server URL）和 url（文件下载 URL）均为必填。");
+    return;
+  }
+
+  // Normalize dsUrl — strip trailing slash
+  dsUrl = dsUrl.replace(/\/+$/, "");
+
+  // Determine documentType from extension
+  var docType = "word";
+  var docFileType = fileExt;
+  switch (fileExt.toLowerCase()) {
+    case "xlsx": docType = "cell"; break;
+    case "pptx": docType = "slide"; break;
+    case "docx": default: docType = "word"; break;
+  }
+
+  // Prefer server-provided key (stable until file mtime/size changes after save).
+  // Fallback: hash of file URL only (no Date.now — avoids needless re-cache misses).
+  var docKey = docKeyParam;
+  if (!docKey) {
+    try {
+      docKey = btoa(unescape(encodeURIComponent(fileUrl))).replace(/[+/=]/g, "").slice(0, 32);
+    } catch (e) {
+      docKey = String(fileUrl.length) + "x" + String(fileName.length);
+    }
+  }
+  // OnlyOffice key charset: 0-9 a-z A-Z . _ - =
+  docKey = String(docKey).replace(/[^0-9a-zA-Z._=-]/g, "").slice(0, 128) || "doc1";
+
+  // Load OnlyOffice API script
+  var apiScript = dsUrl + "/web-apps/apps/api/documents/api.js";
+  var script = document.createElement("script");
+  script.src = apiScript;
+  script.onload = function(){
+    try {
+      if (typeof DocsAPI === "undefined") {
+        showError("DocsAPI 未定义 — Document Server URL 可能不正确: " + dsUrl);
+        return;
+      }
+      var editorConfig = { mode: mode };
+      if (mode === "edit" && callbackUrl) {
+        editorConfig.callbackUrl = callbackUrl;
+      }
+      new DocsAPI.DocEditor("editor-placeholder", {
+        document: {
+          fileType: docFileType,
+          key: docKey,
+          title: fileName,
+          url: fileUrl
+        },
+        documentType: docType,
+        editorConfig: editorConfig,
+        height: "100%",
+        width: "100%"
+      });
+    } catch(e) {
+      showError("初始化 OnlyOffice 编辑器失败: " + e.message);
+    }
+  };
+  script.onerror = function(){
+    showError("无法加载 OnlyOffice API 脚本: " + apiScript + "\n请确认 Document Server 正在运行且 URL 正确。");
+  };
+  document.head.appendChild(script);
+
+  function showError(msg) {
+    var el = document.getElementById("editor-placeholder");
+    el.innerHTML = '<div class="error-box"><div>⚠ ' +
+      msg.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") +
+      '</div><div class="hint">Document Server: ' +
+      dsUrl.replace(/&/g,"&amp;") + ' | 文件: ' +
+      fileName.replace(/&/g,"&amp;") + '</div></div>';
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Lumen Science · 实验室</title>
+  <link rel="stylesheet" href="app.css?v=65">
+</head>
+<body>
+  <div id="splash" class="splash"><span class="spinner"></span>正在加载实验室…</div>
+
+  <div class="shell">
+    <header class="tb">
+      <button type="button" class="tb-btn mobile-only" id="btnSide" title="项目">☰</button>
+      <div class="tb-logo">
+        <span class="tb-lumen">Lumen</span>
+        <span class="tb-label">Science Lab</span>
+      </div>
+      <span class="tb-spacer"></span>
+      <span class="tb-stat"><span class="tb-dot" id="liveDot"></span><span id="runStatus">就绪</span></span>
+      <span class="tb-ops" id="tbOps" hidden>
+        <span class="tb-stat hide-sm" id="usageBadge" title="Token 用量">—</span>
+        <span class="tb-stat" id="packBadge">—</span>
+        <span class="tb-stat" id="fleetBadge">—</span>
+        <span class="tb-stat hide-sm" id="modeHint">hybrid</span>
+        <a class="tb-link hide-sm" id="bridgeLink" href="/lumen-science/?embed=1&oasis=1">Bridge</a>
+      </span>
+      <button class="tb-btn hide-sm" id="btnTbOps" type="button" title="显示/隐藏系统状态">系统</button>
+      <button class="tb-btn" id="btnShortcuts" type="button" title="快捷键 ⌘/">?</button>
+      <button class="tb-btn" id="btnCompact" type="button" title="紧凑布局">紧凑</button>
+      <button class="tb-btn" id="dmToggle" type="button" title="主题">🌙</button>
+      <button type="button" class="tb-btn mobile-only" id="btnInsp" title="面板">▦</button>
+    </header>
+
+    <div class="main">
+      <aside class="side" id="sidebarPanel">
+        <div class="side-inner">
+          <div class="set-card">
+            <div class="set-k">当前项目</div>
+            <div class="set-v" id="activeProjectName">未选择</div>
+            <div class="hint mono" id="activeProjectMeta"></div>
+            <div class="btn-row">
+              <button class="btn primary sm" id="newProjectBtn" type="button">＋ 新建</button>
+              <button class="btn sm" id="refreshAllBtn" type="button">刷新</button>
+            </div>
+          </div>
+          <div class="set-k soft">项目</div>
+          <div id="projectList" class="proj-list"></div>
+          <div class="set-k soft">会话</div>
+          <div class="file-search-row" style="margin:4px 0 6px">
+            <input type="search" id="sessionSearch" class="file-search" placeholder="搜索会话内容…" autocomplete="off" />
+            <button type="button" class="btn sm" id="sessionSearchBtn">搜</button>
+          </div>
+          <div id="sessionSearchHits" class="file-hits" hidden></div>
+          <div id="sessionList" class="sess-list hint">选择课题后加载…</div>
+          <div class="set-k soft">快捷任务
+            <button type="button" class="btn sm" id="saveFavPrompt" title="把当前输入保存为快捷任务">＋收藏</button>
+          </div>
+          <div class="chip-col" id="chipCol">
+            <button class="chip" type="button" data-brief="aspirin">生成 Brief · aspirin</button>
+            <button class="chip" type="button" data-prompt="用 pubmed 检索阿司匹林近三年高被引文献，列 5 条并给中文摘要。">PubMed 文献检索</button>
+            <button class="chip" type="button" data-prompt="列出当前工作区文件结构，指出缺什么实验产物，并建议下一步。">检查工作区</button>
+            <button class="chip" type="button" data-prompt="列出可用的 C2D 算法与如何在绿洲上架。">C2D 算法</button>
+          </div>
+          <div id="favChips" class="chip-col" style="margin-top:4px"></div>
+        </div>
+        <div class="side-ft">
+          <span class="hint">⌘K · @文件 · Enter 发送 · Shift+Enter 换行</span>
+        </div>
+      </aside>
+
+      <div class="resize" id="resizeLeft" aria-hidden="true"></div>
+
+      <section class="ctr">
+        <div class="ctr-top">
+          <div class="ctr-tabs" id="convTabs"></div>
+          <button class="ctr-tab-add" type="button" id="newConvBtn" title="新对话">＋</button>
+          <div class="ctr-more-wrap hide-sm">
+            <button class="btn sm" type="button" id="ctrMoreBtn" title="更多操作" aria-expanded="false">⋯</button>
+            <div class="ctr-more-menu" id="ctrMoreMenu" hidden>
+              <button class="ctr-more-item" type="button" id="copyConvBtn">复制对话</button>
+              <button class="ctr-more-item" type="button" id="exportMdBtn">导出 Markdown</button>
+              <button class="ctr-more-item" type="button" id="exportJsonBtn">导出 JSON</button>
+              <button class="ctr-more-item" type="button" id="exportAllSessBtn">导出全部会话</button>
+              <label class="ctr-more-item" title="导入会话 JSON">导入会话
+                <input type="file" id="importSessFile" accept=".json,application/json" hidden />
+              </label>
+              <button class="ctr-more-item" type="button" id="forkSessBtn">分支会话</button>
+              <button class="ctr-more-item" type="button" id="chatFindBtn">查找 ⌘F</button>
+              <button class="ctr-more-item danger" type="button" id="deleteSessBtn">删除会话</button>
+            </div>
+          </div>
+        </div>
+        <div id="chatScroll">
+          <section id="welcome" class="hero">
+            <h2>Lumen Science Lab</h2>
+            <p>面向科研的本地工作台：阅读与总结文献、分析实验产物、迭代代码与工作区文件。右侧可浏览项目文件，下方描述任务即可开始。</p>
+            <div class="chips">
+              <button class="chip" type="button" data-prompt="用通俗中文介绍你自己：你能帮研究者做哪些事（文献、分析、代码、工作区），并问我今天想先做什么。">介绍你自己</button>
+              <button class="chip" type="button" data-prompt="检索 PubMed 上阿司匹林相关最新文献，给出 3 条要点与中文摘要。">文献检索</button>
+              <button class="chip" type="button" data-prompt="浏览当前项目工作区文件结构，说明有什么、缺什么，并建议下一步实验或分析。">检查工作区</button>
+              <button class="chip" type="button" data-brief="aspirin">生成 Brief</button>
+            </div>
+          </section>
+        </div>
+        <form id="composer" class="composer">
+          <div id="approvalBanner" class="approval-banner" hidden>
+            <div class="appr-banner-main">
+              <span class="appr-banner-pulse" aria-hidden="true"></span>
+              <span id="approvalBannerText">有工具等待你确认</span>
+            </div>
+            <div class="appr-banner-actions">
+              <button type="button" class="btn primary sm" id="approvalBannerJump">查看并批准</button>
+              <button type="button" class="btn sm" id="approvalBannerAllowAll" title="批准当前卡片（不改参数）">允许</button>
+              <button type="button" class="btn sm" id="approvalBannerDeny" title="拒绝当前卡片">拒绝</button>
+            </div>
+          </div>
+          <div class="composer-top">
+            <select id="chatMode" class="mode-sel" title="权限模式：Agent 会在写文件/执行命令前请求批准">
+              <option value="agent" selected>Agent · 工具+审批</option>
+              <option value="plan">Plan · 只规划</option>
+              <option value="bypass">Bypass · 全自动</option>
+              <option value="default">Default · 同 Agent</option>
+            </select>
+            <button type="button" class="btn sm" id="btnStop" disabled title="中止当前回合">停止</button>
+            <button type="button" class="btn sm" id="btnRerun" disabled title="重跑上一条">重跑</button>
+            <label class="btn sm upload-btn">
+              附件
+              <input type="file" id="fileUpload" multiple hidden />
+            </label>
+          </div>
+          <div id="attachChips" class="attach-chips" hidden></div>
+          <div id="composerDrop" class="composer-drop-wrap">
+            <textarea id="promptInput" rows="2" placeholder="问任何问题 — @ 文件 · 拖拽附件 · Enter 发送" autocomplete="off"></textarea>
+            <div id="dropOverlay" class="drop-overlay" hidden>松开以上传附件</div>
+          </div>
+          <div class="composer-bot">
+            <span class="hint" id="composerHint">就绪 · Agent 模式写文件/bash 需批准</span>
+            <button class="btn primary" type="submit" id="btnSend">发送</button>
+          </div>
+        </form>
+      </section>
+
+      <div class="resize" id="resizeRight" aria-hidden="true"></div>
+
+      <aside class="insp" id="inspectorPanel">
+        <div class="insp-tabs">
+          <button class="insp-tab active" type="button" data-pane="files">文件</button>
+          <button class="insp-tab" type="button" data-pane="tasks">本回合</button>
+          <button class="insp-tab" type="button" data-pane="artifacts">产物</button>
+          <button class="insp-tab" type="button" data-pane="skills">技能</button>
+          <button class="insp-tab" type="button" data-pane="notebooks">Notebook</button>
+          <button class="insp-tab" type="button" data-pane="status">状态</button>
+          <button class="insp-tab" type="button" data-pane="compute">算力</button>
+          <button class="insp-tab" type="button" data-pane="ketcher">化学</button>
+          <button class="insp-tab" type="button" data-pane="molecule">分子</button>
+          <button class="insp-tab" type="button" data-pane="diff">Diff</button>
+          <button class="insp-tab" type="button" data-pane="provenance">溯源</button>
+          <button class="insp-tab" type="button" data-pane="office">Office</button>
+          <button class="insp-tab" type="button" data-pane="langgraph">LangGraph</button>
+          <button class="insp-tab" type="button" data-pane="config">配置</button>
+        </div>
+        <div class="insp-body">
+          <div id="filesPane" class="insp-scroll">
+            <div class="file-bar">
+              <button type="button" class="btn sm" id="fileUp" title="上级">↑</button>
+              <span class="mono file-cwd" id="fileCwd">.</span>
+              <button type="button" class="btn sm" id="fileRefresh">↻</button>
+            </div>
+            <div class="file-search-row">
+              <input type="search" id="fileSearch" class="file-search" placeholder="搜索文件名或内容…" autocomplete="off" />
+              <button type="button" class="btn sm" id="fileSearchBtn">搜</button>
+            </div>
+            <div id="fileSearchHits" class="file-hits" hidden></div>
+            <div class="set-k soft">收藏文件</div>
+            <div id="fileStars" class="file-stars hint">—</div>
+            <div class="set-k soft" style="margin-top:8px">最近修改</div>
+            <div id="fileRecent" class="file-recent hint">—</div>
+            <div class="set-k soft" style="margin-top:8px">目录树
+              <button type="button" class="btn sm" id="fileTreeRefresh">↻</button>
+            </div>
+            <div id="fileTreeView" class="file-tree-view hint">—</div>
+            <div class="set-k soft" style="margin-top:8px">当前目录</div>
+            <div id="fileTree"></div>
+            <div id="filePreview" class="fp"></div>
+          </div>
+          <div id="tasksPane" class="insp-scroll" style="display:none">
+            <div class="set-k soft">本回合工具 / 任务</div>
+            <div id="tasksBody" class="hint">发送消息后，工具调用会出现在这里</div>
+            <div class="set-k soft" style="margin-top:12px">子代理时间线</div>
+            <div id="subagentTimeline" class="hint">本回合无子代理 / 嵌套工具</div>
+          </div>
+          <div id="statusPane" style="display:none"><div id="inspectorBody" class="insp-scroll"></div></div>
+          <div id="artifactsPane" class="insp-scroll" style="display:none">
+            <div class="btn-row" style="margin-bottom:8px">
+              <button type="button" class="btn sm" id="artifactsRefresh">刷新产物</button>
+              <button type="button" class="btn sm" id="workspaceExportBtn">导出 ZIP</button>
+              <label class="btn sm">导入 ZIP
+                <input type="file" id="workspaceImport" accept=".zip,application/zip" hidden />
+              </label>
+              <span class="hint">reports / figures / data / imports</span>
+            </div>
+            <div id="artifactsBody" class="hint">加载实验产物…</div>
+          </div>
+          <div id="skillsPane" class="insp-scroll" style="display:none">
+            <div class="btn-row" style="margin-bottom:8px">
+              <button type="button" class="btn sm primary" id="skillsSaveBtn">保存启用</button>
+              <label class="btn sm">导入 .md/.zip
+                <input type="file" id="skillsImport" accept=".md,.zip,text/markdown,application/zip" hidden />
+              </label>
+              <span class="hint" id="skillsHint">点名称注入；运行=发送</span>
+            </div>
+            <div id="skillsBody" class="hint">加载技能目录…</div>
+          </div>
+          <div id="computePane" class="insp-scroll" style="display:none">
+            <div class="set-k soft">执行主机</div>
+            <select id="computeHost" class="mode-sel fill-sel"></select>
+            <div class="hint" style="margin-top:4px">local=本机；registry=UI 注册；ssh_config=~/.ssh/config</div>
+            <div class="set-k soft" style="margin-top:8px">注册主机</div>
+            <div id="hostRegistry" class="hint">—</div>
+            <div class="host-form">
+              <input type="text" id="hostAlias" class="file-search" placeholder="alias（如 gpu1）" />
+              <input type="text" id="hostHostname" class="file-search" placeholder="hostname / IP" />
+              <input type="text" id="hostUser" class="file-search" placeholder="user" />
+              <input type="text" id="hostNotes" class="file-search" placeholder="备注" />
+              <button type="button" class="btn sm primary" id="hostRegisterBtn">保存主机</button>
+            </div>
+            <div class="set-k soft" style="margin-top:8px">工作目录（可选，默认课题 workspace）</div>
+            <input type="text" id="computeWorkDir" class="file-search" placeholder="留空=本机 workspace；SSH 上可用 /data/run" />
+            <div class="set-k soft" style="margin-top:8px">超时秒数</div>
+            <input type="number" id="computeTimeout" class="file-search" min="10" max="7200" value="600" />
+            <div class="set-k soft" style="margin-top:8px">命令</div>
+            <textarea id="computeCmd" rows="2" class="compute-cmd" placeholder="echo ok > result.txt  或  sbatch run.sh"></textarea>
+            <div class="set-k soft" style="margin-top:6px">历史命令</div>
+            <div id="computeHistory" class="compute-history hint">—</div>
+            <div class="set-k soft" style="margin-top:6px">命令模板
+              <button type="button" class="btn sm" id="computeSaveTmpl">保存模板</button>
+            </div>
+            <div id="computeTemplates" class="compute-history hint">—</div>
+            <div class="set-k soft" style="margin-top:8px">产物 glob（可选，逗号分隔）</div>
+            <input type="text" id="computeGlobs" class="file-search" placeholder="*.txt, *.csv, results/*" />
+            <div class="btn-row" style="margin-top:8px">
+              <button type="button" class="btn primary sm" id="computeSubmit">提交任务</button>
+              <button type="button" class="btn sm" id="computeRefresh">刷新列表</button>
+            </div>
+            <div id="computeJobs" class="compute-jobs hint" style="margin-top:10px">暂无任务</div>
+            <div class="set-k soft" style="margin-top:10px">SSE 实时日志</div>
+            <pre id="jobLogLive" class="job-out" hidden style="max-height:220px"></pre>
+          </div>
+          <div id="ketcherPane" style="display:none;height:100%;flex-direction:column">
+            <div class="hint" style="padding:6px 8px;flex-shrink:0;border-bottom:1px solid var(--ocs-line)">
+              <strong>同域 Ketcher：</strong>部署后可「从 Ketcher 导入 / 推送到 Ketcher」。
+              若未部署则回退外链；仍可用下方 MOL 文本保存/加载。
+            </div>
+            <div class="btn-row" style="padding:6px 8px;flex-shrink:0">
+              <input type="text" id="molSavePath" class="file-search" style="flex:1" placeholder="molecules/structure.mol" value="molecules/structure.mol" />
+              <button type="button" class="btn sm" id="molFromKetcher">从 Ketcher 导入</button>
+              <button type="button" class="btn sm" id="molToKetcher">推送到 Ketcher</button>
+              <button type="button" class="btn sm primary" id="molSaveBtn">保存到工作区</button>
+              <button type="button" class="btn sm" id="molLoadBtn">加载路径</button>
+              <button type="button" class="btn sm" id="molTo3dBtn">→ 3Dmol</button>
+            </div>
+            <div id="molStatus" class="hint" style="padding:0 8px 4px;flex-shrink:0">就绪</div>
+            <div id="molBrowser" class="mol-browser hint" style="padding:4px 8px;flex-shrink:0">分子文件…</div>
+            <textarea id="molEditor" class="mol-editor" placeholder="MOL/SDF/PDB 文本（从 Ketcher 导出后粘贴，或点上方分子文件）"></textarea>
+            <iframe id="ketcherFrame" title="Ketcher" style="width:100%;flex:1;min-height:200px;border:none;border-top:1px solid var(--ocs-line)"></iframe>
+          </div>
+          <div id="moleculePane" class="mol-pane" style="display:none">
+            <div class="hint" id="molLabel" style="padding:6px 10px">选择 .pdb/.sdf/.mol 文件打开</div>
+            <div id="molBrowser2" class="mol-browser hint" style="padding:4px 8px"></div>
+            <div id="molViewer" style="width:100%;height:calc(100% - 60px);min-height:280px"></div>
+          </div>
+          <div id="notebooksPane" class="insp-scroll" style="display:none">
+            <div class="set-k soft">Jupyter Notebooks</div>
+            <div class="btn-row" style="margin-bottom:8px">
+              <button type="button" class="btn sm primary" id="nbCreateBtn">新建</button>
+              <button type="button" class="btn sm" id="nbRefreshBtn">刷新</button>
+              <span class="hint" id="nbJupyterHint">—</span>
+            </div>
+            <div id="nbList" class="hint">加载 notebooks…</div>
+            <div class="set-k soft" style="margin-top:10px">当前笔记本</div>
+            <div id="nbTitle" class="mono hint">未选择</div>
+            <textarea id="nbCellSource" class="compute-cmd" rows="4" placeholder="追加代码单元…" style="margin-top:6px"></textarea>
+            <div class="btn-row" style="margin-top:6px">
+              <button type="button" class="btn sm" id="nbAddCellBtn">追加代码单元</button>
+              <button type="button" class="btn sm primary" id="nbExecBtn">执行（需 Jupyter）</button>
+              <button type="button" class="btn sm" id="nbInjectBtn">注入对话</button>
+            </div>
+            <div id="nbCells" class="nb-cells hint" style="margin-top:8px">选择笔记本查看单元</div>
+          </div>
+          <div id="diffPane" class="insp-scroll" style="display:none">
+            <div class="set-k soft">工作区文件 Diff</div>
+            <input type="text" id="diffPathA" class="file-search" placeholder="路径 A（旧）" />
+            <input type="text" id="diffPathB" class="file-search" placeholder="路径 B（新）" style="margin-top:4px" />
+            <div class="btn-row" style="margin-top:6px">
+              <button type="button" class="btn sm primary" id="diffRunBtn">对比</button>
+            </div>
+            <div id="diffBody" class="diff-body hint">选择两个工作区路径进行内容对比</div>
+          </div>
+          <div id="provenancePane" class="insp-scroll" style="display:none">
+            <div class="set-k soft">产物溯源</div>
+            <div class="file-search-row" style="margin:6px 0">
+              <input type="search" id="provFilter" class="file-search" placeholder="按路径过滤（精确匹配）" autocomplete="off" />
+              <button type="button" class="btn sm" id="provRefreshBtn">刷新</button>
+            </div>
+            <div id="provBody" class="hint">加载溯源记录…</div>
+          </div>
+          <div id="officePane" class="insp-scroll" style="display:none">
+            <div class="set-k soft">OnlyOffice / 文档</div>
+            <div class="hint" id="officeHint" style="margin-bottom:8px">配置环境变量 LUMEN_ONLYOFFICE_URL 后可在此打开文档编辑器；未配置时用文本抽取 + 下载。</div>
+            <input type="text" id="officePath" class="file-search" placeholder="工作区路径 e.g. reports/note.docx" />
+            <select id="officeMode" class="mode-sel" style="margin-top:4px"><option value="view">查看</option><option value="edit">编辑</option></select>
+            <div class="btn-row" style="margin-top:6px">
+              <button type="button" class="btn sm primary" id="officeOpenBtn">打开/预览</button>
+              <button type="button" class="btn sm" id="officeDownloadBtn">下载原文件</button>
+            </div>
+            <div id="officeHost" style="margin-top:10px;min-height:360px;border:1px solid var(--ocs-line);border-radius:10px;overflow:hidden"></div>
+          </div>
+          <div id="langgraphPane" class="insp-scroll" style="display:none">
+            <div class="set-k soft">LangGraph 旁路</div>
+            <div class="hint" id="langgraphHint" style="margin-bottom:8px">
+              可选 Python 图执行，不替代主 Agent / SSE / 审批。需 LUMEN_LANGGRAPH=1 与 venv。
+            </div>
+            <div class="set-row"><span class="k">状态</span><span class="v" id="langgraphStatus">—</span></div>
+            <div class="set-k soft" style="margin-top:10px">提示词</div>
+            <textarea id="langgraphPrompt" class="mol-editor" style="min-height:120px;max-height:220px;width:100%" placeholder="例如：分析当前课题并给出 3 条下一步建议"></textarea>
+            <div class="btn-row" style="margin-top:8px">
+              <button type="button" class="btn sm primary" id="langgraphRunBtn">运行</button>
+              <button type="button" class="btn sm" id="langgraphToChatBtn" title="把结果写入输入框">写入对话</button>
+              <button type="button" class="btn sm" id="langgraphSaveNoteBtn" title="保存为工作区 Markdown 笔记并 @ 引用">存笔记</button>
+              <button type="button" class="btn sm" id="langgraphCopyBtn" title="复制纯文本结果">复制</button>
+              <button type="button" class="btn sm" id="langgraphClearBtn">清空</button>
+            </div>
+            <div class="set-k soft" style="margin-top:12px">最近运行
+              <button type="button" class="btn sm" id="langgraphHistScopeBtn" style="margin-left:6px" title="切换本课题 / 全部">本课题</button>
+              <button type="button" class="btn sm" id="langgraphHistExportBtn" style="margin-left:4px" title="导出 JSON+MD 到工作区，并 @ 引用到对话">导出</button>
+              <button type="button" class="btn sm" id="langgraphHistImportBtn" style="margin-left:4px" title="从工作区 JSON 导入">导入</button>
+              <button type="button" class="btn sm" id="langgraphHistClearBtn" style="margin-left:4px">清历史</button>
+            </div>
+            <div id="langgraphHistory" class="hint" style="margin-bottom:8px">暂无历史（本机浏览器保存）</div>
+            <div class="set-k soft" style="margin-top:8px">结果</div>
+            <div id="langgraphResult" class="fp-body agent-md" style="min-height:80px;max-height:360px;overflow:auto">尚未运行</div>
+          </div>
+          <div id="configPane" class="insp-scroll" style="display:none">
+            <div class="set-k soft">Lab 配置</div>
+            <div class="set-row"><span class="k">模型提示</span><span class="v" id="cfgModel">—</span></div>
+            <div class="set-row"><span class="k">版本</span><span class="v" id="cfgVersion">—</span></div>
+            <div class="set-k soft" style="margin-top:10px">默认对话模式</div>
+            <select id="cfgDefaultMode" class="mode-sel fill-sel">
+              <option value="agent">Agent · 工具+审批</option>
+              <option value="plan">Plan · 只规划</option>
+              <option value="bypass">Bypass · 全自动</option>
+              <option value="default">Default</option>
+            </select>
+            <div class="set-k soft" style="margin-top:10px">工具 Profile</div>
+            <input type="text" id="cfgToolProfile" class="file-search" placeholder="full_science" />
+            <div class="btn-row" style="margin-top:10px">
+              <button type="button" class="btn sm primary" id="cfgSaveBtn">保存配置</button>
+              <span class="hint" id="cfgHint">写入 lab.json</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <div id="sideMask" class="mask" hidden></div>
+
+  <div id="previewModal" class="preview-modal" hidden>
+    <div class="preview-modal-box">
+      <div class="preview-modal-hd">
+        <span id="previewModalTitle">预览</span>
+        <button type="button" class="btn sm" id="previewModalClose">关闭</button>
+      </div>
+      <div id="previewModalBody" class="preview-modal-body"></div>
+    </div>
+  </div>
+
+  <div id="cmdPalette" class="palette" style="display:none">
+    <div class="palette-box">
+      <input id="paletteInput" type="text" placeholder="搜索命令…" autocomplete="off" />
+      <div id="paletteResults"></div>
+    </div>
+  </div>
+
+  <div id="shortcutsModal" class="preview-modal" hidden>
+    <div class="preview-modal-box" style="max-width:480px">
+      <div class="preview-modal-hd">
+        <span>键盘快捷键</span>
+        <button type="button" class="btn sm" id="shortcutsClose">关闭</button>
+      </div>
+      <div class="preview-modal-body shortcuts-body">
+        <div class="sc-row"><kbd>⌘/Ctrl</kbd>+<kbd>K</kbd><span>命令面板（含文件/会话搜索）</span></div>
+        <div class="sc-row"><kbd>⌘/Ctrl</kbd>+<kbd>F</kbd><span>在当前对话中查找</span></div>
+        <div class="sc-row"><kbd>⌘/Ctrl</kbd>+<kbd>/</kbd><span>快捷键帮助</span></div>
+        <div class="sc-row"><kbd>Enter</kbd><span>发送消息</span></div>
+        <div class="sc-row"><kbd>Shift</kbd>+<kbd>Enter</kbd><span>换行</span></div>
+        <div class="sc-row"><kbd>@</kbd><span>引用工作区文件</span></div>
+        <div class="sc-row"><kbd>Esc</kbd><span>关闭面板 / 菜单</span></div>
+        <div class="sc-row"><span class="hint">双击会话标签</span><span>重命名会话</span></div>
+        <div class="sc-row"><span class="hint">拖拽到输入框</span><span>上传附件</span></div>
+        <div class="sc-row"><span class="hint">用户消息 · 编辑/重发</span><span>改写后重跑</span></div>
+        <div class="sc-row"><span class="hint">会话 ☆</span><span>置顶会话</span></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=65"></script>
+</body>
+</html>

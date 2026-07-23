@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "check_id": "L3",
+  "pass": true,
+  "exit_code": 0,
+  "tool_request_count": 2,
+  "tools": [
+    "run_terminal_command",
+    "run_terminal_command"
+  ],
+  "call_ids": [
+    "call_00_sDpCVyVQE94R6wjWZpcH3646",
+    "call_00_gm99EpI62Bw1BG0fGS4E4176"
+  ],
+  "generated_at": "2026-07-16T16:59:00Z",
+  "output_snippet": "\u001b[2m2026-07-16T16:58:55.091702Z\u001b[0m \u001b[33m WARN\u001b[0m Failed to fetch models: Auth(\"No auth credentials for cli-chat-proxy\")\n\u001b[2m2026-07-16T16:58:55.091766Z\u001b[0m \u001b[33m WARN\u001b[0m model refresh failed, leaving existing models unchanged\n\u001b[2m2026-07-16T16:58:55.578246Z\u001b[0m \u001b[33m WARN\u001b[0m skill name does not match expected name from path \u001b[3mpath\u001b[0m\u001b[2m=\u001b[0m/Users/lei/.agents/skills/claude-mem/plugin/skills/version-bump/SKILL.md \u001b[3mdeclared_name\u001b[0m\u001b[2m=\u001b[0mcodex-plugin-release \u001b[3mexpected_name\u001b[0m\u001b[2m"
+}

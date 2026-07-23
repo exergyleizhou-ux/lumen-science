@@ -1,0 +1,1 @@
+Fix `getUserName(user)` in `src/user.ts`: when user is null/undefined, it should return "Anonymous" instead of throwing TypeError. Do not modify the tests.

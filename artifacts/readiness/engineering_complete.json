@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "check_id": "engineering_complete",
+  "pass": true,
+  "meaning": "All automatable FINAL-2.0 gates pass; publish ready still requires M5_10_min_stranger and M6_15_day_self_use",
+  "auto_blockers": [],
+  "can_tool_call": true,
+  "source_lock_sha256": "1fa6a1bc79959527ec4e4c5eefa793070b3fc69c2ba2a5c3988c20e5d7c704f4",
+  "binary_sha256": "65a3f6948bdd0598a19b88444f1fb1e9bf620658d5df3393db90156ed7e54bdd",
+  "generated_at": "2026-07-16T17:06:03Z"
+}

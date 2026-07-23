@@ -1,0 +1,6 @@
+{
+  "molecules": [
+    {"molecule_chembl_id": "CHEMBL25", "pref_name": "ASPIRIN"}
+  ],
+  "page_meta": {"limit": 5, "offset": 0, "total_count": 1}
+}

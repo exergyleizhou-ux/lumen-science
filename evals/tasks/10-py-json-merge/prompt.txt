@@ -1,0 +1,1 @@
+Fix `merge_dicts(a, b)` in `mergeutil/merge.py`: when both dicts have the same key, the value from `b` should win. Currently it silently drops b's values. Do not modify the tests.

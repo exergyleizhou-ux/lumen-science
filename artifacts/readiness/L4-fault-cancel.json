@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "check_id": "L4_full",
+  "pass": true,
+  "scope": "full_contract_short",
+  "binary": "/Users/lei/code/lumen/agent/target/release/lumen",
+  "binary_sha256": "65a3f6948bdd0598a19b88444f1fb1e9bf620658d5df3393db90156ed7e54bdd",
+  "scenarios": {
+    "429": {
+      "pass": true,
+      "agent_request_count": 3,
+      "response_kinds": [
+        "aux_text",
+        "fault_429",
+        "tool_call",
+        "final"
+      ],
+      "effect_count": 1
+    },
+    "500": {
+      "pass": true,
+      "agent_request_count": 3,
+      "response_kinds": [
+        "aux_text",
+        "fault_500",
+        "tool_call",
+        "final"
+      ],
+      "effect_count": 1
+    },
+    "disconnect": {
+      "pass": true,
+      "agent_request_count": 3,
+      "response_kinds": [
+        "aux_text",
+        "fault_disconnect",
+        "tool_call",
+        "final"
+      ],
+      "effect_count": 1
+    },
+    "timeout": {
+      "pass": true,
+      "agent_request_count": 1,
+      "response_kinds": [
+        "aux_text",
+        "fault_timeout"
+      ],
+      "effect_count": 0
+    },
+    "cancel": {
+      "pass": true,
+      "agent_request_count": 1,
+      "response_kinds": [
+        "aux_text",
+        "fault_cancel"
+      ],
+      "effect_count": 0
+    }
+  },
+  "retry_policy": "429, 5xx, and interrupted SSE retry; IdleTimeout is terminal by shipped policy",
+  "side_effect_invariant": "retry-success cases execute exactly one effect; timeout/cancel execute zero",
+  "process_tree_suite": "cargo test -p xai-tty-utils --lib kill_all",
+  "generated_at": "2026-07-16T16:59:30Z"
+}

@@ -1,0 +1,176 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-16T17:06:03Z",
+  "ready": false,
+  "state": "BLOCKED",
+  "can_tool_call": true,
+  "l0_pass": true,
+  "engineering_complete": true,
+  "source_lock_sha256": "1fa6a1bc79959527ec4e4c5eefa793070b3fc69c2ba2a5c3988c20e5d7c704f4",
+  "binary_sha256": "65a3f6948bdd0598a19b88444f1fb1e9bf620658d5df3393db90156ed7e54bdd",
+  "blockers": [
+    "M5_10_min_stranger:human_gate missing_or_invalid",
+    "M6_15_day_self_use:human_gate count_lt_15"
+  ],
+  "checks": [
+    {
+      "id": "binary_tuple_pre",
+      "pass": true,
+      "result": "PASS",
+      "detail": "sha256=65a3f6948bdd"
+    },
+    {
+      "id": "gitleaks",
+      "pass": true,
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "defaults",
+      "pass": true,
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "security",
+      "pass": true,
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "m2",
+      "pass": true,
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "parity",
+      "pass": true,
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "eval_harness",
+      "pass": true,
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "verify_cli",
+      "pass": true,
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "verticals",
+      "pass": true,
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "L0_connect",
+      "pass": true,
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "L1_tool_calls",
+      "pass": true,
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "L2_min_e2e",
+      "pass": true,
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "L3_multi_tool",
+      "pass": true,
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "L4_fault_cancel",
+      "pass": true,
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "L5_long_session",
+      "pass": true,
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "L5_one_hour_soak",
+      "pass": true,
+      "result": "PASS",
+      "detail": "elapsed>=3600 and resume_turns>0"
+    },
+    {
+      "id": "R0_full",
+      "pass": true,
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "R0_min",
+      "pass": true,
+      "result": "PASS",
+      "detail": "via R0_full"
+    },
+    {
+      "id": "sbom",
+      "pass": true,
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "legal",
+      "pass": true,
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "eval_live",
+      "pass": true,
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "binary_tuple_post",
+      "pass": true,
+      "result": "PASS",
+      "detail": "sha256=65a3f6948bdd"
+    },
+    {
+      "id": "source_lock",
+      "pass": true,
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "M5_10_min_stranger",
+      "pass": false,
+      "result": "FAIL",
+      "detail": "human_gate missing_or_invalid"
+    },
+    {
+      "id": "M6_15_day_self_use",
+      "pass": false,
+      "result": "FAIL",
+      "detail": "human_gate count_lt_15"
+    },
+    {
+      "id": "reconcile",
+      "pass": true,
+      "result": "PASS",
+      "detail": ""
+    }
+  ],
+  "reconcile_pass": true,
+  "reconciled_at": "2026-07-16T17:06:03Z",
+  "note": "ready=true only when every publish gate is PASS, including live eval, the observed M5 stranger path, and 15 productivity days. SKIP never counts as publish-ready. engineering_complete=true when required automated gates pass."
+}

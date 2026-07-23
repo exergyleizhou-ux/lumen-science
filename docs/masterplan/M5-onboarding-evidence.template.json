@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "check_id": "M5_10_min_stranger",
+  "pass": false,
+  "participant": {
+    "relationship": "stranger_to_lumen",
+    "prior_lumen_use": false,
+    "anonymous_id": "replace-with-anonymous-id"
+  },
+  "observer": {
+    "confirmed": false,
+    "role": "facilitator"
+  },
+  "started_at": "RFC3339",
+  "finished_at": "RFC3339",
+  "elapsed_seconds": 0,
+  "credential_redacted": true,
+  "steps": {
+    "install": {"pass": false, "evidence_path": "m5/install.png", "sha256": "replace"},
+    "configure_deepseek_key": {"pass": false, "evidence_path": "m5/key-redacted.png", "sha256": "replace"},
+    "edit_file": {"pass": false, "evidence_path": "m5/edit.png", "sha256": "replace"},
+    "tool_calls_visible": {"pass": false, "evidence_path": "m5/tool-calls.png", "sha256": "replace"},
+    "security_feedback_visible": {"pass": false, "evidence_path": "m5/security.png", "sha256": "replace"},
+    "verify_feedback_visible": {"pass": false, "evidence_path": "m5/verify.png", "sha256": "replace"}
+  }
+}

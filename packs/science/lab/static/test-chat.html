@@ -1,0 +1,28 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Chat Test</title>
+<style>body{font-family:system-ui;max-width:800px;margin:40px auto;padding:20px;background:#fbfaff}
+.msg{padding:8px;margin:4px 0;border-radius:8px}.user{background:#ece7f8;color:#4c1d95;font-weight:650}.agent{white-space:pre-wrap;line-height:1.6}.tool{font-size:11px;color:#706b78}</style></head><body>
+<h2>Lab Chat 测试 (内联版)</h2>
+<input id="inp" placeholder="输入…" style="width:100%;padding:10px;font-size:16px;border-radius:8px;border:1px solid #ded8e8">
+<button id="send" style="margin-top:8px;padding:10px 20px;font-size:16px;border-radius:8px;background:#4c1d95;color:#fff;border:none;cursor:pointer">发送</button>
+<div id="out"></div>
+<script>
+var $=function(id){return document.getElementById(id);};
+async function api(url,opts){
+  var r=await fetch(url,{headers:{"Content-Type":"application/json"},...opts});
+  return r.json();
+}
+$("send").onclick=async function(){
+  var p=$("inp").value.trim();if(!p)return;$("inp").value="";
+  var out=$("out");
+  var ue=document.createElement("div");ue.className="msg user";ue.textContent=p;out.appendChild(ue);
+  var ae=document.createElement("div");ae.className="msg agent";out.appendChild(ae);
+  var textAcc="";
+  try{
+    var proj=await api("/api/lab/projects",{method:"POST",body:JSON.stringify({title:"t"})});
+    var res=await fetch("/api/lab/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({project_id:proj.slug,prompt:p,mode:"bypass",session_id:"main"})});
+    var reader=res.body.getReader();var dec=new TextDecoder();var buf="";
+    while(true){var r=await reader.read();if(r.done)break;buf+=dec.decode(r.value,{stream:true});var lines=buf.split("\n");buf=lines.pop();for(var i=0;i<lines.length;i++){var line=lines[i];if(line.indexOf("data:")!==0)continue;var json=line.slice(5).trim();if(!json.startsWith("{"))continue;var ev=JSON.parse(json);if(ev.text&&(ev.kind==="text"||ev.kind==="thinking")){textAcc+=ev.text;ae.textContent=textAcc;}}}
+  }catch(e){ae.textContent="ERR: "+e.message;}
+  out.scrollTop=out.scrollHeight;
+};
+</script></body></html>

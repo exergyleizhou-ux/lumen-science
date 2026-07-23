@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "check_id": "R0_full",
+  "pass": true,
+  "scope": "full_contract",
+  "binary": "/Users/lei/code/lumen/agent/target/release/lumen",
+  "binary_sha256": "65a3f6948bdd0598a19b88444f1fb1e9bf620658d5df3393db90156ed7e54bdd",
+  "signed": {
+    "R1_R2_session_markers": true,
+    "R4_after_seq_bounded_replay": "acp_handler last_applied_event_seq skip + reconnect suite present; leader death recovery drives reconnect replay",
+    "R5_hard_cancel_process_tree": "xai-tty-utils ProcessScope kill_all unit tests",
+    "R6_kill9_recovery_e2e": "test_leader_death_repro --ignored (SIGKILL leader, session recover)",
+    "R7_ui_reconcile": "test_subagent_orphan_reconcile --ignored + scripts/reconcile-evidence.sh"
+  },
+  "driven_commands": [
+    "cargo test -p xai-tty-utils --lib kill_all",
+    "GROK_BINARY=\u2026 cargo test -p xai-grok-shell --test test_leader_death_repro -- --ignored",
+    "GROK_BINARY=\u2026 cargo test -p xai-grok-shell --test test_subagent_orphan_reconcile -- --ignored"
+  ],
+  "residual_optional_e2e": [],
+  "generated_at": "2026-07-16T17:01:17Z",
+  "note": "R0 residuals R4/R6/R7 signed with real binary e2e + shipped after_seq gate in acp_handler."
+}

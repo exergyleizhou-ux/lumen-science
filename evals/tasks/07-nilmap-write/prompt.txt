@@ -1,0 +1,1 @@
+Tally.Add panics with "assignment to entry in nil map" because the counts map is never initialized, so TestTally fails. Fix Tally so Add works on a zero-value Tally (var t Tally). Don't change the tests.

@@ -1,0 +1,5 @@
+sample_id,condition,value
+s1,control,1
+s2,control,3
+s3,treated,4
+s4,treated,8

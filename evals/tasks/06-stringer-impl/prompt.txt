@@ -1,0 +1,1 @@
+shape.Circle must implement the Shape interface (Area + Perimeter) — the package doesn't compile because Circle is missing Perimeter, so TestCircle fails. Implement the missing method. Don't change the tests.

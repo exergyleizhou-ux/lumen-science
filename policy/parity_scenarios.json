@@ -1,0 +1,98 @@
+[
+  {
+    "name": "streaming_text",
+    "category": "baseline",
+    "description": "Streamed assistant text without tool calls.",
+    "lumen_check": "structural",
+    "evidence": "xai-grok-sampler streaming path; pager headless plain output",
+    "status": "已有"
+  },
+  {
+    "name": "read_file_roundtrip",
+    "category": "file-tools",
+    "description": "read_file tool execution and synthesis.",
+    "lumen_check": "structural",
+    "evidence": "xai-grok-tools read_file implementation",
+    "status": "已有"
+  },
+  {
+    "name": "grep_chunk_assembly",
+    "category": "file-tools",
+    "description": "grep partial/chunk assembly.",
+    "lumen_check": "structural",
+    "evidence": "grep tool + shell agent loop",
+    "status": "部分"
+  },
+  {
+    "name": "write_file_allowed",
+    "category": "file-tools",
+    "description": "Workspace write succeeds under normal mode.",
+    "lumen_check": "structural",
+    "evidence": "search_replace / write tools + permission allow path",
+    "status": "已有"
+  },
+  {
+    "name": "write_file_denied",
+    "category": "permissions",
+    "description": "Sensitive write path denied (plan/bypass still deny).",
+    "lumen_check": "unit:lumen-guard",
+    "evidence": "lumen_guard::check_write_path + permission manager lumen_guard_deny",
+    "status": "已有"
+  },
+  {
+    "name": "multi_tool_turn_roundtrip",
+    "category": "multi-tool-turns",
+    "description": "Multiple tools in one assistant turn.",
+    "lumen_check": "structural",
+    "evidence": "agent tool loop multi-call",
+    "status": "已有"
+  },
+  {
+    "name": "bash_stdout_roundtrip",
+    "category": "bash",
+    "description": "Bash stdout returned to model.",
+    "lumen_check": "structural",
+    "evidence": "bash / run_terminal_command tool",
+    "status": "已有"
+  },
+  {
+    "name": "bash_permission_prompt_approved",
+    "category": "permissions",
+    "description": "Dangerous bash can be approved once.",
+    "lumen_check": "structural",
+    "evidence": "permission manager prompt path",
+    "status": "已有"
+  },
+  {
+    "name": "bash_permission_prompt_denied",
+    "category": "permissions",
+    "description": "Hard-deny bash never executes (rm -rf /, curl|bash).",
+    "lumen_check": "unit:lumen-guard",
+    "evidence": "lumen_guard::check_bash + manager PolicyDeny",
+    "status": "已有"
+  },
+  {
+    "name": "plugin_tool_roundtrip",
+    "category": "plugin-paths",
+    "description": "MCP / plugin tool path exists.",
+    "lumen_check": "structural",
+    "evidence": "xai-grok-mcp registry",
+    "status": "部分"
+  },
+  {
+    "name": "auto_compact_triggered",
+    "category": "session-compaction",
+    "description": "Auto-compact when context large.",
+    "lumen_check": "structural",
+    "evidence": "shell session compaction module",
+    "status": "部分"
+  },
+  {
+    "name": "token_cost_reporting",
+    "category": "token-usage",
+    "description": "Usage includes tokens and cache_line.",
+    "lumen_check": "structural",
+    "evidence": "notification::project_result_usage cache_line",
+    "status": "已有"
+  }
+]

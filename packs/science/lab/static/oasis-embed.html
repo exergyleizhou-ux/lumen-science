@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lumen Science 实验室 — 绿洲嵌入</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+  iframe { width: 100%; height: 100%; border: none; }
+  .fallback { display: flex; align-items: center; justify-content: center; height: 100%;
+    font-family: -apple-system, sans-serif; color: #8c8478; background: #fbf9f6; }
+  .fallback a { color: #c28b4b; }
+</style>
+</head>
+<body>
+  <div id="status" class="fallback">
+    <p>🔬 <strong>Lumen Science 实验室</strong><br>
+    <small>本地服务未启动 · <a href="#" onclick="retry()">重试</a></small></p>
+  </div>
+  <iframe id="lab" src="" style="display:none" allow="clipboard-read; clipboard-write"></iframe>
+<script>
+const GUI_URL = 'https://127.0.0.1:18993/?embed=1&oasis=1';
+const LAB_URL = 'http://127.0.0.1:18992/?embed=1&oasis=1';
+async function probe() {
+  try {
+    const r = await fetch('http://127.0.0.1:18992/api/lab/health', { signal: AbortSignal.timeout(1000) });
+    if (r.ok) {
+      document.getElementById('status').style.display = 'none';
+      const frame = document.getElementById('lab');
+      frame.src = LAB_URL;
+      frame.style.display = '';
+    }
+  } catch (_) {}
+}
+function retry() { setTimeout(probe, 500); }
+probe();
+// Listen for postMessage from lab
+window.addEventListener('message', (e) => {
+  if (e.data?.type === 'lumen-lab:oasis-auth' && window.parent) {
+    window.parent.postMessage(e.data, 'https://demo.oasisdata2026.xyz');
+  }
+});
+</script>
+</body>
+</html>

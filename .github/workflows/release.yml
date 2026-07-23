@@ -1,0 +1,744 @@
+name: Release Lumen
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: lumen-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Verify release tag and source
+    runs-on: ubuntu-24.04
+    steps:
+      # actions/checkout v7.0.0, pinned to the reviewed commit.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Enforce clean tag/version contract
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: >-
+          python3 scripts/release_contract.py preflight
+          --root "$GITHUB_WORKSPACE"
+          --tag "$GITHUB_REF_NAME"
+          --require-clean
+          --require-head-tag
+          --allowed-ref "origin/$DEFAULT_BRANCH"
+      - name: Verify version bump and changelog tooling
+        run: scripts/test-release-prep.sh
+
+  build:
+    name: Build ${{ matrix.asset }}
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            asset: lumen-macos-arm64
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            asset: lumen-macos-amd64
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            asset: lumen-linux-arm64
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            asset: lumen-linux-amd64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      # actions/checkout v7.0.0, pinned to the reviewed commit.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Recheck release source before build
+        run: >-
+          python3 scripts/release_contract.py preflight
+          --root "$GITHUB_WORKSPACE"
+          --tag "$GITHUB_REF_NAME"
+          --require-clean
+          --require-head-tag
+      - name: Select Rust target
+        run: rustup target add "${{ matrix.target }}"
+      # vendored bin/protoc is a dotslash launcher; CI uses a system protoc instead.
+      - name: Install protoc
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${RUNNER_OS}" == "macOS" ]]; then
+            brew install protobuf
+          else
+            sudo apt-get update
+            sudo apt-get install -y protobuf-compiler
+          fi
+          command -v protoc
+          protoc --version
+      - name: Build release binary
+        working-directory: agent
+        env:
+          PROTOC: protoc
+        run: >-
+          cargo build --locked
+          --profile release-dist
+          --package xai-grok-pager-bin
+          --features release-dist
+          --target "${{ matrix.target }}"
+      - name: Stage Lumen binary and SPDX SBOM
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp "agent/target/${{ matrix.target }}/release-dist/lumen" "dist/${{ matrix.asset }}"
+          chmod 755 "dist/${{ matrix.asset }}"
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")" \
+          scripts/generate-release-sbom.sh \
+            "${{ matrix.asset }}" \
+            "${{ matrix.target }}" \
+            "dist/${{ matrix.asset }}.spdx.json" \
+            "$GITHUB_REF_NAME"
+      - name: Upload immutable build output
+        # actions/upload-artifact v7.0.1, pinned to the reviewed commit.
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ${{ matrix.asset }}
+          path: |
+            dist/${{ matrix.asset }}
+            dist/${{ matrix.asset }}.spdx.json
+          if-no-files-found: error
+          retention-days: 7
+
+  package:
+    name: Assemble unsigned release contract
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      # actions/checkout v7.0.0, pinned to the reviewed commit.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Recheck clean release source
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: >-
+          python3 scripts/release_contract.py preflight
+          --root "$GITHUB_WORKSPACE"
+          --tag "$GITHUB_REF_NAME"
+          --require-clean
+          --require-head-tag
+          --allowed-ref "origin/$DEFAULT_BRANCH"
+      - name: Download all native build outputs
+        # actions/download-artifact v8.0.1, pinned to the reviewed commit.
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: lumen-*
+          path: dist
+          merge-multiple: true
+          digest-mismatch: error
+      - name: Stage pinned public verification key
+        env:
+          LUMEN_MINISIGN_PUBLIC_KEY: ${{ vars.LUMEN_MINISIGN_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          [[ -n "$LUMEN_MINISIGN_PUBLIC_KEY" ]] || { echo "FAIL: LUMEN_MINISIGN_PUBLIC_KEY is unset" >&2; exit 1; }
+          printf '%s\n' "$LUMEN_MINISIGN_PUBLIC_KEY" >dist/lumen-release.pub
+      - name: Assemble release manifest
+        run: >-
+          python3 scripts/release_contract.py assemble
+          --root "$GITHUB_WORKSPACE"
+          --dist "$GITHUB_WORKSPACE/dist"
+          --tag "$GITHUB_REF_NAME"
+          --commit "$GITHUB_SHA"
+          --public-key "$GITHUB_WORKSPACE/dist/lumen-release.pub"
+      - name: Validate original unsigned release contract
+        run: >-
+          python3 scripts/release_contract.py validate-unsigned
+          --root "$GITHUB_WORKSPACE"
+          --dist "$GITHUB_WORKSPACE/dist"
+          --tag "$GITHUB_REF_NAME"
+          --expected-commit "$GITHUB_SHA"
+          --public-key "$GITHUB_WORKSPACE/dist/lumen-release.pub"
+      - name: Upload immutable unsigned release bundle
+        # actions/upload-artifact v7.0.1, pinned to the reviewed commit.
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: lumen-release-unsigned
+          path: dist/lumen-*
+          if-no-files-found: error
+          retention-days: 1
+
+  verify:
+    name: Verify complete release contract without production secrets
+    needs: package
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Download unsigned release bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: lumen-release-unsigned
+          path: dist
+          digest-mismatch: error
+      - name: Validate SBOMs with official SPDX tools 0.8.5
+        run: |
+          set -euo pipefail
+          lock="$RUNNER_TEMP/spdx-tools.requirements.txt"
+          cat >"$lock" <<'REQUIREMENTS'
+          beartype==0.22.9 --hash=sha256:d16c9bbc61ea14637596c5f6fbff2ee99cbe3573e46a716401734ef50c3060c2
+          boolean.py==5.0 --hash=sha256:ef28a70bd43115208441b53a045d1549e2f0ec6e3d08a9d142cbc41c1938e8d9
+          click==8.4.2 --hash=sha256:e6f9f66136c816745b9d65817da91d61d957fb16e02e4dcd0552553c5a197b76
+          license-expression==30.4.4 --hash=sha256:421788fdcadb41f049d2dc934ce666626265aeccefddd25e162a26f23bcbf8a4
+          ply==3.11 --hash=sha256:096f9b8350b65ebd2fd1346b12452efe5b9607f7482813ffca50c22722a807ce
+          pyparsing==3.3.2 --hash=sha256:850ba148bd908d7e2411587e247a1e4f0327839c40e2e5e6d05a007ecc69911d
+          PyYAML==6.0.3 --hash=sha256:ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc
+          rdflib==7.6.0 --hash=sha256:30c0a3ebf4c0e09215f066be7246794b6492e054e782d7ac2a34c9f70a15e0dd
+          semantic-version==2.10.0 --hash=sha256:de78a3b8e0feda74cabc54aab2da702113e33ac9d9eb9d2389bcf1f58b7d9177
+          spdx-tools==0.8.5 --hash=sha256:7c2d5865941be9d2e898f5b084e8d5422dd298dc5a29320ddb198fec304f59c4
+          uritools==6.1.2 --hash=sha256:5682f8c58e96e379224fd72aec227a45432740c1fa860a06b3024d47c2968601
+          xmltodict==1.0.4 --hash=sha256:a4a00d300b0e1c59fc2bfccb53d7b2e88c32f200df138a0dd2229f842497026a
+          REQUIREMENTS
+          python3 -m venv "$RUNNER_TEMP/spdx-tools"
+          "$RUNNER_TEMP/spdx-tools/bin/pip" install \
+            --disable-pip-version-check \
+            --only-binary=:all: \
+            --require-hashes \
+            --requirement "$lock"
+          "$RUNNER_TEMP/spdx-tools/bin/python" scripts/validate-spdx.py dist/*.spdx.json
+      - name: Install checksum-pinned Minisign 0.12
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/minisign-0.12-linux.tar.gz"
+          curl --fail --location --proto '=https' --tlsv1.2 --output "$archive" \
+            https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12-linux.tar.gz
+          printf '%s  %s\n' \
+            '9a599b48ba6eb7b1e80f12f36b94ceca7c00b7a5173c95c3efc88d9822957e73' \
+            "$archive" | sha256sum --check --strict
+          tar -xzf "$archive" -C "$RUNNER_TEMP" minisign-linux/x86_64/minisign
+          install -m 755 "$RUNNER_TEMP/minisign-linux/x86_64/minisign" "$RUNNER_TEMP/minisign"
+      - name: Exercise the full signed contract with an ephemeral key
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/minisign" -G -W \
+            -p "$RUNNER_TEMP/test.pub" -s "$RUNNER_TEMP/test.key"
+          cp "$RUNNER_TEMP/test.pub" dist/lumen-release.pub
+          python3 scripts/release_contract.py assemble \
+            --root "$GITHUB_WORKSPACE" --dist "$GITHUB_WORKSPACE/dist" \
+            --tag "$GITHUB_REF_NAME" --commit "$GITHUB_SHA" \
+            --public-key "$GITHUB_WORKSPACE/dist/lumen-release.pub"
+          for payload in \
+            dist/lumen-macos-arm64 dist/lumen-macos-arm64.spdx.json \
+            dist/lumen-macos-amd64 dist/lumen-macos-amd64.spdx.json \
+            dist/lumen-linux-arm64 dist/lumen-linux-arm64.spdx.json \
+            dist/lumen-linux-amd64 dist/lumen-linux-amd64.spdx.json \
+            dist/lumen-release-manifest.json
+          do
+            "$RUNNER_TEMP/minisign" -S -s "$RUNNER_TEMP/test.key" \
+              -m "$payload" -x "$payload.minisig" \
+              -t "lumen-release-v1 $GITHUB_REF_NAME $(basename "$payload")"
+          done
+          python3 scripts/release_contract.py verify \
+            --root "$GITHUB_WORKSPACE" --dist "$GITHUB_WORKSPACE/dist" \
+            --tag "$GITHUB_REF_NAME" --expected-commit "$GITHUB_SHA" \
+            --public-key "$GITHUB_WORKSPACE/dist/lumen-release.pub" \
+            --minisign "$RUNNER_TEMP/minisign"
+
+  publish:
+    name: Sign and publish protected GitHub Release
+    needs: [package, verify]
+    runs-on: ubuntu-24.04
+    environment: lumen-release
+    permissions:
+      contents: write
+    steps:
+      # Deliberately no checkout: no tag-controlled repository script executes in
+      # the environment-gated job that receives the private signing key.
+      - name: Download verified unsigned release bundle
+        # actions/download-artifact v8.0.1, pinned to the reviewed commit.
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: lumen-release-unsigned
+          path: dist
+          digest-mismatch: error
+      - name: Validate downloaded unsigned release contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$GITHUB_REF_NAME" "$GITHUB_SHA" <<'PY'
+          import base64
+          import hashlib
+          import json
+          import re
+          import sys
+          from pathlib import Path
+
+          tag, commit = sys.argv[1:]
+          dist = Path("dist")
+          if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?", tag):
+              raise SystemExit("FAIL: workflow tag is not v-prefixed SemVer")
+          if not re.fullmatch(r"[0-9a-f]{40}", commit):
+              raise SystemExit("FAIL: workflow commit is not a full lowercase git SHA")
+          version = tag[1:]
+          targets = {
+              "lumen-macos-arm64": "aarch64-apple-darwin",
+              "lumen-macos-amd64": "x86_64-apple-darwin",
+              "lumen-linux-arm64": "aarch64-unknown-linux-gnu",
+              "lumen-linux-amd64": "x86_64-unknown-linux-gnu",
+          }
+          expected = {
+              *targets, *(f"{name}.spdx.json" for name in targets),
+              "lumen-release.pub", "lumen-release-manifest.json",
+          }
+          actual = {path.name for path in dist.iterdir() if path.is_file()}
+          if actual != expected:
+              raise SystemExit(
+                  f"FAIL: unsigned bundle file boundary mismatch: "
+                  f"missing={sorted(expected - actual)} extra={sorted(actual - expected)}"
+              )
+
+          public_key_path = dist / "lumen-release.pub"
+          public_key_lines = [line.strip() for line in public_key_path.read_text().splitlines() if line.strip()]
+          if len(public_key_lines) != 2 or not public_key_lines[0].startswith("untrusted comment:"):
+              raise SystemExit("FAIL: invalid Minisign public key file shape")
+          try:
+              public_key_raw = base64.b64decode(public_key_lines[1], validate=True)
+          except ValueError as exc:
+              raise SystemExit(f"FAIL: invalid Minisign public key base64: {exc}") from exc
+          if len(public_key_raw) != 42 or public_key_raw[:2] != b"Ed":
+              raise SystemExit("FAIL: invalid Minisign Ed25519 public key payload")
+          public_key_fingerprint = f"sha256:{hashlib.sha256(public_key_raw).hexdigest()}"
+          public_key_asset_sha = hashlib.sha256(public_key_path.read_bytes()).hexdigest()
+
+          manifest_path = dist / "lumen-release-manifest.json"
+          try:
+              manifest = json.loads(manifest_path.read_text())
+          except (OSError, json.JSONDecodeError) as exc:
+              raise SystemExit(f"FAIL: invalid unsigned release manifest: {exc}") from exc
+          manifest_fields = {
+              "schemaVersion", "product", "version", "tag", "commit",
+              "versionSource", "signing", "assets",
+          }
+          if set(manifest) != manifest_fields:
+              raise SystemExit("FAIL: unsigned manifest field set mismatch")
+          fixed_manifest = {
+              "schemaVersion": 1,
+              "product": "lumen",
+              "version": version,
+              "versionSource": "VERSION",
+              "tag": tag,
+              "commit": commit,
+          }
+          for field, value in fixed_manifest.items():
+              if (
+                  (field == "schemaVersion" and type(manifest.get(field)) is not int)
+                  or manifest.get(field) != value
+              ):
+                  raise SystemExit(f"FAIL: unsigned manifest {field} mismatch")
+          serialized = json.dumps(manifest, sort_keys=True).casefold()
+          if "x.ai/cli" in serialized or "xai-org-shared/grok-build" in serialized:
+              raise SystemExit("FAIL: legacy product identity in unsigned manifest")
+
+          signing = manifest.get("signing")
+          signing_fields = {
+              "scheme", "identity", "publicKey", "publicKeyFingerprint",
+              "publicKeyAsset", "publicKeyAssetSha256", "manifestSignature",
+          }
+          if not isinstance(signing, dict) or set(signing) != signing_fields:
+              raise SystemExit("FAIL: unsigned manifest signing field set mismatch")
+          fixed_signing = {
+              "scheme": "minisign-ed25519-prehashed",
+              "identity": "lumen-release-v1",
+              "publicKey": public_key_lines[1],
+              "publicKeyFingerprint": public_key_fingerprint,
+              "publicKeyAsset": "lumen-release.pub",
+              "publicKeyAssetSha256": public_key_asset_sha,
+              "manifestSignature": "lumen-release-manifest.json.minisig",
+          }
+          for field, value in fixed_signing.items():
+              if signing.get(field) != value:
+                  raise SystemExit(f"FAIL: unsigned manifest signing.{field} mismatch")
+
+          asset_items = manifest.get("assets")
+          if not isinstance(asset_items, list) or len(asset_items) != 4:
+              raise SystemExit("FAIL: unsigned manifest must contain exactly four assets")
+          if not all(isinstance(asset, dict) for asset in asset_items):
+              raise SystemExit("FAIL: unsigned manifest assets must be objects")
+          names = [asset.get("name") for asset in asset_items]
+          if len(set(names)) != len(names):
+              raise SystemExit("FAIL: unsigned manifest contains duplicate asset names")
+          assets = {asset.get("name"): asset for asset in asset_items}
+          if set(assets) != set(targets):
+              raise SystemExit("FAIL: unsigned manifest platform set mismatch")
+          for name, target in targets.items():
+              binary = dist / name
+              sbom = dist / f"{name}.spdx.json"
+              binary_sha = hashlib.sha256(binary.read_bytes()).hexdigest()
+              binary_sha1 = hashlib.sha1(binary.read_bytes()).hexdigest()
+              sbom_sha = hashlib.sha256(sbom.read_bytes()).hexdigest()
+              asset = assets[name]
+              if set(asset) != {"name", "target", "sha256", "size", "signature", "sbom"}:
+                  raise SystemExit(f"FAIL: unsigned manifest binary field set mismatch for {name}")
+              fixed_asset = {
+                  "name": name, "target": target, "sha256": binary_sha,
+                  "size": binary.stat().st_size, "signature": f"{name}.minisig",
+              }
+              for field, value in fixed_asset.items():
+                  if (
+                      (field == "size" and type(asset.get(field)) is not int)
+                      or asset.get(field) != value
+                  ):
+                      raise SystemExit(f"FAIL: unsigned manifest asset {name}.{field} mismatch")
+              sbom_meta = asset.get("sbom")
+              if not isinstance(sbom_meta, dict) or set(sbom_meta) != {"name", "target", "sha256", "size", "signature"}:
+                  raise SystemExit(f"FAIL: unsigned manifest SBOM field set mismatch for {name}")
+              fixed_sbom = {
+                  "name": sbom.name, "target": target, "sha256": sbom_sha,
+                  "size": sbom.stat().st_size, "signature": f"{sbom.name}.minisig",
+              }
+              for field, value in fixed_sbom.items():
+                  if (
+                      (field == "size" and type(sbom_meta.get(field)) is not int)
+                      or sbom_meta.get(field) != value
+                  ):
+                      raise SystemExit(f"FAIL: unsigned manifest SBOM {name}.{field} mismatch")
+
+              try:
+                  document = json.loads(sbom.read_text())
+              except (OSError, json.JSONDecodeError) as exc:
+                  raise SystemExit(f"FAIL: invalid SBOM {sbom.name}: {exc}") from exc
+              required_document = {
+                  "spdxVersion": "SPDX-2.3",
+                  "dataLicense": "CC0-1.0",
+                  "SPDXID": "SPDXRef-DOCUMENT",
+                  "name": f"{name}-{version}",
+                  "documentNamespace": f"https://lumen.local/spdx/{tag}/{target}",
+              }
+              for field, value in required_document.items():
+                  if document.get(field) != value:
+                      raise SystemExit(f"FAIL: SBOM {sbom.name} {field} mismatch")
+              creation = document.get("creationInfo")
+              if not isinstance(creation, dict) or not creation.get("created") or set(creation.get("creators", [])) != {
+                  "Tool: scripts/generate-release-sbom.sh", "Organization: Lumen",
+              }:
+                  raise SystemExit(f"FAIL: SBOM {sbom.name} creation identity mismatch")
+              packages = document.get("packages")
+              files = document.get("files")
+              relationships = document.get("relationships")
+              if not isinstance(packages, list) or not isinstance(files, list) or not isinstance(relationships, list):
+                  raise SystemExit(f"FAIL: SBOM {sbom.name} package/file/relationship shape mismatch")
+              package_by_id = {
+                  package.get("SPDXID"): package for package in packages if isinstance(package, dict)
+              }
+              release_package = package_by_id.get("SPDXRef-Package-lumen-release-asset", {})
+              source_package = package_by_id.get("SPDXRef-Package-lumen-source", {})
+              if release_package.get("name") != name or release_package.get("versionInfo") != version:
+                  raise SystemExit(f"FAIL: SBOM {sbom.name} release package mismatch")
+              if source_package.get("name") != "lumen-source" or source_package.get("versionInfo") != commit:
+                  raise SystemExit(f"FAIL: SBOM {sbom.name} source commit mismatch")
+              components = [
+                  package for package in packages if isinstance(package, dict)
+                  and package.get("SPDXID") not in {
+                      "SPDXRef-Package-lumen-release-asset", "SPDXRef-Package-lumen-source",
+                  }
+              ]
+              if not any(package.get("name") == "xai-grok-pager-bin" for package in components):
+                  raise SystemExit(f"FAIL: SBOM {sbom.name} Cargo root missing")
+              binary_file = next(
+                  (item for item in files if isinstance(item, dict) and item.get("SPDXID") == "SPDXRef-File-lumen-release-binary"),
+                  None,
+              )
+              expected_checksums = {
+                  ("SHA1", binary_sha1), ("SHA256", binary_sha),
+              }
+              actual_checksums = {
+                  (item.get("algorithm"), item.get("checksumValue"))
+                  for item in (binary_file or {}).get("checksums", []) if isinstance(item, dict)
+              }
+              if not binary_file or binary_file.get("fileName") != f"./{name}" or not expected_checksums <= actual_checksums:
+                  raise SystemExit(f"FAIL: SBOM {sbom.name} binary binding mismatch")
+              actual_relationships = {
+                  (item.get("spdxElementId"), item.get("relationshipType"), item.get("relatedSpdxElement"))
+                  for item in relationships if isinstance(item, dict)
+              }
+              required_relationships = {
+                  ("SPDXRef-DOCUMENT", "DESCRIBES", "SPDXRef-Package-lumen-release-asset"),
+                  ("SPDXRef-Package-lumen-release-asset", "CONTAINS", "SPDXRef-File-lumen-release-binary"),
+                  ("SPDXRef-Package-lumen-release-asset", "GENERATED_FROM", "SPDXRef-Package-lumen-source"),
+              }
+              if not required_relationships <= actual_relationships:
+                  raise SystemExit(f"FAIL: SBOM {sbom.name} release relationships mismatch")
+              expected_annotation = {
+                  "asset": name, "target": target, "version": version, "tag": tag,
+                  "commit": commit, "binary_sha1": binary_sha1, "binary_sha256": binary_sha,
+                  "binary_size": binary.stat().st_size, "identity": "lumen-release-v1",
+                  "cargo_root": "xai-grok-pager-bin",
+              }
+              annotations = []
+              for annotation in document.get("annotations", []):
+                  try:
+                      annotations.append(json.loads(annotation.get("comment", "")))
+                  except (AttributeError, TypeError, json.JSONDecodeError):
+                      pass
+              if not any(all(item.get(field) == value for field, value in expected_annotation.items()) for item in annotations):
+                  raise SystemExit(f"FAIL: SBOM {sbom.name} release annotation mismatch")
+          print("OK: downloaded unsigned release contract is complete and exact")
+          PY
+      - name: Peel remote tag and bind it to the workflow commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          encoded="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$GITHUB_REF_NAME")"
+          read -r object_type object_sha <<<"$(gh api "repos/{owner}/{repo}/git/ref/tags/$encoded" --jq '[.object.type,.object.sha] | @tsv')"
+          for _ in 1 2 3 4 5 6 7 8; do
+            [[ "$object_type" == tag ]] || break
+            read -r object_type object_sha <<<"$(gh api "repos/{owner}/{repo}/git/tags/$object_sha" --jq '[.object.type,.object.sha] | @tsv')"
+          done
+          [[ "$object_type" == commit && "$object_sha" == "$GITHUB_SHA" ]] || {
+            echo "FAIL: remote tag does not peel to workflow commit" >&2
+            exit 1
+          }
+      - name: Install checksum-pinned Minisign 0.12
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/minisign-0.12-linux.tar.gz"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$archive" \
+            https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12-linux.tar.gz
+          printf '%s  %s\n' \
+            '9a599b48ba6eb7b1e80f12f36b94ceca7c00b7a5173c95c3efc88d9822957e73' \
+            "$archive" | sha256sum --check --strict
+          tar -xzf "$archive" -C "$RUNNER_TEMP" minisign-linux/x86_64/minisign
+          install -m 755 "$RUNNER_TEMP/minisign-linux/x86_64/minisign" "$RUNNER_TEMP/minisign"
+          [[ "$($RUNNER_TEMP/minisign -v)" == "minisign 0.12" ]]
+      - name: Sign and independently verify exact release payloads
+        shell: bash
+        env:
+          LUMEN_MINISIGN_PRIVATE_KEY: ${{ secrets.LUMEN_MINISIGN_PRIVATE_KEY }}
+          LUMEN_MINISIGN_PUBLIC_KEY: ${{ vars.LUMEN_MINISIGN_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          [[ -n "$LUMEN_MINISIGN_PRIVATE_KEY" ]] || { echo "FAIL: LUMEN_MINISIGN_PRIVATE_KEY is unset" >&2; exit 1; }
+          [[ -n "$LUMEN_MINISIGN_PUBLIC_KEY" ]] || { echo "FAIL: LUMEN_MINISIGN_PUBLIC_KEY is unset" >&2; exit 1; }
+          umask 077
+          key="$RUNNER_TEMP/lumen-minisign.key"
+          derived="$RUNNER_TEMP/derived.pub"
+          trap 'rm -f "$key" "$derived"' EXIT
+          printf '%s\n' "$LUMEN_MINISIGN_PRIVATE_KEY" >"$key"
+          [[ "$(printf '%s\n' "$LUMEN_MINISIGN_PUBLIC_KEY" | sed -n '2p')" == "$(sed -n '2p' dist/lumen-release.pub)" ]] || {
+            echo "FAIL: unsigned bundle public key differs from protected environment variable" >&2
+            exit 1
+          }
+          "$RUNNER_TEMP/minisign" -R -s "$key" -p "$derived"
+          [[ "$(sed -n '2p' "$derived")" == "$(sed -n '2p' dist/lumen-release.pub)" ]] || {
+            echo "FAIL: signing secret does not match the pinned public key" >&2
+            exit 1
+          }
+          for payload in \
+            dist/lumen-macos-arm64 \
+            dist/lumen-macos-arm64.spdx.json \
+            dist/lumen-macos-amd64 \
+            dist/lumen-macos-amd64.spdx.json \
+            dist/lumen-linux-arm64 \
+            dist/lumen-linux-arm64.spdx.json \
+            dist/lumen-linux-amd64 \
+            dist/lumen-linux-amd64.spdx.json \
+            dist/lumen-release-manifest.json
+          do
+            "$RUNNER_TEMP/minisign" -S \
+              -s "$key" \
+              -m "$payload" \
+              -x "$payload.minisig" \
+              -t "lumen-release-v1 $GITHUB_REF_NAME $(basename "$payload")"
+            verification="$("$RUNNER_TEMP/minisign" -V \
+              -p dist/lumen-release.pub \
+              -m "$payload" \
+              -x "$payload.minisig" 2>&1)"
+            grep -Fqx \
+              "Trusted comment: lumen-release-v1 $GITHUB_REF_NAME $(basename "$payload")" \
+              <<<"$verification"
+          done
+          rm -f "$key" "$derived"
+          trap - EXIT
+      - name: Publish existing tag and exact Lumen assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          peel_tag() {
+            local encoded object_type object_sha
+            encoded="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$GITHUB_REF_NAME")"
+            read -r object_type object_sha <<<"$(gh api "repos/{owner}/{repo}/git/ref/tags/$encoded" --jq '[.object.type,.object.sha] | @tsv')"
+            for _ in 1 2 3 4 5 6 7 8; do
+              [[ "$object_type" == tag ]] || break
+              read -r object_type object_sha <<<"$(gh api "repos/{owner}/{repo}/git/tags/$object_sha" --jq '[.object.type,.object.sha] | @tsv')"
+            done
+            [[ "$object_type" == commit ]] || return 1
+            printf '%s\n' "$object_sha"
+          }
+          fetch_release_metadata() {
+            gh release view "$GITHUB_REF_NAME" --repo "$GH_REPO" \
+              --json databaseId,isDraft,isImmutable,tagName >"$1"
+          }
+          fetch_release_assets() {
+            gh api --paginate --slurp \
+              "repos/{owner}/{repo}/releases/$1/assets?per_page=100" >"$2"
+          }
+          release_state_is_exact() {
+            python3 - "$1" "$2" "$3" "$4" "$GITHUB_REF_NAME" <<'PY'
+          import hashlib
+          import json
+          import sys
+          from pathlib import Path
+
+          metadata_path, assets_path = map(Path, sys.argv[1:3])
+          expected_draft = sys.argv[3] == "true"
+          expected_immutable = sys.argv[4] == "true"
+          expected_tag = sys.argv[5]
+          metadata = json.loads(metadata_path.read_text())
+          pages = json.loads(assets_path.read_text())
+          if not isinstance(pages, list) or not all(isinstance(page, list) for page in pages):
+              raise SystemExit("FAIL: remote release asset pagination response is malformed or truncated")
+          remote_assets = [asset for page in pages for asset in page]
+          if not all(isinstance(asset, dict) for asset in remote_assets):
+              raise SystemExit("FAIL: remote release asset response contains a non-object")
+          if metadata.get("tagName") != expected_tag:
+              raise SystemExit("FAIL: remote release tag name mismatch")
+          if metadata.get("isDraft") is not expected_draft:
+              raise SystemExit(
+                  f"FAIL: remote release draft state mismatch: "
+                  f"expected={expected_draft} actual={metadata.get('isDraft')}"
+              )
+          if metadata.get("isImmutable") is not expected_immutable:
+              raise SystemExit(
+                  f"FAIL: remote release immutable state mismatch: "
+                  f"expected={expected_immutable} actual={metadata.get('isImmutable')}"
+              )
+
+          payloads = {
+              "lumen-macos-arm64", "lumen-macos-arm64.spdx.json",
+              "lumen-macos-amd64", "lumen-macos-amd64.spdx.json",
+              "lumen-linux-arm64", "lumen-linux-arm64.spdx.json",
+              "lumen-linux-amd64", "lumen-linux-amd64.spdx.json",
+              "lumen-release.pub", "lumen-release-manifest.json",
+          }
+          expected = payloads | {
+              f"{name}.minisig" for name in payloads if name != "lumen-release.pub"
+          }
+          dist = Path("dist")
+          local = {path.name for path in dist.iterdir() if path.is_file()}
+          if local != expected:
+              raise SystemExit(
+                  f"FAIL: signed local release file boundary mismatch: "
+                  f"missing={sorted(expected - local)} extra={sorted(local - expected)}"
+              )
+          names = [asset.get("name") for asset in remote_assets]
+          if len(set(names)) != len(names):
+              raise SystemExit("FAIL: remote release contains duplicate asset names")
+          by_name = {asset.get("name"): asset for asset in remote_assets}
+          if set(by_name) != expected:
+              raise SystemExit(
+                  f"FAIL: remote release asset set mismatch: "
+                  f"missing={sorted(expected - set(by_name))} extra={sorted(set(by_name) - expected)}"
+              )
+          for name in sorted(expected):
+              path = dist / name
+              expected_digest = f"sha256:{hashlib.sha256(path.read_bytes()).hexdigest()}"
+              asset = by_name[name]
+              if asset.get("state") != "uploaded":
+                  raise SystemExit(f"FAIL: remote release asset {name} state is not uploaded")
+              if asset.get("digest") != expected_digest:
+                  raise SystemExit(f"FAIL: remote release asset {name} digest mismatch")
+              if asset.get("size") != path.stat().st_size:
+                  raise SystemExit(f"FAIL: remote release asset {name} size mismatch")
+          PY
+          }
+          release_id() {
+            python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["databaseId"])' "$1"
+          }
+          [[ "$(peel_tag)" == "$GITHUB_SHA" ]] || { echo "FAIL: tag moved before draft creation" >&2; exit 1; }
+          prerelease=()
+          [[ "$GITHUB_REF_NAME" == *-* ]] && prerelease=(--prerelease)
+          metadata="$RUNNER_TEMP/release-metadata.json"
+          remote_assets="$RUNNER_TEMP/release-assets.json"
+          if fetch_release_metadata "$metadata" 2>/dev/null; then
+            read -r is_draft is_immutable <<<"$(python3 - "$metadata" <<'PY'
+          import json, sys
+          value = json.load(open(sys.argv[1]))
+          print(str(value.get("isDraft")).lower(), str(value.get("isImmutable")).lower())
+          PY
+          )"
+            if [[ "$is_draft" == false ]]; then
+              fetch_release_assets "$(release_id "$metadata")" "$remote_assets"
+              if [[ "$is_immutable" == true ]] \
+                && [[ "$(peel_tag)" == "$GITHUB_SHA" ]] \
+                && release_state_is_exact "$metadata" "$remote_assets" false true
+              then
+                echo "OK: immutable release already exists with the exact tag and assets"
+                exit 0
+              fi
+              echo "FAIL: existing published release is not an exact immutable match; refusing mutation" >&2
+              exit 1
+            fi
+            [[ "$is_draft" == true && "$is_immutable" == false ]] || {
+              echo "FAIL: existing release has an inconsistent draft/immutable state" >&2
+              exit 1
+            }
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --repo "$GH_REPO" --draft --verify-tag --generate-notes \
+              --title "$GITHUB_REF_NAME" --latest=false "${prerelease[@]}"
+          fi
+          fetch_release_metadata "$metadata"
+          gh release upload "$GITHUB_REF_NAME" dist/lumen-* \
+            --repo "$GH_REPO" --clobber
+          [[ "$(peel_tag)" == "$GITHUB_SHA" ]] || { echo "FAIL: tag moved during asset upload" >&2; exit 1; }
+          fetch_release_metadata "$metadata"
+          fetch_release_assets "$(release_id "$metadata")" "$remote_assets"
+          release_state_is_exact "$metadata" "$remote_assets" true false
+          [[ "$(peel_tag)" == "$GITHUB_SHA" ]] || { echo "FAIL: tag moved immediately before publish" >&2; exit 1; }
+          publish_exit=0
+          gh release edit "$GITHUB_REF_NAME" \
+            --repo "$GH_REPO" --draft=false --latest=false || publish_exit=$?
+
+          # Publishing is the final mutation. A non-zero CLI exit may mean the
+          # server published successfully but the client lost the response, so
+          # always reconcile the authoritative remote state without mutating it.
+          if ! fetch_release_metadata "$metadata"; then
+            echo "FAIL: publish outcome is unknown; release state cannot be reconciled. Manual inspection required." >&2
+            exit 1
+          fi
+          fetch_release_assets "$(release_id "$metadata")" "$remote_assets"
+          if [[ "$(peel_tag)" == "$GITHUB_SHA" ]] \
+            && release_state_is_exact "$metadata" "$remote_assets" false true
+          then
+            if ((publish_exit != 0)); then
+              echo "OK: publish command exited $publish_exit, but reconciliation proves the exact immutable release was published"
+            else
+              echo "OK: published exact immutable release"
+            fi
+            exit 0
+          fi
+          is_draft="$(python3 -c 'import json,sys; print(str(json.load(open(sys.argv[1])).get("isDraft")).lower())' "$metadata")"
+          if [[ "$is_draft" == true ]]; then
+            echo "FAIL: publish command exited $publish_exit and release remains draft; no published state was mutated" >&2
+            exit 1
+          fi
+          echo "FAIL: release is published but its immutable tag/assets contract cannot be proven. Do not mutate it; manual inspection required." >&2
+          exit 1

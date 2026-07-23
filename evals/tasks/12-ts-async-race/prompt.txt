@@ -1,0 +1,1 @@
+Fix `fetchWithTimeout(url, ms)` in `src/fetcher.ts`: the timeout should actually cancel the fetch instead of just being ignored. The current code ignores the timeout and always waits forever. Do not modify the tests.

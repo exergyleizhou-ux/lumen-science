@@ -1,0 +1,1 @@
+Fix the function `safe_divide(a, b)` in `mathutil/divide.py`: it should return 0 (not raise an exception) when b is 0. Do not modify the tests.

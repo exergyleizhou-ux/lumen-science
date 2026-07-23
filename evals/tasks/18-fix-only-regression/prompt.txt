@@ -1,0 +1,1 @@
+The `TrimSpaces` function in `parser/trim.go` is broken for empty strings — it panics. Fix ONLY this function. The `ToUpper` function (which works correctly) must NOT be changed and its test must continue to pass. Do not modify the tests.

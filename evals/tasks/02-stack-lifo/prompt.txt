@@ -1,0 +1,1 @@
+stack.Stack.Pop returns the wrong element: TestPopIsLIFO expects last-in-first-out order, but Pop currently returns the first element (FIFO). Fix Pop (and any related code) so the stack is LIFO. Do not modify the tests.

@@ -1,0 +1,1 @@
+Fix `DoWork` in package `worker`: it should respect context cancellation and return ctx.Err() when the context is cancelled, instead of ignoring it. Do not modify the tests.

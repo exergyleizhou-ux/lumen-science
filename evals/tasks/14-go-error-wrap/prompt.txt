@@ -1,0 +1,1 @@
+Fix OpenDB in package dbutil: on open failure it returns a bare errors.New("database error"). It must wrap the underlying driver error with fmt.Errorf("dbutil: %w", err) so callers can Unwrap / errors.Is. Do not modify the tests.

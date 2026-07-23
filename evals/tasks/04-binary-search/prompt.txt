@@ -1,0 +1,1 @@
+search.Search returns the wrong index / misses elements: TestSearch fails on a present value and on the boundary. Fix the binary search (it has an off-by-one / boundary bug). Don't change the tests.

@@ -1,0 +1,1 @@
+Fix `safe_read(base_dir, rel_path)` in `fileutil/reader.py`: it should reject paths containing ".." to prevent directory traversal. Currently it allows reading any file. Return None and do NOT raise. Do not modify the tests.

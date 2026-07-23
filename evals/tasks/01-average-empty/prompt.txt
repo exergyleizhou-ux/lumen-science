@@ -1,0 +1,1 @@
+The test TestAverageEmpty in package calc fails: Average panics / returns NaN on an empty slice because it divides by len(nums)==0. Fix Average so an empty slice returns 0. Do not modify the tests.

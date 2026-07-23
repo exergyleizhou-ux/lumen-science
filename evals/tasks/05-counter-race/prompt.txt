@@ -1,0 +1,1 @@
+counter.Counter has a data race: TestConcurrentInc fails under the race detector because Inc/Value touch the count without synchronization. Make it race-free (e.g. a mutex or atomic). Don't change the tests.
