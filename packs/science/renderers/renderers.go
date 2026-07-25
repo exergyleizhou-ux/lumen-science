@@ -118,6 +118,16 @@ var Registry = []RendererDescriptor{
 		NetworkPolicy: NetworkSameOrigin, ScriptPolicy: "inline-csp", MaxInputBytes: 32 << 20,
 		RuntimeAuthority: "none", Admission: "pending-per-file-and-dependency-review",
 	},
+	{
+		// Vendored self-contained Motif build (jvogan/motif@876a4f9e, Node 22).
+		// Still no independent MCP authority — Lumen host must gate artifact I/O.
+		ID: "motif-full", Name: "Motif Workbench (vendored)",
+		Description: "Self-contained Motif molecular biology workbench artifact (MIT; see third_party/motif)",
+		MimeTypes:   []string{"application/x-motif-full", "text/x-fasta", "text/x-genbank"},
+		PreviewType: "motif-full", Route: "/render/motif-full",
+		NetworkPolicy: NetworkNone, ScriptPolicy: "inline-csp", MaxInputBytes: 32 << 20,
+		RuntimeAuthority: "none", Admission: "vendored-build-accepted-with-notices",
+	},
 }
 
 // FindRenderer returns the best renderer for a given MIME type.

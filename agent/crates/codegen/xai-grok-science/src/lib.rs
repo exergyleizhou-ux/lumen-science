@@ -30,6 +30,7 @@ pub mod project;
 pub mod release;
 pub mod remote;
 pub mod review;
+pub mod seqbench;
 pub mod transport;
 pub mod workflow;
 

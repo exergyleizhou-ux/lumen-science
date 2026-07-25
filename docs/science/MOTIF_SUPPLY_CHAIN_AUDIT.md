@@ -90,12 +90,21 @@ Checks that must pass when network is authorized:
 ## Verdict
 
 ```text
-DS-45A exact-source lock:     ACCEPT (commit matches)
-DS-45B full supply-chain:     PARTIAL (source/lock hashes + typecheck/lint pass;
-                              full build blocked by Node ≥22.12.0 requirement)
-DS-45C adoption scope:        ACCEPT (documented)
-DS-45D product embed:         PARTIAL (contract renderer live; full Motif bundle
-                              requires Node ≥22.12.0 on build host)
+DS-45A exact-source lock:     ACCEPT (commit 876a4f9e verified)
+DS-45B full supply-chain:     ACCEPT (npm ci + typecheck + lint + build:motif on Node 22.23.1)
+DS-45C adoption scope:        ACCEPT (documented; MCP server NOT admitted)
+DS-45D product embed:         ACCEPT (vendored under third_party/motif + static/motif-full.html)
 ```
 
-Do **not** claim “Motif fully integrated like Claude Science” until DS-45B ACCEPT and a vendored, hashed Motif build is served under the same CSP policy.
+### Vendored build (2026-07-26)
+
+| Item | Value |
+|------|-------|
+| Node | v22.23.1 |
+| Command | `npm ci --ignore-scripts && npm run build:motif` |
+| Artifact SHA-256 | `de7a3873bf48ac3217ac3bb9650ae91da87e068081b1b348000c9ee0e2079422` |
+| Manifest | `third_party/motif/VENDOR_MANIFEST.json` |
+| Renderer route | `/render/motif-full` |
+| Not vendored | Claude Science MCP server, config installer |
+
+Still not claimed: Motif as independent session/MCP authority.

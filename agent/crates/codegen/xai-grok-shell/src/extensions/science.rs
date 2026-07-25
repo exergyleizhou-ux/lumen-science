@@ -113,8 +113,84 @@ pub async fn handle(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
         "x.ai/science/connector_fetch" => handle_connector_fetch(agent, args).await,
         "x.ai/science/ssh_scp_fixture" => handle_ssh_scp_fixture(agent, args).await,
         "x.ai/science/goal_host_verify" => handle_goal_host_verify(agent, args).await,
+        "x.ai/science/seq_analyze" => handle_seq_analyze(agent, args).await,
         _ => Err(acp::Error::method_not_found()),
     }
+}
+
+/// Offline Motif-class sequence analysis product path.
+/// Reads a workspace FASTA, computes deterministic analysis, writes derived
+/// artifacts under artifactRoot (analysis.json + report.md) with SHA-256.
+/// No network. Session must exist; source must be inside session cwd.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SeqAnalyzeParams {
+    session_id: String,
+    project_id: String,
+    owner_id: String,
+    artifact_root: PathBuf,
+    source_path: PathBuf,
+}
+
+async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: SeqAnalyzeParams = parse_params(args)?;
+    if params.project_id.is_empty() || params.owner_id.is_empty() {
+        return Err(acp::Error::invalid_params().data("projectId and ownerId are required"));
+    }
+    let session_id = acp::SessionId::new(params.session_id);
+    let handle = agent
+        .get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let source_path = std::fs::canonicalize(&params.source_path).map_err(internal)?;
+    if !source_path.starts_with(&workspace) || !source_path.is_file() {
+        return Err(
+            acp::Error::invalid_params().data("sourcePath must be a file inside session cwd")
+        );
+    }
+    let artifact_root = canonical_dir_within(params.artifact_root, &workspace)?;
+    let bytes = std::fs::read(&source_path).map_err(internal)?;
+    if bytes.len() > 32 * 1024 * 1024 {
+        return Err(acp::Error::invalid_params().data("source exceeds 32 MiB cap"));
+    }
+    let text = String::from_utf8_lossy(&bytes);
+    let records = xai_grok_science::seqbench::parse_fasta(&text)
+        .map_err(|e| acp::Error::invalid_params().data(e))?;
+    let analysis = xai_grok_science::seqbench::analyze(&records, &bytes);
+    let report = xai_grok_science::seqbench::markdown_report(
+        &analysis,
+        source_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("input.fa"),
+    );
+    let analysis_json = serde_json::to_vec_pretty(&analysis).map_err(internal)?;
+    let out_dir = artifact_root
+        .join(&params.project_id)
+        .join("seqbench");
+    std::fs::create_dir_all(&out_dir).map_err(internal)?;
+    let analysis_path = out_dir.join("analysis.json");
+    let report_path = out_dir.join("report.md");
+    std::fs::write(&analysis_path, &analysis_json).map_err(internal)?;
+    std::fs::write(&report_path, report.as_bytes()).map_err(internal)?;
+    let analysis_sha = xai_grok_science::seqbench::hex_sha256(&analysis_json);
+    let report_sha = xai_grok_science::seqbench::hex_sha256(report.as_bytes());
+    to_raw_response(&serde_json::json!({
+        "projectId": params.project_id,
+        "ownerId": params.owner_id,
+        "sessionId": session_id.0,
+        "sourcePath": source_path,
+        "sourceSha256": analysis.source_sha256,
+        "recordCount": records.len(),
+        "analysisPath": analysis_path,
+        "analysisSha256": analysis_sha,
+        "reportPath": report_path,
+        "reportSha256": report_sha,
+        "tool": analysis.tool,
+        "toolVersion": analysis.tool_version,
+        "network": "disabled",
+        "runtimeAuthority": "SessionActor-gated ACP adapter",
+    }))
 }
 
 /// P5 product completion entry. This endpoint cannot supply a consultant

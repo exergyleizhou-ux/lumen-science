@@ -7,6 +7,22 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added (Lumen Science Fusion candidate — productivity + honesty pass)
+
+- **Truth layer**: `fusion-sources.lock.json` schema v4 — 42/0 dispositions;
+  BioGRID/KEGG removed from runtime `registry()` (audit-only `rejected_registry()`).
+- **Productivity CLI `lumen-science`**: `seq analyze`, `pipeline offline`, `artifact *`,
+  `gates`, `doctor`, `brief` — install via `scripts/install-science.sh`.
+- **seqbench** (Go + Rust): Motif-class offline sequence analysis (GC, RC, translate,
+  ORF, restriction sites) with SHA-256 reports.
+- **Offline dogfood**: `scripts/dogfood-science-offline.sh` (5-step PASS).
+- **Motif DS-45**: exact-source lock, CSP contract renderer, Node 22 vendored build
+  (`third_party/motif/`, `/render/motif-full`), MCP server **not** admitted.
+- **Skills DS-43**: registry schema v2, 27 skills, **0 approved** until audits.
+- **Negative tests**: cross-connector fail-closed battery on all 40 active adapters.
+- **ACP**: `x.ai/science/seq_analyze` product path (workspace FASTA → derived artifacts).
+- **Honest versioning**: `VERSION=1.0.0-fusion-candidate` (not formal 1.0 release).
+
 ### Added (Lumen Science — Level 2 Offline Product Loop)
 
 - **DS-39: Artifacts MCP server** — Durable artifact storage with SHA-256 integrity verification.
