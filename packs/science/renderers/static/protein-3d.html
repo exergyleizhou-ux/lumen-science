@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Protein Structure — Mol* Viewer</title>
+<style>body{margin:0;background:#1a1a2e;overflow:hidden}#app{width:100vw;height:100vh}</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdn.jsdelivr.net/npm/molstar@3.39.0/build/viewer/molstar.js"></script>
+<script>
+(async()=>{
+  const app=document.getElementById('app');
+  const params=new URLSearchParams(location.search);
+  const project=params.get('project')||'default';
+  const run=params.get('run')||'latest';
+  const path=params.get('path');
+  if(!path){app.innerHTML='<div style="color:#fff;padding:2rem"><h2>Protein Structure Viewer</h2><p>No artifact path provided. Add ?path=structure.pdb to the URL.</p></div>';return}
+  const resp=await fetch(`/render/api/raw?project=${encodeURIComponent(project)}&run=${encodeURIComponent(run)}&path=${encodeURIComponent(path)}`);
+  if(!resp.ok){app.innerHTML='<div style="color:#fff;padding:2rem"><p>Failed to load artifact.</p></div>';return}
+  const data=await resp.text();
+  const blob=new Blob([data],{type:'chemical/x-pdb'});
+  const url=URL.createObjectURL(blob);
+  const viewer=new molstar.Viewer(app,{layoutShowControls:true});
+  await viewer.loadStructureFromUrl(url,'pdb');
+})();
+</script>
+</body>
+</html>

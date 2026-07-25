@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lumen-ai/lumen-science/internal/brief"
+	"github.com/lumen-ai/lumen-science/standalone/internal/brief"
 )
 
 const usage = `lumen-science — standalone private-beta Science path

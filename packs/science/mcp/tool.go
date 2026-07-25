@@ -25,7 +25,7 @@ type RegisteredTool struct {
 func TextResult(data any) map[string]any {
 	b, _ := json.MarshalIndent(data, "", "  ")
 	return map[string]any{
-		"content": []map[string]any{{
+		"content": []any{map[string]any{
 			"type": "text",
 			"text": string(b),
 		}},
@@ -35,7 +35,7 @@ func TextResult(data any) map[string]any {
 // ErrorResult returns an MCP tool error payload.
 func ErrorResult(msg string) map[string]any {
 	return map[string]any{
-		"content": []map[string]any{{
+		"content": []any{map[string]any{
 			"type": "text",
 			"text": msg,
 		}},

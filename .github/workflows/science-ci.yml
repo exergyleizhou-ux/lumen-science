@@ -1,0 +1,113 @@
+name: Lumen Science CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packs/science/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packs/science/**'
+  workflow_dispatch:
+
+concurrency:
+  group: science-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Go test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    defaults:
+      run:
+        working-directory: packs/science
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Test (unit)
+        run: go test ./mcp/artifacts/... ./mcp/notebook/... ./mcp/reviewer/... ./mcp/http_bridge/... -count=1 -timeout=60s
+
+      - name: Vet
+        run: go vet ./mcp/artifacts/... ./mcp/notebook/... ./mcp/reviewer/... ./mcp/http_bridge/... ./renderers/...
+
+  build:
+    name: Cross-compile (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { os: darwin,  arch: arm64 }
+          - { os: darwin,  arch: amd64 }
+          - { os: linux,   arch: amd64 }
+          - { os: linux,   arch: arm64 }
+          - { os: windows, arch: amd64 }
+    defaults:
+      run:
+        working-directory: packs/science
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build
+        run: |
+          mkdir -p build
+          for bin in artifacts notebook reviewer http_bridge science skill-migrate; do
+            GOOS=${{ matrix.target.os }} GOARCH=${{ matrix.target.arch }} \
+              go build -trimpath -o build/lumen-mcp-${bin}-${{ matrix.target.os }}-${{ matrix.target.arch }} \
+              ./standalone/cmd/${bin}
+          done
+
+      - name: Verify binaries
+        run: file build/* | head -20
+
+  e2e:
+    name: E2E pipeline test
+    runs-on: ubuntu-latest
+    needs: [build]
+    defaults:
+      run:
+        working-directory: packs/science
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build MCP binaries
+        run: |
+          for bin in artifacts notebook reviewer; do
+            go build -o lumen-mcp-${bin} ./standalone/cmd/${bin}
+          done
+
+      - name: Run E2E tests
+        run: |
+          export PATH="$(pwd):$PATH"
+          go test ./e2e/... -v -count=1 -timeout=120s

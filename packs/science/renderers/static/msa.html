@@ -1,0 +1,17 @@
+<!DOCTYPE html><html lang="en">
+<head><meta charset="UTF-8"><title>MSA Viewer</title>
+<style>body{font-family:monospace;padding:1rem;background:#fafaf7}pre{background:#fff;border:1px solid #ddd;border-radius:.5rem;padding:1rem;overflow:auto;max-height:70vh;font-size:12px;line-height:1.4}.stats{margin-bottom:1rem;color:#71717a}</style></head>
+<body>
+<h2>Multiple Sequence Alignment Viewer</h2><div class="stats" id="stats">Loading...</div><pre id="msa"></pre>
+<script>
+(async()=>{
+  const params=new URLSearchParams(location.search);
+  const path=params.get('path');
+  if(!path){document.getElementById('msa').textContent='No alignment path.';return}
+  const resp=await fetch(`/render/api/raw?project=${params.get('project')||'default'}&run=${params.get('run')||'latest'}&path=${encodeURIComponent(path)}`);
+  if(!resp.ok){document.getElementById('msa').textContent='Failed to load.';return}
+  const text=await resp.text();
+  const lines=text.split('\n').filter(l=>l.trim()&&!l.startsWith('#'));
+  document.getElementById('stats').textContent=`${lines.length} line(s)`;
+  document.getElementById('msa').textContent=text;
+})();</script></body></html>

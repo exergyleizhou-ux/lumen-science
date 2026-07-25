@@ -1,0 +1,15 @@
+<!DOCTYPE html><html lang="en">
+<head><meta charset="UTF-8"><title>Artifact Renderer</title>
+<style>body{font-family:system-ui;padding:2rem;background:#fafaf7}pre{background:#fff;border:1px solid #ddd;padding:1rem;overflow:auto;max-height:70vh;font-size:13px}</style></head>
+<body>
+<h2>Artifact Content</h2><p style="color:#71717a">No specific renderer available. Showing raw content.</p>
+<pre id="content">Loading...</pre>
+<script>
+(async()=>{
+  const params=new URLSearchParams(location.search);
+  const path=params.get('path');
+  if(!path){document.getElementById('content').textContent='No artifact path.';return}
+  const resp=await fetch(`/render/api/raw?project=${params.get('project')||'default'}&run=${params.get('run')||'latest'}&path=${encodeURIComponent(path)}`);
+  if(!resp.ok){document.getElementById('content').textContent='Failed to load.';return}
+  document.getElementById('content').textContent=await resp.text();
+})();</script></body></html>

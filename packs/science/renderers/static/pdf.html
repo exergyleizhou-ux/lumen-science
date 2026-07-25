@@ -1,0 +1,27 @@
+<!DOCTYPE html><html lang="en">
+<head><meta charset="UTF-8"><title>PDF Viewer</title>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.min.js"></script>
+<style>body{font-family:system-ui;margin:0;padding:1rem;background:#fafaf7}#canvas-container{overflow:auto;max-height:80vh;text-align:center}canvas{border:1px solid #ddd;margin:0 auto 8px;display:block}</style></head>
+<body>
+<h2>PDF Viewer</h2><p style="color:#71717a" id="status">Loading...</p>
+<div id="canvas-container"></div>
+<script>
+(async()=>{
+  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.js';
+  const params=new URLSearchParams(location.search);
+  const path=params.get('path');
+  if(!path){document.getElementById('status').textContent='No PDF path provided.';return}
+  const resp=await fetch(`/render/api/raw?project=${params.get('project')||'default'}&run=${params.get('run')||'latest'}&path=${encodeURIComponent(path)}`);
+  if(!resp.ok){document.getElementById('status').textContent='Failed to load PDF.';return}
+  const data=await resp.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data}).promise;
+  document.getElementById('status').textContent=`${pdf.numPages} page(s)`;
+  const container=document.getElementById('canvas-container');
+  for(let i=1;i<=pdf.numPages;i++){
+    const page=await pdf.getPage(i);
+    const scale=1.2;const viewport=page.getViewport({scale});
+    const canvas=document.createElement('canvas');canvas.width=viewport.width;canvas.height=viewport.height;
+    container.appendChild(canvas);
+    await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+  }
+})();</script></body></html>

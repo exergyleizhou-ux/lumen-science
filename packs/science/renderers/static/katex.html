@@ -1,0 +1,22 @@
+<!DOCTYPE html><html lang="en">
+<head><meta charset="UTF-8"><title>LaTeX Viewer</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<style>body{font-family:system-ui;padding:2rem;background:#fafaf7}textarea{width:100%;min-height:120px;font-family:monospace;margin-bottom:1rem}#output{padding:1rem;background:#fff;border:1px solid #ddd;border-radius:.5rem;min-height:100px}</style></head>
+<body>
+<h2>LaTeX / Math Renderer</h2><p style="color:#71717a">Render mathematical formulas with KaTeX. Use $$ for display mode.</p>
+<textarea id="input" placeholder="E = mc^2\n\n\\int_0^\\infty e^{-x^2} dx = \\frac{\\sqrt{\\pi}}{2}">E = mc^2
+
+\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}</textarea>
+<div id="output"></div>
+<script>
+(async()=>{
+  const params=new URLSearchParams(location.search);
+  const path=params.get('path');
+  if(path){
+    const resp=await fetch(`/render/api/raw?project=${params.get('project')||'default'}&run=${params.get('run')||'latest'}&path=${encodeURIComponent(path)}`);
+    if(resp.ok)document.getElementById('input').value=await resp.text();
+  }
+  function render(){const lines=document.getElementById('input').value.split('\n');let html='';for(const line of lines){const t=line.trim();if(!t)continue;try{if(t.startsWith('$$')&&t.endsWith('$$')){html+=katex.renderToString(t.slice(2,-2),{displayMode:true,throwOnError:false})}else if(t.startsWith('$')&&t.endsWith('$')){html+=katex.renderToString(t.slice(1,-1),{throwOnError:false})}else{html+=katex.renderToString(t,{displayMode:true,throwOnError:false})}}catch(e){html+=`<p style="color:red">${e.message}</p>`}}document.getElementById('output').innerHTML=html}
+  document.getElementById('input').addEventListener('input',render);render();
+})();</script></body></html>

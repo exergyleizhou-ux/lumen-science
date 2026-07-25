@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lumen Science — Renderers</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,sans-serif;background:#fafaf7;color:#18181b;padding:2rem}
+  h1{font-size:1.5rem;margin-bottom:.5rem}
+  p.sub{color:#71717a;margin-bottom:2rem}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem}
+  .card{background:#fff;border:1px solid #e5e5e0;border-radius:.75rem;padding:1.25rem}
+  .card h2{font-size:1rem;margin-bottom:.25rem}
+  .card p{font-size:.85rem;color:#71717a;margin-bottom:.75rem}
+  .card a{color:#047857;text-decoration:none;font-size:.85rem;font-weight:500}
+  .card a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<h1>Lumen Science — Artifact Renderers</h1>
+<p class="sub">Select a renderer to visualize your scientific artifacts.</p>
+<div class="grid">
+  <div class="card"><h2>Protein Structure (3D)</h2><p>Interactive 3D macromolecule viewer · Mol*</p><a href="/render/protein-3d">Open →</a></div>
+  <div class="card"><h2>Chemical Structure (2D)</h2><p>2D chemical structure renderer · RDKit.js</p><a href="/render/chem-2d">Open →</a></div>
+  <div class="card"><h2>Genome Browser</h2><p>Interactive genome track browser · IGV.js</p><a href="/render/genome-browser">Open →</a></div>
+  <div class="card"><h2>LaTeX / Math</h2><p>Mathematical formula renderer · KaTeX</p><a href="/render/katex">Open →</a></div>
+  <div class="card"><h2>PDF Viewer</h2><p>Inline PDF document viewer</p><a href="/render/pdf">Open →</a></div>
+  <div class="card"><h2>Sequence Viewer</h2><p>DNA/RNA/protein sequence viewer</p><a href="/render/sequence">Open →</a></div>
+  <div class="card"><h2>MSA Viewer</h2><p>Multiple sequence alignment viewer</p><a href="/render/msa">Open →</a></div>
+  <div class="card"><h2>Image Viewer</h2><p>Scientific image and micrograph viewer</p><a href="/render/image">Open →</a></div>
+  <div class="card"><h2>Motif Molecular Workbench</h2><p>Interactive molecular biology workbench</p><a href="/render/motif">Open →</a></div>
+</div>
+</body>
+</html>

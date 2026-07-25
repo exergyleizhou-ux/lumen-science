@@ -1,0 +1,33 @@
+<!DOCTYPE html><html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Motif — Molecular Biology Workbench</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:system-ui;background:#fafaf7;color:#18181b;padding:2rem}
+  h1{font-size:1.5rem;margin-bottom:.5rem}
+  p{color:#71717a;margin-bottom:1rem}
+  .placeholder{border:2px dashed #047857;border-radius:.75rem;padding:3rem;text-align:center;color:#047857;background:#f0faf5}
+  .placeholder p{color:#047857;margin-top:.5rem;font-size:.85rem}
+</style></head>
+<body>
+<h1>Motif Molecular Biology Workbench</h1>
+<p>Self-contained molecular biology visualization and analysis environment.</p>
+<div class="placeholder">
+  <h2>🧬</h2>
+  <p>Motif workbench ready. Load molecular data via artifact API to begin.</p>
+  <p style="font-family:monospace;font-size:.75rem;margin-top:1rem">
+    GET /render/api/raw?project=&lt;id&gt;&run=&lt;id&gt;&path=&lt;file&gt;
+  </p>
+</div>
+<script>
+(async()=>{
+  const params=new URLSearchParams(location.search);
+  const path=params.get('path');
+  if(path){
+    const resp=await fetch(`/render/api/raw?project=${params.get('project')||'default'}&run=${params.get('run')||'latest'}&path=${encodeURIComponent(path)}`);
+    if(resp.ok){
+      const text=await resp.text();
+      document.querySelector('.placeholder').innerHTML=`<h2>🧬 Loaded: ${path}</h2><pre style="text-align:left;max-height:300px;overflow:auto;font-size:12px">${text.slice(0,2000)}</pre>`;
+    }
+  }
+})();</script></body></html>

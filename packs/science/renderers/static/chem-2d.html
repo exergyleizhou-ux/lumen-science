@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chemical Structure — 2D Viewer</title>
+<script src="https://cdn.jsdelivr.net/npm/@rdkit/rdkit@2024.3.3/dist/RDKit_minimal.js"></script>
+<style>body{font-family:system-ui;margin:0;padding:2rem;background:#fafaf7}
+#canvas{max-width:600px;margin:0 auto}input{width:100%;padding:.5rem;font-family:monospace;margin-bottom:1rem}</style>
+</head>
+<body>
+<h2>Chemical Structure Viewer</h2>
+<p style="color:#71717a">Enter a SMILES string or load from artifact.</p>
+<input id="smiles" placeholder="e.g. CC(=O)OC1=CC=CC=C1C(=O)O (aspirin)" value="CC(=O)OC1=CC=CC=C1C(=O)O">
+<div id="canvas"></div>
+<script>
+(async()=>{
+  const params=new URLSearchParams(location.search);
+  const path=params.get('path');
+  if(path){
+    const resp=await fetch(`/render/api/raw?project=${params.get('project')||'default'}&run=${params.get('run')||'latest'}&path=${encodeURIComponent(path)}`);
+    if(resp.ok){document.getElementById('smiles').value=(await resp.text()).trim()}
+  }
+  const RDKit=await window.initRDKitModule();
+  document.getElementById('smiles').addEventListener('input',()=>{
+    try{
+      const mol=RDKit.get_mol(document.getElementById('smiles').value);
+      const svg=mol.get_svg();
+      document.getElementById('canvas').innerHTML=svg;
+      mol.delete();
+    }catch(e){document.getElementById('canvas').innerHTML='<p style="color:red">Invalid SMILES</p>'}
+  });
+  document.getElementById('smiles').dispatchEvent(new Event('input'));
+})();
+</script>
+</body>
+</html>

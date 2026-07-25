@@ -7,6 +7,46 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added (Lumen Science — Level 2 Offline Product Loop)
+
+- **DS-39: Artifacts MCP server** — Durable artifact storage with SHA-256 integrity verification.
+  Tools: `artifact_write`, `artifact_list`, `artifact_read`, `artifact_preview`.
+  Atomic writes, path traversal protection, CSV/FASTA/JSON content sniffing.
+
+- **DS-40: Python Notebook MCP server** — Persistent Python kernel with JSON-RPC over stdio.
+  Tools: `notebook_execute`, `notebook_restart`, `notebook_state`, `notebook_shutdown`,
+  `manage_packages`, `manage_environments`. Auto-restart on failure.
+
+- **DS-41: Reviewer MCP server** — Artifact integrity verification and review workflow.
+  Tools: `start_review`, `review_status`, `approve_fix`.
+  SHA-256 rehashing, structured pass/warn/fail reports.
+
+- **DS-42: HTTP Bridge** — Exposes any stdio MCP server as a Bearer-auth'd HTTP endpoint.
+  Supports `tools/call`, `tools/list`, and health check endpoints.
+
+- **DS-43: Skills registry** — ACP extension descriptor format, 8 registered science skills,
+  `skill-migrate` tool for batch conversion of SKILL.md files.
+
+- **DS-44/45/46: Science Renderers** — 9 self-contained HTML renderers:
+  Protein Structure 3D (Mol*), Chemical Structure 2D (RDKit.js), Genome Browser (IGV.js),
+  LaTeX/Math (KaTeX), PDF Viewer, Sequence Viewer, MSA Viewer, Image Viewer,
+  Motif Molecular Workbench. ArtifactRenderer framework with embed.FS serving.
+
+- **DS-47: E2E integration tests** — Full pipeline test: artifacts → notebook → reviewer.
+  Security tests for path traversal and error recovery.
+
+- **CI/CD: Science CI workflow** — Cross-platform Go builds (macOS, Linux, Windows)
+  on amd64/arm64. Unit tests, vet, and E2E pipeline test.
+
+- **Makefile** — `make all`, `make cross`, `make test`, `make lint`, `make release`.
+
+### Changed
+
+- `packs/science/go.mod`: Moved module root from `standalone/` to `packs/science/`
+  for multi-package MCP server layout.
+- `mcp/tool.go`: Fixed `TextResult`/`ErrorResult` content type from `[]map[string]any`
+  to `[]any` for MCP compatibility.
+
 ## [0.1.222] - 2026-07-20
 
 ### Fixed

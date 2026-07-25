@@ -1,0 +1,13 @@
+<!DOCTYPE html><html lang="en">
+<head><meta charset="UTF-8"><title>Image Viewer</title>
+<style>body{font-family:system-ui;margin:0;padding:1rem;background:#1a1a2e;text-align:center}img{max-width:95vw;max-height:85vh;border-radius:.5rem}#info{color:#aaa;margin-bottom:.5rem;font-size:.85rem}</style></head>
+<body><div id="info"></div><img id="img" alt="">
+<script>
+(async()=>{
+  const params=new URLSearchParams(location.search);
+  const path=params.get('path');
+  if(!path){document.getElementById('info').textContent='No image path.';return}
+  const url=`/render/api/raw?project=${params.get('project')||'default'}&run=${params.get('run')||'latest'}&path=${encodeURIComponent(path)}`;
+  document.getElementById('info').textContent=path;
+  document.getElementById('img').src=url;
+})();</script></body></html>

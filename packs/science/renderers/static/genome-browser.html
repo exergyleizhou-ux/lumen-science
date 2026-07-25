@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Genome Browser — IGV.js</title>
+<script src="https://cdn.jsdelivr.net/npm/igv@3.0.5/dist/igv.min.js"></script>
+<style>body{margin:0;padding:1rem;background:#fafaf7}#igv-div{width:100%;height:600px;border:1px solid #ddd}</style>
+</head>
+<body>
+<h2>Genome Browser</h2>
+<p style="color:#71717a">Interactive genome track visualization using IGV.js</p>
+<div id="igv-div"></div>
+<script>
+(async()=>{
+  const params=new URLSearchParams(location.search);
+  const path=params.get('path');
+  const options={genome:'hg38',locus:'BRCA1',tracks:[]};
+  if(path){
+    const resp=await fetch(`/render/api/raw?project=${params.get('project')||'default'}&run=${params.get('run')||'latest'}&path=${encodeURIComponent(path)}`);
+    if(resp.ok){
+      const blob=await resp.blob();
+      const url=URL.createObjectURL(blob);
+      options.tracks.push({name:path,url,format:'bed',indexed:false});
+    }
+  }
+  igv.createBrowser(document.getElementById('igv-div'),options);
+})();
+</script>
+</body>
+</html>

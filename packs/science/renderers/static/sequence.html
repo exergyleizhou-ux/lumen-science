@@ -1,0 +1,20 @@
+<!DOCTYPE html><html lang="en">
+<head><meta charset="UTF-8"><title>Sequence Viewer</title>
+<style>body{font-family:monospace;padding:1rem;background:#fafaf7}pre{background:#fff;border:1px solid #ddd;border-radius:.5rem;padding:1rem;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto;font-size:13px;line-height:1.6}.stats{margin-bottom:1rem;color:#71717a}</style></head>
+<body>
+<h2>Sequence Viewer</h2><div class="stats" id="stats">Loading...</div><pre id="seq"></pre>
+<script>
+(async()=>{
+  const params=new URLSearchParams(location.search);
+  const path=params.get('path');
+  if(!path){document.getElementById('seq').textContent='No sequence path provided.';return}
+  const resp=await fetch(`/render/api/raw?project=${params.get('project')||'default'}&run=${params.get('run')||'latest'}&path=${encodeURIComponent(path)}`);
+  if(!resp.ok){document.getElementById('seq').textContent='Failed to load.';return}
+  const text=await resp.text();
+  const lines=text.split('\n').filter(l=>l.trim());
+  const seqCount=lines.filter(l=>l.startsWith('>')).length;
+  const dataLines=lines.filter(l=>!l.startsWith('>'));
+  const totalBases=dataLines.reduce((s,l)=>s+l.replace(/\s/g,'').length,0);
+  document.getElementById('stats').textContent=`${seqCount} sequence(s) · ${totalBases.toLocaleString()} total bases`;
+  document.getElementById('seq').textContent=text;
+})();</script></body></html>
