@@ -14,6 +14,7 @@ import (
 	"github.com/lumen-ai/lumen-science/mcp/artifacts"
 	"github.com/lumen-ai/lumen-science/standalone/internal/brief"
 	"github.com/lumen-ai/lumen-science/standalone/internal/pipeline"
+	"github.com/lumen-ai/lumen-science/standalone/internal/projectstore"
 	"github.com/lumen-ai/lumen-science/standalone/internal/seqbench"
 )
 
@@ -39,9 +40,15 @@ Usage:
   lumen-science artifact verify --project P --run R --path REL --sha256 HEX
   lumen-science pipeline offline --project P --run R FILE
       Offline loop: register FASTA → seqbench → derived artifacts → integrity review
+  lumen-science project create --owner O --title T --question Q [--store DIR]
+  lumen-science project list [--store DIR]
+  lumen-science project get --id ID [--store DIR]
+  lumen-science claim propose --project ID --owner O --by WHO --statement S [--store DIR]
+      V2 ResearchProject path (toward Science 5.0 / WP-2)
 
 Notes:
   brief talks to PubMed/ChEMBL (live). seq/artifact/pipeline offline are default-safe.
+  project/claim are local durable records (feature-gated Preview in Rust ACP).
   Not medical advice. Not unsupervised lab control.
 `
 
@@ -67,6 +74,10 @@ func main() {
 		err = runArtifact(os.Args[2:])
 	case "pipeline":
 		err = runPipeline(os.Args[2:])
+	case "project":
+		err = runProject(os.Args[2:])
+	case "claim":
+		err = runClaim(os.Args[2:])
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 		return
@@ -606,4 +617,113 @@ func writeAtomic(path string, data []byte) error {
 		return err
 	}
 	return os.Rename(tmpPath, absolute)
+}
+
+func defaultProjectStore(explicit string) (string, error) {
+	if explicit != "" {
+		return filepath.Abs(explicit)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".lumen", "science", "projects-root"), nil
+}
+
+func runProject(args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("project requires subcommand: create|list|get")
+	}
+	switch args[0] {
+	case "create":
+		flags := flag.NewFlagSet("project create", flag.ContinueOnError)
+		flags.SetOutput(os.Stderr)
+		owner := flags.String("owner", "", "owner id")
+		title := flags.String("title", "", "title")
+		question := flags.String("question", "", "research question")
+		storePath := flags.String("store", "", "store root")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		root, err := defaultProjectStore(*storePath)
+		if err != nil {
+			return err
+		}
+		p, err := projectstore.New(root).Create(*owner, *title, *question)
+		if err != nil {
+			return err
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(p)
+	case "list":
+		flags := flag.NewFlagSet("project list", flag.ContinueOnError)
+		flags.SetOutput(os.Stderr)
+		storePath := flags.String("store", "", "store root")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		root, err := defaultProjectStore(*storePath)
+		if err != nil {
+			return err
+		}
+		list, err := projectstore.New(root).List()
+		if err != nil {
+			return err
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(list)
+	case "get":
+		flags := flag.NewFlagSet("project get", flag.ContinueOnError)
+		flags.SetOutput(os.Stderr)
+		id := flags.String("id", "", "project id")
+		storePath := flags.String("store", "", "store root")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *id == "" {
+			return fmt.Errorf("--id required")
+		}
+		root, err := defaultProjectStore(*storePath)
+		if err != nil {
+			return err
+		}
+		p, err := projectstore.New(root).Get(*id)
+		if err != nil {
+			return err
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(p)
+	default:
+		return fmt.Errorf("unknown project subcommand %q", args[0])
+	}
+}
+
+func runClaim(args []string) error {
+	if len(args) < 1 || args[0] != "propose" {
+		return fmt.Errorf("usage: claim propose --project ID --owner O --by WHO --statement S")
+	}
+	flags := flag.NewFlagSet("claim propose", flag.ContinueOnError)
+	flags.SetOutput(os.Stderr)
+	projectID := flags.String("project", "", "project id")
+	owner := flags.String("owner", "", "owner id")
+	by := flags.String("by", "", "proposed by")
+	statement := flags.String("statement", "", "claim statement")
+	storePath := flags.String("store", "", "store root")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	root, err := defaultProjectStore(*storePath)
+	if err != nil {
+		return err
+	}
+	c, err := projectstore.New(root).ProposeClaim(*projectID, *owner, *statement, *by)
+	if err != nil {
+		return err
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(c)
 }

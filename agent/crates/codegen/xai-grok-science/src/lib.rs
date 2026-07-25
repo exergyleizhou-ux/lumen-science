@@ -21,6 +21,7 @@ pub mod connector;
 pub mod connectors;
 pub mod csv;
 pub mod dummy_lab;
+pub mod features;
 pub mod import;
 pub mod device;
 pub mod governance;
@@ -48,6 +49,8 @@ pub enum ScienceError {
     Ownership,
     #[error("approval already terminal with a conflicting decision")]
     ApprovalConflict,
+    #[error("feature disabled: {0}")]
+    FeatureDisabled(String),
 }
 
 pub type Result<T> = std::result::Result<T, ScienceError>;

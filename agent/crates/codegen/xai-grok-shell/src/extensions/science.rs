@@ -114,8 +114,215 @@ pub async fn handle(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
         "x.ai/science/ssh_scp_fixture" => handle_ssh_scp_fixture(agent, args).await,
         "x.ai/science/goal_host_verify" => handle_goal_host_verify(agent, args).await,
         "x.ai/science/seq_analyze" => handle_seq_analyze(agent, args).await,
+        "x.ai/science/project_create" => handle_project_create(agent, args).await,
+        "x.ai/science/project_get" => handle_project_get(agent, args).await,
+        "x.ai/science/project_list" => handle_project_list(agent, args).await,
+        "x.ai/science/project_transition" => handle_project_transition(agent, args).await,
+        "x.ai/science/claim_propose" => handle_claim_propose(agent, args).await,
+        "x.ai/science/evidence_attach" => handle_evidence_attach(agent, args).await,
         _ => Err(acp::Error::method_not_found()),
     }
+}
+
+// ── WP-2 product path: ResearchProject + EvidenceGraph + Claims ──
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ProjectCreateParams {
+    session_id: String,
+    owner_id: String,
+    store_root: PathBuf,
+    title: String,
+    research_question: String,
+}
+
+async fn handle_project_create(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: ProjectCreateParams = parse_params(args)?;
+    if params.owner_id.is_empty() || params.title.is_empty() {
+        return Err(acp::Error::invalid_params().data("ownerId and title are required"));
+    }
+    let session_id = acp::SessionId::new(params.session_id);
+    let handle = agent
+        .get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let store_root = canonical_dir_within(params.store_root, &workspace)?;
+    let store = xai_grok_science::project::ProjectStore::new(store_root);
+    let project = store
+        .create_project(&params.owner_id, params.title, params.research_question)
+        .map_err(internal)?;
+    to_raw_response(&serde_json::json!({
+        "projectId": project.project_id.0,
+        "ownerId": project.owner_id.0,
+        "title": project.title,
+        "status": format!("{:?}", project.status),
+        "evidenceGraphId": project.evidence_graph_id,
+        "featureGate": "research_project=preview",
+        "runtimeAuthority": "SessionActor-gated ACP adapter",
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ProjectGetParams {
+    session_id: String,
+    store_root: PathBuf,
+    project_id: String,
+}
+
+async fn handle_project_get(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: ProjectGetParams = parse_params(args)?;
+    let session_id = acp::SessionId::new(params.session_id);
+    let handle = agent
+        .get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let store_root = canonical_dir_within(params.store_root, &workspace)?;
+    let store = xai_grok_science::project::ProjectStore::new(store_root);
+    let pid = xai_grok_science::project::ProjectId(params.project_id);
+    let bundle = store.load_bundle(&pid).map_err(internal)?;
+    to_raw_response(&bundle)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ProjectListParams {
+    session_id: String,
+    store_root: PathBuf,
+}
+
+async fn handle_project_list(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: ProjectListParams = parse_params(args)?;
+    let session_id = acp::SessionId::new(params.session_id);
+    let handle = agent
+        .get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let store_root = canonical_dir_within(params.store_root, &workspace)?;
+    let store = xai_grok_science::project::ProjectStore::new(store_root);
+    let projects = store.list_projects().map_err(internal)?;
+    to_raw_response(&projects)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ProjectTransitionParams {
+    session_id: String,
+    store_root: PathBuf,
+    project_id: String,
+    owner_id: String,
+    /// Draft | Planned | Active | ReviewPending | Accepted | Rejected | Inconclusive | Archived
+    status: String,
+}
+
+async fn handle_project_transition(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: ProjectTransitionParams = parse_params(args)?;
+    let session_id = acp::SessionId::new(params.session_id);
+    let handle = agent
+        .get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let store_root = canonical_dir_within(params.store_root, &workspace)?;
+    let store = xai_grok_science::project::ProjectStore::new(store_root);
+    let status = parse_project_status(&params.status)
+        .ok_or_else(|| acp::Error::invalid_params().data("invalid status"))?;
+    let project = store
+        .transition_project(
+            &xai_grok_science::project::ProjectId(params.project_id),
+            &params.owner_id,
+            status,
+        )
+        .map_err(internal)?;
+    to_raw_response(&project)
+}
+
+fn parse_project_status(s: &str) -> Option<xai_grok_science::project::ProjectStatus> {
+    use xai_grok_science::project::ProjectStatus::*;
+    match s.to_ascii_lowercase().as_str() {
+        "draft" => Some(Draft),
+        "planned" => Some(Planned),
+        "active" => Some(Active),
+        "reviewpending" | "review_pending" => Some(ReviewPending),
+        "accepted" => Some(Accepted),
+        "rejected" => Some(Rejected),
+        "inconclusive" => Some(Inconclusive),
+        "archived" => Some(Archived),
+        _ => None,
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ClaimProposeParams {
+    session_id: String,
+    store_root: PathBuf,
+    project_id: String,
+    owner_id: String,
+    statement: String,
+    proposed_by: String,
+}
+
+async fn handle_claim_propose(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: ClaimProposeParams = parse_params(args)?;
+    if params.statement.is_empty() {
+        return Err(acp::Error::invalid_params().data("statement is required"));
+    }
+    let session_id = acp::SessionId::new(params.session_id);
+    let handle = agent
+        .get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let store_root = canonical_dir_within(params.store_root, &workspace)?;
+    let store = xai_grok_science::project::ProjectStore::new(store_root);
+    let claim = store
+        .propose_claim(
+            &xai_grok_science::project::ProjectId(params.project_id),
+            &params.owner_id,
+            params.statement,
+            params.proposed_by,
+        )
+        .map_err(internal)?;
+    to_raw_response(&claim)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EvidenceAttachParams {
+    session_id: String,
+    store_root: PathBuf,
+    project_id: String,
+    owner_id: String,
+    claim_id: String,
+    artifact_sha256: String,
+    label: String,
+    #[serde(default)]
+    run_id: Option<String>,
+}
+
+async fn handle_evidence_attach(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: EvidenceAttachParams = parse_params(args)?;
+    let session_id = acp::SessionId::new(params.session_id);
+    let handle = agent
+        .get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let store_root = canonical_dir_within(params.store_root, &workspace)?;
+    let store = xai_grok_science::project::ProjectStore::new(store_root);
+    let (claim, graph) = store
+        .attach_evidence(
+            &xai_grok_science::project::ProjectId(params.project_id),
+            &params.owner_id,
+            &params.claim_id,
+            params.artifact_sha256,
+            params.label,
+            params.run_id,
+        )
+        .map_err(internal)?;
+    to_raw_response(&serde_json::json!({
+        "claim": claim,
+        "nodeCount": graph.nodes.len(),
+        "edgeCount": graph.edges.len(),
+    }))
 }
 
 /// Offline Motif-class sequence analysis product path.
