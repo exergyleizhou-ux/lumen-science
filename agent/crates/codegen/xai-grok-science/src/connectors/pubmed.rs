@@ -6,8 +6,56 @@
 //! journals for those PMIDs), matching NCBI's published usage within the
 //! descriptor's 3 requests/second budget.
 
-use super::fetch::RetrievedRecord;
+use super::adapter::ProtocolAdapter;
+use super::fetch::{ParsedResponse, RetrievedRecord};
 use crate::ScienceError;
+
+/// DS-1 protocol adapter. Registered in the global [`super::adapter::REGISTRY`].
+pub struct PubmedAdapter;
+
+impl ProtocolAdapter for PubmedAdapter {
+    fn descriptor(&self) -> &'static super::ConnectorDescriptor {
+        &super::PUBMED
+    }
+
+    fn expected_exchanges(&self) -> usize {
+        2
+    }
+
+    fn build_fixture_paths(
+        &self,
+        query: &str,
+        max_results: u32,
+        fixtures: &[Vec<u8>],
+    ) -> crate::Result<Vec<String>> {
+        if fixtures.len() != 2 {
+            return Err(ScienceError::Invalid(
+                "pubmed fixture requires esearch and esummary fixture bytes".into(),
+            ));
+        }
+        let search_path = esearch_path(query, max_results, 0);
+        let (_total, ids) = parse_esearch(&fixtures[0])?;
+        let summary_path = esummary_path(&ids);
+        Ok(vec![search_path, summary_path])
+    }
+
+    fn parse_responses(
+        &self,
+        exchanges: &[super::fetch::FetchExchange],
+    ) -> crate::Result<ParsedResponse> {
+        if exchanges.len() != 2 {
+            return Err(ScienceError::Invalid(
+                "pubmed fetch requires esearch and esummary exchanges".into(),
+            ));
+        }
+        let (total_hits, _ids) = parse_esearch(&exchanges[0].response)?;
+        let records = parse_esummary(&exchanges[1].response)?;
+        Ok(ParsedResponse {
+            total_hits,
+            records,
+        })
+    }
+}
 
 /// esearch path for `term`, page size `max`, zero-based page start `offset`.
 pub fn esearch_path(term: &str, max: u32, offset: u32) -> String {

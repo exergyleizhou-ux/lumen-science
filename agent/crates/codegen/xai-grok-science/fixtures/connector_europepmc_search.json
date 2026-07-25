@@ -1,0 +1,33 @@
+{
+  "version": "6.9",
+  "hitCount": 2,
+  "nextCursorMark": "AoIIP4FI",
+  "request": {
+    "queryString": "single cell RNA",
+    "resultType": "lite",
+    "pageSize": 5,
+    "synonym": false
+  },
+  "resultList": {
+    "result": [
+      {
+        "id": "41234567",
+        "source": "MED",
+        "pmid": "41234567",
+        "doi": "10.5555/example.1",
+        "title": "Reproducible single-cell analysis",
+        "authorString": "Doe J, Roe R",
+        "journalTitle": "Genome Methods",
+        "pubYear": "2026",
+        "abstractText": "This fixture field is deliberately ignored."
+      },
+      {
+        "id": "PPR123456",
+        "source": "PPR",
+        "title": "A durable literature workflow",
+        "authorString": "Smith A",
+        "pubYear": "2025"
+      }
+    ]
+  }
+}

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <id>http://arxiv.org/abs/1706.03762</id>
+    <title>Attention Is All You Need</title>
+    <summary>intentionally not consumed</summary>
+    <published>2017-06-12T00:00:00Z</published>
+    <author><name>Vaswani</name></author>
+    <arxiv:primary_category term="cs.CL"/>
+    <link title="pdf" href="http://arxiv.org/pdf/1706.03762"/>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/1810.04805</id>
+    <title>BERT: Pre-training of Deep Bidirectional Transformers</title>
+    <published>2018-10-11T00:00:00Z</published>
+    <author><name>Devlin</name></author>
+  </entry>
+</feed>

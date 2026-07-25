@@ -1,0 +1,20 @@
+{
+  "status": "ok",
+  "message-type": "work-list",
+  "message-version": "1.0.0",
+  "message": {
+    "total-results": 2,
+    "items": [
+      {
+        "DOI": "10.5555/example.1",
+        "title": ["Reproducible science workflows"],
+        "container-title": ["Journal of Durable Research"]
+      },
+      {
+        "DOI": "10.5555/example.2",
+        "title": ["Auditable scientific agents"],
+        "container-title": ["Open Systems"]
+      }
+    ]
+  }
+}

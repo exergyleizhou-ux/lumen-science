@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "count": 12,
+    "db_response_time_ms": 7,
+    "page": 1,
+    "per_page": 2,
+    "cost_usd": 0.001
+  },
+  "results": [
+    {
+      "id": "https://openalex.org/W1234567890",
+      "doi": "https://doi.org/10.5555/example.1",
+      "display_name": "Reproducible scholarly graphs",
+      "publication_year": 2026,
+      "abstract_inverted_index": {
+        "INTENTIONALLY_IGNORED": [
+          0
+        ]
+      },
+      "authorships": [
+        {
+          "raw_author_name": "INTENTIONALLY_IGNORED"
+        }
+      ],
+      "content_url": "https://api.openalex.org/works/W123/content"
+    },
+    {
+      "id": "https://openalex.org/W987654321",
+      "doi": null,
+      "display_name": "Durable evidence for open science",
+      "publication_year": 2025,
+      "referenced_works": [
+        "INTENTIONALLY_IGNORED"
+      ]
+    }
+  ],
+  "group_by": []
+}

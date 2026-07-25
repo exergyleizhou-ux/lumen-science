@@ -1,0 +1,1 @@
+{"getLigandsByUniprotsResponse":{"affinities":[{"monomerid":12345,"query":"P01308","affinity_type":"IC50","affinity":"10 nM"}]}}

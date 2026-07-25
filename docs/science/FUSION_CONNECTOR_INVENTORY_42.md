@@ -1,0 +1,3554 @@
+# Lumen Science Fusion — 42-Connector Inventory & Admission Matrix
+
+
+**Milestone:** DS-0  
+**Date:** 2026-07-24  
+
+**HEAD:** d6e94d2ee17ccee29fe6cac42de27dd093db7e1a  
+
+**Upstream:** synsci-openscience @ 083ef91ac29e7083c01aa97ae7db835dc87a6e94 (Apache-2.0)
+
+
+## Summary
+
+
+| Metric | Value |
+|--------|-------|
+
+| Total inventory | 42 |
+
+| DS-0 coverage | 42 |
+
+| Final disposition resolved | 7 |
+
+| Final disposition unresolved | 35 |
+
+| implemented-offline-l4 | 6 |
+
+| inventory-complete | 33 |
+
+| protocol-partial-overlap | 1 |
+
+| license-review-required | 1 |
+
+| rejected-safety-policy | 1 |
+
+
+## Category Breakdown
+
+
+| Category | Count |
+|----------|-------|
+
+| Literature | 7 |
+
+| Proteins | 6 |
+
+| Genomics | 9 |
+
+| Chemistry | 6 |
+
+| Pathways | 7 |
+
+| Omics | 7 |
+
+
+## Shared Source Files
+
+
+| `backend/cli/src/science/connectors/types.ts` | `773284e39614aff97e22c5a6d6c91162cd8dc2292a0413048ca2c428c1c50599` | Connector/ConnectorRegistry/ConnectorHit type definitions shared by all 42 connectors |
+| `backend/cli/src/science/connectors/http.ts` | `43e9e9147399d558eca0a264389389ff5170f5f8b73f0cdda650d816a102ce4e` | Shared HTTP client (User-Agent, timeout, retry, cache, rate-limit pacing) used by all connectors |
+| `backend/cli/src/science/connectors/genomics/util.ts` | `94e40388d14f96e31b982e3a19b6cea976ab956bbfee42c2cfcd2d34f688bb8c` | Defensive accessors (str, num, arr, asRecord, summarize) shared by genomics connectors |
+| `backend/cli/src/science/connectors/proteins/util.ts` | `0420114f884ddde75319364df718716b0ea773235e684c30b861e78c153a5d5e` | UniProt accession resolver bridge (resolveUniProtAccessions) used by AlphaFold and SIFTS connectors |
+
+
+## Connector Inventory
+
+
+### 1. `pubmed` — admission_status: **implemented-offline-l4** | final_disposition: **implemented-offline-l4**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | literature |
+
+| connector_id | `pubmed` |
+
+| stable_id | `pubmed` |
+
+| source_file | `backend/cli/src/science/connectors/literature/pubmed.ts` |
+
+| source_sha256 | `7b89da33bf89be634c94c795af07b21dfcf61273200e960e54c39c0cb009ae04` |
+
+| rust_module | connectors/pubmed.rs |
+
+| service_owner | National Center for Biotechnology Information (NCBI/NIH) |
+
+| official_base_url | https://eutils.ncbi.nlm.nih.gov/entrez/eutils/ |
+
+| egress_hosts | eutils.ncbi.nlm.nih.gov |
+
+| endpoint | /esearch.fcgi (2-step: esearch → esummary) |
+
+| method | GET |
+
+| pagination | retmax + retstart (E-utilities standard) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key), free with NCBI API key (higher rate limit) |
+
+| official_rate_limit | 3 req/s without API key; 10 req/s with API key (NCBI E-utilities guidelines) |
+
+| local_rate_limit | 3 requests per 1000ms |
+
+| license | NCBI policies; PubMed abstracts may be copyrighted; NCBI does not hold copyright to abstracts |
+
+| terms | https://www.ncbi.nlm.nih.gov/home/about/policies/ |
+
+| privacy | https://www.ncbi.nlm.nih.gov/home/about/policies/#privacy |
+
+| copyright_boundary | abstracts may be copyrighted by publishers; NCBI provides access but not redistribution rights |
+
+| selected_fields | PMID (uid), title, fulljournalname |
+
+| excluded_fields | abstract text, full-text links, MeSH terms, author list |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization; recommends NCBI tool/email registration |
+
+| credential_redaction | not applicable |
+
+| admission_status | **implemented-offline-l4** |
+
+| final_disposition | **implemented-offline-l4** |
+
+| reason | Rust Lumen adapter implemented with offline fixture product proof; live remains pending-deny |
+
+| codex_acceptance | accepted (prior milestone) |
+
+| official_docs_urls.auth | https://www.ncbi.nlm.nih.gov/books/NBK25497/ |
+
+| official_docs_urls.rate_limit | https://www.ncbi.nlm.nih.gov/books/NBK25497/#chapter2.Usage_Guidelines_and_Requiremen |
+
+| official_docs_urls.license | https://www.ncbi.nlm.nih.gov/home/about/policies/ |
+
+| official_docs_urls.terms | https://www.ncbi.nlm.nih.gov/home/about/policies/ |
+
+| official_docs_urls.privacy | https://www.ncbi.nlm.nih.gov/home/about/policies/#privacy |
+
+
+| verified_at | 2026-07-23 |
+
+
+
+### 2. `crossref` — admission_status: **implemented-offline-l4** | final_disposition: **implemented-offline-l4**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | literature |
+
+| connector_id | `crossref` |
+
+| stable_id | `crossref` |
+
+| source_file | `backend/cli/src/science/connectors/literature/crossref.ts` |
+
+| source_sha256 | `6ffb5740603bd9f40923bdff0e8229b6134c76ebd07fd781bfb3fa2e5cd38285` |
+
+| rust_module | connectors/crossref.rs |
+
+| service_owner | Crossref |
+
+| official_base_url | https://api.crossref.org/ |
+
+| egress_hosts | api.crossref.org |
+
+| endpoint | /works?query.bibliographic={query}&rows={n}&select=DOI,title,container-title |
+
+| method | GET |
+
+| pagination | rows + offset (cursor optional via deep paging) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | CROSSREF_MAILTO (optional, for polite pool) |
+
+| billing | free (public pool); polite pool with mailto email |
+
+| official_rate_limit | Public pool: 1 req/s, 1 concurrent. Polite pool: 50 req/s (subject to fair-use). Per https://community.crossref.org/t/16137 |
+
+| local_rate_limit | 1 request per 1000ms (conservative local cap) |
+
+| license | Bibliographic facts generally not copyrightable; Crossref-generated metadata CC0; abstracts retain publisher/author rights |
+
+| terms | https://www.crossref.org/documentation/retrieve-metadata/ |
+
+| privacy | https://www.crossref.org/privacy/ |
+
+| copyright_boundary | selected fields are factual bibliographic metadata (DOI, title, container-title); abstracts intentionally excluded |
+
+| selected_fields | DOI, title, container-title |
+
+| excluded_fields | abstract, link, full-text, author, reference |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization and operator-approved CROSSREF_MAILTO |
+
+| credential_redaction | not applicable |
+
+| admission_status | **implemented-offline-l4** |
+
+| final_disposition | **implemented-offline-l4** |
+
+| reason | Rust Lumen adapter implemented; offline fixture proof accepted; live pending-deny |
+
+| codex_acceptance | accepted (prior milestone) |
+
+| official_docs_urls.auth | https://www.crossref.org/documentation/retrieve-metadata/rest-api/ |
+
+| official_docs_urls.rate_limit | https://community.crossref.org/t/refining-rest-api-limits-for-improved-stability-and-reliability/16137 |
+
+| official_docs_urls.license | https://www.crossref.org/documentation/retrieve-metadata/ |
+
+| official_docs_urls.terms | https://www.crossref.org/documentation/retrieve-metadata/ |
+
+| official_docs_urls.privacy | https://www.crossref.org/privacy/ |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 3. `europepmc` — admission_status: **implemented-offline-l4** | final_disposition: **implemented-offline-l4**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | literature |
+
+| connector_id | `europepmc` |
+
+| stable_id | `europepmc` |
+
+| source_file | `backend/cli/src/science/connectors/literature/europepmc.ts` |
+
+| source_sha256 | `6d0715995d17b13dcbf80b20cd7d3e8257ddb1cc11e36d7a9d4e570973ff525f` |
+
+| rust_module | connectors/europepmc.rs |
+
+| service_owner | Europe PMC / EMBL-EBI |
+
+| official_base_url | https://www.ebi.ac.uk/europepmc/webservices/rest/ |
+
+| egress_hosts | www.ebi.ac.uk |
+
+| endpoint | /search?query={query}&format=json&resultType=lite&pageSize={n}&synonym=false |
+
+| method | GET |
+
+| pagination | pageSize + cursorMark (cursor-based) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented (Europe PMC states 'reasonable use'; API max pageSize=1000) |
+
+| local_rate_limit | 1 request per 1000ms (conservative local cap, not an official service quota) |
+
+| license | Article-level; Europe PMC metadata freely accessible; individual articles have their own copyright/license |
+
+| terms | https://europepmc.org/Copyright |
+
+| privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+| copyright_boundary | returns lite bibliographic metadata only; abstracts and full text excluded; article-level rights must be verified before content reuse |
+
+| selected_fields | source, id, title, journalTitle, pubYear |
+
+| excluded_fields | abstractText, full text, references, annotations, external links |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization; article-level license verification before content reuse |
+
+| credential_redaction | not applicable |
+
+| admission_status | **implemented-offline-l4** |
+
+| final_disposition | **implemented-offline-l4** |
+
+| reason | Rust Lumen adapter implemented with offline fixture proof; live pending-deny |
+
+| codex_acceptance | accepted (prior milestone) |
+
+| official_docs_urls.auth | https://europepmc.org/RestfulWebService |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://europepmc.org/Copyright |
+
+| official_docs_urls.terms | https://europepmc.org/Copyright |
+
+| official_docs_urls.privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 4. `openalex` — admission_status: **implemented-offline-l4** | final_disposition: **implemented-offline-l4**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | literature |
+
+| connector_id | `openalex` |
+
+| stable_id | `openalex` |
+
+| source_file | `backend/cli/src/science/connectors/literature/openalex.ts` |
+
+| source_sha256 | `411164e9fb7cd118843e751f80b0eda4b53055f59e634e063bf21b6324935241` |
+
+| rust_module | connectors/openalex.rs |
+
+| service_owner | OurResearch / OpenAlex |
+
+| official_base_url | https://api.openalex.org/ |
+
+| egress_hosts | api.openalex.org |
+
+| endpoint | /works?search={query}&per_page={n}&select=id,doi,display_name,publication_year |
+
+| method | GET |
+
+| pagination | per_page + cursor (next_cursor in meta) |
+
+| maximum_page_size | 50 |
+
+| auth_class | api_key |
+
+| runtime_env_var | OPENALEX_API_KEY |
+
+| billing | metered API; free daily budget with API key; paid tiers available |
+
+| official_rate_limit | 100 req/s hard service limit; daily budget applies (OpenAlex API docs) |
+
+| local_rate_limit | 1 request per 1000ms (conservative local cap) |
+
+| license | OpenAlex dataset CC0; API service use subject to OpenAlex terms; underlying article content retains article-level rights |
+
+| terms | https://openalex.org/OpenAlex_termsofservice.pdf |
+
+| privacy | https://openalex.org/privacy |
+
+| copyright_boundary | selected fields are CC0 bibliographic metadata; abstracts and full text intentionally excluded; verify article-level rights before reuse |
+
+| selected_fields | id, doi, display_name, publication_year |
+
+| excluded_fields | abstract_inverted_index, full text, authorships, locations, references, topics, content_url |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit billable live-network authorization and operator-approved OPENALEX_API_KEY |
+
+| credential_redaction | not applicable |
+
+| admission_status | **implemented-offline-l4** |
+
+| final_disposition | **implemented-offline-l4** |
+
+| reason | Rust Lumen adapter implemented; built-binary ACP product proof accepted; live pending-deny |
+
+| codex_acceptance | accepted (prior milestone) |
+
+| official_docs_urls.auth | https://developers.openalex.org/guides/authentication |
+
+| official_docs_urls.rate_limit | https://developers.openalex.org/api-reference/authentication |
+
+| official_docs_urls.license | https://openalex.org/OpenAlex_termsofservice.pdf |
+
+| official_docs_urls.terms | https://openalex.org/OpenAlex_termsofservice.pdf |
+
+| official_docs_urls.privacy | https://openalex.org/privacy |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 5. `semantic-scholar` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | literature |
+
+| connector_id | `semantic-scholar` |
+
+| stable_id | `semantic-scholar` |
+
+| source_file | `backend/cli/src/science/connectors/literature/semantic-scholar.ts` |
+
+| source_sha256 | `6cecd632a4a400bce418f7a73f9d8f0172202b37b48b2f603759b292fc95a56d` |
+
+| rust_module | connectors/semantic_scholar.rs (planned) |
+
+| service_owner | Allen Institute for AI (AI2) |
+
+| official_base_url | https://api.semanticscholar.org/graph/v1/ |
+
+| egress_hosts | api.semanticscholar.org |
+
+| endpoint | /paper/search?query={query}&limit={n}&fields=title,year,venue,externalIds,url |
+
+| method | GET |
+
+| pagination | offset + limit (API-native) |
+
+| maximum_page_size | 50 |
+
+| auth_class | optional-api-key |
+
+| runtime_env_var | SEMANTIC_SCHOLAR_API_KEY (optional; falls back to unauthenticated tier) |
+
+| billing | free (both unauthenticated and introductory API key tier) |
+
+| official_rate_limit | Unauthenticated: shared pool of 1000 req/s (may be further throttled under high load). Introductory API key: 1 req/s. Per https://api.semanticscholar.org/api-docs/ |
+
+| local_rate_limit | 1 request per 3000ms (local conservative policy; not an official quota) |
+
+| license | S2 data available under ODC-BY; API TOS at https://api.semanticscholar.org/api-docs/ |
+
+| terms | https://api.semanticscholar.org/api-docs/ |
+
+| privacy | https://www.semanticscholar.org/about/privacy |
+
+| copyright_boundary | metadata retrieval; abstracts excluded by field selection; full-text rights vary by publisher |
+
+| selected_fields | paperId, title, year, venue, externalIds, url |
+
+| excluded_fields | abstract, citationCount, authors, references, citations, tldr |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization; optional API key provides an identified dedicated introductory quota of 1 req/s and supportability; it does not imply throughput above the unauthenticated shared-pool ceiling of 1000 req/s |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; awaits DS-2 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://api.semanticscholar.org/api-docs/ |
+
+| official_docs_urls.rate_limit | https://api.semanticscholar.org/api-docs/ |
+
+| official_docs_urls.license | https://www.semanticscholar.org/about/publishers |
+
+| official_docs_urls.terms | https://api.semanticscholar.org/api-docs/ |
+
+| official_docs_urls.privacy | https://www.semanticscholar.org/about/privacy |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 6. `arxiv` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | literature |
+
+| connector_id | `arxiv` |
+
+| stable_id | `arxiv` |
+
+| source_file | `backend/cli/src/science/connectors/literature/arxiv.ts` |
+
+| source_sha256 | `46b9cf1fcae2c3c083a26fc6e1cd3e2fa20a3ced721cbbc3919da32ac6abdf49` |
+
+| rust_module | connectors/arxiv.rs (planned) |
+
+| service_owner | Cornell University / arXiv |
+
+| official_base_url | https://export.arxiv.org/api/ |
+
+| egress_hosts | export.arxiv.org |
+
+| endpoint | /query?search_query={query}&start=0&max_results={n}&sortBy=relevance |
+
+| method | GET |
+
+| pagination | start + max_results |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | No more than 1 request every 3 seconds; max 4 concurrent connections (arXiv API TOS). Per https://info.arxiv.org/help/api/ |
+
+| local_rate_limit | 1 request per 3000ms |
+
+| license | arXiv metadata freely accessible; individual article rights vary by submitter/license |
+
+| terms | https://info.arxiv.org/help/api/index.html |
+
+| privacy | https://info.arxiv.org/help/api/index.html |
+
+| copyright_boundary | metadata retrieval only; full-text PDF rights are per-article |
+
+| selected_fields | id (arXiv ID), title, published, updated, authors, arxiv:doi, primary_category |
+
+| excluded_fields | summary (abstract), pdf link, journal_ref |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; awaits DS-3 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://info.arxiv.org/help/api/index.html |
+
+| official_docs_urls.rate_limit | https://info.arxiv.org/help/api/index.html |
+
+| official_docs_urls.license | https://info.arxiv.org/help/license/index.html |
+
+| official_docs_urls.terms | https://info.arxiv.org/help/api/index.html |
+
+| official_docs_urls.privacy | https://info.arxiv.org/help/api/index.html |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 7. `biorxiv` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | literature |
+
+| connector_id | `biorxiv` |
+
+| stable_id | `biorxiv` |
+
+| source_file | `backend/cli/src/science/connectors/literature/biorxiv.ts` |
+
+| source_sha256 | `c45db042ec72c57b88f23f3ed122246f1f5eed9b1f9a59b03657d1cee07b21f8` |
+
+| rust_module | connectors/biorxiv.rs (planned) |
+
+| service_owner | Cold Spring Harbor Laboratory (CSHL) |
+
+| official_base_url | https://api.biorxiv.org/ |
+
+| egress_hosts | api.biorxiv.org |
+
+| endpoint | /details/{server}/{count} (recent pool) + /details/{server}/{doi} (DOI lookup) |
+
+| method | GET |
+
+| pagination | none (fixed recent-pool fetch; client-side ranking/limit) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 2000ms (conservative local cap) |
+
+| license | Preprint content rights vary by author; bioRxiv TOS at https://www.biorxiv.org/about/terms |
+
+| terms | https://www.biorxiv.org/about/terms |
+
+| privacy | https://www.cshl.edu/privacy-policy/ |
+
+| copyright_boundary | preprint metadata retrieval only; content reuse requires author/publisher permission |
+
+| selected_fields | doi, title, authors, category, date, version, server |
+
+| excluded_fields | abstract |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; awaits DS-8 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://api.biorxiv.org/ |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://www.biorxiv.org/about/terms |
+
+| official_docs_urls.terms | https://www.biorxiv.org/about/terms |
+
+| official_docs_urls.privacy | https://www.cshl.edu/privacy-policy/ |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 8. `uniprot` — admission_status: **implemented-offline-l4** | final_disposition: **implemented-offline-l4**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | proteins |
+
+| connector_id | `uniprot` |
+
+| stable_id | `uniprot` |
+
+| source_file | `backend/cli/src/science/connectors/proteins/uniprot.ts` |
+
+| source_sha256 | `d8ef0c3276ee835936f739d6c5c6e5d72a7e575ec03d4ffc3f24700a100f3aed` |
+
+| rust_module | connectors/uniprot.rs |
+
+| service_owner | UniProt Consortium (EMBL-EBI / SIB / PIR) |
+
+| official_base_url | https://rest.uniprot.org/uniprotkb/ |
+
+| egress_hosts | rest.uniprot.org |
+
+| endpoint | /search?query={query}&format=json&size={n}&fields=accession,id,protein_name,gene_names,organism_name |
+
+| method | GET |
+
+| pagination | size + cursor (next link in response headers) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented (UniProt REST API guidelines: fair use) |
+
+| local_rate_limit | 1 request per 1000ms |
+
+| license | CC-BY-4.0 for copyrightable database content; UniProt provides no correctness warranty; some data may be covered by patents |
+
+| terms | https://www.uniprot.org/help/license |
+
+| privacy | https://www.uniprot.org/help/privacy |
+
+| copyright_boundary | selected fields are annotation summary; sequences, features, references, and citation text excluded |
+
+| selected_fields | accession (primaryAccession), id (uniProtkbId), protein_name (recommendedName/submissionNames), gene_names, organism_name (scientificName) |
+
+| excluded_fields | sequence, features, references, citation_text, comment texts |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **implemented-offline-l4** |
+
+| final_disposition | **implemented-offline-l4** |
+
+| reason | Rust Lumen adapter implemented with offline fixture proof; live pending-deny |
+
+| codex_acceptance | accepted (prior milestone) |
+
+| official_docs_urls.auth | https://www.uniprot.org/help/api |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://www.uniprot.org/help/license |
+
+| official_docs_urls.terms | https://www.uniprot.org/help/api_queries |
+
+| official_docs_urls.privacy | https://www.uniprot.org/help/privacy |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 9. `alphafold` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | proteins |
+
+| connector_id | `alphafold` |
+
+| stable_id | `alphafold` |
+
+| source_file | `backend/cli/src/science/connectors/proteins/alphafold.ts` |
+
+| source_sha256 | `80b5afd376a38eca56e2e3d5726a8847a5b40f8e76c037e5ff027a096cdd760d` |
+
+| rust_module | connectors/alphafold.rs (planned) |
+
+| service_owner | EMBL-EBI / Google DeepMind |
+
+| official_base_url | https://alphafold.ebi.ac.uk/ |
+
+| egress_hosts | alphafold.ebi.ac.uk |
+
+| endpoint | /api/prediction/{uniprot_accession} |
+
+| method | GET |
+
+| pagination | none (single prediction per accession; search fans out across accessions) |
+
+| maximum_page_size | 25 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 500ms (per accession in fan-out) |
+
+| license | AlphaFold DB data CC-BY-4.0; EMBL-EBI terms apply |
+
+| terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+| copyright_boundary | predicted structure metadata only; cifUrl and pdbUrl (large binaries) excluded from default response |
+
+| selected_fields | entryId, uniprotAccession, uniprotId, gene, organismScientificName, globalMetricValue (mean pLDDT) |
+
+| excluded_fields | cifUrl, pdbUrl (large binary links) |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization; may need UniProt resolution for free-text queries (uses proteins/util.ts bridge) |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; uses proteins/util.ts for UniProt accession bridge; awaits DS-5 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://alphafold.ebi.ac.uk/ |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 10. `interpro` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | proteins |
+
+| connector_id | `interpro` |
+
+| stable_id | `interpro` |
+
+| source_file | `backend/cli/src/science/connectors/proteins/interpro.ts` |
+
+| source_sha256 | `c09931410c2abbf1578c803845bcb887f3daf2a8edf5f6acdd4e4027d4db674c` |
+
+| rust_module | connectors/interpro.rs (planned) |
+
+| service_owner | EMBL-EBI / InterPro Consortium |
+
+| official_base_url | https://www.ebi.ac.uk/interpro/api/entry/interpro/ |
+
+| egress_hosts | www.ebi.ac.uk |
+
+| endpoint | /entry/interpro/?search={query}&page_size={n} |
+
+| method | GET |
+
+| pagination | page_size (no offset in synsci; API supports page-based pagination) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 1000ms |
+
+| license | InterPro data CC0; EMBL-EBI terms |
+
+| terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+| copyright_boundary | domain/family annotation metadata; go_terms and description text excluded |
+
+| selected_fields | metadata.accession, metadata.name, metadata.type, metadata.source_database, metadata.integrated |
+
+| excluded_fields | go_terms, description text, full entry hierarchy |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; awaits DS-9 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://www.ebi.ac.uk/interpro/api/ |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 11. `pdbe` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | proteins |
+
+| connector_id | `pdbe` |
+
+| stable_id | `pdbe` |
+
+| source_file | `backend/cli/src/science/connectors/proteins/pdbe.ts` |
+
+| source_sha256 | `b4fb0a7ca819620b199727c8fd0ffa370b86cfcb1e44ea96bba0218e6d152db6` |
+
+| rust_module | connectors/pdbe.rs (planned) |
+
+| service_owner | Protein Data Bank in Europe (EMBL-EBI) |
+
+| official_base_url | https://www.ebi.ac.uk/pdbe/ |
+
+| egress_hosts | www.ebi.ac.uk |
+
+| endpoint | /search/pdb/select?q={query}&wt=json&rows={n}&fl=pdb_id,title,experimental_method,resolution,organism_scientific_name |
+
+| method | GET |
+
+| pagination | rows + start (Solr standard) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 1000ms |
+
+| license | PDB data CC0; EMBL-EBI terms |
+
+| terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+| copyright_boundary | structure metadata only; coordinate data freely available under CC0 |
+
+| selected_fields | pdb_id, title, experimental_method, resolution, organism_scientific_name |
+
+| excluded_fields | full Solr metadata, citation details |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; awaits DS-10 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://www.ebi.ac.uk/pdbe/api/doc/ |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 12. `rcsb-pdb` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | proteins |
+
+| connector_id | `rcsb-pdb` |
+
+| stable_id | `rcsb-pdb` |
+
+| source_file | `backend/cli/src/science/connectors/proteins/rcsb-pdb.ts` |
+
+| source_sha256 | `8cd1757d0aa7a6305f9c1fdebfc7cd3e7f2b0c865e2cc368e2a68cdce8332a71` |
+
+| rust_module | connectors/rcsb_pdb.rs (planned) |
+
+| service_owner | RCSB Protein Data Bank (Rutgers/UCSD/UCSF) |
+
+| official_base_url | https://search.rcsb.org/rcsbsearch/v2/ |
+
+| egress_hosts | search.rcsb.org, data.rcsb.org |
+
+| endpoint | /query?json={encoded_json_dsl_payload} |
+
+| method | GET |
+
+| pagination | paginate: {start, rows} in JSON DSL payload |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 1000ms |
+
+| license | PDB data CC0; RCSB PDB terms |
+
+| terms | https://www.rcsb.org/pages/policies |
+
+| privacy | https://www.rcsb.org/pages/privacy |
+
+| copyright_boundary | structure metadata only; coordinate data freely available under CC0 |
+
+| selected_fields | identifier, struct.title, rcsb_entry_info.experimental_method, rcsb_entry_info.resolution_combined |
+
+| excluded_fields | full entity data, polymer details, citation metadata |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; awaits DS-4 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://search.rcsb.org/#search-api |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://www.rcsb.org/pages/policies |
+
+| official_docs_urls.terms | https://www.rcsb.org/pages/policies |
+
+| official_docs_urls.privacy | https://www.rcsb.org/pages/privacy |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 13. `sifts` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | proteins |
+
+| connector_id | `sifts` |
+
+| stable_id | `sifts` |
+
+| source_file | `backend/cli/src/science/connectors/proteins/sifts.ts` |
+
+| source_sha256 | `a46d656832d81e299a9f828219854572982e04333c30cd44688a271861a92667` |
+
+| rust_module | connectors/sifts.rs (planned) |
+
+| service_owner | EMBL-EBI / PDBe |
+
+| official_base_url | https://www.ebi.ac.uk/pdbe/api/mappings/ |
+
+| egress_hosts | www.ebi.ac.uk |
+
+| endpoint | /best_structures/{uniprot_accession} |
+
+| method | GET |
+
+| pagination | none (single response per accession; client-side limit in fan-out) |
+
+| maximum_page_size | 25 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 500ms (per accession in fan-out) |
+
+| license | SIFTS data freely available; EMBL-EBI terms |
+
+| terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+| copyright_boundary | residue-level mapping metadata; full residue mapping excluded |
+
+| selected_fields | pdb_id, chain_id, experimental_method, resolution, unp_start, unp_end, coverage |
+
+| excluded_fields | full residue-level mapping |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization; may need UniProt resolution via proteins/util.ts |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; uses proteins/util.ts for UniProt accession bridge; awaits DS-11 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://www.ebi.ac.uk/pdbe/docs/sifts/ |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 14. `clinvar` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | genomics |
+
+| connector_id | `clinvar` |
+
+| stable_id | `clinvar` |
+
+| source_file | `backend/cli/src/science/connectors/genomics/clinvar.ts` |
+
+| source_sha256 | `2719340e456bff16798b93fca59ce387d19331b3c79ce0315f3546b6bd52bce9` |
+
+| rust_module | connectors/clinvar.rs (planned) |
+
+| service_owner | NCBI / NIH |
+
+| official_base_url | https://eutils.ncbi.nlm.nih.gov/entrez/eutils/ |
+
+| egress_hosts | eutils.ncbi.nlm.nih.gov |
+
+| endpoint | /esearch.fcgi?db=clinvar (2-step E-utilities: esearch → esummary) |
+
+| method | GET |
+
+| pagination | retmax + retstart (E-utilities standard) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | 3 req/s without API key; 10 req/s with API key (NCBI E-utilities) |
+
+| local_rate_limit | 3 requests per 1000ms |
+
+| license | NCBI policies; ClinVar data freely available |
+
+| terms | https://www.ncbi.nlm.nih.gov/home/about/policies/ |
+
+| privacy | https://www.ncbi.nlm.nih.gov/home/about/policies/#privacy |
+
+| copyright_boundary | variant annotation metadata; full clinical interpretation reports excluded |
+
+| selected_fields | uid, accession, title, clinical_significance, gene_sort |
+
+| excluded_fields | full variant details, trait descriptions, review status details |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; uses E-utilities protocol via genomics/eutils.ts; awaits DS-12 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://www.ncbi.nlm.nih.gov/books/NBK25497/ |
+
+| official_docs_urls.rate_limit | https://www.ncbi.nlm.nih.gov/books/NBK25497/ |
+
+| official_docs_urls.license | https://www.ncbi.nlm.nih.gov/home/about/policies/ |
+
+| official_docs_urls.terms | https://www.ncbi.nlm.nih.gov/home/about/policies/ |
+
+| official_docs_urls.privacy | https://www.ncbi.nlm.nih.gov/home/about/policies/#privacy |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 15. `dbsnp` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | genomics |
+
+| connector_id | `dbsnp` |
+
+| stable_id | `dbsnp` |
+
+| source_file | `backend/cli/src/science/connectors/genomics/dbsnp.ts` |
+
+| source_sha256 | `3d86526dbac01d4dd682d3c088b41f47ad7adcee2a9f3790026ffa9ee82de858` |
+
+| rust_module | connectors/dbsnp.rs (planned) |
+
+| service_owner | NCBI / NIH |
+
+| official_base_url | https://eutils.ncbi.nlm.nih.gov/entrez/eutils/ |
+
+| egress_hosts | eutils.ncbi.nlm.nih.gov |
+
+| endpoint | /esearch.fcgi?db=snp (2-step E-utilities: esearch → esummary) |
+
+| method | GET |
+
+| pagination | retmax + retstart (E-utilities standard) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | 3 req/s without API key; 10 req/s with API key (NCBI E-utilities) |
+
+| local_rate_limit | 3 requests per 1000ms |
+
+| license | NCBI policies; dbSNP data freely available |
+
+| terms | https://www.ncbi.nlm.nih.gov/home/about/policies/ |
+
+| privacy | https://www.ncbi.nlm.nih.gov/home/about/policies/#privacy |
+
+| copyright_boundary | variant identifier metadata; full allele frequency tables excluded |
+
+| selected_fields | snp_id, uid, chrpos, chr, fxn_class, snp_class, clinical_significance |
+
+| excluded_fields | full variant allele data, population frequency tables |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; uses E-utilities protocol; awaits DS-13 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://www.ncbi.nlm.nih.gov/books/NBK25497/ |
+
+| official_docs_urls.rate_limit | https://www.ncbi.nlm.nih.gov/books/NBK25497/ |
+
+| official_docs_urls.license | https://www.ncbi.nlm.nih.gov/home/about/policies/ |
+
+| official_docs_urls.terms | https://www.ncbi.nlm.nih.gov/home/about/policies/ |
+
+| official_docs_urls.privacy | https://www.ncbi.nlm.nih.gov/home/about/policies/#privacy |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 16. `ensembl` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | genomics |
+
+| connector_id | `ensembl` |
+
+| stable_id | `ensembl` |
+
+| source_file | `backend/cli/src/science/connectors/genomics/ensembl.ts` |
+
+| source_sha256 | `f7f1c0b2e637847c0a8164e4716f5f69d8b9fc20ad35f748fa6a1dfbb8e9969a` |
+
+| rust_module | connectors/ensembl.rs (planned) |
+
+| service_owner | EMBL-EBI / Ensembl |
+
+| official_base_url | https://rest.ensembl.org/ |
+
+| egress_hosts | rest.ensembl.org |
+
+| endpoint | /lookup/symbol/{species}/{symbol}?content-type=application/json + /xrefs/symbol/{species}/{symbol}?content-type=application/json |
+
+| method | GET |
+
+| pagination | none (single lookup; xrefs client-side slice) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | ~15 req/s (Ensembl REST guidelines); recommended max 15 concurrent |
+
+| local_rate_limit | 3 requests per 1000ms |
+
+| license | Ensembl data freely available; EMBL-EBI terms |
+
+| terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+| copyright_boundary | gene/transcript annotation metadata; sequence data excluded |
+
+| selected_fields | id (ENSG/ENST), display_name, description, biotype, seq_region_name, start, end |
+
+| excluded_fields | full gene structure, sequence data |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; awaits DS-6 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://rest.ensembl.org/documentation |
+
+| official_docs_urls.rate_limit | https://rest.ensembl.org/documentation |
+
+| official_docs_urls.license | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 17. `eutils` — admission_status: **protocol-partial-overlap** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | genomics |
+
+| connector_id | `eutils` |
+
+| stable_id | `eutils` |
+
+| source_file | `backend/cli/src/science/connectors/genomics/eutils.ts` |
+
+| source_sha256 | `e4bd8ad50fedd1466ae45aa6c73d674ed689265fa5f4329f5c7cb96f4897dace` |
+
+| rust_module | null |
+
+| service_owner | NCBI / NIH |
+
+| official_base_url | https://eutils.ncbi.nlm.nih.gov/entrez/eutils/ |
+
+| egress_hosts | eutils.ncbi.nlm.nih.gov |
+
+| endpoint | /esearch.fcgi?db={db}&term={term}&retmode=json&retmax={n}&tool=openscience-science + /esummary.fcgi?db={db}&id={ids}&retmode=json&tool=openscience-science |
+
+| method | GET |
+
+| pagination | retmax + retstart (E-utilities standard) |
+
+| maximum_page_size | null |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | 3 req/s without API key; 10 req/s with API key (NCBI E-utilities) |
+
+| local_rate_limit | 3 requests per 1000ms |
+
+| license | NCBI policies; per-database data policies apply |
+
+| terms | https://www.ncbi.nlm.nih.gov/home/about/policies/ |
+
+| privacy | https://www.ncbi.nlm.nih.gov/home/about/policies/#privacy |
+
+| copyright_boundary | E-utilities is transport infrastructure; data copyright depends on queried database |
+
+| selected_fields | esearchresult.idlist[], esearchresult.count, result.uids[], result[{uid}] |
+
+| excluded_fields | not applicable (transport layer) |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **protocol-partial-overlap** |
+
+| final_disposition | **null** |
+
+| reason | synsci eutils.ts is a shared, db-parameterizable E-utilities client (esearch(db, term, retmax) accepts db as a parameter). Rust Lumen's pubmed.rs hardcodes `db=pubmed` in both esearch_path() and esummary_path(). Protocol partially overlaps with existing PubMed implementation but no shared, db-parameterizable Rust adapter exists. eutils.ts is counted as a separate inventory item because it represents the shared E-utilities transport pattern used by clinvar, dbsnp, ncbi-gene, and geo. Its final disposition depends on whether DS-1 (ProtocolAdapter trait) enables a parameterizable E-utilities adapter beyond PubMed. |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://www.ncbi.nlm.nih.gov/books/NBK25497/ |
+
+| official_docs_urls.rate_limit | https://www.ncbi.nlm.nih.gov/books/NBK25497/ |
+
+| official_docs_urls.license | https://www.ncbi.nlm.nih.gov/home/about/policies/ |
+
+| official_docs_urls.terms | https://www.ncbi.nlm.nih.gov/home/about/policies/ |
+
+| official_docs_urls.privacy | https://www.ncbi.nlm.nih.gov/home/about/policies/#privacy |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 18. `gnomad` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | genomics |
+
+| connector_id | `gnomad` |
+
+| stable_id | `gnomad` |
+
+| source_file | `backend/cli/src/science/connectors/genomics/gnomad.ts` |
+
+| source_sha256 | `6d707bddd75dc10dd3adff078d54222b9af894151987201ff4582ec6e9f952ad` |
+
+| rust_module | connectors/gnomad.rs (planned) |
+
+| service_owner | Broad Institute |
+
+| official_base_url | https://gnomad.broadinstitute.org/api/ |
+
+| egress_hosts | gnomad.broadinstitute.org |
+
+| endpoint | POST /api (GraphQL: gene by symbol/ENSG, variant by variant_id) |
+
+| method | POST |
+
+| pagination | none (single-entity lookups: gene or variant) |
+
+| maximum_page_size | 1 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 1000ms |
+
+| license | gnomAD data ODC Public Domain Dedication and License (ODC-By for some subsets); Broad Institute terms |
+
+| terms | https://gnomad.broadinstitute.org/terms |
+
+| privacy | https://gnomad.broadinstitute.org/privacy |
+
+| copyright_boundary | aggregate population frequency data; individual-level genotype data excluded from public API |
+
+| selected_fields | gene_id, symbol, name, chrom, start, stop, variant_id, rsids, genome.af |
+
+| excluded_fields | full population frequency breakdown, exome details |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; uses GraphQL POST; awaits DS-15 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://gnomad.broadinstitute.org/api/ |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://gnomad.broadinstitute.org/terms |
+
+| official_docs_urls.terms | https://gnomad.broadinstitute.org/terms |
+
+| official_docs_urls.privacy | https://gnomad.broadinstitute.org/privacy |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 19. `mygene` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | genomics |
+
+| connector_id | `mygene` |
+
+| stable_id | `mygene` |
+
+| source_file | `backend/cli/src/science/connectors/genomics/mygene.ts` |
+
+| source_sha256 | `d24c51ab114f6aaadc4eb7f9bea5f25758a7f5c9c196e5c35d63119a68cb2e17` |
+
+| rust_module | connectors/mygene.rs (planned) |
+
+| service_owner | Su Lab / Scripps Research |
+
+| official_base_url | https://mygene.info/v3/ |
+
+| egress_hosts | mygene.info |
+
+| endpoint | /query?q={term}&size={n}&species={species} |
+
+| method | GET |
+
+| pagination | size + from (offset available via `from` param) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 1000ms |
+
+| license | MyGene.info data from multiple sources; service free |
+
+| terms | https://mygene.info/ |
+
+| privacy | not documented |
+
+| copyright_boundary | gene annotation metadata from multiple public sources |
+
+| selected_fields | _id, symbol, name, entrezgene, taxid |
+
+| excluded_fields | full annotation JSON, external references |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; awaits DS-16 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://mygene.info/ |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://mygene.info/ |
+
+| official_docs_urls.terms | https://mygene.info/ |
+
+| official_docs_urls.privacy | not documented |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 20. `myvariant` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | genomics |
+
+| connector_id | `myvariant` |
+
+| stable_id | `myvariant` |
+
+| source_file | `backend/cli/src/science/connectors/genomics/myvariant.ts` |
+
+| source_sha256 | `887cb0425b80c5d3ea939d436e12dca006c860ae4e954dfb40f1fa2713829c16` |
+
+| rust_module | connectors/myvariant.rs (planned) |
+
+| service_owner | Su Lab / Scripps Research |
+
+| official_base_url | https://myvariant.info/v1/ |
+
+| egress_hosts | myvariant.info |
+
+| endpoint | /query?q={term}&size={n} |
+
+| method | GET |
+
+| pagination | size + from (offset available via `from` param) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 1000ms |
+
+| license | MyVariant.info aggregates from multiple sources; service free |
+
+| terms | https://myvariant.info/ |
+
+| privacy | not documented |
+
+| copyright_boundary | variant annotation metadata from multiple public sources |
+
+| selected_fields | _id (HGVS), dbsnp.rsid, cadd.gene.genename, cadd.consequence |
+
+| excluded_fields | full variant annotation, population frequency data |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; awaits DS-17 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://myvariant.info/ |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://myvariant.info/ |
+
+| official_docs_urls.terms | https://myvariant.info/ |
+
+| official_docs_urls.privacy | not documented |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 21. `ncbi-gene` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | genomics |
+
+| connector_id | `ncbi-gene` |
+
+| stable_id | `ncbi-gene` |
+
+| source_file | `backend/cli/src/science/connectors/genomics/ncbi-gene.ts` |
+
+| source_sha256 | `a09695149eca7b8a61f00e11ab70958434f3c86006492c143b3a54a34f453e1b` |
+
+| rust_module | connectors/ncbi_gene.rs (planned) |
+
+| service_owner | NCBI / NIH |
+
+| official_base_url | https://eutils.ncbi.nlm.nih.gov/entrez/eutils/ |
+
+| egress_hosts | eutils.ncbi.nlm.nih.gov |
+
+| endpoint | /esearch.fcgi?db=gene (2-step E-utilities: esearch → esummary) |
+
+| method | GET |
+
+| pagination | retmax + retstart (E-utilities standard) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | 3 req/s without API key; 10 req/s with API key (NCBI E-utilities) |
+
+| local_rate_limit | 3 requests per 1000ms |
+
+| license | NCBI policies; Gene data freely available |
+
+| terms | https://www.ncbi.nlm.nih.gov/home/about/policies/ |
+
+| privacy | https://www.ncbi.nlm.nih.gov/home/about/policies/#privacy |
+
+| copyright_boundary | gene annotation metadata; full sequence data excluded |
+
+| selected_fields | uid (GeneID), name/nomenclaturesymbol, description/nomenclaturename, organism.scientificname, chromosome |
+
+| excluded_fields | full gene annotation, aliases list |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; uses E-utilities protocol; awaits DS-18 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://www.ncbi.nlm.nih.gov/books/NBK25497/ |
+
+| official_docs_urls.rate_limit | https://www.ncbi.nlm.nih.gov/books/NBK25497/ |
+
+| official_docs_urls.license | https://www.ncbi.nlm.nih.gov/home/about/policies/ |
+
+| official_docs_urls.terms | https://www.ncbi.nlm.nih.gov/home/about/policies/ |
+
+| official_docs_urls.privacy | https://www.ncbi.nlm.nih.gov/home/about/policies/#privacy |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 22. `ucsc` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | genomics |
+
+| connector_id | `ucsc` |
+
+| stable_id | `ucsc` |
+
+| source_file | `backend/cli/src/science/connectors/genomics/ucsc.ts` |
+
+| source_sha256 | `401949e4c3f7e38cfd64d53f778cf653ddd2706a21eb6a3cb8b9a3f0d81c82ea` |
+
+| rust_module | connectors/ucsc.rs (planned) |
+
+| service_owner | UC Santa Cruz Genomics Institute |
+
+| official_base_url | https://api.genome.ucsc.edu/ |
+
+| egress_hosts | api.genome.ucsc.edu |
+
+| endpoint | /search?search={term}&genome={genome} |
+
+| method | GET |
+
+| pagination | none (client-side flatten/limit from positionMatches[].matches[]) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 1000ms |
+
+| license | UCSC Genome Browser data freely available for academic use; commercial use subject to license terms |
+
+| terms | https://genome.ucsc.edu/license/ |
+
+| privacy | https://genome.ucsc.edu/goldenPath/help/hgTracksHelp.html#Privacy |
+
+| copyright_boundary | genome annotation track metadata; sequence data is separate endpoint |
+
+| selected_fields | trackName, position, posName, description, genome |
+
+| excluded_fields | sequence data (separate /getData/sequence endpoint) |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; note commercial use terms; awaits DS-19 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://genome.ucsc.edu/goldenPath/help/api.html |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://genome.ucsc.edu/license/ |
+
+| official_docs_urls.terms | https://genome.ucsc.edu/license/ |
+
+| official_docs_urls.privacy | https://genome.ucsc.edu/goldenPath/help/hgTracksHelp.html#Privacy |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 23. `chembl` — admission_status: **implemented-offline-l4** | final_disposition: **implemented-offline-l4**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | chemistry |
+
+| connector_id | `chembl` |
+
+| stable_id | `chembl` |
+
+| source_file | `backend/cli/src/science/connectors/chemistry/chembl.ts` |
+
+| source_sha256 | `950ae2524b33144d21de692e9bb830be90324c43c764a7779f8e02ad130ffa90` |
+
+| rust_module | connectors/chembl.rs |
+
+| service_owner | EMBL-EBI / ChEMBL |
+
+| official_base_url | https://www.ebi.ac.uk/chembl/api/data/ |
+
+| egress_hosts | www.ebi.ac.uk |
+
+| endpoint | /molecule/search.json?q={term}&limit={n}&offset={m} |
+
+| method | GET |
+
+| pagination | limit + offset (zero-based) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 5 requests per 1000ms |
+
+| license | ChEMBL data CC-BY-SA-3.0; EMBL-EBI terms |
+
+| terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+| copyright_boundary | compound/bioactivity metadata; structure data available but excluded from default fields |
+
+| selected_fields | molecule_chembl_id, pref_name |
+
+| excluded_fields | full molecule properties, structure data (canonical_smiles, etc.) |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **implemented-offline-l4** |
+
+| final_disposition | **implemented-offline-l4** |
+
+| reason | Rust Lumen adapter implemented; offline fixture proof accepted; live pending-deny |
+
+| codex_acceptance | accepted (prior milestone) |
+
+| official_docs_urls.auth | https://www.ebi.ac.uk/chembl/api/data/docs |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+
+| verified_at | 2026-07-23 |
+
+
+
+### 24. `pubchem` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | chemistry |
+
+| connector_id | `pubchem` |
+
+| stable_id | `pubchem` |
+
+| source_file | `backend/cli/src/science/connectors/chemistry/pubchem.ts` |
+
+| source_sha256 | `8d898974c5b57a756d24029e2a8bbe5927dd8a7f9bc7fd63438835c187d4e0f6` |
+
+| rust_module | connectors/pubchem.rs (planned) |
+
+| service_owner | NCBI / NIH |
+
+| official_base_url | https://pubchem.ncbi.nlm.nih.gov/rest/pug/ |
+
+| egress_hosts | pubchem.ncbi.nlm.nih.gov |
+
+| endpoint | /compound/name/{query}/cids/JSON (2-step: name→CIDs, CIDs→properties) |
+
+| method | GET |
+
+| pagination | none explicit in PUG; result set limited by CID list |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | ~5 req/s (PubChem PUG REST guidelines) |
+
+| local_rate_limit | 2 requests per 1000ms (two HTTP calls per search) |
+
+| license | PubChem data freely available; NCBI policies apply |
+
+| terms | https://www.ncbi.nlm.nih.gov/home/about/policies/ |
+
+| privacy | https://www.ncbi.nlm.nih.gov/home/about/policies/#privacy |
+
+| copyright_boundary | compound identifier and property metadata; full structure data excluded |
+
+| selected_fields | CID, Title, MolecularFormula, MolecularWeight |
+
+| excluded_fields | IUPACName, ConnectivitySMILES, InChIKey (structure data) |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; 2-step protocol (name→CIDs, CIDs→properties); awaits DS-7 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest |
+
+| official_docs_urls.rate_limit | https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest |
+
+| official_docs_urls.license | https://www.ncbi.nlm.nih.gov/home/about/policies/ |
+
+| official_docs_urls.terms | https://www.ncbi.nlm.nih.gov/home/about/policies/ |
+
+| official_docs_urls.privacy | https://www.ncbi.nlm.nih.gov/home/about/policies/#privacy |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 25. `bindingdb` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | chemistry |
+
+| connector_id | `bindingdb` |
+
+| stable_id | `bindingdb` |
+
+| source_file | `backend/cli/src/science/connectors/chemistry/bindingdb.ts` |
+
+| source_sha256 | `975c19510e860f00698f8939c965c59767eea630f7c77fe478d522e901f3d160` |
+
+| rust_module | connectors/bindingdb.rs (planned) |
+
+| service_owner | BindingDB (UCSD/Skaggs) |
+
+| official_base_url | https://bindingdb.org/rest/ |
+
+| egress_hosts | bindingdb.org |
+
+| endpoint | /getLigandsByUniprots?uniprot={acc}&cutoff=10000&code=0&response=application/json |
+
+| method | GET |
+
+| pagination | none (single-shot; client-side slice) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 2000ms |
+
+| license | BindingDB data CC BY 4.0 |
+
+| terms | https://www.bindingdb.org/rwd/bind/termsofuse.jsp |
+
+| privacy | not documented |
+
+| copyright_boundary | ligand binding affinity metadata; SMILES structure data excluded |
+
+| selected_fields | monomerid, affinity_type, affinity, query (target) |
+
+| excluded_fields | smile (SMILES), pmid, doi |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization; requires UniProt accession as input |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; requires UniProt accession input; awaits DS-20 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://www.bindingdb.org/rwd/bind/apisearch.jsp |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://www.bindingdb.org/rwd/bind/termsofuse.jsp |
+
+| official_docs_urls.terms | https://www.bindingdb.org/rwd/bind/termsofuse.jsp |
+
+| official_docs_urls.privacy | not documented |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 26. `chebi` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | chemistry |
+
+| connector_id | `chebi` |
+
+| stable_id | `chebi` |
+
+| source_file | `backend/cli/src/science/connectors/chemistry/chebi.ts` |
+
+| source_sha256 | `d3d984583a4e3dda7ebd0a1253d1898bb47501376902e5b4920a5fa22dfd1fe7` |
+
+| rust_module | connectors/chebi.rs (planned) |
+
+| service_owner | EMBL-EBI |
+
+| official_base_url | https://www.ebi.ac.uk/ols4/api/ |
+
+| egress_hosts | www.ebi.ac.uk |
+
+| endpoint | /search?q={query}&ontology=chebi&rows={n} |
+
+| method | GET |
+
+| pagination | rows (OLS4 standard; start parameter available) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 1000ms |
+
+| license | ChEBI data CC BY 4.0; EMBL-EBI terms |
+
+| terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+| copyright_boundary | chemical ontology metadata; full term hierarchy excluded |
+
+| selected_fields | obo_id, label, description |
+
+| excluded_fields | exact_synonyms, full term hierarchy |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; uses OLS4 API; awaits DS-21 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://www.ebi.ac.uk/ols4/help |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 27. `gtopdb` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | chemistry |
+
+| connector_id | `gtopdb` |
+
+| stable_id | `gtopdb` |
+
+| source_file | `backend/cli/src/science/connectors/chemistry/gtopdb.ts` |
+
+| source_sha256 | `dd22d2a0b57cf7804be6509550f83d2562189fbbcf0a457da3a9755cda2e5134` |
+
+| rust_module | connectors/gtopdb.rs (planned) |
+
+| service_owner | IUPHAR/BPS Guide to PHARMACOLOGY |
+
+| official_base_url | https://www.guidetopharmacology.org/services/ |
+
+| egress_hosts | www.guidetopharmacology.org |
+
+| endpoint | /ligands?name={query} + /ligands/{id}/structure |
+
+| method | GET |
+
+| pagination | none (full list returned; client-side slice) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 1000ms |
+
+| license | GtoPdb data CC BY-SA 4.0 |
+
+| terms | https://www.guidetopharmacology.org/about.jsp |
+
+| privacy | https://www.guidetopharmacology.org/privacy.jsp |
+
+| copyright_boundary | ligand annotation metadata; structure data (SMILES, InChIKey) excluded |
+
+| selected_fields | ligandId, name, type, approved, inn |
+
+| excluded_fields | SMILES, InChIKey, IUPAC name (structure data) |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; awaits DS-22 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://www.guidetopharmacology.org/services/ |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://www.guidetopharmacology.org/about.jsp |
+
+| official_docs_urls.terms | https://www.guidetopharmacology.org/about.jsp |
+
+| official_docs_urls.privacy | https://www.guidetopharmacology.org/privacy.jsp |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 28. `surechembl` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | chemistry |
+
+| connector_id | `surechembl` |
+
+| stable_id | `surechembl` |
+
+| source_file | `backend/cli/src/science/connectors/chemistry/surechembl.ts` |
+
+| source_sha256 | `24c90c885e1724fb03f4c91edcbd46f71af470657c201e99da65deedc0766752` |
+
+| rust_module | connectors/surechembl.rs (planned) |
+
+| service_owner | EMBL-EBI |
+
+| official_base_url | https://www.surechembl.org/api/ |
+
+| egress_hosts | www.surechembl.org |
+
+| endpoint | POST /search/content?query={q}&page=1&itemsPerPage={n} |
+
+| method | POST |
+
+| pagination | page + itemsPerPage |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 1000ms |
+
+| license | SureChEMBL data freely available; EMBL-EBI terms |
+
+| terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+| copyright_boundary | patent chemical annotation metadata; full patent text excluded |
+
+| selected_fields | docId, metadata.titles, metadata.pn (patent number) |
+
+| excluded_fields | full patent text, chemical structures |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; only connector using POST search (form-encoded); awaits DS-23 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://www.surechembl.org/api/ |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 29. `biogrid` — admission_status: **rejected-safety-policy** | final_disposition: **rejected-unsafe-or-duplicate**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | pathways |
+
+| connector_id | `biogrid` |
+
+| stable_id | `biogrid` |
+
+| source_file | `backend/cli/src/science/connectors/pathways/biogrid.ts` |
+
+| source_sha256 | `20a224469ec4b288498a9a88456075dadf7d59cc15289abfe9d4215073ae952d` |
+
+| rust_module | null |
+
+| service_owner | BioGRID (Université de Montréal / Princeton) |
+
+| official_base_url | https://webservice.thebiogrid.org/ |
+
+| egress_hosts | webservice.thebiogrid.org |
+
+| endpoint | /interactions/?accessKey={credential}&geneList={query}&format=json&max={n} |
+
+| method | GET (official WADL defines only GET; overview page mentions POST but no formal POST specification exists) |
+
+| pagination | max + start (query parameters); client-side Object.values() iteration |
+
+| maximum_page_size | 50 |
+
+| auth_class | access_key |
+
+| runtime_env_var | BIOGRID_ACCESS_KEY (not applicable — connector rejected) |
+
+| billing | free (requires free registration for access key) — not applicable, connector rejected |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | not applicable (rejected) |
+
+| license | BioGRID data CC BY 4.0; requires free registration |
+
+| terms | https://thebiogrid.org/terms.php |
+
+| privacy | https://thebiogrid.org/privacy.php |
+
+| copyright_boundary | protein-protein interaction metadata |
+
+| selected_fields | BIOGRID_INTERACTION_ID, OFFICIAL_SYMBOL_A, OFFICIAL_SYMBOL_B, EXPERIMENTAL_SYSTEM |
+
+| excluded_fields | PUBMED_ID, full interaction details |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | prohibited — final_disposition is rejected-unsafe-or-duplicate; credential in URL query string violates Lumen safety policy |
+
+| credential_redaction | REJECTED: Official WADL (https://webservice.thebiogrid.org/application.wadl) defines accessKey as style="query" in GET method only. No POST method is defined in the WADL. The credential is therefore required in the URL query string, which violates Lumen's credential-never-in-URL hard constraint. No runtime implementation or live probe is admitted. |
+
+| admission_status | **rejected-safety-policy** |
+
+| final_disposition | **rejected-unsafe-or-duplicate** |
+
+| reason | BioGRID requires accessKey as a query parameter in the official WADL (https://webservice.thebiogrid.org/application.wadl). The WADL defines only GET method with accessKey as style="query". Although the overview page mentions POST support, no formal POST specification or body-parameter transport is defined. The documented credential placement in URL query string violates Lumen's credential-never-in-URL hard constraint (execution book line 801). Therefore rejected as unsafe/duplicate per admission policy. |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://wiki.thebiogrid.org/doku.php/accesskey |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://thebiogrid.org/terms.php |
+
+| official_docs_urls.terms | https://thebiogrid.org/terms.php |
+
+| official_docs_urls.privacy | https://thebiogrid.org/privacy.php |
+
+| official_docs_urls.protocol | https://webservice.thebiogrid.org/application.wadl |
+
+| verified_at | 2026-07-24 |
+
+
+
+### 30. `intact` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | pathways |
+
+| connector_id | `intact` |
+
+| stable_id | `intact` |
+
+| source_file | `backend/cli/src/science/connectors/pathways/intact.ts` |
+
+| source_sha256 | `87710155878bf8795e8f230cbf8047ed9db7f46bb286e8c72b17b12aa1e7d3fd` |
+
+| rust_module | connectors/intact.rs (planned) |
+
+| service_owner | EMBL-EBI / IntAct |
+
+| official_base_url | https://www.ebi.ac.uk/intact/ws/ |
+
+| egress_hosts | www.ebi.ac.uk |
+
+| endpoint | /interaction/findInteractions/{query}?page=0&pageSize={n} |
+
+| method | GET |
+
+| pagination | page + pageSize (Spring Data Page envelope) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 1000ms |
+
+| license | IntAct data freely available; EMBL-EBI terms |
+
+| terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+| copyright_boundary | protein-protein interaction metadata; full interaction details excluded |
+
+| selected_fields | ac, idA, idB, moleculeA, moleculeB, type, detectionMethod |
+
+| excluded_fields | hostOrganism, full interaction metadata |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; Spring Data Page JSON envelope; awaits DS-25 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://www.ebi.ac.uk/intact/ws/ |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 31. `kegg` — admission_status: **license-review-required** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | pathways |
+
+| connector_id | `kegg` |
+
+| stable_id | `kegg` |
+
+| source_file | `backend/cli/src/science/connectors/pathways/kegg.ts` |
+
+| source_sha256 | `bad1968c53f238db2a894bfbf714ff1a71cd48a5eb46252ef7905a5e8e546971` |
+
+| rust_module | null |
+
+| service_owner | Kanehisa Laboratories / Kyoto University |
+
+| official_base_url | https://rest.kegg.jp/ |
+
+| egress_hosts | rest.kegg.jp |
+
+| endpoint | /find/{database}/{query} + /get/{id} |
+
+| method | GET |
+
+| pagination | none (tab-delimited flat text; client-side line parsing) |
+
+| maximum_page_size | null |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | academic: free with attribution; commercial: paid subscription required |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | pending-license-review |
+
+| license | ⚠️ KEGG requires paid subscription for commercial use. Academic use free with attribution. See https://www.kegg.jp/kegg/legal.html |
+
+| terms | https://www.kegg.jp/kegg/legal.html |
+
+| privacy | https://www.kegg.jp/kegg/legal.html |
+
+| copyright_boundary | KEGG pathway data is licensed; commercial use prohibited without subscription |
+
+| selected_fields | pending license review |
+
+| excluded_fields | pending license review |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization AND KEGG commercial license acceptance |
+
+| credential_redaction | not applicable |
+
+| admission_status | **license-review-required** |
+
+| final_disposition | **null** |
+
+| reason | KEGG commercial use requires paid license subscription per https://www.kegg.jp/kegg/legal.html. Execution book explicitly: 'KEGG、HMDB 或其他商业/受限数据不得因为 upstream 有 adapter 就自动准入。' Implementation deferred until license terms are explicitly accepted by the project. |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://www.kegg.jp/kegg/rest/keggapi.html |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://www.kegg.jp/kegg/legal.html |
+
+| official_docs_urls.terms | https://www.kegg.jp/kegg/legal.html |
+
+| official_docs_urls.privacy | https://www.kegg.jp/kegg/legal.html |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 32. `opentargets` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | pathways |
+
+| connector_id | `opentargets` |
+
+| stable_id | `opentargets` |
+
+| source_file | `backend/cli/src/science/connectors/pathways/opentargets.ts` |
+
+| source_sha256 | `e0c740e4e750ce917f6d0ae8d33ea8570a5a74aa2680e7bac014be01bf56c8f8` |
+
+| rust_module | connectors/opentargets.rs (planned) |
+
+| service_owner | Open Targets (EMBL-EBI / Wellcome Sanger / GSK / Biogen / Celgene) |
+
+| official_base_url | https://api.platform.opentargets.org/api/v4/graphql |
+
+| egress_hosts | api.platform.opentargets.org |
+
+| endpoint | POST /api/v4/graphql (GraphQL query) |
+
+| method | POST |
+
+| pagination | GraphQL page: { index: 0, size: $size } |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 1000ms |
+
+| license | Open Targets data CC BY 4.0 |
+
+| terms | https://platform.opentargets.org/documentation |
+
+| privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+| copyright_boundary | target-disease association metadata |
+
+| selected_fields | id, name, entity, description |
+
+| excluded_fields | full target/disease/drug entity details |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; uses POST GraphQL; awaits DS-27 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://platform.opentargets.org/documentation |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://platform.opentargets.org/documentation |
+
+| official_docs_urls.terms | https://platform.opentargets.org/documentation |
+
+| official_docs_urls.privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 33. `reactome` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | pathways |
+
+| connector_id | `reactome` |
+
+| stable_id | `reactome` |
+
+| source_file | `backend/cli/src/science/connectors/pathways/reactome.ts` |
+
+| source_sha256 | `835bd7ff9198e999bc7bb997456ec9f621bb96039cb12d0b8c003712084d5e05` |
+
+| rust_module | connectors/reactome.rs (planned) |
+
+| service_owner | Reactome (OICR / EMBL-EBI / NYU / OHSU) |
+
+| official_base_url | https://reactome.org/ContentService/ |
+
+| egress_hosts | reactome.org |
+
+| endpoint | /search/query?query={query}&cluster=true&species={species} |
+
+| method | GET |
+
+| pagination | none (clustered results; client-side slice) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 1000ms |
+
+| license | Reactome data CC0; ContentService free |
+
+| terms | https://reactome.org/documentation/data-license-agreement |
+
+| privacy | https://reactome.org/privacy |
+
+| copyright_boundary | pathway annotation metadata; diagram data excluded |
+
+| selected_fields | stId, name, exactType, species, summation |
+
+| excluded_fields | full pathway details, diagram data |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; CC0 data; awaits DS-28 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://reactome.org/ContentService/ |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://reactome.org/documentation/data-license-agreement |
+
+| official_docs_urls.terms | https://reactome.org/documentation/data-license-agreement |
+
+| official_docs_urls.privacy | https://reactome.org/privacy |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 34. `string-db` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | pathways |
+
+| connector_id | `string-db` |
+
+| stable_id | `string-db` |
+
+| source_file | `backend/cli/src/science/connectors/pathways/string-db.ts` |
+
+| source_sha256 | `c9e0519400f79ac77d2a03787f6cbc89585a2cdf8df852a2dbd399a4ad049c30` |
+
+| rust_module | connectors/string_db.rs (planned) |
+
+| service_owner | STRING Consortium (CPR / EMBL / SIB / KU / TUD) |
+
+| official_base_url | https://string-db.org/api/ |
+
+| egress_hosts | string-db.org |
+
+| endpoint | /json/get_string_ids?identifiers={query}&species={taxon}&limit={n} |
+
+| method | GET |
+
+| pagination | limit (no offset) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 1000ms |
+
+| license | STRING data CC BY 4.0 |
+
+| terms | https://string-db.org/cgi/access |
+
+| privacy | https://string-db.org/cgi/about?footer_active_subpage=privacy |
+
+| copyright_boundary | protein-protein interaction metadata; interaction scores available but excluded from minimal fields |
+
+| selected_fields | stringId, preferredName, ncbiTaxonId, taxonName |
+
+| excluded_fields | full annotation, interaction scores |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; awaits DS-29 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://string-db.org/help/api/ |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://string-db.org/cgi/access |
+
+| official_docs_urls.terms | https://string-db.org/cgi/access |
+
+| official_docs_urls.privacy | https://string-db.org/cgi/about?footer_active_subpage=privacy |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 35. `wikipathways` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | pathways |
+
+| connector_id | `wikipathways` |
+
+| stable_id | `wikipathways` |
+
+| source_file | `backend/cli/src/science/connectors/pathways/wikipathways.ts` |
+
+| source_sha256 | `3abadc3679d9cd72f223ce990cc6da9f5749bfe0d114da43aa3176aba553713b` |
+
+| rust_module | connectors/wikipathways.rs (planned) |
+
+| service_owner | WikiPathways (Gladstone / Maastricht / EBI) |
+
+| official_base_url | https://www.wikipathways.org/ |
+
+| egress_hosts | www.wikipathways.org |
+
+| endpoint | /json/findPathwaysByText.json (full catalog; client-side filter/slice) |
+
+| method | GET |
+
+| pagination | none (full catalog; client-side filter) |
+
+| maximum_page_size | 25 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 5000ms (large catalog fetch) |
+
+| license | WikiPathways data CC0 |
+
+| terms | https://www.wikipathways.org/index.php/WikiPathways:License |
+
+| privacy | https://www.wikipathways.org/index.php/WikiPathways:Privacy_policy |
+
+| copyright_boundary | pathway annotation metadata; CC0 licensed |
+
+| selected_fields | id, name, url, species, revision |
+
+| excluded_fields | description, authors |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; full catalog JSON fetch with client-side filtering; awaits DS-30 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://www.wikipathways.org/index.php/Help:WikiPathways_Webservice |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://www.wikipathways.org/index.php/WikiPathways:License |
+
+| official_docs_urls.terms | https://www.wikipathways.org/index.php/WikiPathways:License |
+
+| official_docs_urls.privacy | https://www.wikipathways.org/index.php/WikiPathways:Privacy_policy |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 36. `arrayexpress` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | omics |
+
+| connector_id | `arrayexpress` |
+
+| stable_id | `arrayexpress` |
+
+| source_file | `backend/cli/src/science/connectors/omics/arrayexpress.ts` |
+
+| source_sha256 | `88832b7f88e1f2eaefe57e067f11bdf4ad7d87c7b9d39633c4e8014cbbd51c67` |
+
+| rust_module | connectors/arrayexpress.rs (planned) |
+
+| service_owner | EMBL-EBI |
+
+| official_base_url | https://www.ebi.ac.uk/biostudies/api/v1/ |
+
+| egress_hosts | www.ebi.ac.uk |
+
+| endpoint | /arrayexpress/search?query={query}&pageSize={n} |
+
+| method | GET |
+
+| pagination | pageSize (no offset/cursor in synsci) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 1000ms |
+
+| license | ArrayExpress data freely available; EMBL-EBI terms |
+
+| terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+| copyright_boundary | experiment metadata; raw data files excluded |
+
+| selected_fields | accession, type, title, author, release_date |
+
+| excluded_fields | content description, full file metadata |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; EBI BioStudies API; awaits DS-31 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://www.ebi.ac.uk/biostudies/help |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 37. `depmap` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | omics |
+
+| connector_id | `depmap` |
+
+| stable_id | `depmap` |
+
+| source_file | `backend/cli/src/science/connectors/omics/depmap.ts` |
+
+| source_sha256 | `f3bc2650126624290e2b34541de4b906c6657bf7741168f28804491c125faae9` |
+
+| rust_module | connectors/depmap.rs (planned) |
+
+| service_owner | Broad Institute / Sanger Institute |
+
+| official_base_url | https://depmap.org/portal/ |
+
+| egress_hosts | depmap.org |
+
+| endpoint | /api/download/files (file catalogue; client-side filter) |
+
+| method | GET |
+
+| pagination | none (full catalogue; client-side filter/slice) |
+
+| maximum_page_size | 25 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 2000ms |
+
+| license | DepMap data CC BY 4.0 |
+
+| terms | https://depmap.org/portal/download/all/ |
+
+| privacy | not documented |
+
+| copyright_boundary | file catalogue metadata; actual data files excluded |
+
+| selected_fields | releaseName, fileName, fileDescription, fileType, downloadUrl |
+
+| excluded_fields | file size, full release metadata |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization; may serve anti-bot HTML (needs defensive parsing) |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; note: API may return anti-bot HTML; awaits DS-32 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://depmap.org/portal/download/all/ |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://depmap.org/portal/download/all/ |
+
+| official_docs_urls.terms | https://depmap.org/portal/download/all/ |
+
+| official_docs_urls.privacy | not documented |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 38. `expression-atlas` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | omics |
+
+| connector_id | `expression-atlas` |
+
+| stable_id | `expression-atlas` |
+
+| source_file | `backend/cli/src/science/connectors/omics/expression-atlas.ts` |
+
+| source_sha256 | `846253e45f17e67c19dfe17460f21f8ac121212c11118b2e7d30e8da8cce0107` |
+
+| rust_module | connectors/expression_atlas.rs (planned) |
+
+| service_owner | EMBL-EBI |
+
+| official_base_url | https://www.ebi.ac.uk/gxa/ |
+
+| egress_hosts | www.ebi.ac.uk |
+
+| endpoint | /json/experiments (full catalogue; client-side filter) |
+
+| method | GET |
+
+| pagination | none (full catalogue; client-side filter/slice) |
+
+| maximum_page_size | 25 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 1000ms |
+
+| license | Expression Atlas data freely available; EMBL-EBI terms |
+
+| terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+| copyright_boundary | experiment catalogue metadata; raw expression data excluded |
+
+| selected_fields | experimentAccession, experimentDescription, species, kingdom, experimentType, numberOfAssays |
+
+| excluded_fields | loadDate, lastUpdate, technologyType, experimentalFactors |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; full catalogue JSON; awaits DS-33 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://www.ebi.ac.uk/gxa/help/index.html |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 39. `geo` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | omics |
+
+| connector_id | `geo` |
+
+| stable_id | `geo` |
+
+| source_file | `backend/cli/src/science/connectors/omics/geo.ts` |
+
+| source_sha256 | `14e867fd536a6dd0aedcd9bbee3902b72a31c37f06e7c912843c69eb99a9c27c` |
+
+| rust_module | connectors/geo.rs (planned) |
+
+| service_owner | NCBI / NIH |
+
+| official_base_url | https://eutils.ncbi.nlm.nih.gov/entrez/eutils/ |
+
+| egress_hosts | eutils.ncbi.nlm.nih.gov |
+
+| endpoint | /esearch.fcgi?db=gds (2-step E-utilities: esearch over GEO DataSets) |
+
+| method | GET |
+
+| pagination | retmax + retstart (E-utilities standard) |
+
+| maximum_page_size | 50 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | 3 req/s without API key; 10 req/s with API key (NCBI E-utilities) |
+
+| local_rate_limit | 3 requests per 1000ms |
+
+| license | NCBI policies; GEO data freely available |
+
+| terms | https://www.ncbi.nlm.nih.gov/home/about/policies/ |
+
+| privacy | https://www.ncbi.nlm.nih.gov/home/about/policies/#privacy |
+
+| copyright_boundary | experiment metadata; raw expression data excluded from minimal fields |
+
+| selected_fields | uid, accession, title, taxon, gdstype, entrytype, n_samples |
+
+| excluded_fields | summary, gpl (platform details), gse (series details), pdat |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; uses E-utilities protocol (db=gds); awaits DS-34 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://www.ncbi.nlm.nih.gov/books/NBK25497/ |
+
+| official_docs_urls.rate_limit | https://www.ncbi.nlm.nih.gov/books/NBK25497/ |
+
+| official_docs_urls.license | https://www.ncbi.nlm.nih.gov/home/about/policies/ |
+
+| official_docs_urls.terms | https://www.ncbi.nlm.nih.gov/home/about/policies/ |
+
+| official_docs_urls.privacy | https://www.ncbi.nlm.nih.gov/home/about/policies/#privacy |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 40. `gtex` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | omics |
+
+| connector_id | `gtex` |
+
+| stable_id | `gtex` |
+
+| source_file | `backend/cli/src/science/connectors/omics/gtex.ts` |
+
+| source_sha256 | `c04959dfd3d42c95a70dbd8d074127708340fe489f9f517a3076fa2456b26f69` |
+
+| rust_module | connectors/gtex.rs (planned) |
+
+| service_owner | GTEx Consortium (Broad Institute / NIH) |
+
+| official_base_url | https://gtexportal.org/api/v2/ |
+
+| egress_hosts | gtexportal.org |
+
+| endpoint | /reference/gene?geneId={geneId}&itemsPerPage={n} |
+
+| method | GET |
+
+| pagination | itemsPerPage (no offset; search caps at 25, fetch uses 100) |
+
+| maximum_page_size | 25 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 1000ms |
+
+| license | GTEx data freely available; NIH dbGaP terms for controlled-access subsets |
+
+| terms | https://gtexportal.org/home/documentationPage |
+
+| privacy | https://gtexportal.org/home/privacyPolicy |
+
+| copyright_boundary | gene expression metadata; controlled-access individual-level data excluded |
+
+| selected_fields | geneSymbol, gencodeId, description, chromosome, start, end |
+
+| excluded_fields | entrezGeneId, strand, geneType, genomeBuild |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; public portal API v2; awaits DS-35 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://gtexportal.org/home/api-docs/ |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://gtexportal.org/home/documentationPage |
+
+| official_docs_urls.terms | https://gtexportal.org/home/documentationPage |
+
+| official_docs_urls.privacy | https://gtexportal.org/home/privacyPolicy |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 41. `hpa` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | omics |
+
+| connector_id | `hpa` |
+
+| stable_id | `hpa` |
+
+| source_file | `backend/cli/src/science/connectors/omics/hpa.ts` |
+
+| source_sha256 | `3d50b7eab40e699cfc6553c8889022dac0b33f9d99d0d2450fce0db51a4e0e00` |
+
+| rust_module | connectors/hpa.rs (planned) |
+
+| service_owner | Human Protein Atlas (KTH / Uppsala / SciLifeLab) |
+
+| official_base_url | https://www.proteinatlas.org/ |
+
+| egress_hosts | www.proteinatlas.org |
+
+| endpoint | /api/search_download.php?search={query}&format=json&columns=g,gs,eg,up,gd,chr&compress=no |
+
+| method | GET |
+
+| pagination | none (full result list; client-side slice) |
+
+| maximum_page_size | 25 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 1000ms |
+
+| license | HPA data CC BY-SA 3.0 |
+
+| terms | https://www.proteinatlas.org/about/licence |
+
+| privacy | https://www.proteinatlas.org/about/privacy |
+
+| copyright_boundary | gene/protein annotation metadata; tissue expression profiles excluded |
+
+| selected_fields | Gene, Gene synonym, Ensembl, Uniprot, Gene description, Chromosome |
+
+| excluded_fields | tissue expression data, subcellular location data |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; CC BY-SA 3.0; awaits DS-36 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://www.proteinatlas.org/about/download |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://www.proteinatlas.org/about/licence |
+
+| official_docs_urls.terms | https://www.proteinatlas.org/about/licence |
+
+| official_docs_urls.privacy | https://www.proteinatlas.org/about/privacy |
+
+
+| verified_at | 2026-07-24 |
+
+
+
+### 42. `single-cell-atlas` — admission_status: **inventory-complete** | final_disposition: **null**
+
+
+| Field | Value |
+|-------|-------|
+
+| category | omics |
+
+| connector_id | `single-cell-atlas` |
+
+| stable_id | `single-cell-atlas` |
+
+| source_file | `backend/cli/src/science/connectors/omics/single-cell-atlas.ts` |
+
+| source_sha256 | `a3af3caeaa642e340bf3cb40dff6d28212274569007213479f326c73ed1118e8` |
+
+| rust_module | connectors/single_cell_atlas.rs (planned) |
+
+| service_owner | EMBL-EBI |
+
+| official_base_url | https://www.ebi.ac.uk/gxa/sc/ |
+
+| egress_hosts | www.ebi.ac.uk |
+
+| endpoint | /json/experiments (full single-cell catalogue; client-side filter) |
+
+| method | GET |
+
+| pagination | none (full catalogue; client-side filter/slice) |
+
+| maximum_page_size | 25 |
+
+| auth_class | none |
+
+| runtime_env_var | none |
+
+| billing | free (no key required) |
+
+| official_rate_limit | not documented |
+
+| local_rate_limit | 1 request per 1000ms |
+
+| license | Single Cell Expression Atlas data freely available; EMBL-EBI terms |
+
+| terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+| copyright_boundary | experiment catalogue metadata; raw single-cell data excluded |
+
+| selected_fields | experimentAccession, experimentDescription, species, experimentType, numberOfAssays |
+
+| excluded_fields | technologyType, experimentalFactors, loadDate |
+
+| fixture_feasibility | true |
+
+| live_probe_condition | requires explicit live-network authorization |
+
+| credential_redaction | not applicable |
+
+| admission_status | **inventory-complete** |
+
+| final_disposition | **null** |
+
+| reason | DS-0 inventory complete; full single-cell catalogue JSON; awaits DS-37 implementation |
+
+| codex_acceptance | pending |
+
+| official_docs_urls.auth | https://www.ebi.ac.uk/gxa/sc/help/index.html |
+
+| official_docs_urls.rate_limit | not documented |
+
+| official_docs_urls.license | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.terms | https://www.ebi.ac.uk/about/terms-of-use |
+
+| official_docs_urls.privacy | https://www.ebi.ac.uk/about/terms-of-use |
+
+
+| verified_at | 2026-07-24 |
+
+
+

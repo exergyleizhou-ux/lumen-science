@@ -3,8 +3,43 @@
 //! Pure functions only: relative-path construction and response parsing. The
 //! v1 operation is a full-text molecule search returning one page of records.
 
+use super::adapter::ProtocolAdapter;
 use super::fetch::{ParsedResponse, RetrievedRecord};
 use crate::ScienceError;
+
+/// DS-1 protocol adapter. Registered in the global [`super::adapter::REGISTRY`].
+pub struct ChemblAdapter;
+
+impl ProtocolAdapter for ChemblAdapter {
+    fn descriptor(&self) -> &'static super::ConnectorDescriptor {
+        &super::CHEMBL
+    }
+
+    fn expected_exchanges(&self) -> usize {
+        1
+    }
+
+    fn build_fixture_paths(
+        &self,
+        query: &str,
+        max_results: u32,
+        _fixtures: &[Vec<u8>],
+    ) -> crate::Result<Vec<String>> {
+        Ok(vec![search_path(query, max_results, 0)])
+    }
+
+    fn parse_responses(
+        &self,
+        exchanges: &[super::fetch::FetchExchange],
+    ) -> crate::Result<ParsedResponse> {
+        if exchanges.len() != 1 {
+            return Err(ScienceError::Invalid(
+                "chembl fetch requires exactly one search exchange".into(),
+            ));
+        }
+        parse_search(&exchanges[0].response)
+    }
+}
 
 /// Molecule full-text search path for `term`, page size `max`, zero-based
 /// page `offset`.

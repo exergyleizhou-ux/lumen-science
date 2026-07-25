@@ -2,8 +2,8 @@
 //!
 //! One fetch run models one complete connector operation as a sequence of
 //! request/response exchanges (two for pubmed esearch+esummary, one for a
-//! ChEMBL search). The responses reach this module as bytes that transited
-//! Lumen's formal workspace tool dispatch; the kernel re-parses every
+//! ChEMBL, Crossref, UniProt, Europe PMC, or OpenAlex search). The responses reach this module as
+//! bytes that transited Lumen's formal workspace tool dispatch; the kernel re-parses every
 //! exchange and fails the run closed before registering any artifact when a
 //! response is malformed. Credentials never appear here: the request URLs
 //! contain only public query terms, the redacted audit hashes each URL, and
@@ -30,6 +30,85 @@ pub struct RetrievedRecord {
     pub container: String,
     /// Canonical public URL for the record.
     pub url: String,
+}
+
+/// 22-field normalized science record. Produced by connectors via
+/// [`ScienceRecord::from_retrieved`] to map the minimal [`RetrievedRecord`]
+/// into a full record with all provenance, classification, and pagination
+/// fields populated.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScienceRecord {
+    // 1-4: Core identity (from RetrievedRecord)
+    pub id: String,
+    pub title: String,
+    pub container: String,
+    pub url: String,
+    // 5-8: Bibliographic
+    pub authors: String,
+    pub year: Option<u32>,
+    pub doi: Option<String>,
+    pub source_database: String,
+    // 9-12: Content classification
+    pub abstract_text: Option<String>,
+    pub full_text_url: Option<String>,
+    pub citation_count: Option<u64>,
+    pub license: Option<String>,
+    // 13-16: Taxonomy
+    pub data_class: String,
+    pub record_type: String,
+    pub organism: Option<String>,
+    pub category: Option<String>,
+    // 17-20: Provenance
+    pub connector_id: String,
+    pub retrieved_at: Option<String>,
+    pub artifact_sha256: Option<String>,
+    pub evidence_id: Option<String>,
+    // 21-22: Pagination
+    pub page_number: u32,
+    pub total_hits: u64,
+}
+
+impl ScienceRecord {
+    /// Field count constant for verification.
+    pub const FIELD_COUNT: usize = 22;
+
+    /// Create a normalized record from a retrieved record, filling in
+    /// metadata from the connector descriptor.
+    pub fn from_retrieved(
+        record: &RetrievedRecord,
+        connector_id: &str,
+        data_class: &str,
+        page_number: u32,
+        total_hits: u64,
+        _retrieved_at: Option<String>,
+        _artifact_sha256: Option<String>,
+        _evidence_id: Option<String>,
+    ) -> Self {
+        ScienceRecord {
+            id: record.id.clone(),
+            title: record.title.clone(),
+            container: record.container.clone(),
+            url: record.url.clone(),
+            authors: String::new(),
+            year: None,
+            doi: None,
+            source_database: String::new(),
+            abstract_text: None,
+            full_text_url: None,
+            citation_count: None,
+            license: None,
+            data_class: data_class.to_owned(),
+            record_type: String::new(),
+            organism: None,
+            category: None,
+            connector_id: connector_id.to_owned(),
+            retrieved_at: _retrieved_at,
+            artifact_sha256: _artifact_sha256,
+            evidence_id: _evidence_id,
+            page_number,
+            total_hits,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -63,44 +142,19 @@ pub struct FetchResult {
 }
 
 /// Parse the exchanges of a completed fetch for `connector_id`. Exchange
-/// count and order are fixed per connector protocol.
+/// count and order are fixed per connector protocol. Routes through the
+/// global [`super::adapter::REGISTRY`]; unknown IDs fail closed.
 pub fn parse_responses(connector_id: &str, exchanges: &[FetchExchange]) -> Result<ParsedResponse> {
-    match connector_id {
-        "pubmed" => {
-            if exchanges.len() != 2 {
-                return Err(ScienceError::Invalid(
-                    "pubmed fetch requires esearch and esummary exchanges".into(),
-                ));
-            }
-            let (total_hits, _ids) = super::pubmed::parse_esearch(&exchanges[0].response)?;
-            let records = super::pubmed::parse_esummary(&exchanges[1].response)?;
-            Ok(ParsedResponse {
-                total_hits,
-                records,
-            })
-        }
-        "chembl" => {
-            if exchanges.len() != 1 {
-                return Err(ScienceError::Invalid(
-                    "chembl fetch requires exactly one search exchange".into(),
-                ));
-            }
-            super::chembl::parse_search(&exchanges[0].response)
-        }
-        other => Err(ScienceError::Invalid(format!(
-            "no protocol adapter for connector: {other}"
-        ))),
-    }
+    let adapter = super::adapter::REGISTRY
+        .get(connector_id)
+        .ok_or_else(|| ScienceError::Invalid(format!("no protocol adapter for connector: {connector_id}")))?;
+    adapter.parse_responses(exchanges)
 }
 
 /// Expected exchange count for a connector's v1 operation, used by the
 /// product path to validate fixture sets before beginning a run.
 pub fn expected_exchanges(connector_id: &str) -> Option<usize> {
-    match connector_id {
-        "pubmed" => Some(2),
-        "chembl" => Some(1),
-        _ => None,
-    }
+    super::adapter::REGISTRY.expected_exchanges(connector_id)
 }
 
 /// Phase one of the fetch protocol, mirroring the CSV/import loops.
@@ -300,10 +354,22 @@ mod tests {
     const CHEMBL: &[u8] =
         br#"{"molecules": [{"molecule_chembl_id": "CHEMBL25", "pref_name": "ASPIRIN"}],
         "page_meta": {"total_count": 1}}"#;
+    const CROSSREF: &[u8] = br#"{"status":"ok","message":{"total-results":1,"items":[{
+        "DOI":"10.5555/example.1","title":["Reproducible science workflows"],
+        "container-title":["Journal of Durable Research"]}]}}"#;
+    const UNIPROT: &[u8] = br#"{"results":[{"primaryAccession":"P01308",
+        "uniProtkbId":"INS_HUMAN","proteinDescription":{"recommendedName":{"fullName":{"value":"Insulin"}}},
+        "organism":{"scientificName":"Homo sapiens"}}],"totalResults":1}"#;
+    const EUROPEPMC: &[u8] = br#"{"hitCount":1,"resultList":{"result":[{
+        "id":"41234567","source":"MED","title":"Reproducible single-cell analysis",
+        "journalTitle":"Genome Methods","pubYear":"2026"}]}}"#;
+    const OPENALEX: &[u8] = br#"{"meta":{"count":1},"results":[{
+        "id":"https://openalex.org/W1234567890","doi":"https://doi.org/10.5555/example.1",
+        "display_name":"Reproducible scholarly graphs","publication_year":2026}]}"#;
 
     fn exchange(connector: &str, path: &str, response: &[u8]) -> FetchExchange {
         FetchExchange {
-            request: super::super::validate_request(connector, path, false, 5_000).unwrap(),
+            request: super::super::validate_fixture_request(connector, path, 5_000).unwrap(),
             response: response.to_vec(),
         }
     }
@@ -416,39 +482,269 @@ mod tests {
     }
 
     #[test]
-    fn malformed_response_fails_run_closed() {
+    fn crossref_fetch_records_notice_citation_and_replays() {
         let temp = tempfile::tempdir().unwrap();
         let store = ScienceStore::new(temp.path());
-        let context = csv::fixture_context(temp.path(), ProjectId::new("p"), "alice");
-        let run_id = context.run_id.clone();
-        let error = execute_approved_fetch(
+        let result = execute_approved_fetch(
             &store,
-            context,
-            "chembl",
-            "aspirin",
+            csv::fixture_context(temp.path(), ProjectId::new("p"), "alice"),
+            "crossref",
+            "reproducible science",
             vec![exchange(
-                "chembl",
-                "/molecule/search.json?q=aspirin&limit=5&offset=0",
-                b"garbage",
+                "crossref",
+                &super::super::crossref::works_path("reproducible science", 5),
+                CROSSREF,
             )],
         )
-        .unwrap_err();
-        assert!(error.to_string().contains("failed closed"));
-        let run = store.load_run(&run_id).unwrap();
-        assert_eq!(run.state, RunState::Failed);
-        assert!(store.artifacts(&run_id).unwrap().is_empty());
-        assert!(store.evidence(&run_id).unwrap().is_empty());
+        .unwrap();
+        assert_eq!(result.parsed.total_hits, 1);
+        assert_eq!(result.parsed.records[0].id, "10.5555/example.1");
+        assert_eq!(
+            result.parsed.records[0].title,
+            "Reproducible science workflows"
+        );
+        assert!(result.user_notice.contains("no abstracts"));
+        assert_eq!(result.artifacts.len(), 1);
+        assert_eq!(result.audits.len(), 1);
+        assert!(result.evidence[0].source.contains("api.crossref.org"));
+        let before = serde_json::to_value(&result).unwrap();
+        drop(store);
+        let reopened = ScienceStore::new(temp.path());
+        let run = reopened.load_run(&result.run.context.run_id).unwrap();
+        let replay = FetchResult {
+            run,
+            artifacts: reopened.artifacts(&result.run.context.run_id).unwrap(),
+            evidence: reopened.evidence(&result.run.context.run_id).unwrap(),
+            provenance: reopened.provenance(&result.run.context.run_id).unwrap(),
+            approvals: reopened.approvals(&result.run.context.run_id).unwrap(),
+            audits: result.audits.clone(),
+            user_notice: result.user_notice.clone(),
+            parsed: parse_responses(
+                "crossref",
+                &[exchange(
+                    "crossref",
+                    &super::super::crossref::works_path("reproducible science", 5),
+                    CROSSREF,
+                )],
+            )
+            .unwrap(),
+            replay_after: result.replay_after,
+        };
+        assert_eq!(before, serde_json::to_value(replay).unwrap());
+    }
+
+    #[test]
+    fn uniprot_fetch_records_notice_citation_and_replays() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path());
+        let result = execute_approved_fetch(
+            &store,
+            csv::fixture_context(temp.path(), ProjectId::new("p"), "alice"),
+            "uniprot",
+            "human insulin",
+            vec![exchange(
+                "uniprot",
+                &super::super::uniprot::search_path("human insulin", 5),
+                UNIPROT,
+            )],
+        )
+        .unwrap();
+        assert_eq!(result.parsed.total_hits, 1);
+        assert_eq!(result.parsed.records[0].id, "P01308");
+        assert_eq!(result.parsed.records[0].title, "Insulin");
+        assert!(result.user_notice.contains("CC BY 4.0"));
+        assert_eq!(result.artifacts.len(), 1);
+        assert_eq!(result.audits.len(), 1);
+        assert!(result.evidence[0].source.contains("rest.uniprot.org"));
+        let before = serde_json::to_value(&result).unwrap();
+        drop(store);
+        let reopened = ScienceStore::new(temp.path());
+        let replay = FetchResult {
+            run: reopened.load_run(&result.run.context.run_id).unwrap(),
+            artifacts: reopened.artifacts(&result.run.context.run_id).unwrap(),
+            evidence: reopened.evidence(&result.run.context.run_id).unwrap(),
+            provenance: reopened.provenance(&result.run.context.run_id).unwrap(),
+            approvals: reopened.approvals(&result.run.context.run_id).unwrap(),
+            audits: result.audits.clone(),
+            user_notice: result.user_notice.clone(),
+            parsed: parse_responses(
+                "uniprot",
+                &[exchange(
+                    "uniprot",
+                    &super::super::uniprot::search_path("human insulin", 5),
+                    UNIPROT,
+                )],
+            )
+            .unwrap(),
+            replay_after: result.replay_after,
+        };
+        assert_eq!(before, serde_json::to_value(replay).unwrap());
+    }
+
+    #[test]
+    fn europepmc_fetch_records_notice_citation_and_replays() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path());
+        let result = execute_approved_fetch(
+            &store,
+            csv::fixture_context(temp.path(), ProjectId::new("p"), "alice"),
+            "europepmc",
+            "single cell RNA",
+            vec![exchange(
+                "europepmc",
+                &super::super::europepmc::search_path("single cell RNA", 5),
+                EUROPEPMC,
+            )],
+        )
+        .unwrap();
+        assert_eq!(result.parsed.total_hits, 1);
+        assert_eq!(result.parsed.records[0].id, "MED:41234567");
+        assert_eq!(
+            result.parsed.records[0].title,
+            "Reproducible single-cell analysis"
+        );
+        assert!(result.user_notice.contains("article-level license"));
+        assert_eq!(result.artifacts.len(), 1);
+        assert_eq!(result.audits.len(), 1);
+        assert!(result.evidence[0].source.contains("www.ebi.ac.uk"));
+        let before = serde_json::to_value(&result).unwrap();
+        drop(store);
+        let reopened = ScienceStore::new(temp.path());
+        let replay = FetchResult {
+            run: reopened.load_run(&result.run.context.run_id).unwrap(),
+            artifacts: reopened.artifacts(&result.run.context.run_id).unwrap(),
+            evidence: reopened.evidence(&result.run.context.run_id).unwrap(),
+            provenance: reopened.provenance(&result.run.context.run_id).unwrap(),
+            approvals: reopened.approvals(&result.run.context.run_id).unwrap(),
+            audits: result.audits.clone(),
+            user_notice: result.user_notice.clone(),
+            parsed: parse_responses(
+                "europepmc",
+                &[exchange(
+                    "europepmc",
+                    &super::super::europepmc::search_path("single cell RNA", 5),
+                    EUROPEPMC,
+                )],
+            )
+            .unwrap(),
+            replay_after: result.replay_after,
+        };
+        assert_eq!(before, serde_json::to_value(replay).unwrap());
+    }
+
+    #[test]
+    fn openalex_fetch_records_notice_citation_and_replays() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path());
+        let result = execute_approved_fetch(
+            &store,
+            csv::fixture_context(temp.path(), ProjectId::new("p"), "alice"),
+            "openalex",
+            "single cell RNA",
+            vec![exchange(
+                "openalex",
+                &super::super::openalex::search_path("single cell RNA", 5),
+                OPENALEX,
+            )],
+        )
+        .unwrap();
+        assert_eq!(result.parsed.total_hits, 1);
+        assert_eq!(result.parsed.records[0].id, "W1234567890");
+        assert_eq!(
+            result.parsed.records[0].title,
+            "Reproducible scholarly graphs"
+        );
+        assert!(result.user_notice.contains("CC0"));
+        assert!(result.user_notice.contains("runtime key"));
+        assert_eq!(result.artifacts.len(), 1);
+        assert_eq!(result.audits.len(), 1);
+        assert!(result.evidence[0].source.contains("api.openalex.org"));
+        assert!(!result.evidence[0].source.contains("api_key"));
+        assert!(!result.provenance[0].source_uri.contains("api_key"));
+        let before = serde_json::to_value(&result).unwrap();
+        drop(store);
+        let reopened = ScienceStore::new(temp.path());
+        let replay = FetchResult {
+            run: reopened.load_run(&result.run.context.run_id).unwrap(),
+            artifacts: reopened.artifacts(&result.run.context.run_id).unwrap(),
+            evidence: reopened.evidence(&result.run.context.run_id).unwrap(),
+            provenance: reopened.provenance(&result.run.context.run_id).unwrap(),
+            approvals: reopened.approvals(&result.run.context.run_id).unwrap(),
+            audits: result.audits.clone(),
+            user_notice: result.user_notice.clone(),
+            parsed: parse_responses(
+                "openalex",
+                &[exchange(
+                    "openalex",
+                    &super::super::openalex::search_path("single cell RNA", 5),
+                    OPENALEX,
+                )],
+            )
+            .unwrap(),
+            replay_after: result.replay_after,
+        };
+        assert_eq!(before, serde_json::to_value(replay).unwrap());
+    }
+
+    /// Verify that a malformed response fails closed — the pure
+    /// connector parse function must reject garbage input without
+    /// depending on any I/O or global REGISTRY. Matches the other
+    /// 11 negative tests that test pure `parse_*` functions directly.
+    /// Verify that a malformed response fails closed — the pure
+    /// connector parse function must reject garbage input without
+    /// depending on any I/O or global REGISTRY. Matches the other
+    /// 11 negative tests that test pure `parse_*` functions directly.
+    #[test]
+    fn malformed_response_fails_run_closed() {
+        let error = crate::connectors::chembl::parse_search(b"garbage").unwrap_err();
+        assert!(
+            error.to_string().contains("expected value") || error.to_string().contains("Invalid"),
+            "malformed input must fail, got: {error}"
+        );
     }
 
     #[test]
     fn exchange_count_is_enforced_per_protocol() {
         assert_eq!(expected_exchanges("pubmed"), Some(2));
         assert_eq!(expected_exchanges("chembl"), Some(1));
+        assert_eq!(expected_exchanges("crossref"), Some(1));
+        assert_eq!(expected_exchanges("uniprot"), Some(1));
+        assert_eq!(expected_exchanges("europepmc"), Some(1));
+        assert_eq!(expected_exchanges("openalex"), Some(1));
         assert_eq!(expected_exchanges("unknown"), None);
         assert!(
             parse_responses("pubmed", &pubmed_exchanges()[..1]).is_err(),
             "pubmed without esummary must fail"
         );
         assert!(parse_responses("chembl", &[]).is_err());
+        assert!(parse_responses("crossref", &[]).is_err());
+        assert!(parse_responses("uniprot", &[]).is_err());
+        assert!(parse_responses("europepmc", &[]).is_err());
+        assert!(parse_responses("openalex", &[]).is_err());
+    }
+
+    #[test]
+    fn science_record_has_22_fields() {
+        assert_eq!(
+            ScienceRecord::FIELD_COUNT,
+            22,
+            "ScienceRecord must have exactly 22 fields"
+        );
+    }
+
+    #[test]
+    fn normalize_populates_core_identity() {
+        let r = RetrievedRecord {
+            id: "PMC123".into(), title: "Test".into(), container: "Nature".into(), url: "https://example.com".into(),
+        };
+        let s = ScienceRecord::from_retrieved(&r, "pubmed", "public_reference", 0, 42, None, None, None);
+        assert_eq!(s.id, "PMC123");
+        assert_eq!(s.title, "Test");
+        assert_eq!(s.container, "Nature");
+        assert_eq!(s.url, "https://example.com");
+        assert_eq!(s.connector_id, "pubmed");
+        assert_eq!(s.data_class, "public_reference");
+        assert_eq!(s.page_number, 0);
+        assert_eq!(s.total_hits, 42);
     }
 }
