@@ -5,10 +5,16 @@ on:
     branches: [main]
     paths:
       - 'packs/science/**'
+      - 'scripts/dogfood-science-offline.sh'
+      - 'scripts/science-machine-gates.sh'
+      - 'docs/science/fusion-sources.lock.json'
+      - 'VERSION'
   pull_request:
     branches: [main]
     paths:
       - 'packs/science/**'
+      - 'scripts/**'
+      - 'docs/science/**'
   workflow_dispatch:
 
 concurrency:
@@ -38,14 +44,29 @@ jobs:
         with:
           go-version: '1.22'
 
-      - name: Test (unit)
-        run: go test ./mcp/artifacts/... ./mcp/notebook/... ./mcp/reviewer/... ./mcp/http_bridge/... -count=1 -timeout=60s
+      - name: Test (unit + seqbench + pipeline)
+        run: |
+          go test ./mcp/artifacts/... ./mcp/notebook/... ./mcp/reviewer/... ./mcp/http_bridge/... \
+            ./standalone/internal/seqbench/... ./standalone/internal/pipeline/... \
+            -count=1 -timeout=60s
 
       - name: Vet
-        run: go vet ./mcp/artifacts/... ./mcp/notebook/... ./mcp/reviewer/... ./mcp/http_bridge/... ./renderers/...
+        run: go vet ./mcp/artifacts/... ./mcp/notebook/... ./mcp/reviewer/... ./mcp/http_bridge/... ./renderers/... ./standalone/...
+
+      - name: CLI smoke (seq + pipeline offline)
+        run: make smoke
+
+  gates:
+    name: Machine honesty gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Science machine gates
+        run: bash scripts/science-machine-gates.sh
 
   build:
-    name: Cross-compile (${{ matrix.target }})
+    name: Cross-compile (${{ matrix.target.os }}-${{ matrix.target.arch }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -68,17 +89,26 @@ jobs:
         with:
           go-version: '1.22'
 
-      - name: Build
+      - name: Build primary CLI + MCP servers
         run: |
           mkdir -p build
-          for bin in artifacts notebook reviewer http_bridge science skill-migrate; do
+          VERSION=$(cat ../../VERSION 2>/dev/null || echo "${GITHUB_SHA::7}")
+          LDFLAGS="-s -w -X main.version=${VERSION}"
+          ext=""
+          [ "${{ matrix.target.os }}" = "windows" ] && ext=".exe"
+          GOOS=${{ matrix.target.os }} GOARCH=${{ matrix.target.arch }} \
+            go build -trimpath -ldflags="$LDFLAGS" \
+            -o build/lumen-science-${{ matrix.target.os }}-${{ matrix.target.arch }}${ext} \
+            ./standalone/cmd/science
+          for bin in artifacts notebook reviewer http_bridge skill-migrate; do
             GOOS=${{ matrix.target.os }} GOARCH=${{ matrix.target.arch }} \
-              go build -trimpath -o build/lumen-mcp-${bin}-${{ matrix.target.os }}-${{ matrix.target.arch }} \
+              go build -trimpath -ldflags="$LDFLAGS" \
+              -o build/lumen-mcp-${bin}-${{ matrix.target.os }}-${{ matrix.target.arch }}${ext} \
               ./standalone/cmd/${bin}
           done
 
       - name: Verify binaries
-        run: file build/* | head -20
+        run: ls -lh build/ && file build/* | head -30
 
   e2e:
     name: E2E pipeline test
@@ -96,11 +126,6 @@ jobs:
         with:
           go-version: '1.22'
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
       - name: Build MCP binaries
         run: |
           for bin in artifacts notebook reviewer; do
@@ -113,16 +138,14 @@ jobs:
           go test ./e2e/... -v -count=1 -timeout=120s
 
   release-dry-run:
-    name: Release build (dry run)
+    name: Release build + SHA256SUMS
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    needs: [test, build]
+    needs: [test, build, gates]
     defaults:
       run:
         working-directory: packs/science
-    timeout-minutes: 15
-    permissions:
-      contents: write
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -131,28 +154,25 @@ jobs:
         with:
           go-version: '1.22'
 
-      - name: Cross-compile all targets
+      - name: make release
         run: |
-          mkdir -p dist
-          VERSION=${GITHUB_SHA::7}
-          for bin in artifacts notebook reviewer http_bridge; do
-            for pair in "darwin arm64" "darwin amd64" "linux amd64" "linux arm64" "windows amd64"; do
-              set -- $pair
-              suffix=""
-              [ "$1" = "windows" ] && suffix=".exe"
-              GOOS=$1 GOARCH=$2 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" \
-                -o dist/lumen-mcp-${bin}-$1-$2${suffix} ./standalone/cmd/${bin}
-            done
-          done
+          VERSION=$(cat ../../VERSION)
+          make release VERSION="$VERSION"
 
-      - name: Generate checksums
+      - name: Verify SHA256SUMS
         run: |
-          cd dist
-          sha256sum * > lumen-science-${GITHUB_SHA::7}-checksums.txt
+          cd dist/science-release
+          test -f SHA256SUMS
+          # shasum -c is available on ubuntu via sha256sum -c after format convert
+          while read -r hash file; do
+            echo "$hash  $file" | sha256sum -c -
+          done < SHA256SUMS
+          ls -lh
+          wc -l SHA256SUMS
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: lumen-science-binaries-${{ github.sha }}
-          path: packs/science/dist/*
-          retention-days: 7
+          name: lumen-science-release-${{ github.sha }}
+          path: packs/science/dist/science-release/*
+          retention-days: 14

@@ -3,10 +3,11 @@
 #        make cross        — cross-compile for all platforms
 #        make test         — run all tests
 #        make lint         — run vet and static analysis
-#        make release      — build release binaries with version stamp
+#        make release      — build release binaries with version stamp + SHA-256
+#        make smoke        — local CLI smoke (seq + pipeline offline)
 #        make clean        — remove build artifacts
 
-.PHONY: all cross test lint release clean
+.PHONY: all cross test lint release smoke clean cross-macos cross-linux cross-windows
 
 VERSION ?= $(shell cat ../../VERSION 2>/dev/null || echo "0.1.0-dev")
 BUILD_DIR := build
@@ -15,52 +16,55 @@ RELEASE_DIR := dist/science-release
 GO := go
 GOFLAGS := -trimpath -ldflags="-s -w -X main.version=$(VERSION)"
 
-BINARIES := artifacts notebook reviewer http_bridge science skill-migrate
+# MCP servers + primary productivity CLI (science)
+MCP_BINS := artifacts notebook reviewer http_bridge skill-migrate
+# Primary user-facing CLI name
+CLI := science
 
 # ── Default build ──────────────────────────────────────────────
 
-all: $(addprefix $(BUILD_DIR)/lumen-mcp-,$(BINARIES))
+all: $(addprefix $(BUILD_DIR)/lumen-mcp-,$(MCP_BINS)) $(BUILD_DIR)/lumen-science
 
 $(BUILD_DIR)/lumen-mcp-%: standalone/cmd/%/main.go
 	@mkdir -p $(BUILD_DIR)
 	GOOS=$(shell go env GOOS) GOARCH=$(shell go env GOARCH) \
 		$(GO) build $(GOFLAGS) -o $@ ./standalone/cmd/$*
 
+$(BUILD_DIR)/lumen-science: standalone/cmd/science/main.go
+	@mkdir -p $(BUILD_DIR)
+	GOOS=$(shell go env GOOS) GOARCH=$(shell go env GOARCH) \
+		$(GO) build $(GOFLAGS) -o $@ ./standalone/cmd/science
+
 # ── Cross-compile ──────────────────────────────────────────────
 
 cross: cross-macos cross-linux cross-windows
 
-cross-macos:
+define CROSS_ONE
 	@mkdir -p $(RELEASE_DIR)
-	@for bin in $(BINARIES); do \
-		GOOS=darwin GOARCH=arm64 $(GO) build $(GOFLAGS) \
-			-o $(RELEASE_DIR)/lumen-mcp-$$bin-darwin-arm64 \
-			./standalone/cmd/$$bin; \
-		GOOS=darwin GOARCH=amd64 $(GO) build $(GOFLAGS) \
-			-o $(RELEASE_DIR)/lumen-mcp-$$bin-darwin-amd64 \
+	@for bin in $(MCP_BINS); do \
+		ext=""; [ "$(1)" = "windows" ] && ext=".exe"; \
+		GOOS=$(1) GOARCH=$(2) $(GO) build $(GOFLAGS) \
+			-o $(RELEASE_DIR)/lumen-mcp-$$bin-$(1)-$(2)$$ext \
 			./standalone/cmd/$$bin; \
 	done
+	@ext=""; [ "$(1)" = "windows" ] && ext=".exe"; \
+	GOOS=$(1) GOARCH=$(2) $(GO) build $(GOFLAGS) \
+		-o $(RELEASE_DIR)/lumen-science-$(1)-$(2)$$ext \
+		./standalone/cmd/science
+endef
+
+cross-macos:
+	$(call CROSS_ONE,darwin,arm64)
+	$(call CROSS_ONE,darwin,amd64)
 	@echo "macOS builds complete → $(RELEASE_DIR)"
 
 cross-linux:
-	@mkdir -p $(RELEASE_DIR)
-	@for bin in $(BINARIES); do \
-		GOOS=linux GOARCH=amd64 $(GO) build $(GOFLAGS) \
-			-o $(RELEASE_DIR)/lumen-mcp-$$bin-linux-amd64 \
-			./standalone/cmd/$$bin; \
-		GOOS=linux GOARCH=arm64 $(GO) build $(GOFLAGS) \
-			-o $(RELEASE_DIR)/lumen-mcp-$$bin-linux-arm64 \
-			./standalone/cmd/$$bin; \
-	done
+	$(call CROSS_ONE,linux,amd64)
+	$(call CROSS_ONE,linux,arm64)
 	@echo "Linux builds complete → $(RELEASE_DIR)"
 
 cross-windows:
-	@mkdir -p $(RELEASE_DIR)
-	@for bin in $(BINARIES); do \
-		GOOS=windows GOARCH=amd64 $(GO) build $(GOFLAGS) \
-			-o $(RELEASE_DIR)/lumen-mcp-$$bin-windows-amd64.exe \
-			./standalone/cmd/$$bin; \
-	done
+	$(call CROSS_ONE,windows,amd64)
 	@echo "Windows builds complete → $(RELEASE_DIR)"
 
 # ── Test ────────────────────────────────────────────────────────
@@ -76,6 +80,17 @@ test-verbose:
 test-e2e: $(addprefix $(BUILD_DIR)/lumen-mcp-,artifacts notebook reviewer)
 	PATH="$(CURDIR)/$(BUILD_DIR):$$PATH" $(GO) test ./e2e/... -v -count=1 -timeout=120s
 
+# Offline CLI smoke — real entry points
+smoke: $(BUILD_DIR)/lumen-science
+	@tmpdir=$$(mktemp -d); \
+	printf '%s\n' '>smoke EcoRI_NotI' 'GAATTCATGAAGAAGAAGAAGAAGAAGAAGAAGAAGAAGAAGAAGAAGAAGAAGAAGAAGAAGAAGAAGAAGAAGAAAAAAGCGGCCGCTAA' > $$tmpdir/in.fa; \
+	$(BUILD_DIR)/lumen-science seq analyze --md $$tmpdir/in.fa | tee $$tmpdir/seq.md >/dev/null; \
+	grep -q EcoRI $$tmpdir/seq.md && grep -q NotI $$tmpdir/seq.md; \
+	$(BUILD_DIR)/lumen-science pipeline offline --project smoke --run r1 --store $$tmpdir/store $$tmpdir/in.fa > $$tmpdir/pipe.json; \
+	python3 -c "import json;d=json.load(open('$$tmpdir/pipe.json')); assert d['review']['status']=='pass'"; \
+	echo "smoke: OK"; \
+	rm -rf $$tmpdir
+
 # ── Lint ────────────────────────────────────────────────────────
 
 lint:
@@ -84,20 +99,26 @@ lint:
 
 # ── Release ─────────────────────────────────────────────────────
 
-release: cross
-	@echo "Building release package..."
+release: clean cross
+	@echo "Building release package version=$(VERSION)..."
 	@mkdir -p $(RELEASE_DIR)
-	# macOS universal
-	@cd $(RELEASE_DIR) && tar -czf lumen-science-macos-$(VERSION).tar.gz lumen-mcp-*-darwin-*
-	# Linux
-	@cd $(RELEASE_DIR) && tar -czf lumen-science-linux-$(VERSION).tar.gz lumen-mcp-*-linux-*
-	# Windows
-	@cd $(RELEASE_DIR) && zip -q lumen-science-windows-$(VERSION).zip lumen-mcp-*-windows-*
-	# SHA-256 checksums
-	@cd $(RELEASE_DIR) && shasum -a 256 lumen-mcp-* *.tar.gz *.zip > lumen-science-$(VERSION)-checksums.txt
+	@# Per-platform archives (primary CLI + MCP helpers)
+	@cd $(RELEASE_DIR) && tar -czf lumen-science-$(VERSION)-darwin-arm64.tar.gz \
+		lumen-science-darwin-arm64 lumen-mcp-*-darwin-arm64
+	@cd $(RELEASE_DIR) && tar -czf lumen-science-$(VERSION)-darwin-amd64.tar.gz \
+		lumen-science-darwin-amd64 lumen-mcp-*-darwin-amd64
+	@cd $(RELEASE_DIR) && tar -czf lumen-science-$(VERSION)-linux-amd64.tar.gz \
+		lumen-science-linux-amd64 lumen-mcp-*-linux-amd64
+	@cd $(RELEASE_DIR) && tar -czf lumen-science-$(VERSION)-linux-arm64.tar.gz \
+		lumen-science-linux-arm64 lumen-mcp-*-linux-arm64
+	@cd $(RELEASE_DIR) && zip -q lumen-science-$(VERSION)-windows-amd64.zip \
+		lumen-science-windows-amd64.exe lumen-mcp-*-windows-amd64.exe
+	@# SHA-256 for every binary + archive
+	@cd $(RELEASE_DIR) && shasum -a 256 lumen-science-* lumen-mcp-* > SHA256SUMS
 	@echo "Release complete → $(RELEASE_DIR)"
-	@echo "Files:"
 	@ls -lh $(RELEASE_DIR)
+	@echo "--- SHA256SUMS (first 15) ---"
+	@head -15 $(RELEASE_DIR)/SHA256SUMS
 
 # ── Clean ───────────────────────────────────────────────────────
 

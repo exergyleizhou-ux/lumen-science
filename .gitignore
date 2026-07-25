@@ -14,3 +14,6 @@ artifacts/readiness/L5-long-session-short.json
 __pycache__/
 .worktrees/
 packs/science/build/
+
+# Science multi-platform release outputs (build with make release)
+packs/science/dist/

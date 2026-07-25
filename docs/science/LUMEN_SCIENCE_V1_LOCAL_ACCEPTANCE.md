@@ -1,18 +1,18 @@
-# Lumen Science Fusion Candidate — Local Acceptance
+# Lumen Science 1.0.0-rc.1 — Local Acceptance
 
 **Date:** 2026-07-26  
 **Repo:** `github.com/exergyleizhou-ux/lumen-science`  
-**Base:** `main` (local honesty pass)
+**Base:** `main` / tag `v1.0.0-rc.1`
 
 ## Verdict
 
 ```text
-ACCEPT as:  Lumen Science Fusion candidate (local engineering snapshot)
-REJECT as:  Lumen Science 1.0 formal release
+ACCEPT as:  Lumen Science 1.0.0-rc.1 (offline product use + multi-platform release)
+PENDING:    Formal v1.0.0 (authorized live proof)
 REJECT as:  Lumen Science 5.0 product
 ```
 
-See `LUMEN_SCIENCE_FUSION_CANDIDATE_STATUS.md` and `PRODUCT_PATH_CONTRACT.md`.
+See `LUMEN_SCIENCE_1_0_RC_STATUS.md` and `PRODUCT_PATH_CONTRACT.md`.
 
 ## Evidence Matrix
 

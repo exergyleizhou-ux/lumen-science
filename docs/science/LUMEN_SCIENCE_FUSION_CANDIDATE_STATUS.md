@@ -1,10 +1,12 @@
-# Lumen Science Fusion Candidate — Status (2026-07-26)
+# Lumen Science Fusion Candidate — Status (superseded)
 
-## Verdict
+> **Superseded by `1.0.0-rc.1`.** See `docs/science/LUMEN_SCIENCE_1_0_RC_STATUS.md`.
+
+## Verdict (historical — fusion candidate era)
 
 ```text
-PRODUCT NAME:     Lumen Science Fusion candidate
-NOT YET:          Lumen Science 1.0 formal release
+PRODUCT NAME:     Lumen Science Fusion candidate → advanced to 1.0.0-rc.1
+FORMAL TIP NOW:   1.0.0-rc.1 (multi-platform release + CI; live still pending)
 NOT YET:          Lumen Science 5.0
 ```
 
@@ -12,9 +14,9 @@ NOT YET:          Lumen Science 5.0
 
 | Level | Scope | Verdict |
 |-------|-------|---------|
-| L1 DS-0～38 | connector inventory + dispositions | **PARTIAL → repaired toward ACCEPT** (lock 42/0; active runtime 40; rejected 2 out of fetch registry) |
-| L2 DS-39～47 | offline product loop | **REJECT as complete** (Go prototypes + Motif contract UI; Rust SessionActor loop not fully proven) |
-| L3 DS-48～58 | CI/release/live | **REJECT** (no formal tag/release assets/live auth proof) |
+| L1 DS-0～38 | connector inventory + dispositions | **ACCEPT** (lock 42/0; active 40; rejected 2 not fetchable) |
+| L2 DS-39～47 | offline product loop | **ACCEPT offline** (CLI + dogfood + Motif vendor) |
+| L3 DS-48～58 | CI/release/live | **PARTIAL** — release+CI done; live pending |
 | 5.0 LS5-* | governed embodied science | **SPEC/SCAFFOLD only** |
 
 ## Machine gates after this honesty pass
@@ -51,17 +53,16 @@ lumen-science gates                      → PASS
 lumen-science pipeline offline           → review=pass + SHA-256 chain
 ```
 
-## Still open before true 1.0
+## Still open before formal v1.0.0 (not rc)
 
-- Per-connector negative-test battery depth (many thin adapters)  
-- Rust MCP / notebook path under SessionActor  
-- Motif `npm ci` supply-chain ACCEPT (needs user network auth)  
-- Skill prompt-injection audits → controlled tool surfaces  
-- Release tag, multi-platform signed binaries, authorized live proofs  
+- Authorized live connector proof (network + keys)  
+- Optional binary code signing / notarization  
+- Skill prompt-injection audits → controlled tool surfaces (`approved` still 0)  
+- Rust MCP/notebook under SessionActor (Go remains contract prototype)  
 
 ## Allowed marketing sentence
 
-> Lumen Science is a local-first scientific workbench: offline sequence
-> analysis with SHA-256 artifacts, honest connector admission, and a
-> Motif-class review surface — without claiming autonomous science or
-> unsupervised lab control.
+> Lumen Science 1.0.0-rc.1 is a local-first scientific workbench: offline
+> sequence analysis with SHA-256 artifacts, multi-platform release builds,
+> honest connector admission, and a Motif-class review surface — without
+> claiming autonomous science or unsupervised lab control.

@@ -18,7 +18,7 @@ import (
 )
 
 // version is stamped by -ldflags at release builds.
-var version = "1.0.0-fusion-candidate"
+var version = "1.0.0-rc.1"
 
 const usage = `lumen-science — productive local scientific workbench
 

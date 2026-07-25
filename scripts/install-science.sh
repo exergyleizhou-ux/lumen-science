@@ -20,8 +20,11 @@ echo "installed: $OUT_DIR/lumen-science"
 "$OUT_DIR/lumen-science" doctor --root "$PACK" || true
 
 echo
+echo "Release matrix (optional): cd packs/science && make release"
+echo "Checksums: outputs/release/${VERSION}/SHA256SUMS"
+echo
 echo "Try:"
 echo "  lumen-science seq analyze your.fa"
 echo "  lumen-science pipeline offline --project local --run demo your.fa"
-echo "  lumen-science brief aspirin    # live network"
+echo "  lumen-science brief aspirin    # live network — authorized only"
 echo "  lumen-science gates"

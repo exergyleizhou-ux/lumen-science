@@ -7,6 +7,20 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.0.0-rc.1] - 2026-07-26
+
+### Added — formal enough for offline product use
+
+- **Multi-platform release**: `packs/science/make release` builds
+  `lumen-science` + MCP helpers for darwin/linux (arm64+amd64) and windows amd64,
+  archives, and full `SHA256SUMS` (35 assets verified).
+- **Committed checksum evidence**: `outputs/release/1.0.0-rc.1/SHA256SUMS` + MANIFEST
+  (binaries rebuilt via Makefile; not stored in git).
+- **CI**: science workflow runs unit+seqbench+pipeline, `make smoke`, machine gates,
+  cross-compile matrix, and release+checksum verify on main.
+- **VERSION** → `1.0.0-rc.1`; status doc `LUMEN_SCIENCE_1_0_RC_STATUS.md`.
+- Live proof still **pending user authorization** (does not block rc).
+
 ### Added (Lumen Science Fusion candidate — productivity + honesty pass)
 
 - **Truth layer**: `fusion-sources.lock.json` schema v4 — 42/0 dispositions;
