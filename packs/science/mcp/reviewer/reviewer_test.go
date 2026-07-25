@@ -292,3 +292,84 @@ func TestApproveFixAfterHashMismatch(t *testing.T) {
 		t.Fatalf("approve_fix should pass after fix, got %s: %v", report2.Status, report2.Checks)
 	}
 }
+
+// ── DS-41 negative tests ──────────────────────────────────────
+
+// TestPartialCorruption verifies that one corrupted artifact among many is detected.
+func TestPartialCorruption(t *testing.T) {
+	dir := t.TempDir()
+	tools, _ := reviewerTools(t, dir)
+
+	setupArtifact(t, dir, "proj", "run1", "good.csv", "a,b\n1,2")
+	setupArtifact(t, dir, "proj", "run1", "bad.csv", "x,y\n3,4")
+
+	// Corrupt only bad.csv's hash
+	metaPath := filepath.Join(dir, "proj", "run1", "bad.csv.meta.json")
+	metaData, _ := os.ReadFile(metaPath)
+	var meta map[string]any
+	json.Unmarshal(metaData, &meta)
+	meta["sha256"] = "0000000000000000000000000000000000000000000000000000000000000000"
+	corrupt, _ := json.MarshalIndent(meta, "", "  ")
+	os.WriteFile(metaPath, corrupt, 0o644)
+
+	handler := findHandler(t, tools, "start_review")
+	args, _ := json.Marshal(map[string]string{
+		"project_id": "proj", "run_id": "run1",
+	})
+	result, err := handler(context.Background(), args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var report ReviewReport
+	m := result.(map[string]any)
+	c := m["content"].([]any)[0].(map[string]any)
+	json.Unmarshal([]byte(c["text"].(string)), &report)
+	if report.Status != StatusFail {
+		t.Fatalf("partial corruption should fail, got %s", report.Status)
+	}
+}
+
+// TestReviewStatusSameAsStartReview verifies review_status returns same report
+// as start_review (stateless reviewer).
+func TestReviewStatusSameAsStartReview(t *testing.T) {
+	dir := t.TempDir()
+	tools, _ := reviewerTools(t, dir)
+
+	setupArtifact(t, dir, "proj", "run1", "data.csv", "a,b\n1,2")
+
+	args, _ := json.Marshal(map[string]string{"project_id": "proj", "run_id": "run1"})
+
+	r1, _ := findHandler(t, tools, "start_review")(context.Background(), args)
+	r2, _ := findHandler(t, tools, "review_status")(context.Background(), args)
+
+	var rep1, rep2 ReviewReport
+	m1 := r1.(map[string]any)
+	json.Unmarshal([]byte(m1["content"].([]any)[0].(map[string]any)["text"].(string)), &rep1)
+	m2 := r2.(map[string]any)
+	json.Unmarshal([]byte(m2["content"].([]any)[0].(map[string]any)["text"].(string)), &rep2)
+
+	if rep1.Status != rep2.Status {
+		t.Fatalf("expected same status: %s vs %s", rep1.Status, rep2.Status)
+	}
+}
+
+// TestApproveFixNoChange verifies approve_fix works even when already passing.
+func TestApproveFixNoChange(t *testing.T) {
+	dir := t.TempDir()
+	tools, _ := reviewerTools(t, dir)
+
+	setupArtifact(t, dir, "proj", "run1", "data.csv", "a,b\n1,2")
+
+	args, _ := json.Marshal(map[string]string{"project_id": "proj", "run_id": "run1"})
+	result, err := findHandler(t, tools, "approve_fix")(context.Background(), args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var report ReviewReport
+	m := result.(map[string]any)
+	c := m["content"].([]any)[0].(map[string]any)
+	json.Unmarshal([]byte(c["text"].(string)), &report)
+	if report.Status != StatusPass {
+		t.Fatalf("already-correct artifact should pass, got %s", report.Status)
+	}
+}
