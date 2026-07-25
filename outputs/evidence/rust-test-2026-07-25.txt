@@ -1,0 +1,4 @@
+138 passed, 0 failed, 8 ignored, 4.58s
+binary: /Users/lei/code/lumen-science/agent/target/debug/lumen
+sha256: b5e8c2ee791381172f7a5ae37ef59f312137eabe73ba3e8b7cbdd21712a015f9
+build: cargo build -p xai-grok-pager-bin (3m33s)
