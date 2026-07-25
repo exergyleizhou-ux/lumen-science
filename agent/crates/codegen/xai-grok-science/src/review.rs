@@ -73,17 +73,20 @@ pub fn verify_for_goal_completion(
     }
 
     let mut cited_artifact = false;
-    if evidence.iter().any(|item| {
-        let bad_hash = item.artifact_sha256.as_deref().is_some_and(|hash| {
-            cited_artifact = true;
-            !artifact_hashes.contains(hash)
-        });
-        item.run_id != *run_id
+    let any_bad = evidence.iter().any(|item| {
+        let missing_or_bad_hash = match item.artifact_sha256.as_deref() {
+            Some(hash) => {
+                cited_artifact = true;
+                !artifact_hashes.contains(hash)
+            }
+            None => true, // missing artifact citation = fail
+        };
+        missing_or_bad_hash
+            || item.run_id != *run_id
             || item.claim.trim().is_empty()
             || item.source.trim().is_empty()
-            || bad_hash
-    }) || !cited_artifact
-    {
+    });
+    if any_bad || !cited_artifact {
         return Err(ScienceError::Invalid(
             "science evidence must cite a registered artifact".into(),
         ));
@@ -113,8 +116,10 @@ pub fn verify_for_goal_completion(
         digest.update([0]);
     }
     for item in &evidence {
-        digest.update(item.artifact_sha256.as_deref().unwrap().as_bytes());
-        digest.update([0]);
+        if let Some(hash) = item.artifact_sha256.as_deref() {
+            digest.update(hash.as_bytes());
+            digest.update([0]);
+        }
     }
     for item in &provenance {
         digest.update(item.input_sha256.as_bytes());
