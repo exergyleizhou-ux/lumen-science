@@ -1,63 +1,70 @@
 # Lumen Science 5.0 — Governed Embodied Science
 
 **Target Version**: 5.0  
-**Status**: IN PROGRESS (product path starting at WP-2 Preview)  
+**Status**: IN PROGRESS (WP-3～8 product-path Preview, hardware deferred)  
 **Prerequisite**: **Lumen Science 1.0.0** formal release — **DONE** (`v1.0.0`)
-
-> Do not market “5.0 complete”. Hardware WPs remain deferred.
 
 ## Intermediate Versions
 
 | Version | Deliverable | Status |
 |---------|-------------|--------|
-| 1.0 | Installable offline workbench + release + live subset | ✅ **RELEASED** (`v1.0.0`) |
-| 2.0 | Research Project + Evidence Graph **product path** | 🔧 **PREVIEW** (WP-2 store + ACP + CLI) |
-| 3.0 | Reproducible Compute + Collaboration | 📋 SPEC + domain models |
-| 4.0 | Digital Twin + BOS Dummy Lab | ⏸ DEFERRED (hardware) |
-| 5.0 | Governed Embodied Science | 📋 SPEC (hardware/ops deferred) |
+| 1.0 | Installable offline workbench + release | ✅ **RELEASED** (`v1.0.0`) |
+| 2.0 (WP-2/3) | ResearchProject + EvidenceGraph + Queries | 🔧 **PREVIEW** (store + ACP + CLI + trace/compare/migrate) |
+| 3.0 (WP-4/5) | Workflow DAG + dry-run + kernel admission | 🔧 **PREVIEW** (validate/dry-run + kernels, RealDevice Disabled) |
+| 4.0 (WP-6) | Multimodal index + review | 🔧 **PREVIEW** (parser/renderer index, reviewer records) |
+| 4.0+ (WP-7/8) | Collaboration + remote compute | 🔧 **PREVIEW** (collab records, remote dry-run plan only) |
+| 5.0 (WP-9~15) | Devices / twin / HIL / release canary | ⏸ DEFERRED (hardware) |
 
 ## Work Packages
 
 | WP | Scope | Status |
 |----|-------|--------|
 | WP-1 | Baseline freeze + 5.0 contract docs | ✅ ACCEPT |
-| WP-2 | ResearchProject + EvidenceGraph product path | 🔧 PREVIEW — `ProjectStore`, feature gates, ACP + CLI |
-| WP-3 | Evidence queries + migration | 📋 SCAFFOLD models + query module |
-| WP-4 | Workflow engine | 📋 SCAFFOLD models |
-| WP-5 | Multi-kernel + reproduction | 📋 SCAFFOLD models |
-| WP-6 | Multimodal workbench | 📋 SCAFFOLD types |
-| WP-7 | Multi-role review + collaboration | 📋 SCAFFOLD types |
-| WP-8 | Remote compute + HPC | 📋 SCAFFOLD types |
+| WP-2 | ResearchProject + EvidenceGraph product path | ✅ Preview |
+| WP-3 | Evidence queries + trace + compare + consistency + migration | ✅ Preview |
+| WP-4 | Workflow validate + dry-run (allowed steps only) | ✅ Preview |
+| WP-5 | Kernel admission + reproduction status | ✅ Preview |
+| WP-6 | Multimodal index preview | ✅ Preview |
+| WP-7 | Multi-role review + collaboration records | ✅ Preview |
+| WP-8 | Remote compute plan/dry-run (no live HPC) | ✅ Preview |
 | WP-9～15 | Devices / twin / HIL / release canary | ⏸ DEFERRED |
 
 ## Global Invariants
 
 ```text
 Rust Lumen SessionActor = sole execution authority
-PermissionManager       = sole approval authority
-ArtifactRegistry        = sole durable artifact index
+FeatureGates            = RealDevice/DeviceCommand Disabled by default
 EvidenceGraph           = sole evidence relationship authority (V2+)
-EventLog                = sole canonical replay source
-FeatureGates            = V2+ opt-in; RealDevice disabled by default
+Workflow                = white-listed StepKinds only; never arbitrary shell
 ```
 
-## WP-2 quick start
+## Quick start (WP-2～8 CLI surface)
 
 ```bash
-# CLI
-lumen-science project create --owner u1 --title "Study" --question "Q?"
-lumen-science claim propose --project <id> --owner u1 --by sci --statement "..."
-
-# Rust
-# ProjectStore::create_project / propose_claim / attach_evidence
-# FeatureGates::default() disables real device control
-
-# ACP (requires session)
-# x.ai/science/project_create | claim_propose | evidence_attach | ...
+lumen-science project create|list|get
+lumen-science claim propose
+# Evidence queries (new):
+lumen-science project evidence trace --project ID --claim CID
+lumen-science project evidence compare --project ID --claim-a C1 --claim-b C2
+lumen-science project evidence consistency --project ID
+# Workflow (new):
+lumen-science workflow validate --spec-file workflow.json
+# Preview (new):
+lumen-science project multimodal --project ID
+lumen-science project review --project ID --reviewer R --verdict V
+lumen-science project collaborator invite --project ID --owner O --invitee I
 ```
 
-See `WP2_PRODUCT_PATH.md`.
+## Rust ACP gates
 
-## Next
+- All WP-2～8 store APIs behind `features.rs` gate checks
+- Disabled gates → `ScienceError::FeatureDisabled`
+- Device gates stay `Disabled`
 
-WP-3/4: evidence query product path + workflow DAG execution under gates (still no devices).
+## Not-yet / Never-claim
+
+- Real devices (WP-9+)
+- Multi-kernel live execution (dry-run ok)
+- HPC live scheduling (plan/dry-run ok)
+- All 27 skills approved (17 GPU/remote still pending)
+- Formal 5.0 GA release

@@ -7,6 +7,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added — v5 / WP-3～8 preview product paths
+
+- **WP-3**: evidence trace, claim comparison, graph consistency, V1→V2 migration via `ProjectStore` + CLI
+- **WP-4**: workflow DAG validation + dry-run for white-listed StepKinds only
+- **WP-5**: kernel admission check + reproduction status product path
+- **WP-6/7/8**: multimodal index, review/collaboration records, remote compute plan (dry-run)
+- All preview paths behind `FeatureGates`; RealDevice/DeviceCommand remain **Disabled** by default
+- 5.0 docs updated: WP-3～8 Preview, WP-9+ DEFERRED
+
 ## [1.0.0] - 2026-07-26
 
 ### Added — formal Lumen Science 1.0.0

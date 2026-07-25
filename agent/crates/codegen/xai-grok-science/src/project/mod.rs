@@ -2,6 +2,7 @@ pub mod claim;
 pub mod evidence_graph;
 pub mod migration;
 pub mod model;
+pub mod queries_store;
 pub mod query;
 pub mod store;
 
