@@ -16,14 +16,17 @@ use std::{
 use uuid::Uuid;
 
 pub mod api;
+pub mod collaboration;
 pub mod connector;
 pub mod connectors;
 pub mod csv;
 pub mod dummy_lab;
 pub mod import;
+pub mod multimodal;
 pub mod preview;
-pub mod review;
 pub mod project;
+pub mod remote_compute;
+pub mod review;
 pub mod transport;
 pub mod workflow;
 
