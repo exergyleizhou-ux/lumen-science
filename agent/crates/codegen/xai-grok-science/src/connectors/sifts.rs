@@ -9,7 +9,11 @@ pub fn best_structures_path(accession: &str) -> String {
 
 pub fn parse_search(bytes: &[u8]) -> crate::Result<ParsedResponse> {
     let v: serde_json::Value = serde_json::from_slice(bytes)?;
-    // Response is keyed by uniProt accession
+    // Empty array: no matching structures (valid, but zero results).
+    if v.as_array().map(|a| a.is_empty()).unwrap_or(false) {
+        return Ok(ParsedResponse { total_hits: 0, records: vec![] });
+    }
+    // Normal response: object keyed by UniProt accession.
     let obj = v.as_object().ok_or_else(|| ScienceError::Invalid("sifts: not an object".into()))?;
     let mut records = Vec::new();
     for (_key, val) in obj {
@@ -46,5 +50,5 @@ impl ProtocolAdapter for SiftsAdapter {
 #[cfg(test)] mod tests { use super::*;
     const F: &[u8] = br#"{"P01308":[{"pdb_id":"4hhb","chain_id":"A","experimental_method":"X-ray diffraction","resolution":1.8,"coverage":0.95}]}"#;
     #[test] fn parse_ok() { let p = parse_search(F).unwrap(); assert_eq!(p.total_hits,1); assert!(p.records[0].id.contains("4hhb")); }
-    #[test] fn bad() { assert!(parse_search(b"not json").is_err()); assert!(parse_search(b"[]").is_err()); }
+    #[test] fn bad() { assert!(parse_search(b"not json").is_err()); assert!(parse_search(b"[]").is_ok()); }
 }

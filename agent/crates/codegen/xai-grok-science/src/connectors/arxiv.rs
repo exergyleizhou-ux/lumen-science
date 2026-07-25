@@ -27,36 +27,12 @@ pub fn search_path(term: &str, max: u32) -> String {
 
 /// Extract the text content of an XML element (first occurrence).
 fn text_between(xml: &str, tag: &str) -> Option<String> {
-    let open = format!("<{tag}");
-    let start = xml.find(&open)?;
-    let after_open = &xml[start + open.len()..];
-
-    // Self-closing tag: <tag attr="value"/> — only match if next char after
-    // the tag name is whitespace or '/', not '>'.
-    if after_open.starts_with(' ') || after_open.starts_with('/') {
-        if let Some(attr_start) = after_open.find("term=\"") {
-            // Only accept if the attribute is within this tag (before next '>').
-            let gt = after_open.find('>')?;
-            if attr_start < gt {
-                let val_start = attr_start + 6; // len("term=\"") = 6
-                let val_end = after_open[val_start..].find('"')?;
-                let val = after_open[val_start..val_start + val_end].to_string();
-                if !val.is_empty() { return Some(val); }
-            }
-        }
-        return None;
-    }
-
-    // Standard element: <tag>content</tag>
-    if after_open.starts_with('>') {
-        let content_start = 1;
-        let close_tag = format!("</{tag}>");
-        let rest = &xml[start + open.len() + content_start..];
-        let content_end = rest.find(&close_tag)?;
-        let text = rest[..content_end].trim().to_string();
-        if !text.is_empty() { return Some(text); }
-    }
-    None
+    let open = format!("<{tag}>");
+    let close = format!("</{tag}>");
+    let start = xml.find(&open)? + open.len();
+    let end = xml[start..].find(&close)?;
+    let text = xml[start..start + end].trim().to_string();
+    if text.is_empty() { None } else { Some(text) }
 }
 
 /// Extract all blocks between <tag> and </tag>. Simple, not recursive.
@@ -99,12 +75,12 @@ pub fn parse_search(bytes: &[u8]) -> crate::Result<ParsedResponse> {
 
     for entry in &entries {
         // arXiv error entries point at .../api/errors
-        if let Some(id) = text_between(entry, "id") {
-            if id.contains("arxiv.org/api/errors") {
-                return Err(ScienceError::Invalid(format!(
-                    "arxiv: server rejected query: {id}"
-                )));
-            }
+        if let Some(id) = text_between(entry, "id")
+            && id.contains("arxiv.org/api/errors")
+        {
+            return Err(ScienceError::Invalid(format!(
+                "arxiv: server rejected query: {id}"
+            )));
         }
 
         let arxiv_id = text_between(entry, "id")
@@ -120,7 +96,16 @@ pub fn parse_search(bytes: &[u8]) -> crate::Result<ParsedResponse> {
 
         let container = text_between(entry, "arxiv:primary_category")
             .or_else(|| {
-                // The primary_category is sometimes in an attribute. Fallback.
+                // Self-closing tag: <arxiv:primary_category term="cs.CL"/>
+                if let Some(start) = entry.find("<arxiv:primary_category") {
+                    let rest = &entry[start..];
+                    if let Some(term_start) = rest.find("term=\"") {
+                        let after = &rest[term_start + 6..];
+                        if let Some(term_end) = after.find('\"') {
+                            return Some(after[..term_end].to_string());
+                        }
+                    }
+                }
                 entry.find("arxiv:primary_category").map(|_| "arXiv".to_string())
             })
             .unwrap_or_else(|| "arXiv".to_string());
