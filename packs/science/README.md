@@ -1,115 +1,94 @@
-# Lumen Science Pack
+# Lumen Science Pack — productivity workbench
 
-Science vertical for [Lumen](https://github.com/exergyleizhou-ux/lumen) —
-42 scientific database connectors, offline product loop (MCP servers),
-and web-based artifact renderers.
+Local-first scientific tooling for [Lumen](https://github.com/exergyleizhou-ux/lumen-science).
 
-## Architecture
+**Product name today:** Lumen Science **Fusion candidate**  
+**Not yet:** formal `v1.0.0` release tag / signed multi-platform release
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                  Rust Lumen SessionActor                 │
-│              (sole execution & permission authority)     │
-├─────────────────────────────────────────────────────────┤
-│  42 Connectors  │  Artifacts  │  Notebook  │  Reviewer  │
-│  (pubmed,       │  MCP        │  MCP        │  MCP        │
-│   chembl, …)    │             │             │             │
-├─────────────────────────────────────────────────────────┤
-│           HTTP Bridge  │  9 Science Renderers            │
-└─────────────────────────────────────────────────────────┘
-```
-
-## MCP Servers
-
-| Server | Description | Tests |
-|--------|-------------|-------|
-| `lumen-mcp-artifacts` | Durable artifact storage with SHA-256 integrity | 17 |
-| `lumen-mcp-notebook` | Persistent Python kernel (JSON-RPC) | 13 |
-| `lumen-mcp-reviewer` | Artifact verification and review workflow | 9 |
-| `lumen-mcp-http_bridge` | HTTP→stdio MCP proxy with Bearer auth | 9 |
-
-## Quick Start
+## What you can do *now* (offline, real work)
 
 ```bash
-# Build all MCP servers
+# from repo root
+./scripts/install-science.sh
+
+lumen-science version
+lumen-science doctor
+lumen-science gates
+
+# Motif-class sequence analysis (no network, no shell)
+lumen-science seq analyze gene.fa
+lumen-science seq analyze --json gene.fa -o analysis.json
+
+# Full offline loop: register → analyze → derived artifacts → integrity review
+lumen-science pipeline offline --project myproj --run run1 gene.fa
+
+# Artifact store (SHA-256, fail-closed paths)
+lumen-science artifact put --project p --run r --path raw/x.fa gene.fa
+lumen-science artifact list --project p --run r
+lumen-science artifact verify --project p --run r --path raw/x.fa --sha256 <hex>
+```
+
+Live literature brief (network):
+
+```bash
+export NCBI_API_KEY=...   # optional but recommended
+lumen-science brief aspirin --out brief.md
+```
+
+Offline dogfood (CI-friendly):
+
+```bash
+./scripts/dogfood-science-offline.sh
+```
+
+## Architecture (authority)
+
+```text
+Rust Lumen SessionActor     = sole product execution authority
+lumen-science CLI           = local productivity adapter
+MCP servers (Go)            = contract prototypes
+MotifRenderer / sequence UI = CSP review surfaces over registered artifacts
+Skills                      = plans only until DS-43 approved (currently 0 approved)
+```
+
+## Binaries
+
+| Binary | Role |
+|--------|------|
+| `lumen-science` | **Primary productivity CLI** |
+| `lumen-mcp-artifacts` | Artifact MCP (stdio) |
+| `lumen-mcp-notebook` | Python kernel MCP |
+| `lumen-mcp-reviewer` | Review MCP |
+| `lumen-mcp-http_bridge` | Loopback HTTP bridge |
+
+```bash
 cd packs/science
 make all
-
-# Run tests
 make test
-
-# Cross-compile for all platforms
-make cross
-
-# Package release
-make release
 ```
 
-## Individual MCP Server Usage
+## Connectors (Rust crate)
 
-```bash
-# Artifacts MCP — persistent storage
-./build/lumen-mcp-artifacts
-# Tools: artifact_write, artifact_list, artifact_read, artifact_preview
-
-# Notebook MCP — Python kernel
-./build/lumen-mcp-notebook
-# Tools: notebook_execute, notebook_restart, notebook_state,
-#        notebook_shutdown, manage_packages, manage_environments
-
-# Reviewer MCP — integrity verification
-./build/lumen-mcp-reviewer
-# Tools: start_review, review_status, approve_fix
-
-# HTTP Bridge — expose MCP over HTTP
-BRIDGE_TARGET_COMMAND=./build/lumen-mcp-artifacts \
-BRIDGE_BEARER_TOKEN=secret \
-BRIDGE_PORT=9090 \
-  ./build/lumen-mcp-http_bridge
+```text
+Inventory 42 = 40 active runtime + 2 rejected (BioGRID, KEGG)
+Rejected are NOT in connectors::registry()
 ```
 
-## Science Renderers
+## Renderers
 
-Self-contained HTML pages served via embed.FS:
+CSP-locked first-class:
 
-| Renderer | MIME Types | Library |
-|----------|-----------|---------|
-| Protein 3D | `chemical/x-pdb` | Mol* |
-| Chem 2D | `chemical/x-smiles` | RDKit.js |
-| Genome Browser | `application/x-bed` | IGV.js |
-| LaTeX | `application/x-latex` | KaTeX |
-| PDF Viewer | `application/pdf` | pdfjs-dist |
-| Sequence Viewer | `text/x-fasta` | Canvas |
-| MSA Viewer | `application/x-stockholm` | Canvas |
-| Image Viewer | `image/png`, `image/jpeg` | Native |
-| Motif | `application/x-motif` | Self-contained |
+- `motif.html` — Lumen-managed MotifRenderer **contract**
+- `sequence.html` — FASTA workbench viewer
 
-## Connector Status
+Legacy CDN renderers remain marked `pending-cdn-elimination`.
 
-```
-42 total: 40 implemented, 2 rejected, 0 unresolved
+## Honesty docs
 
-Rejected:
-  BioGRID — credential in URL (rejected-unsafe-or-duplicate)
-  KEGG    — commercial license required (rejected-license-or-terms)
-```
-
-## Development
-
-```bash
-go test ./mcp/... -count=1        # Unit tests (49 tests)
-go vet ./mcp/... ./renderers/...  # Lint
-go build ./standalone/cmd/...      # Build all commands
-```
-
-## CI/CD
-
-GitHub Actions (`.github/workflows/science-ci.yml`):
-- Go test on ubuntu + macos
-- Cross-compile (darwin/linux/windows, amd64/arm64)
-- E2E pipeline test
-- Release artifact build with checksums
+- `docs/science/LUMEN_SCIENCE_FUSION_CANDIDATE_STATUS.md`
+- `docs/science/PRODUCT_PATH_CONTRACT.md`
+- `docs/science/MOTIF_SUPPLY_CHAIN_AUDIT.md`
 
 ## License
 
-Apache 2.0 derivative. See `../LICENSE` and `../NOTICE`.
+See repo root `LICENSE` / `NOTICE`. Motif MIT notices under `third_party/motif/`.

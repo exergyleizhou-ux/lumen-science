@@ -1,20 +1,129 @@
-<!DOCTYPE html><html lang="en">
-<head><meta charset="UTF-8"><title>Sequence Viewer</title>
-<style>body{font-family:monospace;padding:1rem;background:#fafaf7}pre{background:#fff;border:1px solid #ddd;border-radius:.5rem;padding:1rem;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto;font-size:13px;line-height:1.6}.stats{margin-bottom:1rem;color:#71717a}</style></head>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src data:; base-uri 'none'; form-action 'none'" />
+  <title>Lumen Sequence Workbench</title>
+  <style>
+    :root { --bg:#0c1220; --panel:#121a2b; --ink:#e7eefc; --muted:#92a0bd; --line:#27324a; --acc:#6ea8fe; --ok:#3dd68c; }
+    *{box-sizing:border-box} body{margin:0;font-family:ui-sans-serif,system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+    header{padding:1rem 1.25rem;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+    h1{margin:0;font-size:1.05rem} .sub{color:var(--muted);font-size:.82rem;margin-top:.3rem}
+    main{padding:1rem 1.25rem 2rem;display:grid;gap:1rem}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:.9rem 1rem}
+    .meta{display:grid;grid-template-columns:7rem 1fr;gap:.3rem .7rem;font-size:.82rem}
+    .meta dt{color:var(--muted)} .meta dd{margin:0;font-family:ui-monospace,Menlo,monospace;word-break:break-all}
+    pre.seq{margin:0;white-space:pre-wrap;word-break:break-all;font:12px/1.55 ui-monospace,Menlo,monospace;max-height:360px;overflow:auto;background:#0a101c;border:1px solid var(--line);border-radius:10px;padding:.75rem}
+    .row{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.6rem}
+    .chip{border:1px solid var(--line);border-radius:999px;padding:.25rem .6rem;font-size:.75rem;color:var(--muted)}
+    .ok{color:var(--ok)} table{width:100%;border-collapse:collapse;font-size:.8rem} th,td{border-bottom:1px solid var(--line);padding:.35rem .25rem;text-align:left}
+    th{color:var(--muted);font-weight:600}
+  </style>
+</head>
 <body>
-<h2>Sequence Viewer</h2><div class="stats" id="stats">Loading...</div><pre id="seq"></pre>
+<header>
+  <div>
+    <h1>Lumen Sequence Workbench</h1>
+    <p class="sub">CSP-locked FASTA viewer + local stats. No CDN. Artifact-bound when opened via renderer host.</p>
+  </div>
+  <div class="chip" id="status">awaiting input</div>
+</header>
+<main>
+  <section class="card">
+    <dl class="meta">
+      <dt>project</dt><dd id="project">—</dd>
+      <dt>run</dt><dd id="run">—</dd>
+      <dt>path</dt><dd id="path">—</dd>
+      <dt>records</dt><dd id="nrec">0</dd>
+      <dt>total nt/aa</dt><dd id="ntot">0</dd>
+    </dl>
+  </section>
+  <section class="card">
+    <h2 style="margin:0 0 .6rem;font-size:.95rem">Records</h2>
+    <div id="records"></div>
+  </section>
+  <section class="card">
+    <h2 style="margin:0 0 .6rem;font-size:.95rem">Raw (bounded)</h2>
+    <pre class="seq" id="raw">No sequence loaded. Pass ?path=… via renderer host, or paste is disabled for fail-closed artifact binding.</pre>
+  </section>
+</main>
 <script>
-(async()=>{
+(function(){
   const params=new URLSearchParams(location.search);
-  const path=params.get('path');
-  if(!path){document.getElementById('seq').textContent='No sequence path provided.';return}
-  const resp=await fetch(`/render/api/raw?project=${params.get('project')||'default'}&run=${params.get('run')||'latest'}&path=${encodeURIComponent(path)}`);
-  if(!resp.ok){document.getElementById('seq').textContent='Failed to load.';return}
-  const text=await resp.text();
-  const lines=text.split('\n').filter(l=>l.trim());
-  const seqCount=lines.filter(l=>l.startsWith('>')).length;
-  const dataLines=lines.filter(l=>!l.startsWith('>'));
-  const totalBases=dataLines.reduce((s,l)=>s+l.replace(/\s/g,'').length,0);
-  document.getElementById('stats').textContent=`${seqCount} sequence(s) · ${totalBases.toLocaleString()} total bases`;
-  document.getElementById('seq').textContent=text;
-})();</script></body></html>
+  const project=params.get('project')||'';
+  const run=params.get('run')||'';
+  const path=params.get('path')||'';
+  const $=id=>document.getElementById(id);
+  $('project').textContent=project||'—';
+  $('run').textContent=run||'—';
+  $('path').textContent=path||'—';
+
+  function parseFASTA(text){
+    const lines=text.replace(/\r/g,'').split('\n');
+    const recs=[]; let cur=null;
+    for(const line of lines){
+      if(line.startsWith('>')){
+        if(cur) recs.push(cur);
+        const h=line.slice(1).trim();
+        const sp=h.indexOf(' ');
+        cur={id: sp<0?h:h.slice(0,sp), desc: sp<0?'':h.slice(sp+1).trim(), seq:''};
+      } else if(cur){
+        cur.seq += line.replace(/[^A-Za-z*]/g,'').toUpperCase();
+      }
+    }
+    if(cur) recs.push(cur);
+    if(!recs.length && text.trim()){
+      recs.push({id:'unnamed', desc:'', seq:text.replace(/[^A-Za-z*]/g,'').toUpperCase()});
+    }
+    return recs.filter(r=>r.seq.length);
+  }
+  function gc(seq){
+    let g=0,n=0;
+    for(const ch of seq){
+      if('GC'.includes(ch)){g++;n++}
+      else if('ATU'.includes(ch)){n++}
+    }
+    return n? (100*g/n):0;
+  }
+  function render(recs, raw){
+    $('nrec').textContent=String(recs.length);
+    $('ntot').textContent=String(recs.reduce((a,r)=>a+r.seq.length,0));
+    const host=$('records'); host.innerHTML='';
+    recs.forEach((r,i)=>{
+      const box=document.createElement('div');
+      box.style.marginBottom='.75rem';
+      const gcP=gc(r.seq).toFixed(2);
+      box.innerHTML=`<div class="row"><strong>${r.id||('seq'+i)}</strong>
+        <span class="chip">len ${r.seq.length}</span>
+        <span class="chip">GC% ${gcP}</span>
+        ${r.desc?`<span class="chip">${r.desc.slice(0,80)}</span>`:''}
+      </div>
+      <pre class="seq" style="max-height:140px;margin-top:.4rem">${r.seq.match(/.{1,60}/g).join('\n')}</pre>`;
+      host.appendChild(box);
+    });
+    $('raw').textContent=raw.length>20000?raw.slice(0,20000)+'\n…[truncated]':raw;
+    $('status').textContent=recs.length?('loaded '+recs.length+' record(s)'):'empty';
+    $('status').classList.add('ok');
+  }
+
+  if(!path){
+    $('status').textContent='no artifact path';
+    return;
+  }
+  if(path.includes('..')||path.startsWith('/')||path.includes('\\')){
+    $('status').textContent='rejected: traversal';
+    return;
+  }
+  const qs=new URLSearchParams({project:project||'default', run:run||'latest', path});
+  fetch('/render/api/raw?'+qs.toString(),{credentials:'same-origin'})
+    .then(async r=>{
+      if(!r.ok){ $('status').textContent='host '+r.status; $('raw').textContent=await r.text(); return; }
+      const text=await r.text();
+      render(parseFASTA(text), text);
+    })
+    .catch(e=>{ $('status').textContent='fetch failed'; $('raw').textContent=String(e); });
+})();
+</script>
+</body>
+</html>

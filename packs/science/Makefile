@@ -66,7 +66,9 @@ cross-windows:
 # ── Test ────────────────────────────────────────────────────────
 
 test:
-	$(GO) test ./mcp/artifacts/... ./mcp/notebook/... ./mcp/reviewer/... ./mcp/http_bridge/... -count=1 -timeout=60s
+	$(GO) test ./mcp/artifacts/... ./mcp/notebook/... ./mcp/reviewer/... ./mcp/http_bridge/... \
+		./standalone/internal/seqbench/... ./standalone/internal/pipeline/... -count=1 -timeout=60s
+	$(GO) build $(GOFLAGS) -o $(BUILD_DIR)/lumen-science ./standalone/cmd/science
 
 test-verbose:
 	$(GO) test ./... -v -count=1 -timeout=120s
