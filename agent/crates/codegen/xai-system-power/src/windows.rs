@@ -2,6 +2,11 @@
 //! with a `DEVICE_NOTIFY_CALLBACK` recipient — no hidden window or message
 //! loop required (Windows 8+).
 //!
+//! Dark wake detection uses `GetSystemMetrics(SM_CMONITORS)` to check
+//! whether any display is attached. When there are zero monitors and no
+//! remote session, the system is likely in a low-power background state
+//! (Modern Standby / Connected Standby), treated as DarkWake.
+//!
 //! NOTE: this module only compiles when targeting Windows.
 
 use std::os::raw::c_void;
@@ -11,7 +16,9 @@ use windows_sys::Win32::System::Power::{
     DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS, HPOWERNOTIFY, PowerRegisterSuspendResumeNotification,
     PowerUnregisterSuspendResumeNotification,
 };
-use windows_sys::Win32::UI::WindowsAndMessaging::DEVICE_NOTIFY_CALLBACK;
+use windows_sys::Win32::UI::WindowsAndMessaging::{
+    DEVICE_NOTIFY_CALLBACK, GetSystemMetrics, SM_CMONITORS, SM_REMOTESESSION,
+};
 
 use super::{PowerCallback, PowerEvent};
 
@@ -97,7 +104,39 @@ unsafe extern "system" fn power_callback(
 }
 
 pub(crate) fn current_power_state() -> crate::PowerState {
-    // No synchronous dark-wake query wired up on Windows; report Unknown so
-    // callers fall back to the suspend/resume notification path.
-    crate::PowerState::Unknown
+    // A remote (RDP) session means a user is actively connected — FullWake.
+    if unsafe { GetSystemMetrics(SM_REMOTESESSION) } != 0 {
+        return crate::PowerState::FullWake;
+    }
+
+    // SM_CMONITORS: number of display monitors on the desktop.
+    // When there are zero monitors and no remote session, treat the system
+    // as in a low-power background state (Modern Standby / Connected Standby).
+    // This is the closest Windows equivalent to macOS dark wake detection.
+    if unsafe { GetSystemMetrics(SM_CMONITORS) } == 0 {
+        crate::PowerState::DarkWake
+    } else {
+        crate::PowerState::FullWake
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn current_power_state_does_not_panic() {
+        // Must always return a valid enum variant, never panic.
+        let state = current_power_state();
+        assert!(matches!(
+            state,
+            crate::PowerState::FullWake | crate::PowerState::DarkWake | crate::PowerState::Unknown
+        ));
+    }
+
+    #[test]
+    fn listener_start_and_drop_clean() {
+        let _listener = Listener::start(Box::new(|_| {}));
+        // Must not panic or leak on drop.
+    }
 }

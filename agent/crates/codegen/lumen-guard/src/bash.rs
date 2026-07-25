@@ -320,7 +320,7 @@ static RECON: Lazy<Vec<Pat>> = Lazy::new(|| {
         // Only block `ps aux` when redirecting to file (actual data exfiltration),
         // not when piped to grep/head/less (common dev usage).
         Pat {
-            re: Regex::new(r"ps\s+(aux|auxwww|ef|af).*>").unwrap(),
+            re: Regex::new(r"ps\s+(aux|auxwww|ef|af).*?>").unwrap(),
             reason: "process enumeration with file redirection (post-exploitation recon)",
         },
         Pat {
