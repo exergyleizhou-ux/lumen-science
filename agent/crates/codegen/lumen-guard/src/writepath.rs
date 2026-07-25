@@ -1,6 +1,7 @@
 //! L3: block writes to persistence / credential / system paths.
 
 use crate::hidden::strip_hidden_chars;
+use crate::unsafe_mode;
 use crate::CheckResult;
 
 const SENSITIVE_SEGMENTS: &[(&str, &str)] = &[
@@ -27,6 +28,13 @@ const SENSITIVE_PREFIXES: &[(&str, &str)] = &[
     ("/lib64/", "write under /lib64"),
     ("/var/spool/cron", "write a cron job"),
     ("/system/", "write under /System (macOS)"),
+    // ── Windows system directories (both raw c:/ and normalized /c/ forms) ──
+    ("c:/windows/", "write under Windows system directory"),
+    ("/c/windows/", "write under Windows system directory"),
+    ("c:/program files/", "write under Program Files"),
+    ("/c/program files/", "write under Program Files"),
+    ("c:/program files (x86)/", "write under Program Files (x86)"),
+    ("/c/program files (x86)/", "write under Program Files (x86)"),
 ];
 
 const SHELL_RC: &[&str] = &[
@@ -47,6 +55,9 @@ const SHELL_RC: &[&str] = &[
 
 /// Block write/edit targets that plant persistence or clobber system paths.
 pub fn check_write_path(path: &str) -> CheckResult {
+    if unsafe_mode() {
+        return CheckResult::ok();
+    }
     let p = strip_hidden_chars(path.trim());
     if p.is_empty() {
         return CheckResult::ok();
@@ -54,6 +65,10 @@ pub fn check_write_path(path: &str) -> CheckResult {
     let p = p.replace("${HOME}", "~").replace("$HOME", "~");
     let clean = normalize_path_slashes(&p);
     let lower = clean.to_ascii_lowercase();
+
+    // Normalise Windows drive-letter paths: "c:/..." → "/c/..." so that
+    // segment and prefix matching behaves the same as Git Bash paths.
+    let lower = normalize_drive_letter(&lower);
 
     let mut probe = lower.clone();
     if !probe.starts_with('/') && !probe.starts_with('~') {
@@ -87,7 +102,8 @@ pub fn check_write_path(path: &str) -> CheckResult {
     let home_anchored = lower.starts_with("~/")
         || lower.starts_with("/root/")
         || lower.starts_with("/home/")
-        || lower.starts_with("/users/");
+        || lower.starts_with("/users/")
+        || is_windows_user_dir(&lower);
     if home_anchored {
         let base = file_name(&clean).to_ascii_lowercase();
         if SHELL_RC.iter().any(|n| *n == base) {
@@ -97,6 +113,22 @@ pub fn check_write_path(path: &str) -> CheckResult {
     }
 
     CheckResult::ok()
+}
+
+/// Normalize Windows drive-letter paths so "c:/path" and "d:/path" become
+/// "/c/path" and "/d/path", matching Git Bash conventions. Unix paths and
+/// relative paths pass through unchanged.
+fn normalize_drive_letter(p: &str) -> String {
+    let bytes = p.as_bytes();
+    if bytes.len() >= 3
+        && bytes[1] == b':'
+        && (bytes[2] == b'/' || bytes[2] == b'\\')
+        && bytes[0].is_ascii_alphabetic()
+    {
+        format!("/{}/{}", bytes[0] as char, &p[3..])
+    } else {
+        p.to_string()
+    }
 }
 
 fn normalize_path_slashes(p: &str) -> String {
@@ -135,6 +167,21 @@ fn file_name(path: &str) -> &str {
     path.rsplit(['/', '\\']).next().unwrap_or(path)
 }
 
+/// Returns true if `p` is a Windows user profile directory like
+/// "/c/users/lei/" or "/d/users/admin/".
+fn is_windows_user_dir(p: &str) -> bool {
+    // Expected form after normalize_drive_letter: /X/users/username/...
+    if p.len() < 10 {
+        return false;
+    }
+    let bytes = p.as_bytes();
+    // "/c/users/" = 9 chars minimum
+    bytes[0] == b'/'
+        && bytes[1].is_ascii_alphabetic()
+        && bytes[2] == b'/'
+        && bytes[3..9].eq_ignore_ascii_case(b"users/")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -157,6 +204,11 @@ mod tests {
             "~/.aws/credentials",
             "~/.config/fish/config.fish",
             "foo/../../../.ssh/authorized_keys",
+            // Windows paths
+            "C:\\Users\\dev\\.ssh\\authorized_keys",
+            "c:/users/dev/.bashrc",
+            "/c/users/dev/.zshrc",
+            "C:\\Windows\\System32\\evil.dll",
         ] {
             assert!(!check_write_path(p).safe, "should block {p}");
         }
@@ -172,6 +224,9 @@ mod tests {
             "config/app.yaml",
             "pkg/ssh/client.go",
             "templates/bashrc.tmpl",
+            // Windows project paths should be allowed
+            "C:\\Users\\dev\\code\\myproject\\src\\main.go",
+            "c:/users/dev/code/myproject/README.md",
         ] {
             let r = check_write_path(p);
             assert!(r.safe, "should allow {p}: {}", r.reason);

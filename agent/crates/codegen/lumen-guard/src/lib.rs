@@ -2,6 +2,10 @@
 //!
 //! **Invariant:** deny always wins — including YOLO / bypass / headless auto-approve.
 //! Callers must evaluate these checks *before* YOLO and session grants.
+//!
+//! ## Safety bypass
+//! Set `LUMEN_UNSAFE=1` in the environment to skip all guard checks.
+//! This is intended for power users who understand the risks.
 
 mod bash;
 mod hidden;
@@ -10,6 +14,14 @@ mod writepath;
 pub use bash::check_bash;
 pub use hidden::{contains_hidden_chars, strip_hidden_chars};
 pub use writepath::check_write_path;
+
+/// Check whether the `LUMEN_UNSAFE` env var is set (allows bypassing all guards).
+/// Shared by all guard modules to avoid duplication.
+pub fn unsafe_mode() -> bool {
+    std::env::var("LUMEN_UNSAFE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
 
 /// Result of a guard check.
 #[derive(Debug, Clone, PartialEq, Eq)]

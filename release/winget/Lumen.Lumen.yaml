@@ -1,0 +1,63 @@
+# Lumen Winget Package Manifest
+# Submit to: https://github.com/microsoft/winget-pkgs
+# Package identifier: Lumen.Lumen
+#
+# Once merged, users can install with:
+#   winget install Lumen.Lumen
+
+PackageIdentifier: Lumen.Lumen
+PackageVersion: 0.1.250
+PackageLocale: en-US
+Publisher: Lumen AI
+PublisherUrl: https://github.com/exergyleizhou-ux/lumen
+PublisherSupportUrl: https://github.com/exergyleizhou-ux/lumen/issues
+PrivacyUrl: https://github.com/exergyleizhou-ux/lumen/blob/main/LEGAL.md
+Author: Lumen Contributors
+PackageName: Lumen
+PackageUrl: https://github.com/exergyleizhou-ux/lumen
+License: Apache-2.0
+LicenseUrl: https://github.com/exergyleizhou-ux/lumen/blob/main/LICENSE
+Copyright: Copyright (c) 2026 Lumen Contributors
+ShortDescription: AI-powered terminal assistant and science toolkit
+Description: |
+  Lumen is an AI-powered interactive CLI tool for software engineering,
+  scientific research, and system automation. It supports multiple AI
+  providers, local models, SSH/SCP connectors, Jupyter integration,
+  and a rich TUI interface.
+
+  Features:
+  - Multi-provider AI (DeepSeek, OpenAI, Anthropic, Grok, local models)
+  - Built-in science toolkit with 42+ data connectors
+  - Python notebook integration via Jupyter
+  - SSH/SCP remote compute
+  - Artifacts MCP server with SHA-256 integrity
+  - Windows Terminal profile integration
+  - Windows Service support for science server
+
+Moniker: lumen
+Tags:
+  - ai
+  - terminal
+  - cli
+  - science
+  - research
+  - productivity
+  - developer-tools
+
+ReleaseDate: 2026-07-25
+Installers:
+  - Architecture: x64
+    InstallerType: zip
+    InstallerUrl: https://github.com/exergyleizhou-ux/lumen/releases/latest/download/lumen-windows-x86_64.zip
+    InstallerSha256: <INSERT_SHA256_HERE>
+    NestedInstallerType: portable
+    NestedInstallerFiles:
+      - RelativeFilePath: lumen.exe
+    InstallerSwitches:
+      Silent: /quiet
+      SilentWithProgress: /quiet
+    UpgradeBehavior: uninstallPrevious
+    Commands:
+      - lumen
+ManifestType: singleton
+ManifestVersion: 1.6.0

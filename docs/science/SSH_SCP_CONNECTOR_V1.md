@@ -30,9 +30,11 @@ Admission and the existing Lumen permission request run through
 `SessionActor`. Allow produces a ticket carrying only the operation digest.
 Execution recomputes that digest and rejects post-approval substitution.
 
-The transport invokes system `/usr/bin/scp` with batch mode, strict host-key
-checking, an explicit identity file, and an explicit fixture-scoped
-known-hosts file. Before starting SCP, the executor independently verifies the
+The transport invokes the system `scp` binary (found via `$PATH`; on Linux/macOS
+typically `/usr/bin/scp`, on Windows requires the OpenSSH Client optional feature)
+with batch mode, strict host-key checking, an explicit identity file, and an
+explicit fixture-scoped known-hosts file. Before starting SCP, the executor
+independently verifies the
 known-hosts public-key blob against the approved SHA-256 fingerprint. No new
 network crate or second agent/runtime is introduced.
 

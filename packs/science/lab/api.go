@@ -2479,7 +2479,8 @@ func (a *API) handleHostPing(w http.ResponseWriter, r *http.Request) {
 	ok := false
 	msg := ""
 	if compute.IsLocalHost(alias) {
-		cmd := exec.Command("sh", "-lc", "echo ok")
+		shellName, shellArgs := compute.LocalShellEcho()
+		cmd := exec.Command(shellName, shellArgs...)
 		out, err := cmd.CombinedOutput()
 		ok = err == nil && strings.Contains(string(out), "ok")
 		if err != nil {

@@ -88,7 +88,38 @@ cp "$BIN_SRC" "$OUT_DIR/lumen.exe"
 SHA=$(shasum -a 256 "$OUT_DIR/lumen.exe" | awk '{print $1}')
 echo "$SHA  lumen.exe" > "$OUT_DIR/SHA256SUMS.txt"
 
-cat > "$OUT_DIR/INSTALL.txt" << INSTALL_EOF
+# Bundle Windows PowerShell utility scripts
+SCRIPTS_SRC="$ROOT/scripts"
+SCRIPTS_DST="$OUT_DIR/scripts"
+mkdir -p "$SCRIPTS_DST"
+for ps1 in lumen-config-check.ps1 lumen-e2e.ps1 lumen-model-fallback.ps1 check-vacuous-e2e.ps1 lumen-install.ps1 lumen-doctor.ps1 lumen-service.ps1 lumen-update.ps1 lumen-credential.ps1 lumen-bench.ps1; do
+  if [ -f "$SCRIPTS_SRC/$ps1" ]; then
+    cp "$SCRIPTS_SRC/$ps1" "$SCRIPTS_DST/"
+    echo "  bundled: scripts/$ps1"
+  fi
+done
+# Also bundle a convenience launcher
+cat > "$OUT_DIR/lumen-env.ps1" << 'PSEOF'
+# Lumen environment setup script — dot-source to configure your shell
+# Usage: . .\lumen-env.ps1
+
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+# Add this directory to PATH for the current session
+if ($env:Path -notlike "*$ScriptDir*") {
+    $env:Path = "$ScriptDir;$env:Path"
+}
+
+# Set default API key if not already set (edit this for your key)
+if (-not $env:DEEPSEEK_API_KEY) {
+    Write-Host "[lumen] DEEPSEEK_API_KEY not set — edit lumen-env.ps1 to configure"
+}
+
+Write-Host "[lumen] Environment ready. Run 'lumen --version' to verify."
+PSEOF
+echo "  bundled: lumen-env.ps1"
+
+cat > "$OUT_DIR/INSTALL.txt" << EOF
 Lumen for Windows
 =================
 Version: commit $SOURCE_COMMIT
@@ -101,17 +132,32 @@ Requirements:
   - Tesseract OCR (optional, for image tools)
 
 Install:
-  1. Extract lumen.exe to a folder, e.g. C:\lumen\
+  1. Extract the zip to a folder, e.g. C:\lumen\
   2. Add that folder to your PATH:
        - Open "System Properties" → "Environment Variables"
        - Edit "Path" → "New" → "C:\lumen\"
        - OK
-  3. Open a new Command Prompt or PowerShell
-  4. Verify:
+  3. (Optional) Dot-source the env script for convenience:
+       . C:\lumen\lumen-env.ps1
+  4. Open a new Command Prompt or PowerShell
+  5. Verify:
        lumen --version
-  5. Set your API key and run:
-       set DEEPSEEK_API_KEY=your-key-here
+  6. Set your API key and run:
+       $env:DEEPSEEK_API_KEY = "your-key-here"
        lumen
+
+Bundled PowerShell scripts (in scripts/):
+  - lumen-env.ps1          Setup Lumen environment (PATH + API key)
+  - lumen-install.ps1      One-click full installation wizard
+  - lumen-doctor.ps1       Comprehensive system diagnostic
+  - lumen-service.ps1      Install Lumen as a Windows Service
+  - lumen-update.ps1       Self-update to latest GitHub release
+  - lumen-credential.ps1   Manage API keys in Windows Credential Manager
+  - lumen-bench.ps1        Performance benchmark (CPU/memory/disk/network)
+  - lumen-config-check.ps1 Validate Lumen vs Grok config consistency
+  - lumen-e2e.ps1          Run end-to-end tests with fresh binary
+  - lumen-model-fallback.ps1 Monitor API health + suggest model switch
+  - check-vacuous-e2e.ps1  Detect Rust async tests missing .await
 
 Notes:
   - Windows Smartscreen may block the first run. Click "More info" → "Run anyway"
@@ -123,9 +169,9 @@ EOF
 
 # Create zip (use 7z if available for maximum compatibility)
 if command -v 7z >/dev/null 2>&1; then
-  (cd "$OUT_DIR" && 7z a -tzip "$ZIP_PATH" lumen.exe INSTALL.txt SHA256SUMS.txt -mx9)
+  (cd "$OUT_DIR" && 7z a -tzip "$ZIP_PATH" lumen.exe lumen-env.ps1 INSTALL.txt SHA256SUMS.txt scripts/ -mx9)
 elif command -v zip >/dev/null 2>&1; then
-  (cd "$OUT_DIR" && zip -9 "$ZIP_PATH" lumen.exe INSTALL.txt SHA256SUMS.txt)
+  (cd "$OUT_DIR" && zip -9 -r "$ZIP_PATH" lumen.exe lumen-env.ps1 INSTALL.txt SHA256SUMS.txt scripts/)
 else
   echo "ERROR: neither 7z nor zip found; install one"
   exit 1

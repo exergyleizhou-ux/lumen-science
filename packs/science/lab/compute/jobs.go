@@ -180,11 +180,9 @@ func (s *Store) run(id, host, command, workDir string, timeout time.Duration, gl
 
 	var cmd *exec.Cmd
 	if IsLocalHost(host) {
-		shell := "sh"
-		if _, lookErr := exec.LookPath("bash"); lookErr == nil {
-			shell = "bash"
-		}
-		cmd = exec.CommandContext(ctx, shell, "-lc", command)
+		shellName, shellArgs := localShell()
+		shellArgs = append(shellArgs, command)
+		cmd = exec.CommandContext(ctx, shellName, shellArgs...)
 		if workDir != "" {
 			cmd.Dir = workDir
 		}
