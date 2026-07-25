@@ -46,16 +46,48 @@
       "local_residual_checkout": "excluded-from-m0-no-recovery-or-modification"
     },
     {
-      "id": "motif",
+      "id": "jvogan-motif",
       "repository": "https://github.com/jvogan/motif.git",
-      "commit": null,
-      "root_license": "unverified",
+      "commit": "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0",
+      "observed_version": "0.2.1",
+      "root_license": "MIT",
+      "verified_at": "2026-07-25",
       "intended_use": [
-        "html-artifact-workbench-reference",
-        "molecular-biology-workflow-reference"
+        "molecular-biology-renderer",
+        "sequence-visualization",
+        "primer-and-assembly-review",
+        "in-browser-bounded-msa",
+        "sanger-chromatogram-review",
+        "self-contained-html-artifact"
       ],
-      "admission": "pending-identity-license-dependency-and-data-term-review",
-      "runtime_authority": "none"
+      "excluded_from_lumen_runtime": [
+        "motif-mcp-server",
+        "claude-science-config-installer",
+        "motif-local-registration",
+        "external-msa-native-runner",
+        "generic-filesystem-access",
+        "generic-dom-eval-bridge"
+      ],
+      "admission": "approved-as-managed-renderer-only",
+      "admission_constraints": {
+        "max_source_artifact_bytes": 26214400,
+        "max_records": 100,
+        "max_residues_per_record": 50000,
+        "browser_msa_max_records": 10,
+        "browser_msa_max_residues_each": 3000,
+        "no_remote_urls": true,
+        "no_executable_attachment": true,
+        "no_network_requests": true,
+        "csp_enforced": true
+      },
+      "runtime_authority": "none",
+      "renderer_only": true,
+      "redistribution_requirements": [
+        "LICENSE",
+        "THIRD_PARTY_NOTICES.md",
+        "record-level-provenance"
+      ],
+      "supply_chain_audit": "pending-dependencies-unavailable"
     }
   ],
   "data_services": [

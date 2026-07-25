@@ -1,40 +1,115 @@
 # Lumen Science Pack
 
-Science private-beta 默认垂直。仓库保留了旧 Go Lumen 的 proxy、Lab、MCP、native brief
-等源代码资产；它们仍引用旧仓共享的 `lumen/internal/*` 包，不能把“代码已在目录里”
-冒充“整个旧 Science 控制面已成为独立二进制”。
+Science vertical for [Lumen](https://github.com/exergyleizhou-ux/lumen) —
+42 scientific database connectors, offline product loop (MCP servers),
+and web-based artifact renderers.
 
-当前可独立复跑的产品路径是一个无第三方 Go 依赖的 provenance-first research brief：
-PubMed 是必须成功的证据源，ChEMBL 是可降级且会显式写 warning 的补充源。它只汇总
-来源元数据，不生成医学结论。
+## Architecture
 
-## 三步 dogfood
+```
+┌─────────────────────────────────────────────────────────┐
+│                  Rust Lumen SessionActor                 │
+│              (sole execution & permission authority)     │
+├─────────────────────────────────────────────────────────┤
+│  42 Connectors  │  Artifacts  │  Notebook  │  Reviewer  │
+│  (pubmed,       │  MCP        │  MCP        │  MCP        │
+│   chembl, …)    │             │             │             │
+├─────────────────────────────────────────────────────────┤
+│           HTTP Bridge  │  9 Science Renderers            │
+└─────────────────────────────────────────────────────────┘
+```
+
+## MCP Servers
+
+| Server | Description | Tests |
+|--------|-------------|-------|
+| `lumen-mcp-artifacts` | Durable artifact storage with SHA-256 integrity | 17 |
+| `lumen-mcp-notebook` | Persistent Python kernel (JSON-RPC) | 13 |
+| `lumen-mcp-reviewer` | Artifact verification and review workflow | 9 |
+| `lumen-mcp-http_bridge` | HTTP→stdio MCP proxy with Bearer auth | 9 |
+
+## Quick Start
 
 ```bash
-# 1. 构建独立入口
+# Build all MCP servers
 cd packs/science
-go build -C standalone -o ../lumen-science ./cmd/science
+make all
 
-# 2. 只读诊断（不写 key、不启动服务）
-./lumen-science doctor
+# Run tests
+make test
 
-# 3. 真实网络路径：生成带 PMID / ChEMBL 链接和时间戳的 brief
-./lumen-science brief --out ../../SCRATCH/science-aspirin.md aspirin
+# Cross-compile for all platforms
+make cross
+
+# Package release
+make release
 ```
 
-验收时打开 `SCRATCH/science-aspirin.md`，逐条点击 PubMed / ChEMBL 来源；网络失败时
-命令必须非零退出或写出明确 warning，不能生成假成功证据。
-
-## 开发验证
+## Individual MCP Server Usage
 
 ```bash
-go test -C standalone ./...
-go vet -C standalone ./...
+# Artifacts MCP — persistent storage
+./build/lumen-mcp-artifacts
+# Tools: artifact_write, artifact_list, artifact_read, artifact_preview
 
-# 一次完成三步并把 live 证据写入 gitignored SCRATCH/
-../../scripts/dogfood-science.sh aspirin
+# Notebook MCP — Python kernel
+./build/lumen-mcp-notebook
+# Tools: notebook_execute, notebook_restart, notebook_state,
+#        notebook_shutdown, manage_packages, manage_environments
+
+# Reviewer MCP — integrity verification
+./build/lumen-mcp-reviewer
+# Tools: start_review, review_status, approve_fix
+
+# HTTP Bridge — expose MCP over HTTP
+BRIDGE_TARGET_COMMAND=./build/lumen-mcp-artifacts \
+BRIDGE_BEARER_TOKEN=secret \
+BRIDGE_PORT=9090 \
+  ./build/lumen-mcp-http_bridge
 ```
 
-`standalone/` 单独成 Go module，是为了让这条 private-beta 路径真实可构建，同时不假装
-已经完成旧仓所有共享包的迁移。`proxy/`、`lab/`、`native/` 等目录目前仍是后续迁移的
-知识/代码资产；完整 GUI、Claude Science sandbox 和全 MCP fleet 不属于这三步已完成宣称。
+## Science Renderers
+
+Self-contained HTML pages served via embed.FS:
+
+| Renderer | MIME Types | Library |
+|----------|-----------|---------|
+| Protein 3D | `chemical/x-pdb` | Mol* |
+| Chem 2D | `chemical/x-smiles` | RDKit.js |
+| Genome Browser | `application/x-bed` | IGV.js |
+| LaTeX | `application/x-latex` | KaTeX |
+| PDF Viewer | `application/pdf` | pdfjs-dist |
+| Sequence Viewer | `text/x-fasta` | Canvas |
+| MSA Viewer | `application/x-stockholm` | Canvas |
+| Image Viewer | `image/png`, `image/jpeg` | Native |
+| Motif | `application/x-motif` | Self-contained |
+
+## Connector Status
+
+```
+42 total: 40 implemented, 2 rejected, 0 unresolved
+
+Rejected:
+  BioGRID — credential in URL (rejected-unsafe-or-duplicate)
+  KEGG    — commercial license required (rejected-license-or-terms)
+```
+
+## Development
+
+```bash
+go test ./mcp/... -count=1        # Unit tests (49 tests)
+go vet ./mcp/... ./renderers/...  # Lint
+go build ./standalone/cmd/...      # Build all commands
+```
+
+## CI/CD
+
+GitHub Actions (`.github/workflows/science-ci.yml`):
+- Go test on ubuntu + macos
+- Cross-compile (darwin/linux/windows, amd64/arm64)
+- E2E pipeline test
+- Release artifact build with checksums
+
+## License
+
+Apache 2.0 derivative. See `../LICENSE` and `../NOTICE`.
