@@ -1,13 +1,10 @@
-//! Collaboration permission model and review package types.
-//! Seam contracts: LS5-30, LS5-31, LS5-32.
+//! Multi-role collaboration, review packages, and permission model.
+//! Seam contracts: LS5-30, LS5-31, LS5-32, LS5-36.
 
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use crate::project::model::ProjectId;
+use crate::project::model::{OwnerId, ProjectId};
 
-// ── Permission Model (LS5-30, LS5-31) ──────────────────────────────
-
-/// Permission levels for collaborators.
+/// Collaboration permission levels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum CollaboratorRole {
     Read,
@@ -17,157 +14,168 @@ pub enum CollaboratorRole {
     Admin,
 }
 
-impl CollaboratorRole {
-    /// Whether this role can modify project data.
-    pub fn can_write(&self) -> bool { matches!(self, Self::Propose | Self::Approve | Self::Admin) }
-    /// Whether this role can approve review verdicts.
-    pub fn can_approve(&self) -> bool { matches!(self, Self::Approve | Self::Admin) }
-    /// Whether this role can manage collaborators.
-    pub fn can_manage(&self) -> bool { matches!(self, Self::Admin) }
-}
-
-/// A collaboration invitation.
+/// A collaborator invitation bound to a project.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CollaborationInvite {
-    pub invite_id: String,
+pub struct Collaboration {
+    pub collaboration_id: String,
     pub project_id: ProjectId,
-    pub inviter_id: String,
-    pub invitee_id: String,
+    pub owner_id: OwnerId,
+    pub collaborator_id: String,
     pub role: CollaboratorRole,
-    pub status: InviteStatus,
-    pub created_at: DateTime<Utc>,
-    pub expires_at: Option<DateTime<Utc>>,
+    pub invited_at: String,
+    pub accepted_at: Option<String>,
+    pub revoked_at: Option<String>,
+    pub is_active: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum InviteStatus { Pending, Accepted, Rejected, Expired, Revoked }
-
-/// A collaborator record.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Collaborator {
-    pub user_id: String,
-    pub project_id: ProjectId,
-    pub role: CollaboratorRole,
-    pub joined_at: DateTime<Utc>,
+impl Collaboration {
+    pub fn can_read(&self) -> bool { self.is_active }
+    pub fn can_comment(&self) -> bool { self.is_active && self.role >= CollaboratorRole::Comment }
+    pub fn can_propose(&self) -> bool { self.is_active && self.role >= CollaboratorRole::Propose }
+    pub fn can_approve(&self) -> bool { self.is_active && self.role >= CollaboratorRole::Approve }
+    pub fn is_admin(&self) -> bool { self.is_active && self.role == CollaboratorRole::Admin }
 }
 
-/// Collaboration registry for a project.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CollaborationRegistry {
-    pub project_id: ProjectId,
-    pub owner_id: String,
-    pub collaborators: Vec<Collaborator>,
-    pub pending_invites: Vec<CollaborationInvite>,
-}
-
-impl CollaborationRegistry {
-    pub fn new(project_id: ProjectId, owner_id: String) -> Self {
-        Self { project_id, owner_id, collaborators: vec![], pending_invites: vec![] }
-    }
-
-    pub fn add_collaborator(&mut self, user_id: String, role: CollaboratorRole) -> Result<(), String> {
-        if self.collaborators.iter().any(|c| c.user_id == user_id) {
-            return Err(format!("user {} is already a collaborator", user_id));
-        }
-        self.collaborators.push(Collaborator { user_id, project_id: self.project_id.clone(), role, joined_at: Utc::now() });
-        Ok(())
-    }
-
-    pub fn remove_collaborator(&mut self, user_id: &str) -> usize {
-        let before = self.collaborators.len();
-        self.collaborators.retain(|c| c.user_id != user_id);
-        before - self.collaborators.len()
-    }
-}
-
-// ── Review Package (LS5-32) ────────────────────────────────────────
-
-/// A self-contained package for independent peer review.
+/// A review package for independent reviewer distribution.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReviewPackage {
     pub package_id: String,
     pub project_id: ProjectId,
-    pub reviewers: Vec<String>,
-    pub artifact_ids: Vec<String>,
-    pub evidence_graph_snapshot: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub status: ReviewPackageStatus,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ReviewPackageStatus { Draft, Sent, InReview, Completed, Expired }
-
-// ── Multi-role review (LS5-33) ─────────────────────────────────────
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ReviewerRole {
-    DomainExpert,
-    Statistician,
-    ReproducibilityReviewer,
-    EthicsReviewer,
-    PeerReviewer,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReviewAssignment {
-    pub assignment_id: String,
     pub reviewer_id: String,
-    pub role: ReviewerRole,
     pub claim_ids: Vec<String>,
-    pub deadline: Option<DateTime<Utc>>,
-    pub completed: bool,
+    pub included_artifacts: Vec<String>,
+    pub excluded_credentials: Vec<String>,
+    pub redacted_logs: bool,
+    pub deadline: Option<String>,
+    pub status: ReviewStatus,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ReviewStatus {
+    Prepared,
+    Sent,
+    InProgress,
+    Submitted,
+    Accepted,
+    Rejected,
+}
+
+impl ReviewPackage {
+    /// Verify that a review package contains no credentials.
+    pub fn verify_no_credentials(&self) -> Result<(), String> {
+        for excluded in &self.excluded_credentials {
+            if excluded.is_empty() {
+                return Err("empty credential exclusion entry".to_string());
+            }
+        }
+        if !self.redacted_logs {
+            return Err("review package must have redacted logs".to_string());
+        }
+        Ok(())
+    }
+}
+
+/// A reviewer verdict submitted as part of a review package.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReviewerVerdict {
+    pub verdict_id: String,
+    pub package_id: String,
+    pub reviewer_id: String,
+    pub claim_id: String,
+    pub outcome: VerdictOutcome,
+    pub evidence_references: Vec<String>,
+    pub limitations: Vec<String>,
+    pub submitted_at: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum VerdictOutcome {
+    Supported,
+    Contradicted,
+    Inconclusive,
+    NeedsRevision,
+}
+
+impl ReviewerVerdict {
+    pub fn has_evidence(&self) -> bool {
+        !self.evidence_references.is_empty()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::project::model::ProjectId;
 
     #[test]
-    fn collaborator_role_permissions() {
-        assert!(!CollaboratorRole::Read.can_write());
-        assert!(CollaboratorRole::Admin.can_write());
-        assert!(CollaboratorRole::Admin.can_approve());
-        assert!(CollaboratorRole::Admin.can_manage());
-        assert!(!CollaboratorRole::Read.can_approve());
+    fn collaborator_role_ordering() {
+        assert!(CollaboratorRole::Admin > CollaboratorRole::Approve);
+        assert!(CollaboratorRole::Approve > CollaboratorRole::Propose);
+        assert!(CollaboratorRole::Read < CollaboratorRole::Comment);
     }
 
     #[test]
-    fn registry_rejects_duplicate_collaborator() {
-        let proj = ProjectId("p1".into());
-        let mut reg = CollaborationRegistry::new(proj, "owner".into());
-        assert!(reg.add_collaborator("user1".into(), CollaboratorRole::Read).is_ok());
-        assert!(reg.add_collaborator("user1".into(), CollaboratorRole::Read).is_err());
-    }
-
-    #[test]
-    fn remove_collaborator_returns_count() {
-        let proj = ProjectId("p1".into());
-        let mut reg = CollaborationRegistry::new(proj, "owner".into());
-        reg.add_collaborator("user1".into(), CollaboratorRole::Read).unwrap();
-        reg.add_collaborator("user2".into(), CollaboratorRole::Comment).unwrap();
-        assert_eq!(reg.remove_collaborator("user1"), 1);
-        assert_eq!(reg.collaborators.len(), 1);
-    }
-
-    #[test]
-    fn review_package_default_draft() {
-        let pkg = ReviewPackage {
-            package_id: "rp-1".into(), project_id: ProjectId("p1".into()),
-            reviewers: vec!["r1".into()], artifact_ids: vec![],
-            evidence_graph_snapshot: None, created_at: Utc::now(),
-            status: ReviewPackageStatus::Draft,
+    fn active_collaborator_permissions() {
+        let c = Collaboration {
+            collaboration_id: "c1".into(),
+            project_id: ProjectId("p1".into()),
+            owner_id: OwnerId("o1".into()),
+            collaborator_id: "reviewer".into(),
+            role: CollaboratorRole::Approve,
+            invited_at: "2026-07-26".into(),
+            accepted_at: Some("2026-07-26".into()),
+            revoked_at: None,
+            is_active: true,
         };
-        assert_eq!(pkg.status, ReviewPackageStatus::Draft);
+        assert!(c.can_read());
+        assert!(c.can_approve());
+        assert!(!c.is_admin());
     }
 
     #[test]
-    fn reviewer_role_completeness() {
-        let roles = vec![
-            ReviewerRole::DomainExpert, ReviewerRole::Statistician,
-            ReviewerRole::ReproducibilityReviewer, ReviewerRole::EthicsReviewer,
-            ReviewerRole::PeerReviewer,
-        ];
-        assert_eq!(roles.len(), 5);
+    fn revoked_collaborator_has_no_access() {
+        let c = Collaboration {
+            collaboration_id: "c1".into(),
+            project_id: ProjectId("p1".into()),
+            owner_id: OwnerId("o1".into()),
+            collaborator_id: "bad-actor".into(),
+            role: CollaboratorRole::Admin,
+            invited_at: "2026-07-26".into(),
+            accepted_at: None,
+            revoked_at: Some("2026-07-26".into()),
+            is_active: false,
+        };
+        assert!(!c.can_read());
+        assert!(!c.is_admin());
+    }
+
+    #[test]
+    fn review_package_rejects_no_redaction() {
+        let pkg = ReviewPackage {
+            package_id: "rp1".into(),
+            project_id: ProjectId("p1".into()),
+            reviewer_id: "r1".into(),
+            claim_ids: vec!["c1".into()],
+            included_artifacts: vec!["a1".into()],
+            excluded_credentials: vec!["api_key".into()],
+            redacted_logs: false,
+            deadline: None,
+            status: ReviewStatus::Prepared,
+        };
+        assert!(pkg.verify_no_credentials().is_err());
+    }
+
+    #[test]
+    fn reviewer_verdict_requires_evidence() {
+        let v = ReviewerVerdict {
+            verdict_id: "v1".into(),
+            package_id: "rp1".into(),
+            reviewer_id: "r1".into(),
+            claim_id: "c1".into(),
+            outcome: VerdictOutcome::Supported,
+            evidence_references: vec![],
+            limitations: vec![],
+            submitted_at: "2026-07-26".into(),
+        };
+        assert!(!v.has_evidence());
     }
 }

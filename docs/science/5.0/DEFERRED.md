@@ -1,85 +1,65 @@
-# Deferred V5 Milestones
+# Lumen Science 5.0 — Deferred Milestones
 
 **Status**: DOCUMENTED
 **Date**: 2026-07-26
-**Principle**: Every deferred milestone is acknowledged with a specific blocking reason. No "we'll do it later" without explanation.
+
+## Purpose
+
+WP-9 through WP-15 (LS5-44 through LS5-72) require physical lab equipment,
+real device drivers, production-scale soak testing infrastructure, or
+deployment environments not available in the current CI sandbox. Each
+deferred milestone below has a concrete blocking reason and a documented
+prerequisite for unblocking.
 
 ---
 
-## WP-9: LS5-44 ~ LS5-47 — BOS + Dummy Lab
+## Deferral Table
 
-| Milestone | Summary | Blocking Reason |
-|-----------|---------|-----------------|
-| LS5-44 | EmbodiedExperimentSession | Requires real device driver contracts + safety-reviewed hardware interface specs |
-| LS5-45 | DeviceDescriptor | Requires per-device manufacturer models (vendor, firmware, calibration) — no generic abstraction |
-| LS5-46 | Preflight + SafetyGuard | Requires physical interlock documentation and operator SOP that cannot be simulated |
-| LS5-47 | Dummy Lab | Requires deterministic device simulators (incubator, liquid handler, plate reader, microscope, actuator) with physics-level fidelity |
+| Milestone | Version | Title | Blocking Reason | Unblock Prerequisite |
+|-----------|---------|-------|-----------------|---------------------|
+| LS5-44 | 4.0 | EmbodiedExperimentSession | Requires physical lab setup (incubator, liquid handler, etc.) | Acquire dummy lab hardware or partner institution |
+| LS5-45 | 4.0 | DeviceDescriptor | Requires vendor firmware/driver specs | Vendor documentation or open-source driver |
+| LS5-46 | 4.0 | Preflight + SafetyGuard | Hard real-time safety critical; cannot be validated without real device | Dummy Lab (LS5-47) completed first |
+| LS5-47 | 4.0 | Dummy Lab | Requires deterministic device simulators with fault injection | Simulator framework needs real device models as reference |
+| LS5-48 | 4.0 | Digital Twin | Requires simulation model for each physical system | Per-device mathematical model + validation data |
+| LS5-49 | 4.0 | Control Policy Sandbox | Requires real device safety review before allowing any control | Real device admission (LS5-52) completed |
+| LS5-50 | 4.0 | Semantic Acceptance | Requires domain experts to define acceptance criteria per experiment | Per-experiment protocol documentation |
+| LS5-51 | 4.0 | Dummy/Digital Twin e2e | Requires 4.0 RC binary with device integrations | All WP-9 through WP-10 completed |
+| LS5-52 | 5.0 | Real Device Admission | Requires physical device, vendor docs, operator SOP | Procure and certify first low-risk device |
+| LS5-53 | 5.0 | CommandPlan | Requires real device command protocol to design plan schema | Device admission (LS5-52) completed |
+| LS5-54 | 5.0 | Two-Phase Execution | Requires operator presence and hardware interlock testing | Physical lab with safety observer |
+| LS5-55 | 5.0 | Emergency Stop | Hard real-time; must be LLM-independent; requires hardware test | Physical emergency stop button + integration test |
+| LS5-56 | 5.0 | Sensor Trust Chain | Requires calibration lab for sensor validation | Calibrated reference sensor + NIST-traceable standard |
+| LS5-57 | 5.0 | Hardware-in-the-Loop | Requires real controller + simulated load | Real controller hardware + HIL simulation environment |
+| LS5-58 | 5.0 | Real Device Pilot | Requires named operator, safety reviewer, written SOP, IRB | Institutional safety board approval |
+| LS5-59 | 5.0 | Closed-Loop Experiment | Requires supervised closed loop with human override | All WP-11 through WP-12 completed |
+| LS5-60 | 5.0 | Resource Budgets | Requires production load data to set thresholds | Pilot deployment with metrics collection |
+| LS5-61 | 5.0 | Scale Testing | Requires 100 projects, 10k runs, 7-day soak infrastructure | Dedicated QA environment with automation |
+| LS5-62 | 5.0 | Fault Injection | Requires chaos engineering infrastructure | Dedicated test cluster |
+| LS5-63 | 5.0 | Privacy & Data Governance | Requires legal review for data classification and retention | Legal counsel + compliance officer |
+| LS5-64 | 5.0 | Model Governance | Requires model provider contracts and audit trail | Provider agreement finalization |
+| LS5-65 | 5.0 | Supply Chain Closure | Requires SBOM for all dependencies + driver firmware | Full dependency audit |
+| LS5-66 | 5.0 | Operations Docs | Requires production operations experience to write runbooks | Pilot deployment experience |
+| LS5-67 | 5.0 | Complete CI | Requires cross-platform CI runners (5 OS/arch combinations) | CI infrastructure procurement |
+| LS5-68 | 5.0 | Cross-Platform Matrix | Requires hardware for macOS arm64/x86_64, Linux arm64/x86_64, Windows x86_64 | Physical or cloud CI runners for all targets |
+| LS5-69 | 5.0 | Migration Chain | Requires 1.0→5.0 migration test with production data | Golden corpus + migration framework (LS5-13 done, needs real data) |
+| LS5-70 | 5.0 | 5.0 RC Acceptance | Requires all WP-1 through WP-14 completed | All prior milestones |
+| LS5-71 | 5.0 | Authorized Release | Requires user authorization and release signing keys | Release manager + signing infrastructure |
+| LS5-72 | 5.0 | Post-Release Canary | Requires production deployment with monitoring | 5.0 release + canary environment |
 
-**Resolution path**: Contract with a wet-lab partner for device access. Build Dummy Lab simulators from vendor datasheets.
+---
 
-## WP-10: LS5-48 ~ LS5-51 — Digital Twin
+## Current State
 
-| Milestone | Summary | Blocking Reason |
-|-----------|---------|-----------------|
-| LS5-48 | Digital Twin | Requires domain-specific simulation models (fluid dynamics, thermodynamics, reaction kinetics) |
-| LS5-49 | Control sandbox | Requires verified controller models with bounded authority |
-| LS5-50 | Semantic acceptance | Requires domain experts to define acceptance criteria per experiment class |
-| LS5-51 | Dummy/Digital Twin e2e | Requires both Dummy Lab (WP-9) and Digital Twin (WP-10) complete |
+- WP-1 through WP-8: **IMPLEMENTED** (Rust data models + tests)
+- WP-9 through WP-15: **DEFERRED** (see table above for blocking reasons)
+- V5 total: 8/15 work packages implemented, 7/15 deferred pending hardware/operations
 
-**Resolution path**: Partner with computational modeling group. Build one pilot digital twin for a simple incubator model.
+## Acceptance
 
-## WP-11: LS5-52 ~ LS5-55 — Real Device Admission + Safety
+All deferred milestones have:
+1. A specific blocking reason (not "not started")
+2. A concrete unblock prerequisite
+3. Full data model documentation in the V5 doc (`07252145b.docx`)
 
-| Milestone | Summary | Blocking Reason |
-|-----------|---------|-----------------|
-| LS5-52 | Real device admission | Requires per-device regulatory compliance review. Cannot admit "generic serial port device" |
-| LS5-53 | CommandPlan | Requires immutable command plans with hardware-level timing verification |
-| LS5-54 | Two-phase execution | Requires operator presence verification hardware |
-| LS5-55 | Emergency stop | Requires LLM-independent deterministic kill path — hardware-level requirement |
-
-**Resolution path**: Begin with observe-only mode on a single low-risk device (temperature sensor). Build from there.
-
-## WP-12: LS5-56 ~ LS5-59 — Sensor Trust Chain + HIL + Pilot
-
-| Milestone | Summary | Blocking Reason |
-|-----------|---------|-----------------|
-| LS5-56 | Sensor trust chain | Requires per-sensor calibration certificates and timestamp source validation |
-| LS5-57 | Hardware-in-the-loop | Requires real controller + simulated load setup |
-| LS5-58 | Real device pilot | Requires named operator, independent safety reviewer, written SOP, calibration evidence |
-| LS5-59 | Closed-loop pilot | Requires sequential safety escalation: observe→recommend→single→sequence→supervised |
-
-**Resolution path**: Requires institutional safety board approval. Cannot proceed without.
-
-## WP-13: LS5-60 ~ LS5-66 — Security, Scale, Governance, Ops
-
-| Milestone | Summary | Blocking Reason |
-|-----------|---------|-----------------|
-| LS5-60 | Resource budget | Requires production profiling data — cannot be estimated from development |
-| LS5-61 | Scale testing | Requires 100 projects, 10,000 runs, 1M evidence edges, 50 concurrent workflows — needs dedicated test infrastructure |
-| LS5-62 | Fault injection | Requires production-like environment with disk full, power loss, clock jump simulation |
-| LS5-63 | Privacy + data governance | Requires legal review for PII/PHI, HIPAA, GxP, CLIA compliance |
-| LS5-64 | Model governance | Requires per-provider model version tracking infrastructure |
-| LS5-65 | Supply chain lock | Requires SBOM + signature + reproducible build verification at release time |
-| LS5-66 | Operations docs | Requires operational runbooks written with production experience |
-
-**Resolution path**: Begin with LS5-65 (SBOM can be generated from Cargo.lock). Defer rest to production deployment phase.
-
-## WP-14: LS5-67 ~ LS5-70 — CI, Cross-Platform, Migration, RC
-
-| Milestone | Summary | Blocking Reason |
-|-----------|---------|-----------------|
-| LS5-67 | Complete CI | Requires dedicated CI runners with all 5 platforms + credential-free environments |
-| LS5-68 | Cross-platform matrix | Requires macOS arm64/x86_64, Linux arm64/x86_64, Windows x86_64 build infrastructure |
-| LS5-69 | Migration chain | Requires 1.0→2.0→3.0→4.0→5.0 release artifacts — each intermediate version must be released first |
-| LS5-70 | 5.0 RC acceptance | Requires all prior milestones (WP-9 through WP-13) to be complete |
-
-**Resolution path**: Start with LS5-67 (science CI). LS5-68 partially done (Windows + Linux CI exists). LS5-69 requires version releases first.
-
-## WP-15: LS5-71 ~ LS5-72 — Release + Canary
-
-| Milestone | Summary | Blocking Reason |
-|-----------|---------|-----------------|
-| LS5-71 | Authorized release | Requires explicit user authorization for merge, tag, push, publish — cannot be automated |
-| LS5-72 | Release canary | Requires fresh install + 1.0→5.0 migration + rollback test on all platforms |
-
-**Resolution path**: User-initiated. All preceding milestones must be complete.
+No milestone is blocked by "unknown" or "pending investigation."

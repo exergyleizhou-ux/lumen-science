@@ -25,7 +25,7 @@ pub mod import;
 pub mod multimodal;
 pub mod preview;
 pub mod project;
-pub mod remote_compute;
+pub mod remote;
 pub mod review;
 pub mod transport;
 pub mod workflow;

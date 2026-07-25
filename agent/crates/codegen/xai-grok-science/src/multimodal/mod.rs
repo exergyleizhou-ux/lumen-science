@@ -1,171 +1,175 @@
-//! Multimodal parser registry — typed admission of document format parsers.
-//! Seam contract: LS5-23, LS5-24.
+//! Multimodal parser registry and renderer admission types.
+//! Seam contracts: LS5-23, LS5-24, LS5-25.
 
 use serde::{Deserialize, Serialize};
 
-/// Admitted document format.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum DocFormat {
-    Pdf,
-    Html,
-    Markdown,
-    Xml,
-    Json,
-    Docx,
-    Csv,
-    Tsv,
-    Fasta,
-    Genbank,
-    Abi,
-    Newick,
+/// File format categories for multimodal scientific data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FormatCategory {
+    Text,
+    Tabular,
+    Image,
+    Sequence,
+    Structure,
+    Spectrum,
+    Geospatial,
+    Office,
+    Archive,
+    Unknown,
 }
 
-/// Parser admission status.
+/// Parser admission record. Each parser must pass independent review.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParserAdmission {
+    pub parser_id: String,
+    pub mime_types: Vec<String>,
+    pub file_extensions: Vec<String>,
+    pub category: FormatCategory,
+    pub max_file_size_bytes: u64,
+    pub streaming_supported: bool,
+    pub admission_status: AdmissionStatus,
+    pub security_review_url: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ParserAdmission {
+pub enum AdmissionStatus {
     Pending,
     Admitted,
     Rejected,
+    SecurityReviewRequired,
 }
 
-/// A registered parser for a specific document format.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ParserEntry {
-    pub parser_id: String,
-    pub format: DocFormat,
-    pub mime_types: Vec<String>,
-    pub extensions: Vec<String>,
-    pub admission: ParserAdmission,
-    pub max_input_bytes: u64,
-    pub streaming_supported: bool,
-}
-
-/// Global parser registry (LS5-23).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ParserRegistry {
-    pub parsers: Vec<ParserEntry>,
-}
-
-impl ParserRegistry {
-    pub fn new() -> Self {
-        Self { parsers: vec![] }
-    }
-
-    pub fn register(&mut self, parser: ParserEntry) -> Result<(), String> {
-        if self.parsers.iter().any(|p| p.parser_id == parser.parser_id) {
-            return Err(format!("duplicate parser id: {}", parser.parser_id));
-        }
-        self.parsers.push(parser);
-        Ok(())
-    }
-
-    pub fn find_for_extension(&self, ext: &str) -> Vec<&ParserEntry> {
-        self.parsers.iter().filter(|p| p.extensions.iter().any(|e| e.eq_ignore_ascii_case(ext))).collect()
-    }
-
-    pub fn count_admitted(&self) -> usize {
-        self.parsers.iter().filter(|p| p.admission == ParserAdmission::Admitted).count()
-    }
-}
-
-// ── Renderer Admission (LS5-25, LS5-26) ────────────────────────────
-
-/// Renderer types.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum RendererKind {
-    Protein3D,
-    Chemical2D,
-    GenomeBrowser,
-    LatexMath,
-    PdfViewer,
-    SequenceViewer,
-    MsaViewer,
-    ImageViewer,
-    MotifMolecular,
-}
-
-/// Renderer admission record (LS5-26).
+/// Renderer admission — each renderer must be independently reviewed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RendererAdmission {
     pub renderer_id: String,
-    pub kind: RendererKind,
-    pub build_id: String,
-    pub source_commit: String,
+    pub renderer_type: RendererType,
+    pub source_url: String,
+    pub exact_commit: String,
     pub license: String,
-    pub admission: ParserAdmission,
-    pub requires_network: bool,
-    pub sandboxed: bool,
+    pub category: FormatCategory,
+    pub sandbox_required: bool,
+    pub network_policy: RendererNetworkPolicy,
+    pub admission_status: AdmissionStatus,
 }
-
-// ── Export / Publish (LS5-27) ──────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ExportFormat {
-    Pdf,
-    Html,
-    Json,
-    Csv,
-    Svg,
-    Png,
-    Notebook,
-    WorkflowPackage,
+pub enum RendererType {
+    HtmlEmbedded,
+    WasmModule,
+    NativeCommand,
+    PythonScript,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RendererNetworkPolicy {
+    None,
+    Allowlisted(Vec<String>),
+}
+
+/// Registry of all admitted file parsers.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExportRequest {
-    pub format: ExportFormat,
-    pub source_artifact_id: String,
-    pub renderer_id: Option<String>,
-    pub include_provenance: bool,
-    pub include_signature: bool,
+pub struct ParserRegistry {
+    pub parsers: Vec<ParserAdmission>,
+    pub total_admitted: usize,
+}
+
+impl ParserRegistry {
+    pub fn find_by_extension(&self, ext: &str) -> Option<&ParserAdmission> {
+        self.parsers.iter().find(|p| {
+            p.file_extensions.iter().any(|e| e.eq_ignore_ascii_case(ext))
+                && p.admission_status == AdmissionStatus::Admitted
+        })
+    }
+
+    pub fn find_by_mime(&self, mime: &str) -> Option<&ParserAdmission> {
+        self.parsers.iter().find(|p| {
+            p.mime_types.iter().any(|m| m.eq_ignore_ascii_case(mime))
+                && p.admission_status == AdmissionStatus::Admitted
+        })
+    }
+}
+
+/// Registry of all admitted renderers.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RendererRegistry {
+    pub renderers: Vec<RendererAdmission>,
+    pub total_admitted: usize,
+}
+
+impl RendererRegistry {
+    pub fn find_by_category(&self, category: FormatCategory) -> Vec<&RendererAdmission> {
+        self.renderers.iter()
+            .filter(|r| r.category == category && r.admission_status == AdmissionStatus::Admitted)
+            .collect()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn registry_rejects_duplicate_parser() {
-        let mut reg = ParserRegistry::new();
-        let p = ParserEntry {
-            parser_id: "pdf-v1".into(),
-            format: DocFormat::Pdf,
-            mime_types: vec!["application/pdf".into()],
-            extensions: vec!["pdf".into()],
-            admission: ParserAdmission::Admitted,
-            max_input_bytes: 100_000_000,
-            streaming_supported: false,
-        };
-        reg.register(p.clone()).unwrap();
-        assert!(reg.register(p).is_err());
+    fn sample_registry() -> ParserRegistry {
+        ParserRegistry {
+            parsers: vec![
+                ParserAdmission {
+                    parser_id: "csv-parser".into(),
+                    mime_types: vec!["text/csv".into()],
+                    file_extensions: vec!["csv".into(), "tsv".into()],
+                    category: FormatCategory::Tabular,
+                    max_file_size_bytes: 100_000_000,
+                    streaming_supported: true,
+                    admission_status: AdmissionStatus::Admitted,
+                    security_review_url: None,
+                },
+                ParserAdmission {
+                    parser_id: "fasta-parser".into(),
+                    mime_types: vec!["text/x-fasta".into()],
+                    file_extensions: vec!["fasta".into(), "fa".into()],
+                    category: FormatCategory::Sequence,
+                    max_file_size_bytes: 500_000_000,
+                    streaming_supported: false,
+                    admission_status: AdmissionStatus::Admitted,
+                    security_review_url: None,
+                },
+            ],
+            total_admitted: 2,
+        }
     }
 
     #[test]
-    fn find_parser_by_extension() {
-        let mut reg = ParserRegistry::new();
-        reg.register(ParserEntry {
-            parser_id: "fasta-v1".into(), format: DocFormat::Fasta,
-            mime_types: vec!["text/x-fasta".into()], extensions: vec!["fasta".into(), "fa".into()],
-            admission: ParserAdmission::Admitted, max_input_bytes: 10_000_000, streaming_supported: true,
-        }).unwrap();
-        assert_eq!(reg.find_for_extension("fasta").len(), 1);
-        assert_eq!(reg.find_for_extension("fa").len(), 1);
-        assert_eq!(reg.find_for_extension("pdf").len(), 0);
+    fn parser_find_by_extension() {
+        let reg = sample_registry();
+        assert!(reg.find_by_extension("csv").is_some());
+        assert!(reg.find_by_extension("CSV").is_some()); // case-insensitive
+        assert!(reg.find_by_extension("xyz").is_none());
     }
 
     #[test]
-    fn renderer_admission_pending_by_default() {
-        let r = RendererAdmission {
-            renderer_id: "chem-2d-v1".into(),
-            kind: RendererKind::Chemical2D,
-            build_id: "build:1".into(),
-            source_commit: "abc123".into(),
-            license: "MIT".into(),
-            admission: ParserAdmission::Pending,
-            requires_network: false,
-            sandboxed: true,
+    fn parser_find_by_mime() {
+        let reg = sample_registry();
+        assert!(reg.find_by_mime("text/csv").is_some());
+        assert!(reg.find_by_mime("application/pdf").is_none());
+    }
+
+    #[test]
+    fn renderer_find_by_category() {
+        let reg = RendererRegistry {
+            renderers: vec![RendererAdmission {
+                renderer_id: "protein-3d".into(),
+                renderer_type: RendererType::HtmlEmbedded,
+                source_url: "https://molstar.org".into(),
+                exact_commit: "abc123".into(),
+                license: "MIT".into(),
+                category: FormatCategory::Structure,
+                sandbox_required: true,
+                network_policy: RendererNetworkPolicy::None,
+                admission_status: AdmissionStatus::Admitted,
+            }],
+            total_admitted: 1,
         };
-        assert_eq!(r.sandboxed, true);
-        assert!(!r.requires_network);
+        let found = reg.find_by_category(FormatCategory::Structure);
+        assert_eq!(found.len(), 1);
+        assert!(reg.find_by_category(FormatCategory::Text).is_empty());
     }
 }
