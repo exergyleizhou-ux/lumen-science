@@ -42,20 +42,19 @@ pub struct WorkflowPackage {
 impl WorkflowPackage {
     pub const CURRENT_SCHEMA_VERSION: u32 = 1;
 
-    /// Verify package integrity: all referenced artifact hashes match.
+    /// Verify package integrity: shared artifacts must have matching hashes.
+    /// New artifacts (output-only) are allowed — they were produced by the workflow.
     pub fn verify_integrity(&self) -> Result<(), String> {
-        for (path, expected) in &self.artifacts_manifest.files {
-            if !self.inputs_manifest.files.contains_key(path) {
-                return Err(format!("artifact '{}' in outputs but not inputs", path));
-            }
+        for (path, output_hash) in &self.artifacts_manifest.files {
             if let Some(input_hash) = self.inputs_manifest.files.get(path) {
-                if input_hash != expected {
+                if input_hash != output_hash {
                     return Err(format!(
                         "hash mismatch for '{}': input={} output={}",
-                        path, input_hash, expected
+                        path, input_hash, output_hash
                     ));
                 }
             }
+            // Artifact only in outputs is valid — it was produced by the workflow.
         }
         Ok(())
     }
@@ -107,7 +106,7 @@ mod tests {
         let mut inputs = BTreeMap::new();
         inputs.insert("data.csv".into(), "sha:abc".into());
         let mut outputs = BTreeMap::new();
-        outputs.insert("data.csv".into(), "sha:xyz".into());
+        outputs.insert("data.csv".into(), "sha:xyz".into()); // mismatch
 
         let pkg = WorkflowPackage {
             package_id: "pkg-1".into(),
@@ -125,5 +124,31 @@ mod tests {
         };
 
         assert!(pkg.verify_integrity().is_err());
+    }
+
+    #[test]
+    fn package_allows_new_output_artifacts() {
+        let mut inputs = BTreeMap::new();
+        inputs.insert("data.csv".into(), "sha:abc".into());
+        let mut outputs = BTreeMap::new();
+        outputs.insert("data.csv".into(), "sha:abc".into());
+        outputs.insert("result.json".into(), "sha:new".into()); // new, not in inputs
+
+        let pkg = WorkflowPackage {
+            package_id: "pkg-1".into(),
+            workflow_id: "wf-1".into(),
+            created_at: "2026-07-25".into(),
+            schema_version: 1,
+            workflow_json: "{}".into(),
+            inputs_manifest: InputManifest { files: inputs, total_bytes: 100 },
+            artifacts_manifest: ArtifactManifest { files: outputs, total_artifacts: 2 },
+            evidence_graph_json: None,
+            events_jsonl: "[]".into(),
+            licenses: vec!["MIT".into()],
+            signature: None,
+            environment_hash: "env:1".into(),
+        };
+
+        assert!(pkg.verify_integrity().is_ok());
     }
 }

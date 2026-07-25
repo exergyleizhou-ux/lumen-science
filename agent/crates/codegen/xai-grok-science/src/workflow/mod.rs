@@ -4,6 +4,9 @@
 pub mod kernel;
 pub mod package;
 
+#[cfg(test)]
+mod e2e_tests;
+
 pub use kernel::{
     AdmissionStatus, KernelAdmission, KernelKind, KernelManifest, ReproductionAttempt,
     ReproductionLevel, ReproductionResult, ResourceCap,
