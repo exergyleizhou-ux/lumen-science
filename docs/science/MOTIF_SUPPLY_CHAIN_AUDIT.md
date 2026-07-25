@@ -40,8 +40,23 @@ Locked in: `docs/science/fusion-sources.lock.json` → `renderer_sources[]`.
 
 ## Dependency audit status
 
+**2026-07-26: Partial audit executed (user-authorized network).**
+
+Node.js 20.18.0; Motif target ≥22.12.0.
+
 ```text
-SOURCE_ACQUIRED_BUT_DEPENDENCIES_UNAVAILABLE
+npm ci --ignore-scripts   → 354 packages, 0 install failures
+npm run typecheck         → PASS (tsc -b)
+npm run lint              → PASS (eslint)
+npm run build:motif       → BLOCKED (requires Node ≥22.12.0 for rolldown binary)
+```
+
+Source hashes captured (exact commit 876a4f9e):
+
+```
+LICENSE:           606f9372bf61b63b32725d69f312ead92010afdaeea35befc46dc4db1ed19d49
+package.json:      1e7f43c08791f57be9018693227cec3f1a9891e6f624ac9833fbdd2b97fd1565
+package-lock.json: 7cdbfd2978c377cf5d99dd8de12f9cb7d1995065321aea53222961514757a426
 ```
 
 Required before DS-45B ACCEPT (needs **user-authorized network**):
@@ -75,10 +90,12 @@ Checks that must pass when network is authorized:
 ## Verdict
 
 ```text
-DS-45A exact-source lock:     ACCEPT
-DS-45B full supply-chain:     BLOCKED_BY_EXTERNAL_AUTHORIZATION (npm ci network)
+DS-45A exact-source lock:     ACCEPT (commit matches)
+DS-45B full supply-chain:     PARTIAL (source/lock hashes + typecheck/lint pass;
+                              full build blocked by Node ≥22.12.0 requirement)
 DS-45C adoption scope:        ACCEPT (documented)
-DS-45D product embed:         PARTIAL (contract renderer live; full Motif bundle not vendored)
+DS-45D product embed:         PARTIAL (contract renderer live; full Motif bundle
+                              requires Node ≥22.12.0 on build host)
 ```
 
 Do **not** claim “Motif fully integrated like Claude Science” until DS-45B ACCEPT and a vendored, hashed Motif build is served under the same CSP policy.
