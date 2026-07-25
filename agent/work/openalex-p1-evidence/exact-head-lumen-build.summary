@@ -1,0 +1,10 @@
+evidence_kind: summarized-current-tool-output
+recorded_at_utc: 2026-07-24T03:06:23Z
+product_source_commit: 791413c28338458472eb98502628f1307eaa58aa
+worktree_state_before_and_after: clean
+command: CARGO_BUILD_JOBS=1 CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/Users/lei/Documents/Codex/2026-07-24/ji-3/work/target-science-fusion cargo build -p xai-grok-pager-bin --bin lumen --offline
+result: exit 0
+final: Finished dev profile [unoptimized + debuginfo] target(s) in 8m 16s
+binary: /Users/lei/Documents/Codex/2026-07-24/ji-3/work/target-science-fusion/debug/lumen
+binary_sha256: 7986919860879b7c4f63aa990fe237f7b34b48e1fac7dd978361d75114fda209
+network: Cargo ran with --offline; no live connector or provider call authorized or executed

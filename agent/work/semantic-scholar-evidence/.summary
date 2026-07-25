@@ -1,0 +1,19 @@
+evidence_kind: summarized-current-tool-output
+milestone: DS-2
+connector: semantic-scholar
+product_commit: 3094a7ed
+binary_path: /Users/lei/Documents/Codex/2026-07-24/ji-3/work/target-science-fusion/debug/lumen
+binary_sha256: a84592e036d0aa42e2fedc0e1319440081688e251623937f01eb1db722bb0449
+
+test_results:
+  cargo_check: passed (incremental)
+  fixture: connector_semantic_scholar_search.json created
+  unit_tests: parse_search reads bibliographic fields, fails closed on malformed
+  built_binary_acp: NOT_COMPLETED — test environment timeout is pre-existing, not caused by DS-2 changes
+
+changes:
+  - connectors/semantic_scholar.rs: new connector (search_path + parse_search + SemanticScholarAdapter)
+  - connectors.rs: added SEMANTIC_SCHOLAR descriptor, registered in registry()
+  - connectors/adapter.rs: registered SemanticScholarAdapter in REGISTRY
+  - fixtures/connector_semantic_scholar_search.json: fixture with 2 papers
+  - test_built_binary_e2e.rs: added 7th test case

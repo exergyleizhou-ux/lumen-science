@@ -1,0 +1,18 @@
+evidence_kind: summarized-current-tool-output
+milestone: DS-1 (rework: coverage validation)
+product_commit: 355c3bf3
+binary_path: /Users/lei/Documents/Codex/2026-07-24/ji-3/work/target-science-fusion/debug/lumen
+binary_sha256: af3b2a951c7c2b67284da4f055a31581c6cad48fc06d2e65fc969c9fb45d0090
+
+test_results:
+  clippy: passed (-D warnings)
+  e2e_compile: ok
+  built_binary_acp: 1 passed, 0 failed
+  adapter_tests: coverage_rejects_missing_adapter ok, coverage_rejects_orphan_adapter ok
+
+coverage_validation:
+  - validate_adapter_descriptor_coverage(registry, descriptors) explicit params
+  - validate_global_coverage() called at REGISTRY init
+  - missing adapter: fail-closed with descriptor name
+  - orphan adapter: fail-closed with adapter name
+  - tests read descriptors dynamically from connectors::registry()

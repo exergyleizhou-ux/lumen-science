@@ -1,0 +1,12 @@
+evidence_kind: summarized-current-tool-output
+recorded_at_utc: 2026-07-24T03:06:23Z
+product_source_commit: 791413c28338458472eb98502628f1307eaa58aa
+command: CARGO_BUILD_JOBS=1 CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/Users/lei/Documents/Codex/2026-07-24/ji-3/work/target-science-fusion cargo test -p xai-grok-science --offline
+result: exit 0
+tests_discovered: 82
+passed: 76
+failed: 0
+ignored: 6
+ignored_scope: PubMed, ChEMBL, Crossref, UniProt, Europe PMC, and OpenAlex live probes
+doc_tests: 0 passed; 0 failed
+network: no live connector or provider call authorized or executed
