@@ -637,30 +637,52 @@ const EUTILS: ConnectorDescriptor = ConnectorDescriptor {
     data_class: DataClass::PublicReference, cache_policy: CachePolicy::NoStore,
     live_probe_path: "/esearch.fcgi?db=nucleotide&retmode=json&retmax=1&term=test",
 };
-const BIOGRID_REJECTED: ConnectorDescriptor = ConnectorDescriptor {
+/// Inventory-only: NEVER registered for runtime fetch. Credential-in-URL.
+pub const BIOGRID_REJECTED: ConnectorDescriptor = ConnectorDescriptor {
     id: "biogrid", display_name: "BioGRID (REJECTED)", auth_class: AuthClass::None,
     base_url: "https://webservice.thebiogrid.org/", egress_hosts: &["webservice.thebiogrid.org"],
     rate_limit: RateLimit { max_requests: 1, per_ms: 1_000 },
     retry: RetryPolicy { max_attempts: 1, base_delay_ms: 100 },
     tos_url: "https://thebiogrid.org/terms.php",
-    user_notice: "REJECTED: credential in URL query string violates Lumen safety policy. No runtime implementation or live probe admitted.",
+    user_notice: "REJECTED: credential in URL query string violates Lumen safety policy. Not in runtime registry. See FUSION_DS24_BIOGRID_REJECTION_CLOSURE.md.",
     data_class: DataClass::PublicData, cache_policy: CachePolicy::NoStore,
     live_probe_path: "/interactions/?searchNames=true&geneList=test&format=json&max=1",
 };
-const KEGG_PENDING: ConnectorDescriptor = ConnectorDescriptor {
-    id: "kegg", display_name: "KEGG (LICENSE PENDING)", auth_class: AuthClass::None,
+/// Inventory-only: NEVER registered for runtime fetch. License rejected.
+pub const KEGG_REJECTED: ConnectorDescriptor = ConnectorDescriptor {
+    id: "kegg", display_name: "KEGG (REJECTED — LICENSE)", auth_class: AuthClass::None,
     base_url: "https://rest.kegg.jp/", egress_hosts: &["rest.kegg.jp"],
     rate_limit: RateLimit { max_requests: 1, per_ms: 1_000 },
     retry: RetryPolicy { max_attempts: 1, base_delay_ms: 100 },
     tos_url: "https://www.kegg.jp/kegg/legal.html",
-    user_notice: "LICENSE PENDING: commercial use requires paid subscription. No runtime implementation admitted until license accepted.",
+    user_notice: "REJECTED: commercial terms require paid subscription (rejected-license-or-terms). Not in runtime registry. See FUSION_DS26_KEGG_LICENSE_CLOSURE.md.",
     data_class: DataClass::PublicData, cache_policy: CachePolicy::NoStore,
     live_probe_path: "/find/pathway/test",
 };
 
-/// All registered connectors, in stable order.
+/// Active runtime connectors only (40). Rejected items are NOT here.
+/// Inventory of 42 = registry() + rejected_registry().
 pub fn registry() -> &'static [ConnectorDescriptor] {
-    &[PUBMED, CHEMBL, CROSSREF, UNIPROT, EUROPEPMC, OPENALEX, SEMANTIC_SCHOLAR, ARXIV, BIORXIV, RCSB_PDB, PDBE, ALPHAFOLD, INTERPRO, SIFTS, PUBCHEM, BINDINGDB, GTOPDB, SURECHEMBL, CHEBI, ENSEMBL, NCBI_GENE, DBSNP, CLINVAR, GNOMAD, UCSC, MYGENE, MYVARIANT, REACTOME, STRING_DB, INTACT, WIKIPATHWAYS, OPENTARGETS, GEO, ARRAYEXPRESS, GTEX, HPA, EXPRESSION_ATLAS, SINGLE_CELL_ATLAS, DEPMAP, EUTILS, BIOGRID_REJECTED, KEGG_PENDING]
+    &[
+        PUBMED, CHEMBL, CROSSREF, UNIPROT, EUROPEPMC, OPENALEX, SEMANTIC_SCHOLAR, ARXIV, BIORXIV,
+        RCSB_PDB, PDBE, ALPHAFOLD, INTERPRO, SIFTS, PUBCHEM, BINDINGDB, GTOPDB, SURECHEMBL, CHEBI,
+        ENSEMBL, NCBI_GENE, DBSNP, CLINVAR, GNOMAD, UCSC, MYGENE, MYVARIANT, REACTOME, STRING_DB,
+        INTACT, WIKIPATHWAYS, OPENTARGETS, GEO, ARRAYEXPRESS, GTEX, HPA, EXPRESSION_ATLAS,
+        SINGLE_CELL_ATLAS, DEPMAP, EUTILS,
+    ]
+}
+
+/// Final-disposition rejected connectors. Present for audit only — no adapter, no fetch.
+pub fn rejected_registry() -> &'static [ConnectorDescriptor] {
+    &[BIOGRID_REJECTED, KEGG_REJECTED]
+}
+
+/// Full 42-item inventory (active + rejected). Not a runtime fetch surface.
+pub fn inventory() -> Vec<&'static ConnectorDescriptor> {
+    registry()
+        .iter()
+        .chain(rejected_registry().iter())
+        .collect()
 }
 
 /// Look up a connector by id.
@@ -939,25 +961,26 @@ mod tests {
     }
 
     #[test]
-    fn register_count_is_42() {
-        assert_eq!(
-            registry().len(),
-            42,
-            "registry must contain exactly 42 connectors"
-        );
+    fn active_registry_is_40_rejected_is_2_inventory_is_42() {
+        assert_eq!(registry().len(), 40, "active runtime registry must be 40");
+        assert_eq!(rejected_registry().len(), 2, "rejected inventory must be 2");
+        assert_eq!(inventory().len(), 42, "full inventory must be 42");
+        assert!(descriptor("biogrid").is_none(), "rejected must not be runtime-fetchable");
+        assert!(descriptor("kegg").is_none(), "rejected must not be runtime-fetchable");
+        assert_eq!(rejected_registry()[0].id, "biogrid");
+        assert_eq!(rejected_registry()[1].id, "kegg");
     }
 
     #[test]
     fn adapter_count_matches_descriptor_count() {
-        // Direct count validation without LazyLock REGISTRY dependency.
-        // The adapter REGISTRY contains the same number of entries as
-        // the descriptor registry (proven by compiler-enforced coverage
-        // validation at init). This test proves the descriptor side.
-        assert_eq!(registry().len(), 42, "42 descriptors required");
-        // Verify all expected categories have descriptors
+        // Active descriptors only; adapter REGISTRY coverage validates 1:1 at init.
+        assert_eq!(registry().len(), 40, "40 active descriptors required");
         let ids: std::collections::BTreeSet<&str> =
             registry().iter().map(|d| d.id).collect();
-        assert_eq!(ids.len(), 42, "all 42 IDs must be unique");
+        assert_eq!(ids.len(), 40, "all 40 active IDs must be unique");
+        let inv_ids: std::collections::BTreeSet<&str> =
+            inventory().iter().map(|d| d.id).collect();
+        assert_eq!(inv_ids.len(), 42, "inventory IDs must be unique across 42");
     }
 
     #[test]

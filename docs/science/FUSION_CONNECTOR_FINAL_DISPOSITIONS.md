@@ -1,18 +1,21 @@
 # Lumen Science — 42 Connector Final Dispositions
 
-**Date:** 2026-07-25
-**Authority:** Rust Lumen SessionActor
-**Status:** All 42 connectors have a final disposition. Zero unresolved.
+**Date:** 2026-07-26  
+**Authority:** Rust Lumen SessionActor  
+**Status:** All 42 inventory items have a final disposition (machine lock synced).  
+**Runtime:** 40 active in `connectors::registry()`; 2 rejected in `connectors::rejected_registry()` only.
 
 ## Summary
 
-| Disposition | Count |
-|-------------|-------|
-| `implemented` | 40 |
-| `rejected-unsafe-or-duplicate` | 1 (BioGRID) |
-| `rejected-license-or-terms` | 1 (KEGG) |
-| **Total** | **42** |
-| **Unresolved** | **0** |
+| Disposition | Count | Runtime fetch? |
+|-------------|-------|----------------|
+| `implemented` | 40 | yes (`registry()`) |
+| `rejected-unsafe-or-duplicate` | 1 (BioGRID) | **no** |
+| `rejected-license-or-terms` | 1 (KEGG) | **no** |
+| **Inventory total** | **42** | |
+| **Unresolved** | **0** | |
+
+Machine source of truth: `docs/science/fusion-sources.lock.json` (`schema_version` 4).
 
 ## Full Registry
 

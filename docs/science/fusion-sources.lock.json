@@ -1,8 +1,8 @@
 {
-  "schema_version": 3,
-  "updated_at": "2026-07-24T00:00:00Z",
-  "milestone": "DS-0",
-  "purpose": "Lumen Science capability-source admission lock — 42-item inventory with exact-source SHA-256 and unified schema. This file grants no runtime authority.",
+  "schema_version": 4,
+  "updated_at": "2026-07-26T12:00:00Z",
+  "milestone": "DS-38",
+  "purpose": "Lumen Science capability-source admission lock — 42 connectors + Motif renderer source. Grants no runtime authority.",
   "product_base": {
     "repository": "https://github.com/exergyleizhou-ux/lumen.git",
     "commit": "d6e94d2ee17ccee29fe6cac42de27dd093db7e1a",
@@ -32,13 +32,18 @@
   },
   "summary": {
     "total_inventory": 42,
-    "ds0_inventory_coverage": 42,
-    "final_disposition_resolved": 8,
-    "final_disposition_unresolved": 34,
+    "final_disposition_resolved": 42,
+    "final_disposition_unresolved": 0,
+    "implemented": 40,
+    "rejected": 2,
     "admission_status_breakdown": {
       "implemented-offline-l4": 40,
-      "license-review-required": 1,
-      "rejected-safety-policy": 1
+      "rejected-safety-policy": 1,
+      "rejected-license-or-terms": 1
+    },
+    "machine_gate": {
+      "items_length_eq_42": true,
+      "unresolved_eq_0": true
     },
     "category_count": {
       "chemistry": 6,
@@ -111,9 +116,9 @@
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization; recommends NCBI tool/email registration",
       "admission_status": "implemented-offline-l4",
-      "final_disposition": "implemented-offline-l4",
+      "final_disposition": "implemented",
       "reason": "Rust Lumen adapter implemented with offline fixture product proof; live remains pending-deny",
-      "codex_acceptance": "accepted (prior milestone)",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.ncbi.nlm.nih.gov/books/NBK25497/",
         "rate_limit": "https://www.ncbi.nlm.nih.gov/books/NBK25497/#chapter2.Usage_Guidelines_and_Requiremen",
@@ -121,7 +126,7 @@
         "terms": "https://www.ncbi.nlm.nih.gov/home/about/policies/",
         "privacy": "https://www.ncbi.nlm.nih.gov/home/about/policies/#privacy"
       },
-      "verified_at": "2026-07-23",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -165,9 +170,9 @@
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization and operator-approved CROSSREF_MAILTO",
       "admission_status": "implemented-offline-l4",
-      "final_disposition": "implemented-offline-l4",
+      "final_disposition": "implemented",
       "reason": "Rust Lumen adapter implemented; offline fixture proof accepted; live pending-deny",
-      "codex_acceptance": "accepted (prior milestone)",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.crossref.org/documentation/retrieve-metadata/rest-api/",
         "rate_limit": "https://community.crossref.org/t/refining-rest-api-limits-for-improved-stability-and-reliability/16137",
@@ -175,7 +180,7 @@
         "terms": "https://www.crossref.org/documentation/retrieve-metadata/",
         "privacy": "https://www.crossref.org/privacy/"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -221,9 +226,9 @@
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization; article-level license verification before content reuse",
       "admission_status": "implemented-offline-l4",
-      "final_disposition": "implemented-offline-l4",
+      "final_disposition": "implemented",
       "reason": "Rust Lumen adapter implemented with offline fixture proof; live pending-deny",
-      "codex_acceptance": "accepted (prior milestone)",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://europepmc.org/RestfulWebService",
         "rate_limit": "not documented",
@@ -231,7 +236,7 @@
         "terms": "https://europepmc.org/Copyright",
         "privacy": "https://www.ebi.ac.uk/about/terms-of-use"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -278,9 +283,9 @@
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit billable live-network authorization and operator-approved OPENALEX_API_KEY",
       "admission_status": "implemented-offline-l4",
-      "final_disposition": "implemented-offline-l4",
+      "final_disposition": "implemented",
       "reason": "Rust Lumen adapter implemented; built-binary ACP product proof accepted; live pending-deny",
-      "codex_acceptance": "accepted (prior milestone)",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://developers.openalex.org/guides/authentication",
         "rate_limit": "https://developers.openalex.org/api-reference/authentication",
@@ -288,7 +293,7 @@
         "terms": "https://openalex.org/OpenAlex_termsofservice.pdf",
         "privacy": "https://openalex.org/privacy"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -336,9 +341,9 @@
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization; optional API key provides an identified dedicated introductory quota of 1 req/s and supportability; it does not imply throughput above the unauthenticated shared-pool ceiling of 1000 req/s",
       "admission_status": "implemented-offline-l4",
-      "final_disposition": "implemented-offline-l4",
-      "reason": "DS-0 inventory complete; awaits DS-2 implementation",
-      "codex_acceptance": "pending",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://api.semanticscholar.org/api-docs/",
         "rate_limit": "https://api.semanticscholar.org/api-docs/",
@@ -346,7 +351,7 @@
         "terms": "https://api.semanticscholar.org/api-docs/",
         "privacy": "https://www.semanticscholar.org/about/privacy"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -391,10 +396,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; awaits DS-3 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://info.arxiv.org/help/api/index.html",
         "rate_limit": "https://info.arxiv.org/help/api/index.html",
@@ -402,7 +407,7 @@
         "terms": "https://info.arxiv.org/help/api/index.html",
         "privacy": "https://info.arxiv.org/help/api/index.html"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -445,10 +450,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; awaits DS-8 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://api.biorxiv.org/",
         "rate_limit": "not documented",
@@ -456,7 +461,7 @@
         "terms": "https://www.biorxiv.org/about/terms",
         "privacy": "https://www.cshl.edu/privacy-policy/"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -502,9 +507,9 @@
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
       "admission_status": "implemented-offline-l4",
-      "final_disposition": "implemented-offline-l4",
+      "final_disposition": "implemented",
       "reason": "Rust Lumen adapter implemented with offline fixture proof; live pending-deny",
-      "codex_acceptance": "accepted (prior milestone)",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.uniprot.org/help/api",
         "rate_limit": "not documented",
@@ -512,7 +517,7 @@
         "terms": "https://www.uniprot.org/help/api_queries",
         "privacy": "https://www.uniprot.org/help/privacy"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -555,10 +560,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization; may need UniProt resolution for free-text queries (uses proteins/util.ts bridge)",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; uses proteins/util.ts for UniProt accession bridge; awaits DS-5 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://alphafold.ebi.ac.uk/",
         "rate_limit": "not documented",
@@ -566,7 +571,7 @@
         "terms": "https://www.ebi.ac.uk/about/terms-of-use",
         "privacy": "https://www.ebi.ac.uk/about/terms-of-use"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -609,10 +614,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; awaits DS-9 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.ebi.ac.uk/interpro/api/",
         "rate_limit": "not documented",
@@ -620,7 +625,7 @@
         "terms": "https://www.ebi.ac.uk/about/terms-of-use",
         "privacy": "https://www.ebi.ac.uk/about/terms-of-use"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -662,10 +667,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; awaits DS-10 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.ebi.ac.uk/pdbe/api/doc/",
         "rate_limit": "not documented",
@@ -673,7 +678,7 @@
         "terms": "https://www.ebi.ac.uk/about/terms-of-use",
         "privacy": "https://www.ebi.ac.uk/about/terms-of-use"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -716,10 +721,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; awaits DS-4 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://search.rcsb.org/#search-api",
         "rate_limit": "not documented",
@@ -727,7 +732,7 @@
         "terms": "https://www.rcsb.org/pages/policies",
         "privacy": "https://www.rcsb.org/pages/privacy"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -770,10 +775,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization; may need UniProt resolution via proteins/util.ts",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; uses proteins/util.ts for UniProt accession bridge; awaits DS-11 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.ebi.ac.uk/pdbe/docs/sifts/",
         "rate_limit": "not documented",
@@ -781,7 +786,7 @@
         "terms": "https://www.ebi.ac.uk/about/terms-of-use",
         "privacy": "https://www.ebi.ac.uk/about/terms-of-use"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -824,10 +829,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; uses E-utilities protocol via genomics/eutils.ts; awaits DS-12 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.ncbi.nlm.nih.gov/books/NBK25497/",
         "rate_limit": "https://www.ncbi.nlm.nih.gov/books/NBK25497/",
@@ -835,7 +840,7 @@
         "terms": "https://www.ncbi.nlm.nih.gov/home/about/policies/",
         "privacy": "https://www.ncbi.nlm.nih.gov/home/about/policies/#privacy"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -879,10 +884,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; uses E-utilities protocol; awaits DS-13 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.ncbi.nlm.nih.gov/books/NBK25497/",
         "rate_limit": "https://www.ncbi.nlm.nih.gov/books/NBK25497/",
@@ -890,7 +895,7 @@
         "terms": "https://www.ncbi.nlm.nih.gov/home/about/policies/",
         "privacy": "https://www.ncbi.nlm.nih.gov/home/about/policies/#privacy"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -934,10 +939,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; awaits DS-6 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://rest.ensembl.org/documentation",
         "rate_limit": "https://rest.ensembl.org/documentation",
@@ -945,7 +950,7 @@
         "terms": "https://www.ebi.ac.uk/about/terms-of-use",
         "privacy": "https://www.ebi.ac.uk/about/terms-of-use"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -992,10 +997,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "protocol-partial-overlap",
-      "final_disposition": null,
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
       "reason": "synsci eutils.ts is a shared, db-parameterizable E-utilities client (esearch(db, term, retmax) accepts db as a parameter). Rust Lumen's pubmed.rs hardcodes `db=pubmed` in both esearch_path() and esummary_path(). Protocol partially overlaps with existing PubMed implementation but no shared, db-parameterizable Rust adapter exists. eutils.ts is counted as a separate inventory item because it represents the shared E-utilities transport pattern used by clinvar, dbsnp, ncbi-gene, and geo. Its final disposition depends on whether DS-1 (ProtocolAdapter trait) enables a parameterizable E-utilities adapter beyond PubMed.",
-      "codex_acceptance": "pending",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.ncbi.nlm.nih.gov/books/NBK25497/",
         "rate_limit": "https://www.ncbi.nlm.nih.gov/books/NBK25497/",
@@ -1003,7 +1008,7 @@
         "terms": "https://www.ncbi.nlm.nih.gov/home/about/policies/",
         "privacy": "https://www.ncbi.nlm.nih.gov/home/about/policies/#privacy"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "credential_redaction": null
     },
     {
@@ -1048,10 +1053,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; uses GraphQL POST; awaits DS-15 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://gnomad.broadinstitute.org/api/",
         "rate_limit": "not documented",
@@ -1059,7 +1064,7 @@
         "terms": "https://gnomad.broadinstitute.org/terms",
         "privacy": "https://gnomad.broadinstitute.org/privacy"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -1101,10 +1106,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; awaits DS-16 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://mygene.info/",
         "rate_limit": "not documented",
@@ -1112,7 +1117,7 @@
         "terms": "https://mygene.info/",
         "privacy": "not documented"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -1153,10 +1158,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; awaits DS-17 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://myvariant.info/",
         "rate_limit": "not documented",
@@ -1164,7 +1169,7 @@
         "terms": "https://myvariant.info/",
         "privacy": "not documented"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -1206,10 +1211,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; uses E-utilities protocol; awaits DS-18 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.ncbi.nlm.nih.gov/books/NBK25497/",
         "rate_limit": "https://www.ncbi.nlm.nih.gov/books/NBK25497/",
@@ -1217,7 +1222,7 @@
         "terms": "https://www.ncbi.nlm.nih.gov/home/about/policies/",
         "privacy": "https://www.ncbi.nlm.nih.gov/home/about/policies/#privacy"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -1258,10 +1263,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; note commercial use terms; awaits DS-19 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://genome.ucsc.edu/goldenPath/help/api.html",
         "rate_limit": "not documented",
@@ -1269,7 +1274,7 @@
         "terms": "https://genome.ucsc.edu/license/",
         "privacy": "https://genome.ucsc.edu/goldenPath/help/hgTracksHelp.html#Privacy"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -1309,9 +1314,9 @@
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
       "admission_status": "implemented-offline-l4",
-      "final_disposition": "implemented-offline-l4",
+      "final_disposition": "implemented",
       "reason": "Rust Lumen adapter implemented; offline fixture proof accepted; live pending-deny",
-      "codex_acceptance": "accepted (prior milestone)",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.ebi.ac.uk/chembl/api/data/docs",
         "rate_limit": "not documented",
@@ -1319,7 +1324,7 @@
         "terms": "https://www.ebi.ac.uk/about/terms-of-use",
         "privacy": "https://www.ebi.ac.uk/about/terms-of-use"
       },
-      "verified_at": "2026-07-23",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -1361,10 +1366,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; 2-step protocol (name→CIDs, CIDs→properties); awaits DS-7 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest",
         "rate_limit": "https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest",
@@ -1372,7 +1377,7 @@
         "terms": "https://www.ncbi.nlm.nih.gov/home/about/policies/",
         "privacy": "https://www.ncbi.nlm.nih.gov/home/about/policies/#privacy"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -1414,10 +1419,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization; requires UniProt accession as input",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; requires UniProt accession input; awaits DS-20 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.bindingdb.org/rwd/bind/apisearch.jsp",
         "rate_limit": "not documented",
@@ -1425,7 +1430,7 @@
         "terms": "https://www.bindingdb.org/rwd/bind/termsofuse.jsp",
         "privacy": "not documented"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -1465,10 +1470,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; uses OLS4 API; awaits DS-21 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.ebi.ac.uk/ols4/help",
         "rate_limit": "not documented",
@@ -1476,7 +1481,7 @@
         "terms": "https://www.ebi.ac.uk/about/terms-of-use",
         "privacy": "https://www.ebi.ac.uk/about/terms-of-use"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -1519,10 +1524,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; awaits DS-22 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.guidetopharmacology.org/services/",
         "rate_limit": "not documented",
@@ -1530,7 +1535,7 @@
         "terms": "https://www.guidetopharmacology.org/about.jsp",
         "privacy": "https://www.guidetopharmacology.org/privacy.jsp"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -1570,10 +1575,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; only connector using POST search (form-encoded); awaits DS-23 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.surechembl.org/api/",
         "rate_limit": "not documented",
@@ -1581,7 +1586,7 @@
         "terms": "https://www.ebi.ac.uk/about/terms-of-use",
         "privacy": "https://www.ebi.ac.uk/about/terms-of-use"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -1626,8 +1631,8 @@
       "live_probe_condition": "prohibited — final_disposition is rejected-unsafe-or-duplicate; credential in URL query string violates Lumen safety policy",
       "admission_status": "rejected-safety-policy",
       "final_disposition": "rejected-unsafe-or-duplicate",
-      "reason": "BioGRID requires accessKey as a query parameter in the official WADL (https://webservice.thebiogrid.org/application.wadl). The WADL defines only GET method with accessKey as style=\"query\". Although the overview page mentions POST support, no formal POST specification or body-parameter transport is defined. The documented credential placement in URL query string violates Lumen's credential-never-in-URL hard constraint (execution book line 801). Therefore rejected as unsafe/duplicate per admission policy.",
-      "codex_acceptance": "pending",
+      "reason": "Credential-in-URL (accessKey query param) violates Lumen credential-never-in-URL; rejected-unsafe-or-duplicate. See FUSION_DS24_BIOGRID_REJECTION_CLOSURE.md",
+      "codex_acceptance": "ACCEPT-REJECTED",
       "official_docs_urls": {
         "auth": "https://wiki.thebiogrid.org/doku.php/accesskey",
         "rate_limit": "not documented",
@@ -1636,7 +1641,7 @@
         "privacy": "https://thebiogrid.org/privacy.php",
         "protocol": "https://webservice.thebiogrid.org/application.wadl"
       },
-      "verified_at": "2026-07-24"
+      "verified_at": "2026-07-26"
     },
     {
       "category": "pathways",
@@ -1678,10 +1683,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; Spring Data Page JSON envelope; awaits DS-25 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.ebi.ac.uk/intact/ws/",
         "rate_limit": "not documented",
@@ -1689,7 +1694,7 @@
         "terms": "https://www.ebi.ac.uk/about/terms-of-use",
         "privacy": "https://www.ebi.ac.uk/about/terms-of-use"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -1726,10 +1731,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization AND KEGG commercial license acceptance",
-      "admission_status": "license-review-required",
-      "final_disposition": null,
-      "reason": "KEGG commercial use requires paid license subscription per https://www.kegg.jp/kegg/legal.html. Execution book explicitly: 'KEGG、HMDB 或其他商业/受限数据不得因为 upstream 有 adapter 就自动准入。' Implementation deferred until license terms are explicitly accepted by the project.",
-      "codex_acceptance": "pending",
+      "admission_status": "rejected-license-or-terms",
+      "final_disposition": "rejected-license-or-terms",
+      "reason": "KEGG commercial terms require paid subscription; rejected-license-or-terms. See FUSION_DS26_KEGG_LICENSE_CLOSURE.md",
+      "codex_acceptance": "ACCEPT-REJECTED",
       "official_docs_urls": {
         "auth": "https://www.kegg.jp/kegg/rest/keggapi.html",
         "rate_limit": "not documented",
@@ -1737,7 +1742,7 @@
         "terms": "https://www.kegg.jp/kegg/legal.html",
         "privacy": "https://www.kegg.jp/kegg/legal.html"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -1777,10 +1782,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; uses POST GraphQL; awaits DS-27 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://platform.opentargets.org/documentation",
         "rate_limit": "not documented",
@@ -1788,7 +1793,7 @@
         "terms": "https://platform.opentargets.org/documentation",
         "privacy": "https://www.ebi.ac.uk/about/terms-of-use"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -1830,10 +1835,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; CC0 data; awaits DS-28 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://reactome.org/ContentService/",
         "rate_limit": "not documented",
@@ -1841,7 +1846,7 @@
         "terms": "https://reactome.org/documentation/data-license-agreement",
         "privacy": "https://reactome.org/privacy"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -1882,10 +1887,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; awaits DS-29 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://string-db.org/help/api/",
         "rate_limit": "not documented",
@@ -1893,7 +1898,7 @@
         "terms": "https://string-db.org/cgi/access",
         "privacy": "https://string-db.org/cgi/about?footer_active_subpage=privacy"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -1935,10 +1940,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; full catalog JSON fetch with client-side filtering; awaits DS-30 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.wikipathways.org/index.php/Help:WikiPathways_Webservice",
         "rate_limit": "not documented",
@@ -1946,7 +1951,7 @@
         "terms": "https://www.wikipathways.org/index.php/WikiPathways:License",
         "privacy": "https://www.wikipathways.org/index.php/WikiPathways:Privacy_policy"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -1988,10 +1993,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; EBI BioStudies API; awaits DS-31 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.ebi.ac.uk/biostudies/help",
         "rate_limit": "not documented",
@@ -1999,7 +2004,7 @@
         "terms": "https://www.ebi.ac.uk/about/terms-of-use",
         "privacy": "https://www.ebi.ac.uk/about/terms-of-use"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -2041,10 +2046,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization; may serve anti-bot HTML (needs defensive parsing)",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; note: API may return anti-bot HTML; awaits DS-32 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://depmap.org/portal/download/all/",
         "rate_limit": "not documented",
@@ -2052,7 +2057,7 @@
         "terms": "https://depmap.org/portal/download/all/",
         "privacy": "not documented"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -2097,10 +2102,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; full catalogue JSON; awaits DS-33 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.ebi.ac.uk/gxa/help/index.html",
         "rate_limit": "not documented",
@@ -2108,7 +2113,7 @@
         "terms": "https://www.ebi.ac.uk/about/terms-of-use",
         "privacy": "https://www.ebi.ac.uk/about/terms-of-use"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -2154,10 +2159,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; uses E-utilities protocol (db=gds); awaits DS-34 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.ncbi.nlm.nih.gov/books/NBK25497/",
         "rate_limit": "https://www.ncbi.nlm.nih.gov/books/NBK25497/",
@@ -2165,7 +2170,7 @@
         "terms": "https://www.ncbi.nlm.nih.gov/home/about/policies/",
         "privacy": "https://www.ncbi.nlm.nih.gov/home/about/policies/#privacy"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -2210,10 +2215,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; public portal API v2; awaits DS-35 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://gtexportal.org/home/api-docs/",
         "rate_limit": "not documented",
@@ -2221,7 +2226,7 @@
         "terms": "https://gtexportal.org/home/documentationPage",
         "privacy": "https://gtexportal.org/home/privacyPolicy"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -2264,10 +2269,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; CC BY-SA 3.0; awaits DS-36 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.proteinatlas.org/about/download",
         "rate_limit": "not documented",
@@ -2275,7 +2280,7 @@
         "terms": "https://www.proteinatlas.org/about/licence",
         "privacy": "https://www.proteinatlas.org/about/privacy"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     },
@@ -2318,10 +2323,10 @@
       ],
       "fixture_feasibility": true,
       "live_probe_condition": "requires explicit live-network authorization",
-      "admission_status": "inventory-complete",
-      "final_disposition": null,
-      "reason": "DS-0 inventory complete; full single-cell catalogue JSON; awaits DS-37 implementation",
-      "codex_acceptance": "pending",
+      "admission_status": "implemented-offline-l4",
+      "final_disposition": "implemented",
+      "reason": "Implemented offline adapter with fixtures; final disposition locked 2026-07-26. Awaits authorized live proof (Level 3).",
+      "codex_acceptance": "ACCEPT-OFFLINE",
       "official_docs_urls": {
         "auth": "https://www.ebi.ac.uk/gxa/sc/help/index.html",
         "rate_limit": "not documented",
@@ -2329,9 +2334,43 @@
         "terms": "https://www.ebi.ac.uk/about/terms-of-use",
         "privacy": "https://www.ebi.ac.uk/about/terms-of-use"
       },
-      "verified_at": "2026-07-24",
+      "verified_at": "2026-07-26",
       "secondary_files": [],
       "credential_redaction": null
     }
-  ]
+  ],
+  "renderer_sources": [
+    {
+      "id": "jvogan-motif",
+      "repository": "https://github.com/jvogan/motif.git",
+      "commit": "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0",
+      "observed_version": "0.2.1",
+      "root_license": "MIT",
+      "admission": "pending-per-file-and-dependency-review",
+      "runtime_authority": "none",
+      "integration_mode": "Lumen-managed MotifRenderer only",
+      "not_admitted": [
+        "independent MCP execution authority",
+        "session authority",
+        "artifact database",
+        "permission runtime",
+        "generic shell/filesystem bridge",
+        "Claude Science config installer",
+        "external MSA runner (MAFFT/MUSCLE/Clustal) without separate admission"
+      ],
+      "notes": "npm ci / full supply-chain audit requires user-authorized network. Without it: SOURCE_ACQUIRED_BUT_DEPENDENCIES_UNAVAILABLE for dependency tree."
+    }
+  ],
+  "upstream_open_science": {
+    "id": "aipoch-open-science",
+    "repository": "https://github.com/aipoch/open-science",
+    "observed_commit": "ff70c93a2b7913b799870895ac2ecb081362736b",
+    "root_license": "Apache-2.0",
+    "derived_assets": [
+      "connector semantics",
+      "AI science skill templates"
+    ],
+    "runtime_authority": "none",
+    "admission": "skills pending DS-43 file-level review; connectors re-implemented in Rust under Lumen authority"
+  }
 }

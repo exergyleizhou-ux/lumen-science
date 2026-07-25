@@ -2394,20 +2394,19 @@ async fn test_headless_waits_for_short_background_task_and_exits_clean() {
     );
 }
 
-/// DS-38: structural proof that the science connector registry contains
-/// exactly 42 entries and that every expected connector ID is present.
-/// This test does NOT require a running binary — it reads the compiled-in
-/// descriptor registry directly from the xai-grok-science crate.
+/// DS-38: 40 active runtime connectors + 2 rejected inventory-only.
+/// Rejected (biogrid, kegg) MUST NOT appear in the runtime fetch registry.
 #[test]
-fn test_connector_registry_has_all_42_ids() {
+fn test_connector_registry_active_40_inventory_42() {
     let registry = xai_grok_science::connectors::registry();
-    assert_eq!(
-        registry.len(),
-        42,
-        "descriptor registry must contain exactly 42 connectors"
-    );
+    let rejected = xai_grok_science::connectors::rejected_registry();
+    let inventory = xai_grok_science::connectors::inventory();
 
-    let expected: std::collections::BTreeSet<&str> = [
+    assert_eq!(registry.len(), 40, "active runtime registry must be 40");
+    assert_eq!(rejected.len(), 2, "rejected inventory must be 2");
+    assert_eq!(inventory.len(), 42, "full disposition inventory must be 42");
+
+    let expected_active: std::collections::BTreeSet<&str> = [
         "pubmed", "chembl", "crossref", "uniprot", "europepmc", "openalex",
         "semantic-scholar", "arxiv", "biorxiv",
         "rcsb-pdb", "pdbe", "alphafold", "interpro", "sifts",
@@ -2415,22 +2414,24 @@ fn test_connector_registry_has_all_42_ids() {
         "ensembl", "ncbi-gene", "dbsnp", "clinvar", "gnomad", "ucsc", "mygene", "myvariant",
         "reactome", "string-db", "intact", "wikipathways", "opentargets",
         "geo", "arrayexpress", "gtex", "hpa", "expression-atlas", "single-cell-atlas", "depmap",
-        "eutils", "biogrid", "kegg",
+        "eutils",
     ]
     .into_iter()
     .collect();
 
-    let actual: std::collections::BTreeSet<&str> =
+    let actual_active: std::collections::BTreeSet<&str> =
         registry.iter().map(|d| d.id).collect();
+    assert_eq!(expected_active, actual_active);
 
+    let rejected_ids: std::collections::BTreeSet<&str> =
+        rejected.iter().map(|d| d.id).collect();
     assert_eq!(
-        expected, actual,
-        "connector registry must contain exactly these 42 IDs"
+        rejected_ids,
+        ["biogrid", "kegg"].into_iter().collect(),
+        "rejected inventory must be exactly biogrid + kegg"
     );
 
-    // Prove no duplicates
-    let mut ids: Vec<&str> = registry.iter().map(|d| d.id).collect();
-    ids.sort();
-    ids.dedup();
-    assert_eq!(ids.len(), 42, "connector registry contains duplicate IDs");
+    // Rejected must not be runtime-resolvable
+    assert!(xai_grok_science::connectors::descriptor("biogrid").is_none());
+    assert!(xai_grok_science::connectors::descriptor("kegg").is_none());
 }
