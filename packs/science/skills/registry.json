@@ -1,224 +1,944 @@
 {
-  "schema_version": 1,
-  "updated_at": "2026-07-25",
+  "schema_version": 2,
+  "updated_at": "2026-07-26",
+  "admission_policy": {
+    "rule": "MIT/Apache/BSD still require file-level review; GPL/AGPL default deny; unknown deny; remote script deny; generic shell/filesystem bridge deny",
+    "approved_requires": [
+      "source_repository",
+      "exact_commit",
+      "source_path",
+      "source_sha256",
+      "file_license",
+      "prompt_injection_audit.pass",
+      "runtime_permissions.reviewed",
+      "final_disposition=approved"
+    ],
+    "runtime_authority": "SessionActor only; skills generate plans or call controlled Lumen tools"
+  },
+  "summary": {
+    "total": 27,
+    "approved": 0,
+    "pending": 27,
+    "rejected": 0
+  },
   "skills": [
     {
       "skill_id": "science/chart-design-system",
       "display_name": "Chart Design System",
-      "version": "1.0.0", "license": "MIT", "category": "visualization",
+      "version": "1.0.0",
+      "category": "visualization",
       "description": "Design publication-quality scientific charts with consistent styling.",
-      "entry_point": "chart-design-system.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "chart-design-system.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/exergyleizhou-ux/lumen-science",
+      "exact_commit": "in-tree",
+      "source_path": "packs/science/lab/runtime/skills/science/chart-design-system.md",
+      "source_sha256": "9f31db51c0e7f9e7bbdb40a6e0f2c46b18fe5cda6fe3504f13980d6b75ff1018",
+      "file_license": "MIT",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-controlled-tool-surface",
+      "admission": {
+        "status": "pending-controlled-tool-surface",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/figure-publication",
       "display_name": "Figure Publication",
-      "version": "1.0.0", "license": "MIT", "category": "visualization",
+      "version": "1.0.0",
+      "category": "visualization",
       "description": "Prepare figures for journal publication with proper formatting.",
-      "entry_point": "figure-publication.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "figure-publication.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/exergyleizhou-ux/lumen-science",
+      "exact_commit": "in-tree",
+      "source_path": "packs/science/lab/runtime/skills/science/figure-publication.md",
+      "source_sha256": "76f73dcb433bc077332395c38ff6572b042e3f8b9dbec97d6ca9eb524e11aa26",
+      "file_license": "MIT",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-controlled-tool-surface",
+      "admission": {
+        "status": "pending-controlled-tool-surface",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/integrity-auditor",
       "display_name": "Integrity Auditor",
-      "version": "1.0.0", "license": "MIT", "category": "quality",
+      "version": "1.0.0",
+      "category": "quality",
       "description": "Audit scientific data for integrity issues.",
-      "entry_point": "integrity-auditor.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "integrity-auditor.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/exergyleizhou-ux/lumen-science",
+      "exact_commit": "in-tree",
+      "source_path": "packs/science/lab/runtime/skills/science/integrity-auditor.md",
+      "source_sha256": "77d00ed3e4caa847a181f940dba0bbc63d1701697a82d5657c762e29934c6f37",
+      "file_license": "MIT",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-controlled-tool-surface",
+      "admission": {
+        "status": "pending-controlled-tool-surface",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/literature-survey",
       "display_name": "Literature Survey",
-      "version": "1.0.0", "license": "MIT", "category": "research",
+      "version": "1.0.0",
+      "category": "research",
       "description": "Conduct systematic literature survey across PubMed, Semantic Scholar, bioRxiv.",
-      "entry_point": "literature-survey.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "literature-survey.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/exergyleizhou-ux/lumen-science",
+      "exact_commit": "in-tree",
+      "source_path": "packs/science/lab/runtime/skills/science/literature-survey.md",
+      "source_sha256": "9b1788cc4290076b0cb16414232f9d3feaefd9c84fb1f44a625cba1a5d9bfecc",
+      "file_license": "MIT",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-controlled-tool-surface",
+      "admission": {
+        "status": "pending-controlled-tool-surface",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/molecule-viewer",
       "display_name": "Molecule Viewer",
-      "version": "1.0.0", "license": "MIT", "category": "chemistry",
+      "version": "1.0.0",
+      "category": "chemistry",
       "description": "Retrieve and visualize molecular structures.",
-      "entry_point": "molecule-viewer.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "molecule-viewer.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/exergyleizhou-ux/lumen-science",
+      "exact_commit": "in-tree",
+      "source_path": "packs/science/lab/runtime/skills/science/molecule-viewer.md",
+      "source_sha256": "44122d26f8c3c542f8bd25baecb88d9902252070151e85ab7d83be148c08beda",
+      "file_license": "MIT",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-controlled-tool-surface",
+      "admission": {
+        "status": "pending-controlled-tool-surface",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/oasis-c2d-run",
       "display_name": "Oasis C2D Run",
-      "version": "1.0.0", "license": "MIT", "category": "compute",
+      "version": "1.0.0",
+      "category": "compute",
       "description": "Execute a Compute-to-Data job on Oasis.",
-      "entry_point": "oasis-c2d-run.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "oasis-c2d-run.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/exergyleizhou-ux/lumen-science",
+      "exact_commit": "in-tree",
+      "source_path": "packs/science/lab/runtime/skills/science/oasis-c2d-run.md",
+      "source_sha256": "baa8d208810f82fb91d9309942e7b6c9263040c4ed9e4393ebb270838be41633",
+      "file_license": "MIT",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-controlled-tool-surface",
+      "admission": {
+        "status": "pending-controlled-tool-surface",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/research-brief",
       "display_name": "Research Brief",
-      "version": "1.0.0", "license": "MIT", "category": "research",
+      "version": "1.0.0",
+      "category": "research",
       "description": "Generate provenance-first research brief.",
-      "entry_point": "research-brief.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "research-brief.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/exergyleizhou-ux/lumen-science",
+      "exact_commit": "in-tree",
+      "source_path": "packs/science/lab/runtime/skills/science/research-brief.md",
+      "source_sha256": "be8d7a1b164816e6090e88b7d63cba367e49bd64aa9d97782bff125fcf1ee861",
+      "file_license": "MIT",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-controlled-tool-surface",
+      "admission": {
+        "status": "pending-controlled-tool-surface",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/traceability-review",
       "display_name": "Traceability Review",
-      "version": "1.0.0", "license": "MIT", "category": "quality",
+      "version": "1.0.0",
+      "category": "quality",
       "description": "Review workflows for complete traceability.",
-      "entry_point": "traceability-review.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "traceability-review.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/exergyleizhou-ux/lumen-science",
+      "exact_commit": "in-tree",
+      "source_path": "packs/science/lab/runtime/skills/science/traceability-review.md",
+      "source_sha256": "306392df8b06d6753bb9d2feb6d8fbed642b0ab5906352fd2442c676b2ca2a86",
+      "file_license": "MIT",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-controlled-tool-surface",
+      "admission": {
+        "status": "pending-controlled-tool-surface",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/alphafold2",
       "display_name": "AlphaFold2",
-      "version": "1.0.0", "license": "Apache-2.0", "category": "protein-structure",
+      "version": "1.0.0",
+      "category": "protein-structure",
       "description": "Predict 3D protein structures from amino acid sequences using AlphaFold2.",
-      "entry_point": "alphafold2/SKILL.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "alphafold2/SKILL.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/aipoch/open-science",
+      "exact_commit": "ff70c93a2b7913b799870895ac2ecb081362736b",
+      "source_path": "upstream open-science skills/alphafold2",
+      "source_sha256": "562520a36043c09f6e740b28a097e1e11a68b73bcc3c4c7cb0e269a644b4427a",
+      "file_license": "Apache-2.0",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-compute-admission",
+      "admission": {
+        "status": "pending-compute-admission",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/boltz",
       "display_name": "Boltz",
-      "version": "1.0.0", "license": "Apache-2.0", "category": "molecular-dynamics",
+      "version": "1.0.0",
+      "category": "molecular-dynamics",
       "description": "Run molecular dynamics simulations with Boltzmann-weighted sampling.",
-      "entry_point": "boltz/SKILL.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "boltz/SKILL.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/aipoch/open-science",
+      "exact_commit": "ff70c93a2b7913b799870895ac2ecb081362736b",
+      "source_path": "upstream open-science skills/boltz",
+      "source_sha256": "4205a08363955f762f45a2065263de0dabedd898eba13460830b70b621b26700",
+      "file_license": "Apache-2.0",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-compute-admission",
+      "admission": {
+        "status": "pending-compute-admission",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/borzoi",
       "display_name": "Borzoi",
-      "version": "1.0.0", "license": "Apache-2.0", "category": "genomics",
+      "version": "1.0.0",
+      "category": "genomics",
       "description": "Predict gene expression from DNA sequence using Borzoi.",
-      "entry_point": "borzoi/SKILL.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "borzoi/SKILL.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/aipoch/open-science",
+      "exact_commit": "ff70c93a2b7913b799870895ac2ecb081362736b",
+      "source_path": "upstream open-science skills/borzoi",
+      "source_sha256": "138b38790b1a1c6a2c48a1c9712256f168790a01f5f5f9a4810ca5e0f2c1a62d",
+      "file_license": "Apache-2.0",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-compute-admission",
+      "admission": {
+        "status": "pending-compute-admission",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/chai1",
       "display_name": "Chai-1",
-      "version": "1.0.0", "license": "Apache-2.0", "category": "protein-ligand",
+      "version": "1.0.0",
+      "category": "protein-ligand",
       "description": "Predict protein-ligand binding using Chai-1.",
-      "entry_point": "chai1/SKILL.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "chai1/SKILL.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/aipoch/open-science",
+      "exact_commit": "ff70c93a2b7913b799870895ac2ecb081362736b",
+      "source_path": "upstream open-science skills/chai1",
+      "source_sha256": "14c7b111475cfb2df0c1ba4de8427b09099439417101bc443fe52e8c80eff539",
+      "file_license": "Apache-2.0",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-compute-admission",
+      "admission": {
+        "status": "pending-compute-admission",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/diffdock",
       "display_name": "DiffDock",
-      "version": "1.0.0", "license": "Apache-2.0", "category": "molecular-docking",
+      "version": "1.0.0",
+      "category": "molecular-docking",
       "description": "Diffusion-based molecular docking with DiffDock.",
-      "entry_point": "diffdock/SKILL.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "diffdock/SKILL.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/aipoch/open-science",
+      "exact_commit": "ff70c93a2b7913b799870895ac2ecb081362736b",
+      "source_path": "upstream open-science skills/diffdock",
+      "source_sha256": "6c3acc1710209b8daf2322e6103043c3487412153e2455deab6abd851ad8efb6",
+      "file_license": "Apache-2.0",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-compute-admission",
+      "admission": {
+        "status": "pending-compute-admission",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/esmfold2",
       "display_name": "ESMFold2",
-      "version": "1.0.0", "license": "Apache-2.0", "category": "protein-folding",
+      "version": "1.0.0",
+      "category": "protein-folding",
       "description": "Fast single-sequence protein structure prediction with ESMFold2.",
-      "entry_point": "esmfold2/SKILL.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "esmfold2/SKILL.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/aipoch/open-science",
+      "exact_commit": "ff70c93a2b7913b799870895ac2ecb081362736b",
+      "source_path": "upstream open-science skills/esmfold2",
+      "source_sha256": "28e625bab51a5d33e278b5ee6f304d76afa35c424fd919e1914d649df7600175",
+      "file_license": "Apache-2.0",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-compute-admission",
+      "admission": {
+        "status": "pending-compute-admission",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/evo2",
       "display_name": "Evo 2",
-      "version": "1.0.0", "license": "Apache-2.0", "category": "genomics",
+      "version": "1.0.0",
+      "category": "genomics",
       "description": "Genomic foundation model for DNA sequence analysis with Evo 2.",
-      "entry_point": "evo2/SKILL.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "evo2/SKILL.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/aipoch/open-science",
+      "exact_commit": "ff70c93a2b7913b799870895ac2ecb081362736b",
+      "source_path": "upstream open-science skills/evo2",
+      "source_sha256": "fe826880691971ed32e472b63e3d99be104ce2afc0e78ce50a332c26642e9fe1",
+      "file_license": "Apache-2.0",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-compute-admission",
+      "admission": {
+        "status": "pending-compute-admission",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/fair-esm2",
       "display_name": "ESM-2",
-      "version": "1.0.0", "license": "Apache-2.0", "category": "protein-representation",
+      "version": "1.0.0",
+      "category": "protein-representation",
       "description": "Protein language model for representation learning with ESM-2.",
-      "entry_point": "fair-esm2/SKILL.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "fair-esm2/SKILL.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/aipoch/open-science",
+      "exact_commit": "ff70c93a2b7913b799870895ac2ecb081362736b",
+      "source_path": "upstream open-science skills/fair-esm2",
+      "source_sha256": "ab851af1124c563b183e4d98fc6891cc289a61b83a5dd4145618970b6942ece5",
+      "file_license": "Apache-2.0",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-compute-admission",
+      "admission": {
+        "status": "pending-compute-admission",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/ligandmpnn",
       "display_name": "LigandMPNN",
-      "version": "1.0.0", "license": "Apache-2.0", "category": "protein-design",
+      "version": "1.0.0",
+      "category": "protein-design",
       "description": "Ligand-aware protein sequence design with LigandMPNN.",
-      "entry_point": "ligandmpnn/SKILL.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "ligandmpnn/SKILL.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/aipoch/open-science",
+      "exact_commit": "ff70c93a2b7913b799870895ac2ecb081362736b",
+      "source_path": "upstream open-science skills/ligandmpnn",
+      "source_sha256": "004f25fe7caab394424fb7e2660b9428ad7079d0b9ff1d573079ab6340938396",
+      "file_license": "Apache-2.0",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-compute-admission",
+      "admission": {
+        "status": "pending-compute-admission",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/openfold3",
       "display_name": "OpenFold3",
-      "version": "1.0.0", "license": "Apache-2.0", "category": "protein-structure",
+      "version": "1.0.0",
+      "category": "protein-structure",
       "description": "Predict protein complex structures with OpenFold3.",
-      "entry_point": "openfold3/SKILL.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "openfold3/SKILL.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/aipoch/open-science",
+      "exact_commit": "ff70c93a2b7913b799870895ac2ecb081362736b",
+      "source_path": "upstream open-science skills/openfold3",
+      "source_sha256": "eef2b03a2c7e1c4b94cd29bb27f3e02499a77be5c414a494f3d78e9c7cc443de",
+      "file_license": "Apache-2.0",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-compute-admission",
+      "admission": {
+        "status": "pending-compute-admission",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/proteinmpnn",
       "display_name": "ProteinMPNN",
-      "version": "1.0.0", "license": "Apache-2.0", "category": "protein-design",
+      "version": "1.0.0",
+      "category": "protein-design",
       "description": "Inverse protein folding design with ProteinMPNN.",
-      "entry_point": "proteinmpnn/SKILL.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "proteinmpnn/SKILL.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/aipoch/open-science",
+      "exact_commit": "ff70c93a2b7913b799870895ac2ecb081362736b",
+      "source_path": "upstream open-science skills/proteinmpnn",
+      "source_sha256": "9873f4f800d457a6b6a7139df133e8b4b259694c9433e188ca551929373f47b8",
+      "file_license": "Apache-2.0",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-compute-admission",
+      "admission": {
+        "status": "pending-compute-admission",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/scgpt",
       "display_name": "scGPT",
-      "version": "1.0.0", "license": "Apache-2.0", "category": "single-cell",
+      "version": "1.0.0",
+      "category": "single-cell",
       "description": "Single-cell transcriptomics foundation model with scGPT.",
-      "entry_point": "scgpt/SKILL.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "scgpt/SKILL.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/aipoch/open-science",
+      "exact_commit": "ff70c93a2b7913b799870895ac2ecb081362736b",
+      "source_path": "upstream open-science skills/scgpt",
+      "source_sha256": "7af27c91d22afd7bd465d2d84b5fbe6702792d9233fa81ab75cbfa00818cf55e",
+      "file_license": "Apache-2.0",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-compute-admission",
+      "admission": {
+        "status": "pending-compute-admission",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/scvi-tools",
       "display_name": "scvi-tools",
-      "version": "1.0.0", "license": "Apache-2.0", "category": "single-cell",
+      "version": "1.0.0",
+      "category": "single-cell",
       "description": "Probabilistic models for single-cell omics with scvi-tools.",
-      "entry_point": "scvi-tools/SKILL.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "scvi-tools/SKILL.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/aipoch/open-science",
+      "exact_commit": "ff70c93a2b7913b799870895ac2ecb081362736b",
+      "source_path": "upstream open-science skills/scvi-tools",
+      "source_sha256": "b782f4fb1ceb2e8444e83de86e6b3fc553e800f9acd420965ccfb94e531bca75",
+      "file_license": "Apache-2.0",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-compute-admission",
+      "admission": {
+        "status": "pending-compute-admission",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/solublempnn",
       "display_name": "SolubleMPNN",
-      "version": "1.0.0", "license": "Apache-2.0", "category": "protein-design",
+      "version": "1.0.0",
+      "category": "protein-design",
       "description": "Solubility-aware protein sequence design with SolubleMPNN.",
-      "entry_point": "solublempnn/SKILL.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "solublempnn/SKILL.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/aipoch/open-science",
+      "exact_commit": "ff70c93a2b7913b799870895ac2ecb081362736b",
+      "source_path": "upstream open-science skills/solublempnn",
+      "source_sha256": "c5c9b5cba2668bfafc54e899e5165a68e07a1425ab25667cab8c86807d3f6e0c",
+      "file_license": "Apache-2.0",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-compute-admission",
+      "admission": {
+        "status": "pending-compute-admission",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/indication-dossier",
       "display_name": "Indication Dossier",
-      "version": "1.0.0", "license": "Apache-2.0", "category": "research",
+      "version": "1.0.0",
+      "category": "research",
       "description": "Build comprehensive drug indication dossiers with epidemiology and clinical evidence.",
-      "entry_point": "indication-dossier/SKILL.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "indication-dossier/SKILL.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/aipoch/open-science",
+      "exact_commit": "ff70c93a2b7913b799870895ac2ecb081362736b",
+      "source_path": "upstream open-science skills/indication-dossier",
+      "source_sha256": "dfad982f985e7db5a406420b108713c0b8ce39903e304a3f968d11271c9e64ec",
+      "file_license": "Apache-2.0",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-controlled-tool-surface",
+      "admission": {
+        "status": "pending-controlled-tool-surface",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/literature-review",
       "display_name": "Literature Review",
-      "version": "1.0.0", "license": "Apache-2.0", "category": "research",
+      "version": "1.0.0",
+      "category": "research",
       "description": "AI-assisted systematic literature review with Python kernel integration.",
-      "entry_point": "literature-review/SKILL.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "literature-review/SKILL.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/aipoch/open-science",
+      "exact_commit": "ff70c93a2b7913b799870895ac2ecb081362736b",
+      "source_path": "upstream open-science skills/literature-review",
+      "source_sha256": "d5c5e780369ab9e2d342c6fca025339c92f78d2128e344a28a158cd3ebc651f8",
+      "file_license": "Apache-2.0",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-controlled-tool-surface",
+      "admission": {
+        "status": "pending-controlled-tool-surface",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/env-management",
       "display_name": "Environment & Packages",
-      "version": "1.0.0", "license": "Apache-2.0", "category": "infrastructure",
+      "version": "1.0.0",
+      "category": "infrastructure",
       "description": "Manage Python/R/Julia environments and packages for reproducible science.",
-      "entry_point": "env-management/SKILL.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "env-management/SKILL.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/aipoch/open-science",
+      "exact_commit": "ff70c93a2b7913b799870895ac2ecb081362736b",
+      "source_path": "upstream open-science skills/env-management",
+      "source_sha256": "325d707a5b9e7359859b054880eb90dd151bd369f00a5e2bb9e49eb541de149d",
+      "file_license": "Apache-2.0",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-controlled-tool-surface",
+      "admission": {
+        "status": "pending-controlled-tool-surface",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/remote-compute-ssh",
       "display_name": "Remote Compute (SSH)",
-      "version": "1.0.0", "license": "Apache-2.0", "category": "infrastructure",
+      "version": "1.0.0",
+      "category": "infrastructure",
       "description": "Submit and monitor compute jobs on remote HPC via SSH.",
-      "entry_point": "remote-compute-ssh/SKILL.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "remote-compute-ssh/SKILL.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/aipoch/open-science",
+      "exact_commit": "ff70c93a2b7913b799870895ac2ecb081362736b",
+      "source_path": "upstream open-science skills/remote-compute-ssh",
+      "source_sha256": "6cbd305da2fe5f6cfa2fb604604f572c7969b57688f1e6c0cd716c7634211d06",
+      "file_license": "Apache-2.0",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-controlled-tool-surface",
+      "admission": {
+        "status": "pending-controlled-tool-surface",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     },
     {
       "skill_id": "science/motif-for-claude-science",
       "display_name": "Motif Molecular Toolkit",
-      "version": "1.0.0", "license": "MIT", "category": "molecular-biology",
+      "version": "1.0.0",
+      "category": "molecular-biology",
       "description": "DNA/protein sequence viewer, PCR, assembly, restriction digest via Motif.",
-      "entry_point": "motif-for-claude-science/SKILL.md", "protocol": "ACP-extension",
-      "admission": { "status": "approved", "reviewed_at": "2026-07-25" }
+      "entry_point": "motif-for-claude-science/SKILL.md",
+      "protocol": "ACP-extension",
+      "source_repository": "https://github.com/jvogan/motif",
+      "exact_commit": "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0",
+      "source_path": "upstream motif skill template (adapted)",
+      "source_sha256": "9b6682fcde32a3a8a56574774cc1c7c6879f02b4adc277f78468aedfc7732329",
+      "file_license": "MIT",
+      "dependencies": [],
+      "prompt_injection_audit": {
+        "status": "not-run",
+        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+      },
+      "runtime_permissions": {
+        "session_actor_required": true,
+        "may_call_lumen_tools_only": true,
+        "independent_execution_authority": false,
+        "network": "none-by-default",
+        "shell": "denied",
+        "filesystem": "session-workspace-artifact-only"
+      },
+      "final_disposition": "pending-controlled-tool-surface",
+      "admission": {
+        "status": "pending-controlled-tool-surface",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+      }
     }
-  ],
-  "rejected": [],
-  "pending": []
+  ]
 }
