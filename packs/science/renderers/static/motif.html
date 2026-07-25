@@ -1,33 +1,207 @@
-<!DOCTYPE html><html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Motif — Molecular Biology Workbench</title>
-<style>
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:system-ui;background:#fafaf7;color:#18181b;padding:2rem}
-  h1{font-size:1.5rem;margin-bottom:.5rem}
-  p{color:#71717a;margin-bottom:1rem}
-  .placeholder{border:2px dashed #047857;border-radius:.75rem;padding:3rem;text-align:center;color:#047857;background:#f0faf5}
-  .placeholder p{color:#047857;margin-top:.5rem;font-size:.85rem}
-</style></head>
-<body>
-<h1>Motif Molecular Biology Workbench</h1>
-<p>Self-contained molecular biology visualization and analysis environment.</p>
-<div class="placeholder">
-  <h2>🧬</h2>
-  <p>Motif workbench ready. Load molecular data via artifact API to begin.</p>
-  <p style="font-family:monospace;font-size:.75rem;margin-top:1rem">
-    GET /render/api/raw?project=&lt;id&gt;&run=&lt;id&gt;&path=&lt;file&gt;
-  </p>
-</div>
-<script>
-(async()=>{
-  const params=new URLSearchParams(location.search);
-  const path=params.get('path');
-  if(path){
-    const resp=await fetch(`/render/api/raw?project=${params.get('project')||'default'}&run=${params.get('run')||'latest'}&path=${encodeURIComponent(path)}`);
-    if(resp.ok){
-      const text=await resp.text();
-      document.querySelector('.placeholder').innerHTML=`<h2>🧬 Loaded: ${path}</h2><pre style="text-align:left;max-height:300px;overflow:auto;font-size:12px">${text.slice(0,2000)}</pre>`;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'" />
+  <title>Lumen-managed MotifRenderer</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #121a2b;
+      --ink: #e8eefc;
+      --muted: #93a0bd;
+      --ok: #3dd68c;
+      --warn: #f5b942;
+      --bad: #ff6b7a;
+      --line: #243049;
+      --accent: #6ea8fe;
     }
-  }
-})();</script></body></html>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+      background: radial-gradient(1200px 600px at 10% -10%, #1a2744 0%, var(--bg) 55%);
+      color: var(--ink); min-height: 100vh;
+    }
+    header {
+      padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--line);
+      display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between;
+      flex-wrap: wrap;
+    }
+    h1 { margin: 0; font-size: 1.15rem; letter-spacing: 0.01em; }
+    .sub { color: var(--muted); font-size: 0.85rem; margin-top: 0.35rem; max-width: 62ch; line-height: 1.45; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      border: 1px solid var(--line); background: var(--panel);
+      border-radius: 999px; padding: 0.35rem 0.7rem; font-size: 0.75rem; color: var(--muted);
+    }
+    .dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--warn); }
+    main { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 1rem; padding: 1rem 1.5rem 2rem; }
+    @media (max-width: 960px) { main { grid-template-columns: 1fr; } }
+    .card {
+      background: color-mix(in srgb, var(--panel) 92%, black);
+      border: 1px solid var(--line); border-radius: 14px; padding: 1rem 1.1rem;
+    }
+    .card h2 { margin: 0 0 0.75rem; font-size: 0.95rem; }
+    .meta { display: grid; grid-template-columns: 8.5rem 1fr; gap: 0.35rem 0.75rem; font-size: 0.82rem; }
+    .meta dt { color: var(--muted); }
+    .meta dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    .pill {
+      border: 1px solid var(--line); border-radius: 10px; padding: 0.55rem 0.65rem; font-size: 0.78rem;
+      background: #0e1627;
+    }
+    .pill strong { display: block; margin-bottom: 0.2rem; font-size: 0.72rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+    .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+    pre {
+      margin: 0; max-height: 280px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+      font: 0.75rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: #0a101c; border: 1px solid var(--line); border-radius: 10px; padding: 0.75rem;
+    }
+    .notice {
+      margin-top: 0.75rem; font-size: 0.8rem; color: var(--muted); line-height: 1.45;
+      border-left: 3px solid var(--accent); padding-left: 0.75rem;
+    }
+    ul { margin: 0.25rem 0 0; padding-left: 1.1rem; color: var(--muted); font-size: 0.82rem; line-height: 1.5; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #c9d7ff; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Lumen-managed MotifRenderer</h1>
+      <p class="sub">
+        Embedded molecular-biology review surface. Not an independent MCP authority,
+        not a session actor, not an artifact database, and not a shell bridge.
+        All durable I/O is artifact-bound under SessionActor.
+      </p>
+    </div>
+    <div class="badge"><span class="dot" id="statusDot"></span><span id="statusText">awaiting artifact binding</span></div>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Bound artifact</h2>
+      <dl class="meta" id="meta">
+        <dt>project_id</dt><dd id="projectId">—</dd>
+        <dt>run_id</dt><dd id="runId">—</dd>
+        <dt>path</dt><dd id="path">—</dd>
+        <dt>expected_sha256</dt><dd id="sha">—</dd>
+        <dt>mime</dt><dd id="mime">application/x-motif | text/x-fasta | text/x-genbank | application/json</dd>
+        <dt>load_state</dt><dd id="loadState" class="warn">no path query</dd>
+      </dl>
+      <div class="notice">
+        Network policy: <code>connect-src 'self'</code> only (same-origin artifact API).
+        No CDN scripts, no remote fonts, no eval, no generic DOM bridge.
+        Full Motif package build requires authorized <code>npm ci</code> + DS-45B supply-chain ACCEPT.
+      </div>
+      <h2 style="margin-top:1rem">Artifact preview (bounded)</h2>
+      <pre id="preview">No artifact bound. Pass query:
+?project=&lt;id&gt;&amp;run=&lt;id&gt;&amp;path=&lt;registered-artifact&gt;&amp;sha256=&lt;hex&gt;
+
+Then the host serves bytes only from the registered artifact store.</pre>
+    </section>
+
+    <section class="card">
+      <h2>Admission matrix (Lumen Science 1.0)</h2>
+      <div class="grid">
+        <div class="pill"><strong class="ok">Admitted (review UI)</strong>
+          FASTA / GenBank / Motif JSON records · circular/linear map view · restriction digest review ·
+          primer/PCR review · assembly plan review · in-browser bounded MSA display ·
+          AB1/Sanger review · ORF/translation display · CRISPR candidate display ·
+          checkpoint JSON · self-contained HTML export as derived artifact
+        </div>
+        <div class="pill"><strong class="bad">Not admitted</strong>
+          Independent Motif MCP authority · Claude Science config installer ·
+          external MAFFT/MUSCLE/Clustal runners · generic shell/filesystem bridge ·
+          permission runtime · hosted backend · credentialed remote upload
+        </div>
+      </div>
+      <h2 style="margin-top:1rem">Upstream lock</h2>
+      <ul>
+        <li>repo: <code>https://github.com/jvogan/motif.git</code></li>
+        <li>commit: <code>876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0</code></li>
+        <li>version: <code>0.2.1</code> · license: <code>MIT</code></li>
+        <li>admission: <code>pending-per-file-and-dependency-review</code></li>
+        <li>runtime_authority: <code>none</code> (SessionActor only)</li>
+      </ul>
+      <h2 style="margin-top:1rem">Fail closed</h2>
+      <ul>
+        <li>Missing session/project/owner binding → reject</li>
+        <li>Path traversal / symlink escape → reject</li>
+        <li>SHA-256 mismatch → reject</li>
+        <li>Unregistered file → reject</li>
+        <li>MIME vs magic-byte conflict → reject</li>
+        <li>Oversized payload → reject</li>
+      </ul>
+    </section>
+  </main>
+
+  <script>
+  (function () {
+    const params = new URLSearchParams(location.search);
+    const project = params.get('project') || '';
+    const run = params.get('run') || '';
+    const path = params.get('path') || '';
+    const sha = params.get('sha256') || params.get('expected_sha256') || '';
+
+    const $ = (id) => document.getElementById(id);
+    $('projectId').textContent = project || '—';
+    $('runId').textContent = run || '—';
+    $('path').textContent = path || '—';
+    $('sha').textContent = sha || '— (host must still verify registered hash)';
+
+    function setStatus(kind, text) {
+      const dot = $('statusDot');
+      const el = $('statusText');
+      const state = $('loadState');
+      el.textContent = text;
+      state.textContent = text;
+      state.className = kind;
+      dot.style.background = kind === 'ok' ? 'var(--ok)' : kind === 'bad' ? 'var(--bad)' : 'var(--warn)';
+    }
+
+    // Hard fail: reject obvious traversal in the query itself.
+    if (path && (path.includes('..') || path.startsWith('/') || path.includes('\\'))) {
+      setStatus('bad', 'rejected: path traversal pattern');
+      $('preview').textContent = 'Fail closed: path must be a relative registered artifact key.';
+      return;
+    }
+
+    if (!path) {
+      setStatus('warn', 'awaiting artifact binding');
+      return;
+    }
+
+    // Same-origin only. Host is responsible for session/project/owner + hash checks.
+    const qs = new URLSearchParams({
+      project: project || 'default',
+      run: run || 'latest',
+      path: path,
+    });
+    if (sha) qs.set('expected_sha256', sha);
+
+    setStatus('warn', 'loading registered artifact…');
+    fetch('/render/api/raw?' + qs.toString(), { credentials: 'same-origin' })
+      .then(async (resp) => {
+        if (!resp.ok) {
+          setStatus('bad', 'rejected: host returned ' + resp.status);
+          $('preview').textContent = await resp.text();
+          return;
+        }
+        const text = await resp.text();
+        const MAX = 200_000;
+        const clipped = text.length > MAX;
+        const body = clipped ? text.slice(0, MAX) + '\n…[truncated for renderer bound]' : text;
+        $('preview').textContent = body;
+        setStatus('ok', clipped ? 'loaded (truncated preview)' : 'loaded from registered artifact');
+        $('mime').textContent = resp.headers.get('content-type') || 'text/plain';
+      })
+      .catch((err) => {
+        setStatus('bad', 'rejected: fetch failed');
+        $('preview').textContent = String(err);
+      });
+  })();
+  </script>
+</body>
+</html>

@@ -1,8 +1,10 @@
 // Package renderers provides a web-based artifact rendering framework for Lumen Science.
 //
-// Each renderer is a self-contained HTML page that loads its visualization
-// library from CDN and renders artifact data. The framework serves these pages
-// and routes artifact data through a local API.
+// Security contract (DS-44 / DS-45):
+//   - Renderers are adapters only. SessionActor remains sole execution authority.
+//   - Artifact bytes must come from a registered store (project/session/owner + SHA-256).
+//   - Prefer CSP-locked, same-origin pages. CDN scripts are legacy debt to eliminate.
+//   - Motif is Lumen-managed MotifRenderer only — never an independent MCP authority.
 package renderers
 
 import (
@@ -18,14 +20,28 @@ import (
 //go:embed static/*
 var staticFiles embed.FS
 
+// NetworkPolicy for a renderer page.
+type NetworkPolicy string
+
+const (
+	NetworkNone        NetworkPolicy = "none"
+	NetworkSameOrigin  NetworkPolicy = "same-origin"
+	NetworkAllowlisted NetworkPolicy = "allowlisted" // legacy; prefer none/same-origin
+)
+
 // RendererDescriptor describes one registered science renderer.
 type RendererDescriptor struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	MimeTypes   []string `json:"mime_types"`
-	PreviewType string   `json:"preview_type"`
-	Route       string   `json:"route"`
+	ID             string        `json:"id"`
+	Name           string        `json:"name"`
+	Description    string        `json:"description"`
+	MimeTypes      []string      `json:"mime_types"`
+	PreviewType    string        `json:"preview_type"`
+	Route          string        `json:"route"`
+	NetworkPolicy  NetworkPolicy `json:"network_policy"`
+	ScriptPolicy   string        `json:"script_policy"` // "inline-csp" | "legacy-cdn" | "none"
+	MaxInputBytes  int64         `json:"max_input_bytes"`
+	RuntimeAuthority string      `json:"runtime_authority"` // always "none" for renderers
+	Admission      string        `json:"admission"`
 }
 
 // Registry of all available renderers.
@@ -35,54 +51,72 @@ var Registry = []RendererDescriptor{
 		Description: "Interactive 3D macromolecule viewer using Mol*",
 		MimeTypes:   []string{"chemical/x-pdb", "chemical/x-mmcif"},
 		PreviewType: "pdb", Route: "/render/protein-3d",
+		NetworkPolicy: NetworkAllowlisted, ScriptPolicy: "legacy-cdn", MaxInputBytes: 32 << 20,
+		RuntimeAuthority: "none", Admission: "pending-cdn-elimination",
 	},
 	{
 		ID: "chem-2d", Name: "Chemical Structure (2D)",
 		Description: "2D chemical structure renderer using RDKit.js",
 		MimeTypes:   []string{"chemical/x-smiles", "chemical/x-mdl-molfile"},
 		PreviewType: "smiles", Route: "/render/chem-2d",
+		NetworkPolicy: NetworkAllowlisted, ScriptPolicy: "legacy-cdn", MaxInputBytes: 2 << 20,
+		RuntimeAuthority: "none", Admission: "pending-cdn-elimination",
 	},
 	{
 		ID: "genome-browser", Name: "Genome Browser",
 		Description: "Interactive genome track browser using IGV.js",
 		MimeTypes:   []string{"application/x-bed", "application/x-bigwig"},
 		PreviewType: "bed", Route: "/render/genome-browser",
+		NetworkPolicy: NetworkAllowlisted, ScriptPolicy: "legacy-cdn", MaxInputBytes: 64 << 20,
+		RuntimeAuthority: "none", Admission: "pending-cdn-elimination",
 	},
 	{
 		ID: "katex", Name: "LaTeX / Math",
 		Description: "Mathematical formula renderer using KaTeX",
 		MimeTypes:   []string{"application/x-latex", "text/x-tex"},
 		PreviewType: "latex", Route: "/render/katex",
+		NetworkPolicy: NetworkAllowlisted, ScriptPolicy: "legacy-cdn", MaxInputBytes: 1 << 20,
+		RuntimeAuthority: "none", Admission: "pending-cdn-elimination",
 	},
 	{
 		ID: "pdf-viewer", Name: "PDF Viewer",
 		Description: "Inline PDF document viewer",
 		MimeTypes:   []string{"application/pdf"},
 		PreviewType: "pdf", Route: "/render/pdf",
+		NetworkPolicy: NetworkSameOrigin, ScriptPolicy: "inline-csp", MaxInputBytes: 64 << 20,
+		RuntimeAuthority: "none", Admission: "preview",
 	},
 	{
 		ID: "sequence-viewer", Name: "Sequence Viewer",
 		Description: "DNA/RNA/protein sequence viewer",
 		MimeTypes:   []string{"text/x-fasta", "text/x-fastq"},
 		PreviewType: "fasta", Route: "/render/sequence",
+		NetworkPolicy: NetworkSameOrigin, ScriptPolicy: "inline-csp", MaxInputBytes: 16 << 20,
+		RuntimeAuthority: "none", Admission: "preview",
 	},
 	{
 		ID: "msa-viewer", Name: "MSA Viewer",
 		Description: "Multiple sequence alignment viewer",
 		MimeTypes:   []string{"application/x-stockholm", "application/x-clustal"},
 		PreviewType: "msa", Route: "/render/msa",
+		NetworkPolicy: NetworkSameOrigin, ScriptPolicy: "inline-csp", MaxInputBytes: 32 << 20,
+		RuntimeAuthority: "none", Admission: "preview",
 	},
 	{
 		ID: "image-viewer", Name: "Image Viewer",
 		Description: "Scientific image and micrograph viewer",
 		MimeTypes:   []string{"image/png", "image/jpeg", "image/tiff", "image/svg+xml"},
 		PreviewType: "image", Route: "/render/image",
+		NetworkPolicy: NetworkSameOrigin, ScriptPolicy: "inline-csp", MaxInputBytes: 64 << 20,
+		RuntimeAuthority: "none", Admission: "preview",
 	},
 	{
-		ID: "motif", Name: "Motif Molecular Workbench",
-		Description: "Interactive molecular biology workbench",
-		MimeTypes:   []string{"application/x-motif"},
+		ID: "motif", Name: "Lumen-managed MotifRenderer",
+		Description: "CSP-locked Motif contract UI; artifact-bound molecular biology review (not independent MCP)",
+		MimeTypes:   []string{"application/x-motif", "text/x-fasta", "text/x-genbank", "application/json"},
 		PreviewType: "motif", Route: "/render/motif",
+		NetworkPolicy: NetworkSameOrigin, ScriptPolicy: "inline-csp", MaxInputBytes: 32 << 20,
+		RuntimeAuthority: "none", Admission: "pending-per-file-and-dependency-review",
 	},
 }
 
