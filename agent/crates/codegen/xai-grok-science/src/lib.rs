@@ -19,6 +19,7 @@ pub mod api;
 pub mod connector;
 pub mod connectors;
 pub mod csv;
+pub mod dummy_lab;
 pub mod import;
 pub mod preview;
 pub mod review;
