@@ -502,7 +502,10 @@ func (a *API) handleOpenLogsDir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dir := a.sciDir
-	if runtime.GOOS == "darwin" {
+	switch runtime.GOOS {
+	case "windows":
+		_ = exec.Command("explorer", dir).Run()
+	case "darwin":
 		_ = exec.Command("open", dir).Run()
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"path": dir})

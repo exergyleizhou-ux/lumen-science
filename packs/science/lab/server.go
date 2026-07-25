@@ -227,13 +227,17 @@ func parseListenPort(addr string) int {
 }
 
 func openPanel(url string) error {
-	if runtime.GOOS == "darwin" {
+	switch runtime.GOOS {
+	case "windows":
+		return exec.Command("cmd", "/c", "start", "", url).Run()
+	case "darwin":
 		if err := exec.Command("open", "-na", "Google Chrome", "--args", "--app="+url).Run(); err == nil {
 			return nil
 		}
 		return exec.Command("open", url).Run()
+	default:
+		return exec.Command("xdg-open", url).Run()
 	}
-	return exec.Command("xdg-open", url).Run()
 }
 
 func (s *Server) serveHTTPS() {

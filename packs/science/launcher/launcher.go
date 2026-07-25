@@ -276,11 +276,18 @@ func cloneAPFS(src, dst string) error {
 	if _, err := os.Stat(dst); err == nil {
 		return nil
 	}
+	if runtime.GOOS == "windows" {
+		// robocopy /E mirrors directory tree silently
+		return exec.Command("robocopy", src, dst, "/E", "/NFL", "/NDL", "/NJH", "/NJS").Run()
+	}
 	cmd := exec.Command("cp", "-Rc", src, dst)
 	return cmd.Run()
 }
 
 func copyDir(src, dst string) error {
+	if runtime.GOOS == "windows" {
+		return exec.Command("robocopy", src, dst, "/E", "/NFL", "/NDL", "/NJH", "/NJS").Run()
+	}
 	return exec.Command("cp", "-R", src, dst).Run()
 }
 
@@ -329,12 +336,16 @@ func redactProxyURL(u string) string {
 	return u
 }
 
-// OpenBrowser opens a URL in the default browser (macOS).
+// OpenBrowser opens a URL in the default browser. Cross-platform.
 func OpenBrowser(url string) error {
-	if runtime.GOOS == "darwin" {
+	switch runtime.GOOS {
+	case "windows":
+		return exec.Command("cmd", "/c", "start", "", url).Run()
+	case "darwin":
 		return exec.Command("open", url).Run()
+	default:
+		return exec.Command("xdg-open", url).Run()
 	}
-	return exec.Command("xdg-open", url).Run()
 }
 
 // OpenOfficial launches the real Claude Science app without proxy env.
