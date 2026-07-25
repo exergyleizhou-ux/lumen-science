@@ -1,0 +1,11 @@
+=== VERIFICATION PLAN PASS ===
+cargo-test-lib=256_passed_0_failed
+go-projectstore=PASS
+dogfood=PASS
+gates=PASS
+shell-check=PASS
+wp3-cli=generated
+features-RealDevice=DISABLED
+wp9-15=DEFERRED
+docs-updated=yes
+head=deefc31
