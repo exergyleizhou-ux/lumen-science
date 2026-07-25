@@ -426,11 +426,13 @@ static DESTRUCTIVE: Lazy<Vec<Pat>> = Lazy::new(|| {
             reason: "formatting a Windows drive",
         },
         Pat {
-            re: Regex::new(r"(?i)\bdel\s+/[fF]\s+/[sS]\s+/[qQ]\s+[A-Za-z]:[\\/]").unwrap(),
+            // Matches: del /f /s /q C:\  or  del /f /s /q C:\path
+            re: Regex::new(r"(?i)\bdel\s+/[fF]\s+/[sS]\s+/[qQ]\s+[A-Za-z]:[\\/]?").unwrap(),
             reason: "force-delete Windows drive root",
         },
         Pat {
-            re: Regex::new(r"(?i)\brmdir\s+/[sS]\s+/[qQ]\s+[A-Za-z]:[\\/]").unwrap(),
+            // Matches: rmdir /s /q C:\  or  rmdir /s /q C:\path
+            re: Regex::new(r"(?i)\brmdir\s+/[sS]\s+/[qQ]\s+[A-Za-z]:[\\/]?").unwrap(),
             reason: "recursive remove of Windows drive root",
         },
     ]
@@ -611,7 +613,9 @@ mod tests {
         for cmd in [
             "format C: /fs:ntfs /q",
             "del /f /s /q C:\\windows",
+            "del /f /s /q C:\\",
             "rmdir /s /q C:\\",
+            "rmdir /s /q C:",
         ] {
             assert!(!check_bash(cmd).safe, "should block {cmd}");
         }
@@ -741,7 +745,10 @@ mod tests {
 
     #[test]
     fn unsafe_mode_bypasses_all() {
-        // SAFETY: test-only, single-threaded, no concurrent env access.
+        // Serialize to prevent parallel tests from observing the env var.
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = LOCK.lock().unwrap();
+        // SAFETY: test-only, guarded by mutex, no concurrent env access.
         unsafe { std::env::set_var("LUMEN_UNSAFE", "1") };
         // These would normally be blocked
         assert!(check_bash("rm -rf /").safe);
