@@ -1122,3 +1122,4 @@ pub mod reactome;
 pub mod single_cell_atlas;
 pub mod string_db;
 pub mod wikipathways;
+pub mod negative_tests;
