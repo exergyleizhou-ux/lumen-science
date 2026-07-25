@@ -1,0 +1,41 @@
+# Skill admission evidence — 2026-07-26
+
+## Policy
+
+A skill may be `final_disposition: approved` only when all hold:
+
+1. `source_repository` + `exact_commit` + `source_sha256` present  
+2. Prompt-injection audit status `pass` with written notes  
+3. `runtime_permissions.controlled_tools` non-empty and Lumen-only  
+4. `independent_execution_authority: false`  
+5. No generic shell / filesystem bridge / remote script  
+
+## Approved (5)
+
+| skill_id | Controlled tools | Rationale |
+|----------|------------------|-----------|
+| `science/research-brief` | `lumen-science.brief`, pubmed, chembl | Product CLI + connectors only |
+| `science/literature-survey` | brief + `connector_fetch` | SessionActor path only |
+| `science/integrity-auditor` | artifact verify, pipeline offline, reviewer MCP | Hash-enforced integrity |
+| `science/traceability-review` | artifact list/verify, reviewer | Registered artifacts only |
+| `science/motif-for-claude-science` | MotifRenderer + seq_analyze | No Motif MCP authority |
+
+## Still pending (22)
+
+All protein-structure / MD / single-cell GPU skills, remote-compute-ssh,
+env-management, indication-dossier, literature-review kernel, oasis-c2d, etc.
+remain `pending-*` until compute admission and tool surface exist.
+
+## Prompt-injection residual risk
+
+Approved skills still run under model instruction risk. Mitigations:
+
+- Artifacts rehashed on verify (code path, not model trust)  
+- Reviewer cannot invent SHA-256 without registered artifact  
+- Shell denied; network only via admitted adapters  
+
+## Evidence paths
+
+- Registry: `packs/science/skills/registry.json`  
+- CLI: `lumen-science brief|seq|pipeline|artifact`  
+- ACP: `x.ai/science/seq_analyze`, connector_fetch  

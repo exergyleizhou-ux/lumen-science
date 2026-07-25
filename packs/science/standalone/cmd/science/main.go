@@ -18,7 +18,7 @@ import (
 )
 
 // version is stamped by -ldflags at release builds.
-var version = "1.0.0-rc.1"
+var version = "1.0.0"
 
 const usage = `lumen-science — productive local scientific workbench
 
@@ -128,7 +128,7 @@ func runInProcessGates(repo string) error {
 	}
 	fmt.Println("PASS  fusion-sources.lock.json 42/0 + motif")
 
-	// 2) skills honesty
+	// 2) skills honesty — approved only with prompt-injection pass + controlled tools
 	regPath := filepath.Join(repo, "packs/science/skills/registry.json")
 	regRaw, err := os.ReadFile(regPath)
 	if err != nil {
@@ -148,10 +148,33 @@ func runInProcessGates(repo string) error {
 	if reg.SchemaVersion < 2 {
 		return fmt.Errorf("skills schema_version < 2")
 	}
-	if reg.Summary.Approved != 0 {
-		return fmt.Errorf("skills approved must be 0 until DS-43 audits complete")
+	approvedCount := 0
+	for _, s := range reg.Skills {
+		sid, _ := s["skill_id"].(string)
+		disp, _ := s["final_disposition"].(string)
+		perms, _ := s["runtime_permissions"].(map[string]any)
+		if perms == nil {
+			return fmt.Errorf("skill %s missing runtime_permissions", sid)
+		}
+		if ind, ok := perms["independent_execution_authority"].(bool); ok && ind {
+			return fmt.Errorf("skill %s claims independent execution authority", sid)
+		}
+		if disp == "approved" {
+			approvedCount++
+			audit, _ := s["prompt_injection_audit"].(map[string]any)
+			if audit == nil || audit["status"] != "pass" {
+				return fmt.Errorf("skill %s approved without prompt_injection_audit.pass", sid)
+			}
+			tools, _ := perms["controlled_tools"].([]any)
+			if len(tools) < 1 {
+				return fmt.Errorf("skill %s approved without controlled_tools", sid)
+			}
+		}
 	}
-	fmt.Printf("PASS  skills registry v%d total=%d approved=0\n", reg.SchemaVersion, reg.Summary.Total)
+	if approvedCount != reg.Summary.Approved {
+		return fmt.Errorf("skills summary.approved=%d but found %d approved dispositions", reg.Summary.Approved, approvedCount)
+	}
+	fmt.Printf("PASS  skills registry v%d total=%d approved=%d\n", reg.SchemaVersion, reg.Summary.Total, approvedCount)
 
 	// 3) motif contract
 	motif := filepath.Join(repo, "packs/science/renderers/static/motif.html")

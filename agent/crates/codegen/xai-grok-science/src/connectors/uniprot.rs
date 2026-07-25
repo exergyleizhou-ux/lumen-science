@@ -62,10 +62,17 @@ pub fn parse_search(bytes: &[u8]) -> crate::Result<ParsedResponse> {
         .get("results")
         .and_then(serde_json::Value::as_array)
         .ok_or_else(|| ScienceError::Invalid("uniprot search: missing results".into()))?;
+    // UniProt REST historically returned `totalResults`; some live responses omit it
+    // and only return the page `results` array. Prefer totalResults (u64 or string),
+    // else fall back to the page length so live probes fail closed only on real
+    // parse errors — not schema drift.
     let total_hits = value
         .get("totalResults")
-        .and_then(serde_json::Value::as_u64)
-        .ok_or_else(|| ScienceError::Invalid("uniprot search: missing totalResults".into()))?;
+        .and_then(|v| {
+            v.as_u64()
+                .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+        })
+        .unwrap_or(results.len() as u64);
     let mut records = Vec::with_capacity(results.len());
     for result in results {
         let accession = result
@@ -176,8 +183,11 @@ mod tests {
     #[test]
     fn parse_search_fails_closed_on_malformed_records() {
         assert!(parse_search(b"not json").is_err());
-        assert!(parse_search(br#"{"totalResults":1}"#).is_err());
-        assert!(parse_search(br#"{"results":[]}"#).is_err());
+        assert!(parse_search(br#"{"totalResults":1}"#).is_err()); // missing results
+        // empty page is valid when totalResults omitted (live schema)
+        let empty = parse_search(br#"{"results":[]}"#).unwrap();
+        assert_eq!(empty.total_hits, 0);
+        assert!(empty.records.is_empty());
         assert!(parse_search(br#"{"results":[{"uniProtkbId":"X"}],"totalResults":1}"#).is_err());
         assert!(
             parse_search(

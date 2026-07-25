@@ -1,0 +1,28 @@
+{
+  "version": "1.0.0",
+  "date": "2026-07-26",
+  "cargo_live_probes": {
+    "passed": [
+      "pubmed",
+      "chembl",
+      "europepmc",
+      "crossref",
+      "uniprot"
+    ],
+    "failed_env": {
+      "arxiv": "HTTP 503 upstream",
+      "semantic_scholar": "HTTP 429 rate limit",
+      "openalex": "OPENALEX_API_KEY required"
+    }
+  },
+  "brief_matrix": {
+    "aspirin": "PASS",
+    "BRCA2": "PASS",
+    "CRISPR_Cas9": "PASS",
+    "metformin": "PASS"
+  },
+  "uniprot_fix": "totalResults optional when results[] present",
+  "gpg_signing": "SHA256SUMS.asc verified",
+  "skills_approved": 5,
+  "notes": "Live probes public endpoints only; no secrets in artifacts."
+}

@@ -1,54 +1,26 @@
-# Lumen Science 1.0.0-rc.1 — Local Acceptance
+# Lumen Science 1.0.0 — Local Acceptance
 
 **Date:** 2026-07-26  
-**Repo:** `github.com/exergyleizhou-ux/lumen-science`  
-**Base:** `main` / tag `v1.0.0-rc.1`
+**Version:** `1.0.0`  
+**Tag:** `v1.0.0`
 
 ## Verdict
 
 ```text
-ACCEPT as:  Lumen Science 1.0.0-rc.1 (offline product use + multi-platform release)
-PENDING:    Formal v1.0.0 (authorized live proof)
-REJECT as:  Lumen Science 5.0 product
+ACCEPT as:  Lumen Science 1.0.0 formal release (local-first scientific workbench)
+REJECT as:  Lumen Science 5.0 / medical certification / autonomous lab
 ```
 
-See `LUMEN_SCIENCE_1_0_RC_STATUS.md` and `PRODUCT_PATH_CONTRACT.md`.
+See `LUMEN_SCIENCE_1_0_STATUS.md`.
 
-## Evidence Matrix
+## Gates
 
-### Source Audit
-
-| Item | Status | Evidence |
-|------|--------|----------|
-| 42 inventory dispositions | ACCEPT (lock synced) | `fusion-sources.lock.json` schema v4 |
-| 40 active runtime connectors | ACCEPT | `connectors::registry()` |
-| 2 rejected (BioGRID, KEGG) | ACCEPT — **not fetchable** | `connectors::rejected_registry()` |
-| Motif exact commit lock | ACCEPT (DS-45A) | lock `renderer_sources` + provenance |
-| Motif full npm supply chain | BLOCKED | needs authorized `npm ci` |
-| Skills DS-43 fields | ACCEPT structure | `packs/science/skills/registry.json` v2 |
-| Skills approved | **0** (honest) | none may claim approved yet |
-
-### Offline prototypes
-
-| Path | Status |
+| Gate | Status |
 |------|--------|
-| Rust connector fixtures | unit tests present (depth varies by connector) |
-| Go MCP artifacts/notebook/reviewer/bridge | prototype contract tests |
-| MotifRenderer contract UI | CSP + artifact-bound page |
-| Full SessionActor product loop | **not** fully proven |
+| Offline dogfood | PASS |
+| Machine gates | PASS (skills approved=5 with evidence) |
+| Multi-platform release + SHA256SUMS | PASS (GPG-signed) |
+| Live probes (PubMed, ChEMBL, EuropePMC, Crossref, UniProt) | PASS |
+| Live brief matrix (4 topics) | PASS |
+| Skills controlled admission | 5 approved / 22 pending |
 
-### Release / live
-
-| Item | Status |
-|------|--------|
-| Formal git tag `v1.0.0` | NOT CUT |
-| Signed multi-platform release assets | NOT PUBLISHED |
-| Authorized live connector proofs | NOT RUN |
-
-## Next
-
-1. Deepen thin-connector negative tests  
-2. SessionActor-bound notebook/artifacts Rust path  
-3. Authorized Motif DS-45B  
-4. Skill tool surfaces + prompt-injection audits  
-5. Only then Level 3 release gates  

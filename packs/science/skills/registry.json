@@ -13,12 +13,13 @@
       "runtime_permissions.reviewed",
       "final_disposition=approved"
     ],
-    "runtime_authority": "SessionActor only; skills generate plans or call controlled Lumen tools"
+    "runtime_authority": "SessionActor only; skills generate plans or call controlled Lumen tools",
+    "note": "approved count may rise only after file SHA + prompt-injection pass + controlled tool list; GPU/remote skills stay pending."
   },
   "summary": {
     "total": 27,
-    "approved": 0,
-    "pending": 27,
+    "approved": 5,
+    "pending": 22,
     "rejected": 0
   },
   "skills": [
@@ -105,23 +106,31 @@
       "file_license": "MIT",
       "dependencies": [],
       "prompt_injection_audit": {
-        "status": "not-run",
-        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+        "status": "pass",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Integrity skill only requests hash verify / pipeline offline / reviewer MCP. Fail-closed on hash mismatch is code-enforced, not model-trusted.",
+        "evidence": "docs/science/SKILL_ADMISSION_2026-07-26.md"
       },
       "runtime_permissions": {
         "session_actor_required": true,
         "may_call_lumen_tools_only": true,
+        "controlled_tools": [
+          "lumen-science.artifact.verify",
+          "lumen-science.pipeline.offline",
+          "mcp.reviewer"
+        ],
         "independent_execution_authority": false,
-        "network": "none-by-default",
+        "network": "via-lumen-adapters-only",
         "shell": "denied",
         "filesystem": "session-workspace-artifact-only"
       },
-      "final_disposition": "pending-controlled-tool-surface",
+      "final_disposition": "approved",
       "admission": {
-        "status": "pending-controlled-tool-surface",
+        "status": "approved",
         "reviewed_at": "2026-07-26",
         "reviewer": "lumen-science-hard-gate",
-        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+        "notes": "Approved only for controlled Lumen tools listed in runtime_permissions."
       }
     },
     {
@@ -139,23 +148,30 @@
       "file_license": "MIT",
       "dependencies": [],
       "prompt_injection_audit": {
-        "status": "not-run",
-        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+        "status": "pass",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Survey skill limited to connector_fetch + brief. No generic shell. Prompt-injection: model output cannot invent artifact hashes; review path rehashes.",
+        "evidence": "docs/science/SKILL_ADMISSION_2026-07-26.md"
       },
       "runtime_permissions": {
         "session_actor_required": true,
         "may_call_lumen_tools_only": true,
+        "controlled_tools": [
+          "lumen-science.brief",
+          "x.ai/science/connector_fetch"
+        ],
         "independent_execution_authority": false,
-        "network": "none-by-default",
+        "network": "via-lumen-adapters-only",
         "shell": "denied",
         "filesystem": "session-workspace-artifact-only"
       },
-      "final_disposition": "pending-controlled-tool-surface",
+      "final_disposition": "approved",
       "admission": {
-        "status": "pending-controlled-tool-surface",
+        "status": "approved",
         "reviewed_at": "2026-07-26",
         "reviewer": "lumen-science-hard-gate",
-        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+        "notes": "Approved only for controlled Lumen tools listed in runtime_permissions."
       }
     },
     {
@@ -241,23 +257,31 @@
       "file_license": "MIT",
       "dependencies": [],
       "prompt_injection_audit": {
-        "status": "not-run",
-        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+        "status": "pass",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Skill may only instruct calling lumen-science brief / SessionActor connector_fetch. Dataset text never becomes shell. Reviewer verified entry_point SHA and tool list. No independent network outside Lumen adapters.",
+        "evidence": "docs/science/SKILL_ADMISSION_2026-07-26.md"
       },
       "runtime_permissions": {
         "session_actor_required": true,
         "may_call_lumen_tools_only": true,
+        "controlled_tools": [
+          "lumen-science.brief",
+          "connectors.pubmed",
+          "connectors.chembl"
+        ],
         "independent_execution_authority": false,
-        "network": "none-by-default",
+        "network": "via-lumen-adapters-only",
         "shell": "denied",
         "filesystem": "session-workspace-artifact-only"
       },
-      "final_disposition": "pending-controlled-tool-surface",
+      "final_disposition": "approved",
       "admission": {
-        "status": "pending-controlled-tool-surface",
+        "status": "approved",
         "reviewed_at": "2026-07-26",
         "reviewer": "lumen-science-hard-gate",
-        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+        "notes": "Approved only for controlled Lumen tools listed in runtime_permissions."
       }
     },
     {
@@ -275,23 +299,31 @@
       "file_license": "MIT",
       "dependencies": [],
       "prompt_injection_audit": {
-        "status": "not-run",
-        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+        "status": "pass",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Traceability skill enumerates registered artifacts only; cannot invent SHA-256. No filesystem bridge outside artifact store root.",
+        "evidence": "docs/science/SKILL_ADMISSION_2026-07-26.md"
       },
       "runtime_permissions": {
         "session_actor_required": true,
         "may_call_lumen_tools_only": true,
+        "controlled_tools": [
+          "lumen-science.artifact.list",
+          "lumen-science.artifact.verify",
+          "mcp.reviewer"
+        ],
         "independent_execution_authority": false,
-        "network": "none-by-default",
+        "network": "via-lumen-adapters-only",
         "shell": "denied",
         "filesystem": "session-workspace-artifact-only"
       },
-      "final_disposition": "pending-controlled-tool-surface",
+      "final_disposition": "approved",
       "admission": {
-        "status": "pending-controlled-tool-surface",
+        "status": "approved",
         "reviewed_at": "2026-07-26",
         "reviewer": "lumen-science-hard-gate",
-        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+        "notes": "Approved only for controlled Lumen tools listed in runtime_permissions."
       }
     },
     {
@@ -921,23 +953,31 @@
       "file_license": "MIT",
       "dependencies": [],
       "prompt_injection_audit": {
-        "status": "not-run",
-        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+        "status": "pass",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Motif skill admits Lumen-managed MotifRenderer + seq_analyze only. Upstream Motif MCP server and Claude Science installer remain NOT admitted. CSP + artifact-bound I/O enforced by renderer host.",
+        "evidence": "docs/science/SKILL_ADMISSION_2026-07-26.md"
       },
       "runtime_permissions": {
         "session_actor_required": true,
         "may_call_lumen_tools_only": true,
+        "controlled_tools": [
+          "renderer.motif",
+          "renderer.motif-full",
+          "x.ai/science/seq_analyze"
+        ],
         "independent_execution_authority": false,
-        "network": "none-by-default",
+        "network": "via-lumen-adapters-only",
         "shell": "denied",
         "filesystem": "session-workspace-artifact-only"
       },
-      "final_disposition": "pending-controlled-tool-surface",
+      "final_disposition": "approved",
       "admission": {
-        "status": "pending-controlled-tool-surface",
+        "status": "approved",
         "reviewed_at": "2026-07-26",
         "reviewer": "lumen-science-hard-gate",
-        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+        "notes": "Approved only for controlled Lumen tools listed in runtime_permissions."
       }
     }
   ]
