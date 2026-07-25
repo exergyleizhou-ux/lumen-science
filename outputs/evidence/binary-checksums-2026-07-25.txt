@@ -1,0 +1,4 @@
+44984323359cfe0435c3c2941a36f553ed2a29274bfc221c0ee4a684b07ae0a4  build/lumen-mcp-artifacts
+fa31fa11a1480cca94e10bdc450494cd7f95783b6650c290aa26b13a946b18fa  build/lumen-mcp-http_bridge
+870f34bbb0bd679b615c67ba27dc842b075bb4da8c1fda66764ca239d04f796a  build/lumen-mcp-notebook
+1b39993ea4ee376421e01655d29e9b3ec2fdb22a02391605f6cabe19df1e4a81  build/lumen-mcp-reviewer
