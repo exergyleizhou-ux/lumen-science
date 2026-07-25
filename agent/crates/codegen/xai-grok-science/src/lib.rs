@@ -25,6 +25,7 @@ pub mod preview;
 pub mod review;
 pub mod project;
 pub mod transport;
+pub mod workflow;
 
 pub const SCHEMA_VERSION: u32 = 1;
 
