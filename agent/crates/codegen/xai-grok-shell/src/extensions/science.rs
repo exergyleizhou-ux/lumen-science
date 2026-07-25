@@ -295,8 +295,10 @@ async fn handle_connector_fetch(agent: &MvpAgent, args: &acp::ExtRequest) -> Ext
     }
     let descriptor = xai_grok_science::connectors::descriptor(&params.connector_id)
         .ok_or_else(|| acp::Error::invalid_params().data("unknown connectorId"))?;
-    let expected = xai_grok_science::connectors::fetch::expected_exchanges(descriptor.id)
-        .ok_or_else(|| acp::Error::invalid_params().data("connector has no v1 operation"))?;
+    let adapter = xai_grok_science::connectors::adapter::REGISTRY
+        .get(descriptor.id)
+        .ok_or_else(|| acp::Error::invalid_params().data("no protocol adapter for connector"))?;
+    let expected = adapter.expected_exchanges();
     if params.fixture_paths.len() != expected {
         return Err(acp::Error::invalid_params().data(format!(
             "connector {} requires exactly {expected} fixture exchange(s)",
@@ -324,39 +326,18 @@ async fn handle_connector_fetch(agent: &MvpAgent, args: &acp::ExtRequest) -> Ext
         }
         fixture_bytes.push(bytes);
     }
-    // Build the policy-gated request sequence. The pubmed esummary path
-    // depends on the ids of the esearch exchange, parsed from the staged
-    // fixture (the kernel re-parses everything at finish).
-    let validate = |path: &str| {
-        xai_grok_science::connectors::validate_request(descriptor.id, path, false, 10_000)
-            .map_err(|error| acp::Error::invalid_params().data(error.to_string()))
-    };
-    let requests = match descriptor.id {
-        "pubmed" => {
-            let search = validate(&xai_grok_science::connectors::pubmed::esearch_path(
-                &params.query,
-                params.max_results,
-                0,
-            ))?;
-            let (_total, ids) =
-                xai_grok_science::connectors::pubmed::parse_esearch(&fixture_bytes[0])
-                    .map_err(|error| acp::Error::invalid_params().data(error.to_string()))?;
-            let summary = validate(&xai_grok_science::connectors::pubmed::esummary_path(&ids))?;
-            vec![search, summary]
-        }
-        "chembl" => {
-            vec![validate(
-                &xai_grok_science::connectors::chembl::search_path(
-                    &params.query,
-                    params.max_results,
-                    0,
-                ),
-            )?]
-        }
-        other => {
-            return Err(acp::Error::invalid_params().data(format!("no v1 operation for {other}")));
-        }
-    };
+    // Build the protocol's policy-gated request sequence through the adapter.
+    let paths = adapter
+        .build_fixture_paths(&params.query, params.max_results, &fixture_bytes)
+        .map_err(|error| acp::Error::invalid_params().data(error.to_string()))?;
+    let mut requests = Vec::with_capacity(paths.len());
+    for path in &paths {
+        let req = xai_grok_science::connectors::validate_fixture_request(
+            descriptor.id, path, 10_000,
+        )
+        .map_err(|error| acp::Error::invalid_params().data(error.to_string()))?;
+        requests.push(req);
+    }
     let context = RunContext {
         run_id: RunId::new_v7(),
         project_id: ProjectId::new(params.project_id),

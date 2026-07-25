@@ -102,7 +102,7 @@ mod tests {
     ///
     /// Uses `GROK_AUTH_PATH` (not `GROK_HOME`) so a OnceLock-cached real home
     /// with `auth.json` cannot leak into these tests.
-    fn isolate_auth_sources() -> (tempfile::TempDir, [EnvGuard; 10]) {
+    fn isolate_auth_sources() -> (tempfile::TempDir, [EnvGuard; 7]) {
         let dir = tempfile::tempdir().unwrap();
         let auth_path = dir.path().join("no-auth.json");
         let guards = [
@@ -113,12 +113,6 @@ mod tests {
             EnvGuard::unset("GROK_DEPLOYMENT_KEY"),
             EnvGuard::unset("GROK_WS_ORIGIN"),
             EnvGuard::unset("GROK_DISABLE_API_KEY_AUTH"),
-            // Model-specific BYOK variables are also process-global auth
-            // sources; leave no ambient provider credential able to change
-            // a test's intended no-auth resolution.
-            EnvGuard::unset("DEEPSEEK_API_KEY"),
-            EnvGuard::unset("KIMI_API_KEY"),
-            EnvGuard::unset("KIMI_CODE_API_KEY"),
         ];
         (dir, guards)
     }

@@ -1299,9 +1299,9 @@ async fn test_stdio_science_import_csv_fasta_product_path() {
     .await;
 }
 
-/// Science GC2 product proof: pubmed (two-exchange protocol) and chembl
-/// (single-exchange) fetches run through the SessionActor product path with
-/// offline fixtures as mock transport. Each run persists raw response
+/// Science GC2 product proof: PubMed (two-exchange protocol), ChEMBL,
+/// Crossref, UniProt, Europe PMC, and OpenAlex (single-exchange) fetches run through the SessionActor
+/// product path with offline fixtures as mock transport. Each run persists raw response
 /// artifacts, a redacted per-exchange audit, citation-bearing evidence, and
 /// provenance naming the connector TOS.
 #[tokio::test]
@@ -1318,6 +1318,12 @@ async fn test_stdio_science_connector_fetch_product_path() {
             "connector_pubmed_esearch.json",
             "connector_pubmed_esummary.json",
             "connector_chembl_search.json",
+            "connector_crossref_works.json",
+            "connector_uniprot_search.json",
+            "connector_europepmc_search.json",
+            "connector_openalex_search.json",
+            "connector_semantic_scholar_search.json",
+            "connector_arxiv_search.xml",
         ] {
             std::fs::copy(
                 format!(
@@ -1333,7 +1339,7 @@ async fn test_stdio_science_connector_fetch_product_path() {
         client.initialize_with_timeout().await;
         let session_id = client.create_session_with_timeout(workdir.path()).await;
 
-        let cases: [(&str, &str, Vec<&str>, usize, &str); 2] = [
+        let cases: [(&str, &str, Vec<&str>, usize, &str); 8] = [
             (
                 "pubmed",
                 "crispr",
@@ -1350,6 +1356,48 @@ async fn test_stdio_science_connector_fetch_product_path() {
                 vec!["connector_chembl_search.json"],
                 1,
                 "ASPIRIN",
+            ),
+            (
+                "crossref",
+                "reproducible science",
+                vec!["connector_crossref_works.json"],
+                1,
+                "Reproducible science workflows",
+            ),
+            (
+                "uniprot",
+                "human insulin",
+                vec!["connector_uniprot_search.json"],
+                1,
+                "Insulin",
+            ),
+            (
+                "europepmc",
+                "single cell RNA",
+                vec!["connector_europepmc_search.json"],
+                1,
+                "Reproducible single-cell analysis",
+            ),
+            (
+                "openalex",
+                "single cell RNA",
+                vec!["connector_openalex_search.json"],
+                1,
+                "Reproducible scholarly graphs",
+            ),
+            (
+                "semantic-scholar",
+                "machine learning",
+                vec!["connector_semantic_scholar_search.json"],
+                1,
+                "Attention Is All You Need",
+            ),
+            (
+                "arxiv",
+                "transformer",
+                vec!["connector_arxiv_search.xml"],
+                1,
+                "Attention Is All You Need",
             ),
         ];
         for (connector, query, fixtures, exchange_count, first_title) in cases {
@@ -1403,6 +1451,19 @@ async fn test_stdio_science_connector_fetch_product_path() {
             );
             if connector == "pubmed" {
                 assert!(notice.contains("NCBI disclaimer"), "notice: {notice}");
+            }
+            if connector == "uniprot" {
+                assert!(notice.contains("CC BY 4.0"), "notice: {notice}");
+            }
+            if connector == "europepmc" {
+                assert!(notice.contains("article-level license"), "notice: {notice}");
+            }
+            if connector == "openalex" {
+                assert!(notice.contains("CC0"), "notice: {notice}");
+                assert!(notice.contains("runtime key"), "notice: {notice}");
+            }
+            if connector == "semantic-scholar" {
+                assert!(notice.contains("ODC-BY"), "notice: {notice}");
             }
             // Evidence carries the scientific citation; the audit is redacted.
             let claim = result["evidence"][0]["claim"].as_str().unwrap_or_default();
@@ -2331,4 +2392,45 @@ async fn test_headless_waits_for_short_background_task_and_exits_clean() {
          was skipped\nstderr:\n{}",
         stderr_tail(&result.stderr, 2000)
     );
+}
+
+/// DS-38: structural proof that the science connector registry contains
+/// exactly 42 entries and that every expected connector ID is present.
+/// This test does NOT require a running binary — it reads the compiled-in
+/// descriptor registry directly from the xai-grok-science crate.
+#[test]
+fn test_connector_registry_has_all_42_ids() {
+    let registry = xai_grok_science::connectors::registry();
+    assert_eq!(
+        registry.len(),
+        42,
+        "descriptor registry must contain exactly 42 connectors"
+    );
+
+    let expected: std::collections::BTreeSet<&str> = [
+        "pubmed", "chembl", "crossref", "uniprot", "europepmc", "openalex",
+        "semantic-scholar", "arxiv", "biorxiv",
+        "rcsb-pdb", "pdbe", "alphafold", "interpro", "sifts",
+        "pubchem", "bindingdb", "gtopdb", "surechembl", "chebi",
+        "ensembl", "ncbi-gene", "dbsnp", "clinvar", "gnomad", "ucsc", "mygene", "myvariant",
+        "reactome", "string-db", "intact", "wikipathways", "opentargets",
+        "geo", "arrayexpress", "gtex", "hpa", "expression-atlas", "single-cell-atlas", "depmap",
+        "eutils", "biogrid", "kegg",
+    ]
+    .into_iter()
+    .collect();
+
+    let actual: std::collections::BTreeSet<&str> =
+        registry.iter().map(|d| d.id).collect();
+
+    assert_eq!(
+        expected, actual,
+        "connector registry must contain exactly these 42 IDs"
+    );
+
+    // Prove no duplicates
+    let mut ids: Vec<&str> = registry.iter().map(|d| d.id).collect();
+    ids.sort();
+    ids.dedup();
+    assert_eq!(ids.len(), 42, "connector registry contains duplicate IDs");
 }
