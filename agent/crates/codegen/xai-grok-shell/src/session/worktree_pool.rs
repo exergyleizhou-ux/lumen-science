@@ -1766,6 +1766,18 @@ mod tests {
     use super::*;
     use serial_test::serial;
 
+    /// Deadline for worktree pool test operations.
+    /// Configurable via `LUMEN_WORKTREE_TEST_TIMEOUT_SECS` env var.
+    /// macOS under heavy parallelism (5700 tests × 10 threads) needs longer;
+    /// default 30s works for serial / light-load test runs.
+    fn test_timeout() -> Duration {
+        let secs: u64 = std::env::var("LUMEN_WORKTREE_TEST_TIMEOUT_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(30);
+        Duration::from_secs(secs)
+    }
+
     #[test]
     fn test_pool_config_defaults() {
         let config = PoolConfig::default();
@@ -1919,7 +1931,7 @@ pool_size = 3
         let pool = WorktreePool::new(repo_path.clone(), config, 5);
 
         // Wait for fill task to create worktrees
-        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        let deadline = std::time::Instant::now() + test_timeout();
         loop {
             let count = count_instance_worktrees(&pool.instance_id);
             if count >= 2 {
@@ -1953,7 +1965,7 @@ pool_size = 3
         let pool = WorktreePool::new(repo_path.clone(), config, 5);
 
         // Wait for initial fill
-        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        let deadline = std::time::Instant::now() + test_timeout();
         loop {
             if count_instance_worktrees(&pool.instance_id) >= 2 {
                 break;
@@ -1993,7 +2005,7 @@ pool_size = 3
         let pool = WorktreePool::new(repo_path.clone(), config, 10);
 
         // Wait for fill task to produce a ready worktree, then acquire it
-        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        let deadline = std::time::Instant::now() + test_timeout();
         let acquired = loop {
             if let Some(acq) = pool.acquire("test-session", &repo_path, true).await {
                 break acq;
@@ -2011,7 +2023,7 @@ pool_size = 3
 
         // Should eventually be able to acquire again (either the released one
         // or a newly filled one)
-        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        let deadline = std::time::Instant::now() + test_timeout();
         let reacquired = loop {
             if let Some(acq) = pool.acquire("test-session-2", &repo_path, true).await {
                 break acq;
@@ -2144,7 +2156,7 @@ pool_size = 3
         assert_eq!(pool.count_ready_worktrees(), 0);
 
         // Wait for fill task to create worktrees
-        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        let deadline = std::time::Instant::now() + test_timeout();
         loop {
             if pool.count_ready_worktrees() >= 2 {
                 break;
@@ -2415,7 +2427,7 @@ pool_size = 3
         let pool = WorktreePool::new(repo_path.clone(), config, 5);
 
         // Wait for the pool to have 2 ready worktrees (1 adopted + 1 created).
-        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        let deadline = std::time::Instant::now() + test_timeout();
         loop {
             let count = count_instance_worktrees(&pool.instance_id);
             if count >= 2 {

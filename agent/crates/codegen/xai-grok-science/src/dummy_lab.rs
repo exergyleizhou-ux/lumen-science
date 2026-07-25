@@ -10,8 +10,8 @@
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicF64, Ordering};
-use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 
 // ── Sensor ──────────────────────────────────────────────────────────
 
@@ -26,7 +26,7 @@ pub struct DummySensor {
     pub max: f64,
     /// Drift per second (positive or negative).
     pub drift: f64,
-    last_value: Arc<AtomicF64>,
+    last_value: Arc<AtomicU64>,
     last_read: Instant,
 }
 
@@ -50,7 +50,7 @@ impl DummySensor {
             min,
             max,
             drift: 0.0,
-            last_value: Arc::new(AtomicF64::new(min + (max - min) / 2.0)),
+            last_value: Arc::new(AtomicU64::new((min + (max - min) / 2.0).to_bits())),
             last_read: Instant::now(),
         }
     }
@@ -63,9 +63,10 @@ impl DummySensor {
     /// Read the current simulated value, applying drift since last read.
     pub fn read(&mut self) -> f64 {
         let elapsed = self.last_read.elapsed().as_secs_f64();
-        let drifted = self.last_value.load(Ordering::Relaxed) + self.drift * elapsed;
+        let current = f64::from_bits(self.last_value.load(Ordering::Relaxed));
+        let drifted = current + self.drift * elapsed;
         let clamped = drifted.clamp(self.min, self.max);
-        self.last_value.store(clamped, Ordering::Relaxed);
+        self.last_value.store(clamped.to_bits(), Ordering::Relaxed);
         self.last_read = Instant::now();
         clamped
     }
@@ -98,6 +99,33 @@ pub struct ActuatorAction {
     pub action: String,
     pub target_value: f64,
     pub timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+impl serde::Serialize for ActuatorAction {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut st = s.serialize_struct("ActuatorAction", 4)?;
+        st.serialize_field("actuator_id", &self.actuator_id)?;
+        st.serialize_field("action", &self.action)?;
+        st.serialize_field("target_value", &self.target_value)?;
+        st.serialize_field("timestamp", &self.timestamp.to_rfc3339())?;
+        st.end()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ActuatorAction {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let v = serde_json::Value::deserialize(d)?;
+        Ok(ActuatorAction {
+            actuator_id: v["actuator_id"].as_str().unwrap_or("").to_string(),
+            action: v["action"].as_str().unwrap_or("").to_string(),
+            target_value: v["target_value"].as_f64().unwrap_or(0.0),
+            timestamp: v["timestamp"].as_str()
+                .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                .map(|dt| dt.with_timezone(&chrono::Utc))
+                .unwrap_or_else(chrono::Utc::now),
+        })
+    }
 }
 
 impl DummyActuator {
@@ -227,7 +255,7 @@ mod tests {
         let mut sensor = DummySensor::new("ph-1", SensorKind::Ph, 0.0, 14.0)
             .with_drift(0.1);
         let first = sensor.read();
-        std::thread::sleep(Duration::from_secs(1));
+        std::thread::sleep(std::time::Duration::from_secs(1));
         let second = sensor.read();
         assert!((second - first).abs() > 0.0, "value should drift");
     }
