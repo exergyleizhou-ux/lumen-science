@@ -19,8 +19,9 @@ pub fn search_path(term: &str, max: u32) -> String {
     } else {
         format!("all:{term}")
     };
+    // base_url is https://export.arxiv.org/api — path must be /query (not /api/query).
     format!(
-        "/api/query?search_query={}&start=0&max_results={limit}&sortBy=relevance",
+        "/query?search_query={}&start=0&max_results={limit}&sortBy=relevance",
         super::url_encode(&expr)
     )
 }

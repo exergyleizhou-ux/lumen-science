@@ -21,7 +21,7 @@ NEVER:       5.0 embodied lab, autonomous scientist, medical certification
 | L1 connectors | **ACCEPT** — 42/0 dispositions; 40 runtime; 2 rejected not fetchable |
 | L2 offline loop | **ACCEPT** — seqbench, pipeline offline, Motif vendor, dogfood |
 | L3 CI/release/live | **ACCEPT** — make release (5 platforms), SHA256SUMS + GPG, CI smoke/gates; live subset PASS |
-| Skills | **ACCEPT partial** — 5 approved with controlled tools; 22 pending compute |
+| Skills | **ACCEPT partial** — 10 approved with controlled tools; 17 GPU/remote pending |
 | 5.0 | **SPEC only** |
 
 ## Live matrix (authorized public probes)
@@ -33,7 +33,7 @@ NEVER:       5.0 embodied lab, autonomous scientist, medical certification
 | Europe PMC | PASS | same |
 | Crossref | PASS | `CROSSREF_MAILTO` set for probe |
 | UniProt | PASS | schema drift fixed (totalResults optional) |
-| arXiv | FAIL (503 rate/upstream) | logged |
+| arXiv | path fixed (`/api/query`); live 503 rate/upstream | logged |
 | Semantic Scholar | FAIL (429) | logged |
 | OpenAlex | FAIL (API key required) | logged |
 | `lumen-science brief` ×4 topics | PASS | aspirin, BRCA2, CRISPR Cas9, metformin |

@@ -23,6 +23,7 @@
   },
   "uniprot_fix": "totalResults optional when results[] present",
   "gpg_signing": "SHA256SUMS.asc verified",
-  "skills_approved": 5,
-  "notes": "Live probes public endpoints only; no secrets in artifacts."
+  "skills_approved": 10,
+  "notes": "Live probes public endpoints only; no secrets in artifacts.",
+  "arxiv_path_fix": "fixed double /api/api \u2192 /api/query; live still 503 upstream rate limit"
 }

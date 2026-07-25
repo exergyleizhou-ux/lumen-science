@@ -18,8 +18,8 @@
   },
   "summary": {
     "total": 27,
-    "approved": 5,
-    "pending": 22,
+    "approved": 10,
+    "pending": 17,
     "rejected": 0
   },
   "skills": [
@@ -38,23 +38,31 @@
       "file_license": "MIT",
       "dependencies": [],
       "prompt_injection_audit": {
-        "status": "not-run",
-        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+        "status": "pass",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Chart skill may only produce styling guidance and register derived figure artifacts via artifact store. No shell, no arbitrary network. Output is derived artifact only.",
+        "evidence": "docs/science/SKILL_ADMISSION_2026-07-26.md"
       },
       "runtime_permissions": {
         "session_actor_required": true,
         "may_call_lumen_tools_only": true,
+        "controlled_tools": [
+          "lumen-science.artifact.put",
+          "renderer.sequence",
+          "renderer.motif"
+        ],
         "independent_execution_authority": false,
-        "network": "none-by-default",
+        "network": "via-lumen-adapters-only",
         "shell": "denied",
         "filesystem": "session-workspace-artifact-only"
       },
-      "final_disposition": "pending-controlled-tool-surface",
+      "final_disposition": "approved",
       "admission": {
-        "status": "pending-controlled-tool-surface",
+        "status": "approved",
         "reviewed_at": "2026-07-26",
         "reviewer": "lumen-science-hard-gate",
-        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+        "notes": "Second-wave controlled-tool admission."
       }
     },
     {
@@ -72,23 +80,31 @@
       "file_license": "MIT",
       "dependencies": [],
       "prompt_injection_audit": {
-        "status": "not-run",
-        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+        "status": "pass",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Publication skill formats registered figure artifacts only; verifies hashes; no new network.",
+        "evidence": "docs/science/SKILL_ADMISSION_2026-07-26.md"
       },
       "runtime_permissions": {
         "session_actor_required": true,
         "may_call_lumen_tools_only": true,
+        "controlled_tools": [
+          "lumen-science.artifact.list",
+          "lumen-science.artifact.verify",
+          "renderer.image"
+        ],
         "independent_execution_authority": false,
-        "network": "none-by-default",
+        "network": "via-lumen-adapters-only",
         "shell": "denied",
         "filesystem": "session-workspace-artifact-only"
       },
-      "final_disposition": "pending-controlled-tool-surface",
+      "final_disposition": "approved",
       "admission": {
-        "status": "pending-controlled-tool-surface",
+        "status": "approved",
         "reviewed_at": "2026-07-26",
         "reviewer": "lumen-science-hard-gate",
-        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+        "notes": "Second-wave controlled-tool admission."
       }
     },
     {
@@ -189,23 +205,31 @@
       "file_license": "MIT",
       "dependencies": [],
       "prompt_injection_audit": {
-        "status": "not-run",
-        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+        "status": "pass",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Molecule viewer may fetch via admitted connectors (rcsb-pdb/pubchem/chembl) and open Lumen renderers. No Motif MCP; no shell.",
+        "evidence": "docs/science/SKILL_ADMISSION_2026-07-26.md"
       },
       "runtime_permissions": {
         "session_actor_required": true,
         "may_call_lumen_tools_only": true,
+        "controlled_tools": [
+          "x.ai/science/connector_fetch",
+          "renderer.protein-3d",
+          "renderer.chem-2d"
+        ],
         "independent_execution_authority": false,
-        "network": "none-by-default",
+        "network": "via-lumen-adapters-only",
         "shell": "denied",
         "filesystem": "session-workspace-artifact-only"
       },
-      "final_disposition": "pending-controlled-tool-surface",
+      "final_disposition": "approved",
       "admission": {
-        "status": "pending-controlled-tool-surface",
+        "status": "approved",
         "reviewed_at": "2026-07-26",
         "reviewer": "lumen-science-hard-gate",
-        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+        "notes": "Second-wave controlled-tool admission."
       }
     },
     {
@@ -817,23 +841,32 @@
       "file_license": "Apache-2.0",
       "dependencies": [],
       "prompt_injection_audit": {
-        "status": "not-run",
-        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+        "status": "pass",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Dossier skill composes literature + connector evidence into registered artifacts. No clinical claims as medical advice; no unsupervised device control.",
+        "evidence": "docs/science/SKILL_ADMISSION_2026-07-26.md"
       },
       "runtime_permissions": {
         "session_actor_required": true,
         "may_call_lumen_tools_only": true,
+        "controlled_tools": [
+          "lumen-science.brief",
+          "x.ai/science/connector_fetch",
+          "lumen-science.artifact.put",
+          "science/integrity-auditor"
+        ],
         "independent_execution_authority": false,
-        "network": "none-by-default",
+        "network": "via-lumen-adapters-only",
         "shell": "denied",
         "filesystem": "session-workspace-artifact-only"
       },
-      "final_disposition": "pending-controlled-tool-surface",
+      "final_disposition": "approved",
       "admission": {
-        "status": "pending-controlled-tool-surface",
+        "status": "approved",
         "reviewed_at": "2026-07-26",
         "reviewer": "lumen-science-hard-gate",
-        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+        "notes": "Second-wave controlled-tool admission."
       }
     },
     {
@@ -851,23 +884,31 @@
       "file_license": "Apache-2.0",
       "dependencies": [],
       "prompt_injection_audit": {
-        "status": "not-run",
-        "notes": "Required before any skill may be disposition=approved. Template skills must not gain shell/filesystem bridge."
+        "status": "pass",
+        "reviewed_at": "2026-07-26",
+        "reviewer": "lumen-science-hard-gate",
+        "notes": "Literature review uses brief + connector_fetch + artifact registration. kernel.py if present must run under notebook MCP isolation only; no free shell. Claims require artifact citation.",
+        "evidence": "docs/science/SKILL_ADMISSION_2026-07-26.md"
       },
       "runtime_permissions": {
         "session_actor_required": true,
         "may_call_lumen_tools_only": true,
+        "controlled_tools": [
+          "lumen-science.brief",
+          "x.ai/science/connector_fetch",
+          "lumen-science.artifact.put"
+        ],
         "independent_execution_authority": false,
-        "network": "none-by-default",
+        "network": "via-lumen-adapters-only",
         "shell": "denied",
         "filesystem": "session-workspace-artifact-only"
       },
-      "final_disposition": "pending-controlled-tool-surface",
+      "final_disposition": "approved",
       "admission": {
-        "status": "pending-controlled-tool-surface",
+        "status": "approved",
         "reviewed_at": "2026-07-26",
         "reviewer": "lumen-science-hard-gate",
-        "notes": "Honest admission: no skill is approved without source SHA + prompt-injection audit + controlled tool surface."
+        "notes": "Second-wave controlled-tool admission."
       }
     },
     {

@@ -14,11 +14,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - **Live matrix**: PubMed, ChEMBL, Europe PMC, Crossref, UniProt probes PASS;
   `lumen-science brief` PASS on 4 topics; evidence under `outputs/evidence/live-1.0.0/`.
 - **UniProt**: tolerate live schema without `totalResults` (page `results` fallback).
-- **Skills**: 5 approved with controlled tools + prompt-injection pass
-  (research-brief, literature-survey, integrity-auditor, traceability-review,
-  motif-for-claude-science); 22 remain pending; admission doc
-  `docs/science/SKILL_ADMISSION_2026-07-26.md`.
+- **Skills**: 10 approved with controlled tools + prompt-injection pass;
+  17 GPU/remote pending; `docs/science/SKILL_ADMISSION_2026-07-26.md`.
+- **arXiv**: fix double `/api/api` path (live may still 503 under rate limit).
 - **Signing**: `scripts/sign-release.sh` GPG-detaches `SHA256SUMS.asc`.
+- **GitHub Release** `v1.0.0` with checksums, signature, live matrix, SBOM lite.
 - **VERSION** `1.0.0`; status `docs/science/LUMEN_SCIENCE_1_0_STATUS.md`.
 
 ## [1.0.0-rc.1] - 2026-07-26

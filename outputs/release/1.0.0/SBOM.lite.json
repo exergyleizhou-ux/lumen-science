@@ -1,0 +1,46 @@
+{
+  "spdxVersion": "SPDX-2.3-lite",
+  "name": "lumen-science-1.0.0",
+  "created": "2026-07-25T23:32:46.116856Z",
+  "packages": [
+    {
+      "name": "lumen-science",
+      "version": "1.0.0",
+      "downloadLocation": "https://github.com/exergyleizhou-ux/lumen-science"
+    },
+    {
+      "name": "jvogan-motif",
+      "version": "0.2.1",
+      "commit": "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0",
+      "license": "MIT"
+    }
+  ],
+  "files": [
+    {
+      "path": "VERSION",
+      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03",
+      "bytes": 6
+    },
+    {
+      "path": "packs/science/standalone/cmd/science/main.go",
+      "sha256": "13567f131d250f802a92cda6dffd3e7dc536cd5af624c93b41278fc72a1162a8",
+      "bytes": 17849
+    },
+    {
+      "path": "packs/science/skills/registry.json",
+      "sha256": "96d22ffc0159f9bcec10dfa3f686855c7ccc159c2c80eacdf9f1cc5a35e7f132",
+      "bytes": 44164
+    },
+    {
+      "path": "docs/science/fusion-sources.lock.json",
+      "sha256": "4ad7efdc6c8599d893b3a00614b7b260cbcc1555d5e15ac4b4ba0da345424deb",
+      "bytes": 104808
+    },
+    {
+      "path": "outputs/release/1.0.0/SHA256SUMS",
+      "sha256": "782b1c70b576e1cb8da0ced4d60d13b48640e0864b11e465d6ca064d69903ecd",
+      "bytes": 3504
+    }
+  ],
+  "note": "Lite inventory for release integrity; full OS SBOM via scripts/generate-sbom.sh when tooling available"
+}
