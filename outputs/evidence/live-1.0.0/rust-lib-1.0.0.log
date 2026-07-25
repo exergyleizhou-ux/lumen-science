@@ -1,0 +1,345 @@
+warning: unused imports: `AuthClass`, `CachePolicy`, `DataClass`, `RateLimit`, and `RetryPolicy`
+  --> crates/codegen/xai-grok-science/src/connectors/negative_tests.rs:12:25
+   |
+12 | use crate::connectors::{AuthClass, DataClass, CachePolicy, ConnectorDescriptor, RateLimit, RetryPolicy};
+   |                         ^^^^^^^^^  ^^^^^^^^^  ^^^^^^^^^^^                       ^^^^^^^^^  ^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `BTreeSet`
+  --> crates/codegen/xai-grok-science/src/project/evidence_graph.rs:14:34
+   |
+14 | use std::collections::{BTreeMap, BTreeSet};
+   |                                  ^^^^^^^^
+
+warning: unused import: `EvidenceEdge`
+ --> crates/codegen/xai-grok-science/src/project/query.rs:7:39
+  |
+7 | use super::evidence_graph::{EdgeKind, EvidenceEdge, EvidenceGraph, EvidenceNode, NodeId, NodeKind};
+  |                                       ^^^^^^^^^^^^
+
+warning: unused import: `super::model::ProjectId`
+ --> crates/codegen/xai-grok-science/src/project/query.rs:8:5
+  |
+8 | use super::model::ProjectId;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `MigrationResult`
+  --> crates/codegen/xai-grok-science/src/project/e2e_tests.rs:18:68
+   |
+18 | use crate::project::migration::{HashVerification, V1ToV2Migration, MigrationResult};
+   |                                                                    ^^^^^^^^^^^^^^^
+
+warning: unused import: `std::collections::BTreeMap`
+ --> crates/codegen/xai-grok-science/src/workflow/kernel.rs:5:5
+  |
+5 | use std::collections::BTreeMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::connectors::ConnectorDescriptor`
+  --> crates/codegen/xai-grok-science/src/workflow/e2e_tests.rs:13:5
+   |
+13 | use crate::connectors::ConnectorDescriptor;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `OwnerId`
+  --> crates/codegen/xai-grok-science/src/workflow/e2e_tests.rs:14:29
+   |
+14 | use crate::project::model::{OwnerId, ProjectId};
+   |                             ^^^^^^^
+
+warning: unused imports: `ReproductionAttempt` and `ReproductionResult`
+  --> crates/codegen/xai-grok-science/src/workflow/e2e_tests.rs:20:54
+   |
+20 |     ResourceCap, AdmissionStatus, ReproductionLevel, ReproductionAttempt,
+   |                                                      ^^^^^^^^^^^^^^^^^^^
+21 |     ReproductionResult,
+   |     ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `super::adapter::ProtocolAdapter`
+ --> crates/codegen/xai-grok-science/src/connectors/negative_tests.rs:9:5
+  |
+9 | use super::adapter::ProtocolAdapter;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused variable: `bad_project`
+   --> crates/codegen/xai-grok-science/src/review.rs:288:13
+    |
+288 |         let bad_project = ProjectId::new("wrong-project");
+    |             ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_bad_project`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `S` is never used
+ --> crates/codegen/xai-grok-science/src/connectors/dbsnp.rs:9:46
+  |
+9 | #[cfg(test)] mod tests { use super::*; const S: &[u8] = br#"{"esearchresult":{"idlist":["12345"]}}"#; const M: &[u8] = br#"{"result":{"ui...
+  |                                              ^
+  |
+  = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `xai-grok-science` (lib test) generated 12 warnings (run `cargo fix --lib -p xai-grok-science --tests` to apply 10 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.44s
+     Running unittests src/lib.rs (target/debug/deps/xai_grok_science-e0b7a9639ffc4671)
+
+running 257 tests
+test collaboration::tests::reviewer_verdict_requires_evidence ... ok
+test collaboration::tests::collaborator_role_ordering ... ok
+test collaboration::tests::active_collaborator_permissions ... ok
+test collaboration::tests::revoked_collaborator_has_no_access ... ok
+test collaboration::tests::review_package_rejects_no_redaction ... ok
+test connector::tests::egress_and_malformed_targets_fail_closed ... ok
+test connector::tests::exact_project_owner_host_key_and_timeout_are_required ... ok
+test connector::tests::durable_audit_is_redacted_and_stable ... ok
+test api::tests::token_file_is_0600_and_removed_on_drop ... ok
+test connector::tests::denied_admission_creates_no_pending_permission ... ok
+test connectors::adapter::tests::adapter_descriptor_coverage_is_one_to_one ... ok
+test connectors::adapter::tests::coverage_rejects_missing_adapter ... ok
+test connectors::adapter::tests::coverage_rejects_orphan_adapter ... ok
+test connectors::adapter::tests::every_adapter_descriptor_is_valid ... ok
+test connectors::adapter::tests::expected_exchanges_match_v1_protocol ... ok
+test connectors::adapter::tests::registry_rejects_duplicate_id ... ok
+test connectors::adapter::tests::registry_unknown_id_returns_none ... ok
+test connectors::alphafold::tests::bad ... ok
+test connectors::alphafold::tests::parse_ok ... ok
+test connectors::arrayexpress::tests::ok ... ok
+test connectors::arxiv::tests::live_probe_arxiv_real_search ... ignored, live network probe against arXiv; run explicitly
+test connectors::arxiv::tests::parse_search_fails_closed_on_non_atom ... ok
+test connectors::arxiv::tests::parse_search_reads_entries_and_ignores_summary_and_pdf ... ok
+test connectors::arxiv::tests::parse_search_rejects_error_entry ... ok
+test connectors::arxiv::tests::search_path_passes_fielded_query_through ... ok
+test connectors::arxiv::tests::search_path_wraps_bare_query_in_all ... ok
+test connectors::bindingdb::tests::bad ... ok
+test connectors::bindingdb::tests::parse_ok ... ok
+test connectors::biorxiv::tests::malformed_fails ... ok
+test connectors::biorxiv::tests::parse_reads_fields ... ok
+test connectors::chebi::tests::bad ... ok
+test connectors::chebi::tests::parse_ok ... ok
+test connectors::chembl::tests::live_probe_chembl_real_search ... ignored, live network probe against ChEMBL; run explicitly
+test connectors::chembl::tests::parse_search_fails_closed_on_malformed ... ok
+test connectors::chembl::tests::parse_search_reads_records_and_total ... ok
+test connectors::chembl::tests::search_path_encodes_terms_and_paginates ... ok
+test connectors::clinvar::tests::ok ... ok
+test connectors::crossref::tests::live_probe_crossref_real_search ... ignored, live network probe against Crossref; requires explicit authorization and CROSSREF_MAILTO
+test connectors::crossref::tests::mailto_path_requires_and_encodes_contact_identity ... ok
+test connectors::crossref::tests::parse_works_fails_closed_on_malformed_records ... ok
+test connectors::crossref::tests::parse_works_reads_only_bibliographic_fields ... ok
+test connectors::crossref::tests::works_path_encodes_query_clamps_rows_and_selects_safe_fields ... ok
+test connectors::dbsnp::tests::ok ... ok
+test connectors::depmap::tests::ok ... ok
+test connectors::ensembl::tests::ok ... ok
+test connectors::europepmc::tests::live_probe_europepmc_real_search ... ignored, live network probe against Europe PMC; run explicitly
+test connectors::europepmc::tests::parse_search_fails_closed_on_malformed_records ... ok
+test connectors::europepmc::tests::parse_search_reads_only_lite_bibliographic_fields ... ok
+test connectors::europepmc::tests::search_path_is_bounded_lite_json_and_disables_synonyms ... ok
+test connectors::eutils::tests::build_fixture_paths_basic ... ok
+test connectors::eutils::tests::descriptor_is_valid ... ok
+test connectors::eutils::tests::expected_exchanges ... ok
+test connectors::eutils::tests::parse_empty_response ... ok
+test connectors::eutils::tests::parse_result_with_records ... ok
+test connectors::eutils::tests::rejects_wrong_exchange_count ... ok
+test connectors::expression_atlas::tests::empty_ok ... ok
+test connectors::expression_atlas::tests::garbage_fails ... ok
+test connectors::expression_atlas::tests::ok_parse ... ok
+test connectors::expression_atlas::tests::wrong_exchange_count ... ok
+test connector::tests::admission_is_durable_redacted_and_never_executes_a_transport ... ok
+test connector::tests::permission_decision_is_replayable_and_allow_starts_no_transport ... ok
+test connector::tests::denied_permission_closes_run_without_transport_ticket ... ok
+test connectors::fetch::tests::exchange_count_is_enforced_per_protocol ... ok
+test connectors::fetch::tests::malformed_response_fails_run_closed ... ok
+test connectors::fetch::tests::normalize_populates_core_identity ... ok
+test connector::tests::restart_interrupts_approved_ticket_and_prevents_transport_resume ... ok
+test api::tests::all_read_surfaces_require_auth_and_owner ... ok
+test connectors::fetch::tests::science_record_has_22_fields ... ok
+test api::tests::query_token_host_origin_and_traversal_are_rejected ... ok
+test connectors::geo::tests::ok ... ok
+test connectors::gnomad::tests::ok ... ok
+test connectors::gtex::tests::empty_ok ... ok
+test connectors::gtex::tests::garbage_fails ... ok
+test connectors::gtex::tests::ok_parse ... ok
+test connectors::gtex::tests::partial_missing_id_fails ... ok
+test connectors::gtex::tests::truncated_fails ... ok
+test connectors::gtex::tests::wrong_exchange_count ... ok
+test connectors::gtopdb::tests::bad ... ok
+test connectors::gtopdb::tests::parse_ok ... ok
+test connectors::hpa::tests::empty_ok ... ok
+test connectors::hpa::tests::garbage_fails ... ok
+test connectors::hpa::tests::not_array_fails ... ok
+test connectors::hpa::tests::ok_parse ... ok
+test connectors::hpa::tests::wrong_exchange_count ... ok
+test connectors::intact::tests::ok ... ok
+test connectors::interpro::tests::bad ... ok
+test connectors::interpro::tests::parse_ok ... ok
+test connectors::mygene::tests::ok ... ok
+test connectors::myvariant::tests::ok ... ok
+test connectors::ncbi_gene::tests::ok ... ok
+test connectors::negative_tests::every_active_connector_rejects_empty_truncated_and_garbage ... ok
+test connectors::negative_tests::every_connector_descriptor_validates ... ok
+test connectors::openalex::tests::live_probe_openalex_real_search ... ignored, live metered network probe against OpenAlex; run explicitly
+test connectors::openalex::tests::parse_search_fails_closed_on_malformed_records ... ok
+test connectors::openalex::tests::parse_search_reads_only_selected_bibliographic_fields ... ok
+test connectors::openalex::tests::search_path_is_bounded_and_selects_only_bibliographic_fields ... ok
+test connectors::opentargets::tests::ok ... ok
+test connectors::pdbe::tests::bad ... ok
+test connectors::pdbe::tests::parse_ok ... ok
+test connectors::pubchem::tests::bad ... ok
+test connectors::pubchem::tests::parse_cids_ok ... ok
+test connectors::pubchem::tests::parse_props_ok ... ok
+test connectors::pubmed::tests::esearch_path_encodes_terms_and_paginates ... ok
+test connectors::pubmed::tests::live_probe_pubmed_real_search ... ignored, live network probe against NCBI; run explicitly
+test connectors::pubmed::tests::parse_esearch_fails_closed_on_server_error_and_malformed ... ok
+test connectors::pubmed::tests::parse_esearch_reads_count_and_ids ... ok
+test connectors::pubmed::tests::parse_esummary_fails_closed_on_missing_record ... ok
+test connectors::pubmed::tests::parse_esummary_reads_records_in_uid_order ... ok
+test connectors::rcsb_pdb::tests::bad ... ok
+test connectors::rcsb_pdb::tests::parse_ok ... ok
+test connectors::reactome::tests::ok ... ok
+test connectors::semantic_scholar::tests::live_probe_semantic_scholar_real_search ... ignored, live network probe against Semantic Scholar; run explicitly
+test connectors::semantic_scholar::tests::parse_search_fails_closed_on_malformed_records ... ok
+test connectors::semantic_scholar::tests::parse_search_reads_bibliographic_fields_and_ignores_excluded ... ok
+test connectors::semantic_scholar::tests::search_path_selects_safe_fields_and_clamps_limit ... ok
+test connectors::sifts::tests::bad ... ok
+test connectors::sifts::tests::parse_ok ... ok
+test connectors::single_cell_atlas::tests::empty_ok ... ok
+test connectors::single_cell_atlas::tests::garbage_fails ... ok
+test connectors::single_cell_atlas::tests::ok_parse ... ok
+test connectors::single_cell_atlas::tests::wrong_exchange_count ... ok
+test connectors::string_db::tests::ok ... ok
+test connectors::surechembl::tests::bad ... ok
+test connectors::surechembl::tests::parse_ok ... ok
+test connectors::tests::active_registry_is_40_rejected_is_2_inventory_is_42 ... ok
+test connectors::tests::adapter_count_matches_descriptor_count ... ok
+test connectors::tests::audit_record_is_redacted_and_stable ... ok
+test connectors::tests::descriptor_validation_rejects_http_and_bad_paths ... ok
+test connectors::tests::every_registered_descriptor_passes_validation ... ok
+test connectors::tests::registry_contains_first_batch_in_stable_order ... ok
+test connectors::tests::unknown_connector_and_bad_paths_fail_closed ... ok
+test connectors::tests::validate_request_builds_bounded_request ... ok
+test connectors::ucsc::tests::ok ... ok
+test connectors::uniprot::tests::live_probe_uniprot_real_search ... ignored, live network probe against UniProt; run explicitly
+test connectors::uniprot::tests::parse_search_fails_closed_on_malformed_records ... ok
+test connectors::uniprot::tests::parse_search_reads_summary_and_ignores_sequence ... ok
+test connectors::uniprot::tests::search_path_encodes_query_clamps_size_and_selects_summary_fields ... ok
+test connectors::wikipathways::tests::ok ... ok
+test api::tests::real_loopback_listener_holds_and_cleans_token ... ok
+test device::tests::command_plan_hash_deterministic ... ok
+test device::tests::fault_injection_profile_defaults ... ok
+test device::tests::preflight_passes_dummy_mode ... ok
+test device::tests::preflight_rejects_real_without_reviewers ... ok
+test device::tests::sensor_trust_score_decays_without_calibration ... ok
+test device::tests::two_phase_cannot_commit_without_operator ... ok
+test dummy_lab::tests::dummy_lab_action_produces_evidence ... ok
+test dummy_lab::tests::dummy_lab_snapshot_produces_evidence ... ok
+test dummy_lab::tests::dummy_lab_unknown_actuator_returns_none ... ok
+test connectors::fetch::tests::crossref_fetch_records_notice_citation_and_replays ... ok
+test dummy_lab::tests::dummy_sensor_reads_within_bounds ... ok
+test governance::tests::budget_check_warn_and_exceed ... ok
+test governance::tests::data_classification_export_rules ... ok
+test governance::tests::model_call_safety_check ... ok
+test governance::tests::model_call_unsafe_with_credential_leak ... ok
+test connectors::fetch::tests::chembl_fetch_single_exchange ... ok
+test connectors::fetch::tests::europepmc_fetch_records_notice_citation_and_replays ... ok
+test connectors::fetch::tests::openalex_fetch_records_notice_citation_and_replays ... ok
+test connectors::fetch::tests::pubmed_fetch_records_citation_evidence_and_replays ... ok
+test multimodal::tests::parser_find_by_extension ... ok
+test multimodal::tests::parser_find_by_mime ... ok
+test multimodal::tests::renderer_find_by_category ... ok
+test preview::tests::csv_stats_and_ragged_detection ... ok
+test preview::tests::fasta_malformed_fails_closed ... ok
+test preview::tests::fasta_stats_and_warnings ... ok
+test preview::tests::json_must_parse_to_be_json ... ok
+test preview::tests::non_utf8_is_binary_not_text ... ok
+test preview::tests::oversized_content_is_rejected ... ok
+test preview::tests::sniffs_png_by_magic_not_name ... ok
+test preview::tests::svg_detected_as_image ... ok
+test preview::tests::tsv_is_distinguished_from_csv ... ok
+test preview::tests::utf8_boundary_multibyte_text ... ok
+test project::claim::tests::citation_from_doi ... ok
+test project::claim::tests::claim_cannot_skip_review ... ok
+test project::claim::tests::claim_lifecycle_full ... ok
+test project::e2e_tests::e2e_citation_types ... ok
+test project::e2e_tests::e2e_claim_lifecycle ... ok
+test project::e2e_tests::e2e_evidence_graph_for_claim ... ok
+test project::e2e_tests::e2e_migration_preserves_hashes ... ok
+test project::e2e_tests::e2e_project_lifecycle ... ok
+test project::e2e_tests::e2e_rejects_invalid_transition ... ok
+test project::evidence_graph::tests::new_graph_is_empty ... ok
+test project::evidence_graph::tests::rejects_cross_project_node ... ok
+test project::evidence_graph::tests::rejects_dangling_edge ... ok
+test project::evidence_graph::tests::rejects_duplicate_node ... ok
+test project::evidence_graph::tests::rejects_self_referencing_edge ... ok
+test project::evidence_graph::tests::supports_claim_derivation_chain ... ok
+test project::migration::tests::create_project_preserves_run_ids ... ok
+test project::migration::tests::hash_verification_detects_mismatch ... ok
+test project::migration::tests::hash_verification_passes_on_match ... ok
+test project::model::tests::hypothesis_only_in_draft_or_planned ... ok
+test project::model::tests::new_project_is_draft ... ok
+test project::model::tests::rejects_invalid_transition ... ok
+test project::model::tests::session_deduplication ... ok
+test project::model::tests::terminal_states_block_execution ... ok
+test project::model::tests::valid_transition_chain ... ok
+test project::query::tests::consistency_detects_dangling_edge ... ok
+test project::query::tests::consistency_report_clean_graph ... ok
+test project::query::tests::trace_evidence_back_to_source ... ok
+test release::tests::canary_critical_checks ... ok
+test release::tests::migration_chain_acceptance ... ok
+test release::tests::platform_matrix_covers_all_required ... ok
+test release::tests::release_manifest_contains_required_assets ... ok
+test remote::tests::data_movement_boundary_validation ... ok
+test remote::tests::data_movement_rejects_zero_max_bytes ... ok
+test remote::tests::job_terminal_states ... ok
+test connectors::fetch::tests::uniprot_fetch_records_notice_citation_and_replays ... ok
+test import::tests::import_without_allowance_is_rejected ... ok
+test csv::tests::fixture_is_deterministic_across_reopen ... ok
+test api::tests::artifact_preview_requires_auth_owner_and_registered_record ... ok
+test import::tests::malformed_content_fails_run_closed_without_artifact ... ok
+test connector::tests::offline_transport_is_redacted_and_has_explicit_terminal_outcomes ... ok
+test import::tests::fasta_import_records_sequence_stats ... ok
+test import::tests::csv_import_records_preview_evidence_and_replays ... ok
+test review::tests::non_succeeded_or_incomplete_records_fail_closed ... ok
+test seqbench::tests::deterministic_hash ... ok
+test seqbench::tests::empty_fails ... ok
+test seqbench::tests::parse_multi_and_analyze ... ok
+test dummy_lab::tests::dummy_sensor_drifts_over_time ... ok
+test review::tests::approval_not_terminal_allow_fails ... ok
+test review::tests::durable_evidence_is_required_and_rehashed ... ok
+test review::tests::evidence_citing_unregistered_artifact_fails ... ok
+test review::tests::evidence_without_artifact_citation_fails ... ok
+test review::tests::run_succeeded_but_no_approvals_fails ... ok
+test tests::approval_is_owner_scoped_terminal_and_idempotent ... ok
+test review::tests::reopened_artifact_hash_drift_fails ... ok
+test transport::tests::operation_binding_is_direction_and_path_sensitive ... ok
+test transport::tests::remote_path_rejects_option_and_control_injection ... ok
+test workflow::e2e_tests::tests::e2e_compute_environment_stable ... ok
+test workflow::e2e_tests::tests::e2e_cycle_detection ... ok
+test workflow::e2e_tests::tests::e2e_kernel_safety ... ok
+test workflow::e2e_tests::tests::e2e_package_integrity ... ok
+test workflow::e2e_tests::tests::e2e_reproduction_safety ... ok
+test workflow::e2e_tests::tests::e2e_reuse_key_deterministic ... ok
+test workflow::e2e_tests::tests::e2e_step_reference_chain ... ok
+test workflow::e2e_tests::tests::e2e_workflow_dag_is_valid ... ok
+test workflow::kernel::tests::admitted_kernel_is_safe ... ok
+test workflow::kernel::tests::kernel_identity_verification ... ok
+test workflow::kernel::tests::pending_kernel_is_unsafe ... ok
+test workflow::kernel::tests::r3_requires_independent_reviewer ... ok
+test workflow::kernel::tests::replay_never_allows_live_providers ... ok
+test workflow::package::tests::package_allows_new_output_artifacts ... ok
+test workflow::package::tests::package_detects_hash_mismatch ... ok
+test workflow::package::tests::package_integrity_verification ... ok
+test workflow::tests::compute_environment_identity ... ok
+test workflow::tests::cycle_detection ... ok
+test workflow::tests::invalid_input_reference_fails ... ok
+test workflow::tests::reuse_key_matching ... ok
+test workflow::tests::valid_dag_passes_validation ... ok
+test review::tests::provenance_incomplete_fails ... ok
+test tests::corrupt_event_store_fails_closed ... ok
+test review::tests::wrong_project_id_fails ... ok
+test tests::traversal_and_cross_run_reads_are_rejected ... ok
+test tests::registered_symlink_artifact_is_rejected_on_read ... ok
+test tests::restart_replay_is_stable_and_pending_becomes_interrupted ... ok
+test tests::explicit_denied_timeout_and_cancel_terminal_states ... ok
+test tests::concurrent_projects_do_not_cross ... ok
+test tests::concurrent_appends_to_one_run_have_unique_monotonic_sequences ... ok
+
+test result: ok. 249 passed; 0 failed; 8 ignored; 0 measured; 0 filtered out; finished in 4.97s
+

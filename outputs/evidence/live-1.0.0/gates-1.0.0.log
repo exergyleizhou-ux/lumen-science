@@ -1,0 +1,10 @@
+lock: 42/0 + motif locked
+GATE OK: fusion-sources.lock.json
+skills: approved=5 pending=22 full DS-43 fields
+GATE OK: skills registry
+GATE OK: Motif contract surface
+GATE OK: honesty docs
+WARN  outputs/release/1.0.0/SHA256SUMS not present (run make release + copy sums)
+
+All science machine gates passed (documentation + lock integrity).
+Rust unit tests and release artifacts are separate gates.

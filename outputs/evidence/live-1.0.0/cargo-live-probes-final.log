@@ -1,0 +1,184 @@
+warning: unused imports: `AuthClass`, `CachePolicy`, `DataClass`, `RateLimit`, and `RetryPolicy`
+  --> crates/codegen/xai-grok-science/src/connectors/negative_tests.rs:12:25
+   |
+12 | use crate::connectors::{AuthClass, DataClass, CachePolicy, ConnectorDescriptor, RateLimit, RetryPolicy};
+   |                         ^^^^^^^^^  ^^^^^^^^^  ^^^^^^^^^^^                       ^^^^^^^^^  ^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `BTreeSet`
+  --> crates/codegen/xai-grok-science/src/project/evidence_graph.rs:14:34
+   |
+14 | use std::collections::{BTreeMap, BTreeSet};
+   |                                  ^^^^^^^^
+
+warning: unused import: `EvidenceEdge`
+ --> crates/codegen/xai-grok-science/src/project/query.rs:7:39
+  |
+7 | use super::evidence_graph::{EdgeKind, EvidenceEdge, EvidenceGraph, EvidenceNode, NodeId, NodeKind};
+  |                                       ^^^^^^^^^^^^
+
+warning: unused import: `super::model::ProjectId`
+ --> crates/codegen/xai-grok-science/src/project/query.rs:8:5
+  |
+8 | use super::model::ProjectId;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `MigrationResult`
+  --> crates/codegen/xai-grok-science/src/project/e2e_tests.rs:18:68
+   |
+18 | use crate::project::migration::{HashVerification, V1ToV2Migration, MigrationResult};
+   |                                                                    ^^^^^^^^^^^^^^^
+
+warning: unused import: `std::collections::BTreeMap`
+ --> crates/codegen/xai-grok-science/src/workflow/kernel.rs:5:5
+  |
+5 | use std::collections::BTreeMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::connectors::ConnectorDescriptor`
+  --> crates/codegen/xai-grok-science/src/workflow/e2e_tests.rs:13:5
+   |
+13 | use crate::connectors::ConnectorDescriptor;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `OwnerId`
+  --> crates/codegen/xai-grok-science/src/workflow/e2e_tests.rs:14:29
+   |
+14 | use crate::project::model::{OwnerId, ProjectId};
+   |                             ^^^^^^^
+
+warning: unused imports: `ReproductionAttempt` and `ReproductionResult`
+  --> crates/codegen/xai-grok-science/src/workflow/e2e_tests.rs:20:54
+   |
+20 |     ResourceCap, AdmissionStatus, ReproductionLevel, ReproductionAttempt,
+   |                                                      ^^^^^^^^^^^^^^^^^^^
+21 |     ReproductionResult,
+   |     ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `super::adapter::ProtocolAdapter`
+ --> crates/codegen/xai-grok-science/src/connectors/negative_tests.rs:9:5
+  |
+9 | use super::adapter::ProtocolAdapter;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused variable: `bad_project`
+   --> crates/codegen/xai-grok-science/src/review.rs:288:13
+    |
+288 |         let bad_project = ProjectId::new("wrong-project");
+    |             ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_bad_project`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `S` is never used
+ --> crates/codegen/xai-grok-science/src/connectors/dbsnp.rs:9:46
+  |
+9 | #[cfg(test)] mod tests { use super::*; const S: &[u8] = br#"{"esearchresult":{"idlist":["12345"]}}"#; const M: &[u8] = br#"{"result":{"ui...
+  |                                              ^
+  |
+  = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `xai-grok-science` (lib test) generated 12 warnings (run `cargo fix --lib -p xai-grok-science --tests` to apply 10 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.44s
+     Running unittests src/lib.rs (target/debug/deps/xai_grok_science-e0b7a9639ffc4671)
+
+running 8 tests
+
+thread 'connectors::openalex::tests::live_probe_openalex_real_search' (10154631) panicked at crates/codegen/xai-grok-science/src/connectors/openalex.rs:222:14:
+live OpenAlex probe requires runtime-only OPENALEX_API_KEY: NotPresent
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test connectors::openalex::tests::live_probe_openalex_real_search ... FAILED
+
+thread 'connectors::semantic_scholar::tests::live_probe_semantic_scholar_real_search' (10154633) panicked at crates/codegen/xai-grok-science/src/connectors/semantic_scholar.rs:189:14:
+Semantic Scholar status: reqwest::Error { kind: Status(429, None), url: "https://api.semanticscholar.org/graph/v1/paper/search?query=machine%20learning&limit=3&fields=paperId,title,url,year,venue,externalIds" }
+test connectors::semantic_scholar::tests::live_probe_semantic_scholar_real_search ... FAILED
+
+thread 'connectors::arxiv::tests::live_probe_arxiv_real_search' (10154627) panicked at crates/codegen/xai-grok-science/src/connectors/arxiv.rs:238:14:
+arXiv status: reqwest::Error { kind: Status(429, None), url: "https://export.arxiv.org/api/api/query?search_query=all%3Amachine%20learning&start=0&max_results=3&sortBy=relevance" }
+test connectors::arxiv::tests::live_probe_arxiv_real_search ... FAILED
+CROSSREF_LIVE_EVIDENCE={
+  "connector": "crossref",
+  "first_record": {
+    "container": "F1000Research Channels",
+    "doi": "10.12688/f1000research.channels.655",
+    "title": "Single-Cell RNA-Sequencing",
+    "url": "https://doi.org/10.12688%2Ff1000research.channels.655"
+  },
+  "query": "single cell RNA sequencing",
+  "request_sha256": "e6afe01d5fb2b87fff8dedb0a15d41fef6ab4d8cbd9956cf385b19fdcdd21b2e",
+  "retrieved_at": "2026-07-25T23:27:44.130397+00:00",
+  "tos_url": "https://www.crossref.org/documentation/retrieve-metadata/",
+  "total_hits": 4144918
+}
+test connectors::crossref::tests::live_probe_crossref_real_search ... ok
+UNIPROT_LIVE_EVIDENCE={
+  "connector": "uniprot",
+  "first_record": {
+    "accession": "P01308",
+    "organism": "Homo sapiens",
+    "protein_name": "Insulin",
+    "url": "https://www.uniprot.org/uniprotkb/P01308/entry"
+  },
+  "query": "insulin",
+  "retrieved_at": "2026-07-25T23:27:44.775313+00:00",
+  "tos_url": "https://www.uniprot.org/help/license",
+  "total_hits": 1
+}
+test connectors::uniprot::tests::live_probe_uniprot_real_search ... ok
+EUROPEPMC_LIVE_EVIDENCE={
+  "connector": "europepmc",
+  "first_record": {
+    "publication": "Front Glob Womens Health",
+    "source_and_id": "PMC:PMC13294870",
+    "title": "Application of single-cell RNA sequencing in preeclampsia",
+    "url": "https://europepmc.org/article/PMC/PMC13294870"
+  },
+  "query": "single cell RNA",
+  "retrieved_at": "2026-07-25T23:27:45.044035+00:00",
+  "tos_url": "https://europepmc.org/Copyright",
+  "total_hits": 1351342
+}
+test connectors::europepmc::tests::live_probe_europepmc_real_search ... ok
+PUBMED_LIVE_EVIDENCE={
+  "connector": "pubmed",
+  "first_record": {
+    "journal": "Frontiers in plant science",
+    "pmid": "42500480",
+    "title": "Beyond GMOs: transgene-free gene-edited crops for global food security.",
+    "url": "https://pubmed.ncbi.nlm.nih.gov/42500480/"
+  },
+  "query": "crispr base editing",
+  "request_urls": [
+    "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=3&retstart=0&term=crispr%20base%20editing",
+    "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id=42500480,42499346,42499296"
+  ],
+  "retrieved_at": "2026-07-25T23:27:45.288939+00:00",
+  "tos_url": "https://www.ncbi.nlm.nih.gov/home/about/policies/",
+  "total_hits": 25323
+}
+test connectors::pubmed::tests::live_probe_pubmed_real_search ... ok
+CHEMBL_LIVE_EVIDENCE={
+  "connector": "chembl",
+  "first_record": {
+    "chembl_id": "CHEMBL25",
+    "name": "ASPIRIN",
+    "url": "https://www.ebi.ac.uk/chembl/compound_report_card/CHEMBL25/"
+  },
+  "query": "aspirin",
+  "request_url": "https://www.ebi.ac.uk/chembl/api/data/molecule/search.json?q=aspirin&limit=3&offset=0",
+  "retrieved_at": "2026-07-25T23:27:46.415550+00:00",
+  "tos_url": "https://www.ebi.ac.uk/about/terms-of-use",
+  "total_hits": 52
+}
+test connectors::chembl::tests::live_probe_chembl_real_search ... ok
+
+failures:
+
+failures:
+    connectors::arxiv::tests::live_probe_arxiv_real_search
+    connectors::openalex::tests::live_probe_openalex_real_search
+    connectors::semantic_scholar::tests::live_probe_semantic_scholar_real_search
+
+test result: FAILED. 5 passed; 3 failed; 0 ignored; 0 measured; 249 filtered out; finished in 3.35s
+
+error: test failed, to rerun pass `-p xai-grok-science --lib`

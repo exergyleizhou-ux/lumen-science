@@ -1,0 +1,60 @@
+rm -rf build dist/science-release
+clean: done
+macOS builds complete → dist/science-release
+Linux builds complete → dist/science-release
+Windows builds complete → dist/science-release
+Building release package version=1.0.0...
+Release complete → dist/science-release
+total 270568
+-rwxr-xr-x@ 1 lei  staff   2.0M  7月 26 07:26 lumen-mcp-artifacts-darwin-amd64
+-rwxr-xr-x@ 1 lei  staff   1.9M  7月 26 07:26 lumen-mcp-artifacts-darwin-arm64
+-rwxr-xr-x@ 1 lei  staff   1.9M  7月 26 07:26 lumen-mcp-artifacts-linux-amd64
+-rwxr-xr-x@ 1 lei  staff   1.9M  7月 26 07:26 lumen-mcp-artifacts-linux-arm64
+-rwxr-xr-x@ 1 lei  staff   2.1M  7月 26 07:26 lumen-mcp-artifacts-windows-amd64.exe
+-rwxr-xr-x@ 1 lei  staff   5.3M  7月 26 07:26 lumen-mcp-http_bridge-darwin-amd64
+-rwxr-xr-x@ 1 lei  staff   5.0M  7月 26 07:26 lumen-mcp-http_bridge-darwin-arm64
+-rwxr-xr-x@ 1 lei  staff   5.2M  7月 26 07:26 lumen-mcp-http_bridge-linux-amd64
+-rwxr-xr-x@ 1 lei  staff   5.0M  7月 26 07:26 lumen-mcp-http_bridge-linux-arm64
+-rwxr-xr-x@ 1 lei  staff   5.3M  7月 26 07:26 lumen-mcp-http_bridge-windows-amd64.exe
+-rwxr-xr-x@ 1 lei  staff   2.0M  7月 26 07:26 lumen-mcp-notebook-darwin-amd64
+-rwxr-xr-x@ 1 lei  staff   2.0M  7月 26 07:26 lumen-mcp-notebook-darwin-arm64
+-rwxr-xr-x@ 1 lei  staff   2.0M  7月 26 07:26 lumen-mcp-notebook-linux-amd64
+-rwxr-xr-x@ 1 lei  staff   2.1M  7月 26 07:26 lumen-mcp-notebook-linux-arm64
+-rwxr-xr-x@ 1 lei  staff   2.1M  7月 26 07:26 lumen-mcp-notebook-windows-amd64.exe
+-rwxr-xr-x@ 1 lei  staff   1.9M  7月 26 07:26 lumen-mcp-reviewer-darwin-amd64
+-rwxr-xr-x@ 1 lei  staff   1.9M  7月 26 07:26 lumen-mcp-reviewer-darwin-arm64
+-rwxr-xr-x@ 1 lei  staff   1.9M  7月 26 07:26 lumen-mcp-reviewer-linux-amd64
+-rwxr-xr-x@ 1 lei  staff   1.9M  7月 26 07:26 lumen-mcp-reviewer-linux-arm64
+-rwxr-xr-x@ 1 lei  staff   2.0M  7月 26 07:26 lumen-mcp-reviewer-windows-amd64.exe
+-rwxr-xr-x@ 1 lei  staff   2.1M  7月 26 07:26 lumen-mcp-skill-migrate-darwin-amd64
+-rwxr-xr-x@ 1 lei  staff   2.1M  7月 26 07:26 lumen-mcp-skill-migrate-darwin-arm64
+-rwxr-xr-x@ 1 lei  staff   2.0M  7月 26 07:26 lumen-mcp-skill-migrate-linux-amd64
+-rwxr-xr-x@ 1 lei  staff   2.1M  7月 26 07:26 lumen-mcp-skill-migrate-linux-arm64
+-rwxr-xr-x@ 1 lei  staff   2.2M  7月 26 07:26 lumen-mcp-skill-migrate-windows-amd64.exe
+-rw-r--r--@ 1 lei  staff   8.1M  7月 26 07:26 lumen-science-1.0.0-darwin-amd64.tar.gz
+-rw-r--r--@ 1 lei  staff   7.6M  7月 26 07:26 lumen-science-1.0.0-darwin-arm64.tar.gz
+-rw-r--r--@ 1 lei  staff   8.0M  7月 26 07:26 lumen-science-1.0.0-linux-amd64.tar.gz
+-rw-r--r--@ 1 lei  staff   7.4M  7月 26 07:26 lumen-science-1.0.0-linux-arm64.tar.gz
+-rw-r--r--@ 1 lei  staff   8.3M  7月 26 07:26 lumen-science-1.0.0-windows-amd64.zip
+-rwxr-xr-x@ 1 lei  staff   5.5M  7月 26 07:26 lumen-science-darwin-amd64
+-rwxr-xr-x@ 1 lei  staff   5.3M  7月 26 07:26 lumen-science-darwin-arm64
+-rwxr-xr-x@ 1 lei  staff   5.4M  7月 26 07:26 lumen-science-linux-amd64
+-rwxr-xr-x@ 1 lei  staff   5.1M  7月 26 07:26 lumen-science-linux-arm64
+-rwxr-xr-x@ 1 lei  staff   5.5M  7月 26 07:26 lumen-science-windows-amd64.exe
+-rw-r--r--@ 1 lei  staff   3.4K  7月 26 07:26 SHA256SUMS
+--- SHA256SUMS (first 15) ---
+b5ad043e46c1eaa89397471ab8dc709df5a534458c2197772724c48b570e2ee5  lumen-science-1.0.0-darwin-amd64.tar.gz
+9886220a6e76fd08260dd223d4228a9f75502259cd76613dcbaa68a1d251fcfe  lumen-science-1.0.0-darwin-arm64.tar.gz
+5ddff77d5328baf3181c7bdb0859b1646478b8d9e663519ecc793848d174b3a6  lumen-science-1.0.0-linux-amd64.tar.gz
+107076d953804510cabdc8de8677acddadeb04fb5652627df85712dbca8c447f  lumen-science-1.0.0-linux-arm64.tar.gz
+069679eb93ae27bd1bc2443209390abc72610f4bb2fcfaada33a49a1de204dcd  lumen-science-1.0.0-windows-amd64.zip
+827436221cd2672cc1356a1dd9eef0c5b8d88ac0c49b716e5b41a8b586a598e2  lumen-science-darwin-amd64
+6487db116d6054cc2e83a180b9205e8d14e4850a8381303d41c3799f82756fa3  lumen-science-darwin-arm64
+0986801355a0806fb18ef56296101719894a6faa24b04532f1d25cf2f3a282f6  lumen-science-linux-amd64
+d6d7715425704eb016d0e88f8ea4a20d25cf71fbd50a2d9cb071850c6580ecf5  lumen-science-linux-arm64
+04afd1e6bfcf1be9df15b19f09b5134b0275d94d147bbf3432e8a878d8c64393  lumen-science-windows-amd64.exe
+1799f7747b5b9e455f116dc98a22162f43e276d7748a5396cbf8337bed7f25d2  lumen-mcp-artifacts-darwin-amd64
+271d70a689cde27119fdadc9ea116f65012dbcb734562f58342f49b69e634dc1  lumen-mcp-artifacts-darwin-arm64
+fec5cf50e03677aaaf442e6d74c7e42f26b7bd29eedf255a714bd7981fd5bfcf  lumen-mcp-artifacts-linux-amd64
+3c9a2b9b0bb8d8bc1f01eadedafdbdc84f7ad93c8825841c3fcaf31fa7d0266b  lumen-mcp-artifacts-linux-arm64
+13b56920dc89f8af3a4413c351146cc9a6638872f00db735bff698bb02491a96  lumen-mcp-artifacts-windows-amd64.exe
