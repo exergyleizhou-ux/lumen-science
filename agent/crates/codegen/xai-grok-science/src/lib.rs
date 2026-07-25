@@ -23,6 +23,7 @@ pub mod dummy_lab;
 pub mod import;
 pub mod preview;
 pub mod review;
+pub mod project;
 pub mod transport;
 
 pub const SCHEMA_VERSION: u32 = 1;
