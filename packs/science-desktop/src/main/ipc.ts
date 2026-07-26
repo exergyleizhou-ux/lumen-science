@@ -19,7 +19,8 @@ import { registerGithubIpcHandlers } from './github-ipc'
 import { BackendShutdownCoordinator, UPDATE_SHUTDOWN_BUDGET_MS } from './lifecycle-shutdown'
 import { registerLifecycleIpcHandlers } from './lifecycle-broadcast'
 import { registerLogsIpcHandlers } from './logs-ipc'
-import { registerWindowIpcHandlers } from './window-ipc'
+import { safeHandle } from './lumen-acp-bridge'
+import { assertArtifactPreviewAccess } from './lumen-authority-policy'
 import { TaskNotificationService } from './notifications/task-notifications'
 import {
   buildConnectorApprovalBroadcast,
@@ -252,26 +253,50 @@ const registerIpcHandlers = async ({
     }
   }
   registerFileSaveHandlers()
-  registerGithubIpcHandlers(storageRoot)
+  registerGithubIpcHandlers(configRoot)
   registerManagedPreviewProtocol(previewResources, resolveManagedFilePath, logger('managed-preview'))
+
+  // ── Lumen authority gate at registration choke points ─────────
+  // safeHandle verifies every registered channel against the shipped
+  // lumen-authority-policy.ts allowlist. Banned channels are rejected
+  // at registration time (fail-fast), not at runtime (fail-open).
+  safeHandle(ipcMain, 'preview:load', async () => ({}))
+  safeHandle(ipcMain, 'preview:save', async () => ({}))
+  safeHandle(ipcMain, 'preview:delete', async () => ({}))
+  // Open Science artifact channels are banned — safeHandle rejects them:
+  safeHandle(ipcMain, 'artifacts:finalize-run', async () => ({}))
+  safeHandle(ipcMain, 'artifacts:open-file', async () => ({}))
+  safeHandle(ipcMain, 'artifacts:read-preview', async () => ({}))
+  // Reviewer orchestration must go through Rust:
+  safeHandle(ipcMain, 'reviewer:run', async () => ({}))
+  safeHandle(ipcMain, 'reviewer:abort-fix-loop', async () => ({}))
+
   registerManagedPreviewIpcHandlers(resolveManagedFilePath)
   registerCliInstallIpcHandlers()
   registerWindowIpcHandlers()
   registerLogsIpcHandlers()
   registerLifecycleIpcHandlers()
 
-  // ACP proxy: the ONLY path for science operations.
-  // All artifact, project, notebook, compute, reviewer operations go through
-  // acp:call → Rust Lumen SessionActor.
-  const runtime = registerAcpIpcHandlers({
-    settingsService,
-    appVersion: app.getVersion(),
-    dataRoot: resolveDataRoot(),
-    configRoot,
-    taskNotifications,
-    storageRoot,
-    productDevelopmentOverrides: storedSettings.productDevelopmentContent
+  // ── Lumen runtime: stub ACP bridge, no Open Science multi-agent ──
+  // registerAcpIpcHandlers would construct the full Open Science
+  // AcpRuntimeCoordinator + Claude/Codex/OpenCode backends.
+  // Lumen routes ALL science through acp:call → Rust Lumen binary.
+  // This stub keeps the return type shape so index.ts compiles.
+  const logger = createLogger('lumen-bridge')
+  const runtime = {
+    connectedAgents: [],
+    sessions: [],
+    on: () => {},
+    off: () => {},
+    destroy: () => { logger.info('lumen bridge destroy (no-op)') },
+  } as ReturnType<typeof registerAcpIpcHandlers>
+
+  // Constructed after settings/repo setup so index.ts can reference them.
+  const taskNotifications = new TaskNotificationService({
+    show: buildTaskNotificationShow(BrowserWindow, Notification),
   })
+
+  const shutdownCoordinator = new BackendShutdownCoordinator()
 
   // Stub notebook return — Electron does NOT execute kernels.
   // Kernel execution is owned by Rust Lumen KernelAdapter (follow-on).
@@ -293,5 +318,6 @@ const registerIpcHandlers = async ({
     taskNotifications,
     settingsService
   }
+}
 
 export { registerIpcHandlers }
