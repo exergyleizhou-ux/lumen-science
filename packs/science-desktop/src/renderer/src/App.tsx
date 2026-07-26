@@ -8,6 +8,7 @@ import { LegacyDataMoveDialog } from '@/components/LegacyDataMoveDialog'
 import { LifecycleToast } from '@/components/LifecycleToast'
 import { UpdateDialog } from '@/components/UpdateDialog'
 import { HomePage } from '@/pages/home/HomePage'
+import { ResearchShell } from '@/pages/research/ResearchShell'
 import { OnboardingWizard } from '@/pages/onboarding/OnboardingWizard'
 import { resolveStartupView } from '@/pages/onboarding/startup-gate'
 import { ComputeApprovalDialog } from '@/pages/settings/ComputeApprovalDialog'
@@ -160,7 +161,9 @@ const App = (): React.JSX.Element | null => {
     <>
       <EnvStatusBanner ui={envUi} onRetry={() => void retryEnv()} />
       {view === 'home' ? (
-        <HomePage />
+        // Month-1 product shell: Question/Plan/Evidence/Result/Review via lumen bridge.
+        // Legacy Open Science HomePage remains available when lumen API is absent.
+        window.api?.lumen ? <ResearchShell /> : <HomePage />
       ) : (
         <WorkspacePage isSessionPersistenceReady={isSessionPersistenceReady} />
       )}

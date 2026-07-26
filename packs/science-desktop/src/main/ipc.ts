@@ -24,7 +24,7 @@
  * See: third_party/open-science/NOTICE
  */
 
-import { ipcMain, Notification } from 'electron'
+import { app, ipcMain, Notification } from 'electron'
 import { BackendShutdownCoordinator } from './lifecycle-shutdown'
 import { createLogger } from './logger'
 import { installIpcGuard, safeHandle, getLumenBinaryHash, acpCall } from './lumen-acp-bridge'
@@ -45,6 +45,10 @@ import {
   createAcpMembershipAsserter,
   listArtifactsViaAcp,
 } from './files/acp-membership'
+import { createHybridMembershipAsserter } from './files/hybrid-membership'
+import { getDefaultLocalProjectCatalog } from './files/local-project-catalog'
+import { join } from 'node:path'
+import { app } from 'electron'
 
 type IpcRegistrationOptions = {
   mainEntryPath: string
@@ -85,18 +89,25 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
   })
 
   // ── Science + OSF-2 product path (single registration site) ──
-  // ACP-wired store + membership-gated bind + artifact_list seed.
+  // ACP-wired store + hybrid membership (ACP then local UI catalog) + seed.
   const acpTool = async (tool: string, args: Record<string, unknown>) =>
     acpCall(tool, args)
   const wiredStore = new AcpPreviewStore(acpTool)
+  const catalogPath = join(app.getPath('userData'), 'lumen-ui-projects.json')
+  const projectCatalog = getDefaultLocalProjectCatalog(catalogPath)
 
   registerScienceIpcHandlers(ipcMain, {
     safeHandle,
     getLumenBinaryHash,
     previewStore: wiredStore,
-    assertMembership: createAcpMembershipAsserter(acpTool),
+    assertMembership: createHybridMembershipAsserter({
+      acp: createAcpMembershipAsserter(acpTool),
+      catalog: projectCatalog,
+    }),
     listArtifacts: ({ projectId, runId }) =>
       listArtifactsViaAcp(acpTool, { projectId, runId }),
+    projectCatalog,
+    defaultOwnerId: process.env.LUMEN_DESKTOP_OWNER_ID || 'local-user',
   })
 
   // ── Backend handles with shutdown contracts ─────────────────

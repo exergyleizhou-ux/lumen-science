@@ -541,6 +541,35 @@ interface OpenScienceAPI {
     // Sends an abort request to stop the running fix loop for a session.
     abortFixLoop(sessionId: string): Promise<void>
   }
+  /** Lumen SessionActor product path — prefer over banned projects:*/artifacts:* */
+  lumen: {
+    getBinaryHash(): Promise<string | null>
+    callTool(toolName: string, args?: Record<string, unknown>): Promise<unknown>
+    listTools(): Promise<unknown>
+    bindSession(request: {
+      ownerId: string
+      projectId: string
+      runId?: string
+    }): Promise<unknown>
+    unbindSession(): Promise<unknown>
+    previewByArtifact(request: {
+      artifactId: string
+      expectedSha256?: string
+      mimeType?: string
+    }): Promise<unknown>
+    listUiProjects(): Promise<unknown>
+    createUiProject(request: {
+      name: string
+      description?: string
+      ownerId?: string
+    }): Promise<unknown>
+    openUiProject(request: {
+      projectId: string
+      ownerId?: string
+      runId?: string
+    }): Promise<unknown>
+    deleteUiProject(request: { projectId: string }): Promise<unknown>
+  }
   window: {
     // Closes the focused window (the Cmd+W / Ctrl+W fallback when no preview panel is open).
     close(): Promise<void>

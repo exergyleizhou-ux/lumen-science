@@ -89,6 +89,8 @@ async function run() {
   )
   await test('registers files:bind-session', () => ok(handlers.has('files:bind-session')))
   await test('registers files:unbind-session', () => ok(handlers.has('files:unbind-session')))
+  await test('registers files:list-ui-projects', () => ok(handlers.has('files:list-ui-projects')))
+  await test('registers files:open-ui-project', () => ok(handlers.has('files:open-ui-project')))
 
   await test('all registered channels pass validateIpcChannel', () => {
     for (const ch of handlers.keys()) {

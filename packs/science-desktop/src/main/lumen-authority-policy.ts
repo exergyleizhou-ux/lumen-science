@@ -52,6 +52,11 @@ const ALLOWED_CHANNELS = new Set<string>([
   // OSF-2 session bind — identity set only after membership assertion
   'files:bind-session',
   'files:unbind-session',
+  // UI project catalog (not science authority; open binds via membership)
+  'files:list-ui-projects',
+  'files:create-ui-project',
+  'files:open-ui-project',
+  'files:delete-ui-project',
 ])
 
 /**

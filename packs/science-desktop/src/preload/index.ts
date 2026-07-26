@@ -588,6 +588,38 @@ type OpenScienceAPI = {
     // Sends an abort request to stop the running fix loop for a session.
     abortFixLoop: (sessionId: string) => Promise<void>
   }
+  /**
+   * Lumen SessionActor product path (OSF-2). Prefer this over projects:*/artifacts:*
+   * which are banned in greenfield main and must not regain execution authority.
+   */
+  lumen: {
+    getBinaryHash: () => Promise<string | null>
+    callTool: (toolName: string, args?: Record<string, unknown>) => Promise<unknown>
+    listTools: () => Promise<unknown>
+    bindSession: (request: {
+      ownerId: string
+      projectId: string
+      runId?: string
+    }) => Promise<unknown>
+    unbindSession: () => Promise<unknown>
+    previewByArtifact: (request: {
+      artifactId: string
+      expectedSha256?: string
+      mimeType?: string
+    }) => Promise<unknown>
+    listUiProjects: () => Promise<unknown>
+    createUiProject: (request: {
+      name: string
+      description?: string
+      ownerId?: string
+    }) => Promise<unknown>
+    openUiProject: (request: {
+      projectId: string
+      ownerId?: string
+      runId?: string
+    }) => Promise<unknown>
+    deleteUiProject: (request: { projectId: string }) => Promise<unknown>
+  }
   window: {
     // Closes the focused window (the Cmd+W / Ctrl+W fallback when no preview panel is open).
     close: () => Promise<void>
@@ -1128,7 +1160,28 @@ const api: OpenScienceAPI = {
       onIpcMessage(WINDOW_CLOSE_CONFIRM_REQUEST_CHANNEL, listener),
     sendCloseConfirmResponse: (payload) =>
       ipcRenderer.send(WINDOW_CLOSE_CONFIRM_RESPONSE_CHANNEL, payload)
-  }
+  },
+  lumen: {
+    getBinaryHash: () =>
+      ipcRenderer.invoke('app:get-lumen-hash') as Promise<string | null>,
+    callTool: (toolName, args = {}) =>
+      ipcRenderer.invoke('acp:call', toolName, args) as Promise<unknown>,
+    listTools: () => ipcRenderer.invoke('acp:list-tools') as Promise<unknown>,
+    bindSession: (request) =>
+      ipcRenderer.invoke('files:bind-session', request) as Promise<unknown>,
+    unbindSession: () =>
+      ipcRenderer.invoke('files:unbind-session') as Promise<unknown>,
+    previewByArtifact: (request) =>
+      ipcRenderer.invoke('files:preview-by-artifact', request) as Promise<unknown>,
+    listUiProjects: () =>
+      ipcRenderer.invoke('files:list-ui-projects') as Promise<unknown>,
+    createUiProject: (request) =>
+      ipcRenderer.invoke('files:create-ui-project', request) as Promise<unknown>,
+    openUiProject: (request) =>
+      ipcRenderer.invoke('files:open-ui-project', request) as Promise<unknown>,
+    deleteUiProject: (request) =>
+      ipcRenderer.invoke('files:delete-ui-project', request) as Promise<unknown>,
+  },
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to
