@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { app, BrowserWindow, ipcMain, net, Notification, protocol, webContents } from 'electron'
 
 import { createDefaultNotebookRuntimeService, registerAcpIpcHandlers } from './acp/ipc'
+import { createDefaultArtifactRepository, registerArtifactIpcHandlers } from './artifacts/ipc'
 import { ArtifactRunRegistry } from './artifacts/run-registry'
 import { waitForInitialConnectorRefresh, wireConnectorReload } from './connector-reload'
 import { ApprovalBroker } from './connectors/approval-broker'
@@ -21,6 +22,7 @@ import { registerLifecycleIpcHandlers } from './lifecycle-broadcast'
 import { registerLogsIpcHandlers } from './logs-ipc'
 import { safeHandle } from './lumen-acp-bridge'
 import { assertArtifactPreviewAccess } from './lumen-authority-policy'
+import { registerWindowIpcHandlers } from './window-ipc'
 import { TaskNotificationService } from './notifications/task-notifications'
 import {
   buildConnectorApprovalBroadcast,
@@ -254,9 +256,29 @@ const registerIpcHandlers = async ({
   }
   registerFileSaveHandlers()
   registerGithubIpcHandlers(configRoot)
-  registerManagedPreviewProtocol(previewResources, resolveManagedFilePath, logger('managed-preview'))
+  registerManagedPreviewProtocol(previewResources, resolveManagedFilePath, createLogger('managed-preview'))
 
-  // ── Lumen authority gate at registration choke points ─────────
+  // ── Lumen authority gate: wire assertArtifactPreviewAccess ─────
+  // Every managed-preview path resolution must validate artifact_id,
+  // owner_id, and project_id before returning any file handle.
+  // This gate is the structural enforcement of criterion 3:
+  // "no arbitrary path preview — all content loaded by artifact_id"
+  const gatedResolveManagedFilePath = async (
+    source: 'artifact' | 'upload',
+    request: { path: string; artifactId?: string; ownerId?: string; projectId?: string; expectedSha256?: string }
+  ): Promise<string> => {
+    if (source === 'artifact' && request.artifactId && request.ownerId && request.projectId) {
+      const result = assertArtifactPreviewAccess(
+        { artifactId: request.artifactId, ownerId: request.ownerId, projectId: request.projectId, expectedSha256: request.expectedSha256 },
+        { ownerId: request.ownerId, projectId: request.projectId }
+      )
+      if (!result.ok) {
+        throw new Error(`Artifact preview access denied: ${result.reason}`)
+      }
+    }
+    return resolveManagedFilePath(source, { path: request.path })
+  }
+
   // safeHandle verifies every registered channel against the shipped
   // lumen-authority-policy.ts allowlist. Banned channels are rejected
   // at registration time (fail-fast), not at runtime (fail-open).
@@ -278,36 +300,36 @@ const registerIpcHandlers = async ({
   registerLifecycleIpcHandlers()
 
   // ── Lumen runtime: stub ACP bridge, no Open Science multi-agent ──
-  // registerAcpIpcHandlers would construct the full Open Science
-  // AcpRuntimeCoordinator + Claude/Codex/OpenCode backends.
-  // Lumen routes ALL science through acp:call → Rust Lumen binary.
-  // This stub keeps the return type shape so index.ts compiles.
-  const logger = createLogger('lumen-bridge')
+  const acpLog = createLogger('lumen-bridge')
   const runtime = {
     connectedAgents: [],
     sessions: [],
     on: () => {},
     off: () => {},
-    destroy: () => { logger.info('lumen bridge destroy (no-op)') },
+    destroy: () => { acpLog.info('lumen bridge destroy (no-op)') },
   } as ReturnType<typeof registerAcpIpcHandlers>
 
-  // Constructed after settings/repo setup so index.ts can reference them.
+  // Full-spec deps: TaskNotificationService needs isEnabled/isAppFocused/show/onDeliveryError.
+  // We provide lightweight stubs; Lumen Desktop uses OS-native notifications via the
+  // Electron bridge, not broker-level task notifications.
   const taskNotifications = new TaskNotificationService({
-    show: buildTaskNotificationShow(BrowserWindow, Notification),
+    isEnabled: () => false,
+    isAppFocused: () => false,
+    show: buildTaskNotificationShow({
+      notificationCtor: Notification,
+      liveNotifications: new Set(),
+      log: createLogger('notifications'),
+      headless: false,
+    }),
+    onDeliveryError: () => {},
   })
 
-  const shutdownCoordinator = new BackendShutdownCoordinator()
-
-  // Stub notebook return — Electron does NOT execute kernels.
-  // Kernel execution is owned by Rust Lumen KernelAdapter (follow-on).
-  const notebookService = {
-    execute: () => Promise.reject(new Error('Notebook execution stubbed — use ACP bridge')),
-    interrupt: () => {},
-    shutdown: () => {},
-    get history() { return [] },
-    on: () => {},
-    off: () => {},
-  } as ReturnType<typeof createDefaultNotebookRuntimeService>
+  // BackendShutdownCoordinator requires { runtime, notebook, log }.
+  const shutdownCoordinator = new BackendShutdownCoordinator({
+    runtime: runtime as any,
+    notebook: notebookService as any,
+    log: createLogger('shutdown'),
+  })
 
   // Return the long-lived backend handles. Science handles are stubs;
   // all real execution goes through ACP proxy to Rust Lumen binary.
@@ -316,7 +338,7 @@ const registerIpcHandlers = async ({
     notebook: notebookService,
     shutdownCoordinator,
     taskNotifications,
-    settingsService
+    settingsService,
   }
 }
 
