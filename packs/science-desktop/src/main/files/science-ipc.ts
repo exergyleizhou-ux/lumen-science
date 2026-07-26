@@ -138,6 +138,35 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
         const raw = await callTool(toolName, args)
         return raw
       },
+      defaultOwnerId: defaultOwner,
+      storeRoot: SCIENCE_STORE_DIR,
+      approvalTimeoutMs: ENGINE_APPROVAL_TIMEOUT_MS,
+      // Resolves lazily at execute time (`environment` is declared further
+      // down this function; by the time a cell runs, it is initialised). The
+      // first runnable Python is taken in DISCOVERY order, which is
+      // deterministic: manual settings entries, then PATH, then well-known
+      // install dirs — so a user's explicit choice wins over a system default.
+      resolveInterpreter: async () => {
+        if (!environment) {
+          return {
+            ok: false as const,
+            reason:
+              'no runtime root configured for this process — cannot name the interpreter ' +
+              'this cell would run on, so nothing was executed',
+          }
+        }
+        const report = await environment.discover('python')
+        const usable = report.interpreters.find((i) => i.runnable)
+        if (!usable) {
+          return {
+            ok: false as const,
+            reason:
+              'no runnable Python interpreter was discovered on this machine — ' +
+              'add one in Settings or install python3, then retry',
+          }
+        }
+        return { ok: true as const, interpreterPath: usable.interpreterPath }
+      },
     })
 
   safeHandle(ipcMain, 'acp:call', async (_event, toolName: unknown, args: unknown) => {

@@ -2,7 +2,7 @@
  * OSF-3 Notebook plan — pure module (no Electron, no process spawn).
  *
  * Builds an execution plan that can only be fulfilled by Lumen ACP
- * (SessionActor → KernelAdapter / notebook_execute). TypeScript KernelExecutor
+ * (SessionActor → KernelAdapter via workflow_execute). TypeScript KernelExecutor
  * remains stubbed and must never receive this plan.
  */
 
@@ -27,7 +27,7 @@ export type NotebookCellPlan = {
   codeHash: string
   codeLength: number
   dryRun: boolean
-  tool: 'notebook_execute'
+  tool: 'workflow_execute'
   authority: 'SessionActor/KernelAdapter'
   requiresAdmittedKernel: true
   /** Static warnings (not hard fails) */
@@ -81,7 +81,7 @@ export function planNotebookCell(req: NotebookCellRequest): NotebookCellPlan | {
     codeHash: hashNotebookCode(req.code),
     codeLength: req.code.length,
     dryRun: Boolean(req.dryRun),
-    tool: 'notebook_execute',
+    tool: 'workflow_execute',
     authority: 'SessionActor/KernelAdapter',
     requiresAdmittedKernel: true,
     warnings,
@@ -105,7 +105,7 @@ export function assertNotebookExecuteAccess(
       reason: 'no trusted session — open a project before notebook execute',
     }
   }
-  if (plan.tool !== 'notebook_execute') {
+  if (plan.tool !== 'workflow_execute') {
     return { ok: false, reason: 'unknown notebook tool' }
   }
   if (plan.authority !== 'SessionActor/KernelAdapter') {

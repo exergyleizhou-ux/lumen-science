@@ -204,3 +204,45 @@ test('the workspace explains itself to a researcher, not to an implementer', asy
   expect(haystack).toContain('remote compute')
   expect(haystack).toContain('research question')
 })
+
+test('a notebook cell actually runs in the engine after approval', async () => {
+  // The chain this proves: Run in engine → workflow_execute → SessionActor
+  // permission prompt → human Allow → kernel admitted from a pinned
+  // interpreter → sandboxed exec-loop → run recorded → result on screen.
+  //
+  // Until LS5-K24 the button sent `notebook_execute`, which the desktop's own
+  // registry REJECTS — so this path had never once succeeded against an
+  // engine, while the notebook suite stayed green on a mock that accepted the
+  // rejected name. This is the only test anywhere that runs a cell for real.
+  await page.getByRole('tab', { name: 'Notebook', exact: true }).click()
+  await page.locator('#panel-notebook').waitFor({ timeout: 10_000 })
+
+  const code = page.locator('#panel-notebook textarea')
+  await code.fill('print(6 * 7)\n')
+  await page.getByRole('button', { name: 'Run in engine', exact: true }).click()
+
+  // The engine must ask before running arbitrary code. If no prompt ever
+  // appears AND no result arrives, the timeout below reports it.
+  const allow = page.getByRole('button', { name: /allow/i }).first()
+  try {
+    await allow.waitFor({ timeout: 30_000 })
+    await allow.click()
+  } catch {
+    // Already-approved sessions may not re-prompt; the output assertion below
+    // is the real gate either way.
+  }
+
+  // The run's terminal state must be visible, and it must be success. The
+  // output pane prints the engine's report verbatim.
+  await expect
+    .poll(async () => page.locator('#panel-notebook pre').textContent(), { timeout: 120_000 })
+    .toContain('"state": "succeeded"')
+
+  const report = (await page.locator('#panel-notebook pre').textContent()) ?? ''
+  // An artifact was committed — the cell really produced recorded output, not
+  // just a state flag.
+  expect(report).toContain('artifactsCommitted')
+  // Empty MEANS empty: asserting the absence of '"refusedSteps": [' bans the
+  // empty array too, since '[]' contains '['. Assert the empty list itself.
+  expect(report).toContain('"refusedSteps": []')
+})
