@@ -171,6 +171,37 @@ pub struct FinishScienceFetch {
     pub(crate) respond_to:
         oneshot::Sender<xai_grok_science::Result<xai_grok_science::connectors::fetch::FetchResult>>,
 }
+/// A project mutation admitted by the actor and awaiting its permission
+/// decision. Holds the durable run ticket, so every allow/deny/timeout/cancel
+/// has a record to finish.
+pub struct PreparedScienceProjectMutation {
+    pub(crate) store: xai_grok_science::ScienceStore,
+    pub(crate) project_root: std::path::PathBuf,
+    pub(crate) ticket: xai_grok_science::csv::ScienceRunTicket,
+    pub(crate) request: xai_grok_science::project::MutationRequest,
+    /// Human-readable target used in the permission prompt.
+    pub(crate) target: String,
+    /// An operation already applied under this id: returned without asking
+    /// for permission a second time.
+    pub(crate) replayed: Option<xai_grok_science::project::MutationOutcome>,
+}
+/// WP-2 phase one: admit a project/claim/evidence mutation, bind it to this
+/// session, and open its durable run before the caller awaits permission.
+pub struct BeginScienceProjectMutation {
+    pub(crate) store: xai_grok_science::ScienceStore,
+    pub(crate) project_root: std::path::PathBuf,
+    pub(crate) context: xai_grok_science::RunContext,
+    pub(crate) request: xai_grok_science::project::MutationRequest,
+    pub(crate) respond_to:
+        oneshot::Sender<xai_grok_science::Result<PreparedScienceProjectMutation>>,
+}
+pub struct FinishScienceProjectMutation {
+    pub(crate) prepared: PreparedScienceProjectMutation,
+    pub(crate) decision: xai_grok_science::ApprovalDecision,
+    pub(crate) reason: String,
+    pub(crate) respond_to:
+        oneshot::Sender<xai_grok_science::Result<xai_grok_science::project::MutationOutcome>>,
+}
 pub struct BeginScienceSshScpAdmission {
     pub(crate) store: xai_grok_science::ScienceStore,
     pub(crate) context: xai_grok_science::RunContext,
@@ -254,6 +285,12 @@ pub enum SessionCommand {
     /// awaits this session's production permission manager.
     BeginScienceFetch(Box<BeginScienceFetch>),
     FinishScienceFetch(Box<FinishScienceFetch>),
+    /// WP-2 phase one: admit a ResearchProject/Claim/EvidenceGraph mutation
+    /// inside the actor before the caller awaits this session's production
+    /// permission manager. The ACP adapter must not mutate the project store
+    /// on its own request task.
+    BeginScienceProjectMutation(Box<BeginScienceProjectMutation>),
+    FinishScienceProjectMutation(Box<FinishScienceProjectMutation>),
     BeginScienceSshScpAdmission(Box<BeginScienceSshScpAdmission>),
     FinishScienceSshScpAdmission(Box<FinishScienceSshScpAdmission>),
     ExecuteScienceSshScpOfflineTransport(Box<ExecuteScienceSshScpOfflineTransport>),

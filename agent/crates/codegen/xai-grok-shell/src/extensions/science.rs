@@ -139,6 +139,104 @@ pub async fn handle(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
 }
 
 // ── WP-2 product path: ResearchProject + EvidenceGraph + Claims ──
+//
+// Every mutating entry here routes through the SessionActor
+// (`MvpAgent::run_science_project_mutation`), which owns the permission
+// request, the durable run record, and the record write. None of them may
+// construct a ProjectStore and mutate it on this request task: that would put
+// execution authority in the ACP adapter, which is exactly the seam this
+// product path exists to keep closed. Read-only entries below still build a
+// store directly, which is fine — they take no authority.
+
+/// Shared driver for the four mutating WP-2 entries.
+///
+/// Resolves the session, pins the store roots inside its workspace, builds the
+/// run context, and hands the typed mutation to the actor. `operationId` is
+/// the caller's idempotency key: replaying one returns the first outcome
+/// instead of applying the mutation twice. `expectedRevision` is a
+/// compare-and-swap against `ProjectStore::project_revision`; omit it only
+/// when the caller accepts last-writer-wins.
+async fn run_project_mutation(
+    agent: &MvpAgent,
+    session_id: String,
+    owner_id: String,
+    store_root: PathBuf,
+    artifact_root: Option<PathBuf>,
+    operation_id: String,
+    expected_revision: Option<String>,
+    approval_timeout_ms: u64,
+    mutation: xai_grok_science::project::ProjectMutation,
+) -> Result<xai_grok_science::project::MutationOutcome, acp::Error> {
+    if owner_id.is_empty() {
+        return Err(acp::Error::invalid_params().data("ownerId is required"));
+    }
+    if !(1..=300_000).contains(&approval_timeout_ms) {
+        return Err(acp::Error::invalid_params().data("approvalTimeoutMs must be in 1..=300000"));
+    }
+    let session_id = acp::SessionId::new(session_id);
+    let handle = agent
+        .get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let project_root = canonical_dir_within(store_root, &workspace)?;
+    let artifact_root = match artifact_root {
+        Some(root) => canonical_dir_within(root, &workspace)?,
+        None => canonical_dir_within(project_root.join("runs"), &workspace)?,
+    };
+    // The run record is bound to the project being mutated; a create has no
+    // project id yet, so the run is filed under the operation that makes one.
+    let run_project = mutation
+        .target_project()
+        .map(|project_id| project_id.0.clone())
+        .unwrap_or_else(|| format!("pending-{operation_id}"));
+    let context = RunContext {
+        run_id: RunId::new_v7(),
+        project_id: ProjectId::new(run_project),
+        session_id: session_id.0.to_string(),
+        owner_id: owner_id.clone(),
+        workspace_root: workspace,
+        provider: "offline-deterministic".into(),
+        approval_policy: "production-session-permission".into(),
+        tool_profile: "science-project-mutation-v1".into(),
+        artifact_root,
+        environment: BTreeMap::from([
+            ("network".into(), "disabled".into()),
+            ("locale".into(), "C".into()),
+        ]),
+    };
+    let request = xai_grok_science::project::MutationRequest {
+        operation_id,
+        session_id: session_id.0.to_string(),
+        owner_id,
+        expected_revision,
+        mutation,
+    };
+    agent
+        .run_science_project_mutation(
+            &session_id,
+            ScienceStore::new(project_root.clone()),
+            project_root,
+            context,
+            request,
+            Duration::from_millis(approval_timeout_ms),
+        )
+        .await
+        .map_err(internal)
+}
+
+fn mutation_response(
+    outcome: xai_grok_science::project::MutationOutcome,
+) -> ExtResult {
+    to_raw_response(&serde_json::json!({
+        "operationId": outcome.operation_id,
+        "kind": outcome.kind,
+        "projectId": outcome.project_id.0,
+        "revision": outcome.revision,
+        "replayed": outcome.replayed,
+        "result": outcome.result,
+        "runtimeAuthority": "SessionActor-gated ACP adapter",
+    }))
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -148,32 +246,35 @@ struct ProjectCreateParams {
     store_root: PathBuf,
     title: String,
     research_question: String,
+    operation_id: String,
+    #[serde(default)]
+    artifact_root: Option<PathBuf>,
+    #[serde(default = "default_approval_timeout_ms")]
+    approval_timeout_ms: u64,
 }
 
 async fn handle_project_create(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: ProjectCreateParams = parse_params(args)?;
-    if params.owner_id.is_empty() || params.title.is_empty() {
-        return Err(acp::Error::invalid_params().data("ownerId and title are required"));
+    if params.title.is_empty() {
+        return Err(acp::Error::invalid_params().data("title is required"));
     }
-    let session_id = acp::SessionId::new(params.session_id);
-    let handle = agent
-        .get_session_handle(&session_id)
-        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
-    let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root);
-    let project = store
-        .create_project(&params.owner_id, params.title, params.research_question)
-        .map_err(internal)?;
-    to_raw_response(&serde_json::json!({
-        "projectId": project.project_id.0,
-        "ownerId": project.owner_id.0,
-        "title": project.title,
-        "status": format!("{:?}", project.status),
-        "evidenceGraphId": project.evidence_graph_id,
-        "featureGate": "research_project=preview",
-        "runtimeAuthority": "SessionActor-gated ACP adapter",
-    }))
+    let outcome = run_project_mutation(
+        agent,
+        params.session_id,
+        params.owner_id,
+        params.store_root,
+        params.artifact_root,
+        params.operation_id,
+        // A create has no prior revision to compare against.
+        None,
+        params.approval_timeout_ms,
+        xai_grok_science::project::ProjectMutation::ProjectCreate {
+            title: params.title,
+            research_question: params.research_question,
+        },
+    )
+    .await?;
+    mutation_response(outcome)
 }
 
 #[derive(Debug, Deserialize)]
@@ -227,27 +328,35 @@ struct ProjectTransitionParams {
     owner_id: String,
     /// Draft | Planned | Active | ReviewPending | Accepted | Rejected | Inconclusive | Archived
     status: String,
+    operation_id: String,
+    #[serde(default)]
+    expected_revision: Option<String>,
+    #[serde(default)]
+    artifact_root: Option<PathBuf>,
+    #[serde(default = "default_approval_timeout_ms")]
+    approval_timeout_ms: u64,
 }
 
 async fn handle_project_transition(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: ProjectTransitionParams = parse_params(args)?;
-    let session_id = acp::SessionId::new(params.session_id);
-    let handle = agent
-        .get_session_handle(&session_id)
-        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
-    let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root);
     let status = parse_project_status(&params.status)
         .ok_or_else(|| acp::Error::invalid_params().data("invalid status"))?;
-    let project = store
-        .transition_project(
-            &xai_grok_science::project::ProjectId(params.project_id),
-            &params.owner_id,
+    let outcome = run_project_mutation(
+        agent,
+        params.session_id,
+        params.owner_id,
+        params.store_root,
+        params.artifact_root,
+        params.operation_id,
+        params.expected_revision,
+        params.approval_timeout_ms,
+        xai_grok_science::project::ProjectMutation::ProjectTransition {
+            project_id: xai_grok_science::project::ProjectId(params.project_id),
             status,
-        )
-        .map_err(internal)?;
-    to_raw_response(&project)
+        },
+    )
+    .await?;
+    mutation_response(outcome)
 }
 
 fn parse_project_status(s: &str) -> Option<xai_grok_science::project::ProjectStatus> {
@@ -274,6 +383,13 @@ struct ClaimProposeParams {
     owner_id: String,
     statement: String,
     proposed_by: String,
+    operation_id: String,
+    #[serde(default)]
+    expected_revision: Option<String>,
+    #[serde(default)]
+    artifact_root: Option<PathBuf>,
+    #[serde(default = "default_approval_timeout_ms")]
+    approval_timeout_ms: u64,
 }
 
 async fn handle_claim_propose(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
@@ -281,22 +397,23 @@ async fn handle_claim_propose(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtRe
     if params.statement.is_empty() {
         return Err(acp::Error::invalid_params().data("statement is required"));
     }
-    let session_id = acp::SessionId::new(params.session_id);
-    let handle = agent
-        .get_session_handle(&session_id)
-        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
-    let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root);
-    let claim = store
-        .propose_claim(
-            &xai_grok_science::project::ProjectId(params.project_id),
-            &params.owner_id,
-            params.statement,
-            params.proposed_by,
-        )
-        .map_err(internal)?;
-    to_raw_response(&claim)
+    let outcome = run_project_mutation(
+        agent,
+        params.session_id,
+        params.owner_id,
+        params.store_root,
+        params.artifact_root,
+        params.operation_id,
+        params.expected_revision,
+        params.approval_timeout_ms,
+        xai_grok_science::project::ProjectMutation::ClaimPropose {
+            project_id: xai_grok_science::project::ProjectId(params.project_id),
+            statement: params.statement,
+            proposed_by: params.proposed_by,
+        },
+    )
+    .await?;
+    mutation_response(outcome)
 }
 
 #[derive(Debug, Deserialize)]
@@ -311,32 +428,36 @@ struct EvidenceAttachParams {
     label: String,
     #[serde(default)]
     run_id: Option<String>,
+    operation_id: String,
+    #[serde(default)]
+    expected_revision: Option<String>,
+    #[serde(default)]
+    artifact_root: Option<PathBuf>,
+    #[serde(default = "default_approval_timeout_ms")]
+    approval_timeout_ms: u64,
 }
 
 async fn handle_evidence_attach(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: EvidenceAttachParams = parse_params(args)?;
-    let session_id = acp::SessionId::new(params.session_id);
-    let handle = agent
-        .get_session_handle(&session_id)
-        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
-    let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root);
-    let (claim, graph) = store
-        .attach_evidence(
-            &xai_grok_science::project::ProjectId(params.project_id),
-            &params.owner_id,
-            &params.claim_id,
-            params.artifact_sha256,
-            params.label,
-            params.run_id,
-        )
-        .map_err(internal)?;
-    to_raw_response(&serde_json::json!({
-        "claim": claim,
-        "nodeCount": graph.nodes.len(),
-        "edgeCount": graph.edges.len(),
-    }))
+    let outcome = run_project_mutation(
+        agent,
+        params.session_id,
+        params.owner_id,
+        params.store_root,
+        params.artifact_root,
+        params.operation_id,
+        params.expected_revision,
+        params.approval_timeout_ms,
+        xai_grok_science::project::ProjectMutation::EvidenceAttach {
+            project_id: xai_grok_science::project::ProjectId(params.project_id),
+            claim_id: params.claim_id,
+            artifact_sha256: params.artifact_sha256,
+            label: params.label,
+            run_id: params.run_id,
+        },
+    )
+    .await?;
+    mutation_response(outcome)
 }
 
 /// Offline Motif-class sequence analysis product path.
@@ -410,7 +531,12 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
         "tool": analysis.tool,
         "toolVersion": analysis.tool_version,
         "network": "disabled",
-        "runtimeAuthority": "SessionActor-gated ACP adapter",
+        // NOT SessionActor-gated. This handler still writes artifacts from the
+        // ACP request task with no SessionCommand, no permission request and
+        // no durable run record. The previous "SessionActor-gated ACP adapter"
+        // claim here was false; do not restore it until seq_analyze routes
+        // through the actor the way the WP-2 mutations now do.
+        "runtimeAuthority": "ACP request task (not actor-gated)",
     }))
 }
 
@@ -852,6 +978,11 @@ async fn handle_evidence_reproduction(agent: &MvpAgent, args: &acp::ExtRequest) 
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ProjectMigrateParams { session_id: String, store_root: PathBuf, run_id: String, owner_id: String, title: String, question: String }
 
+/// KNOWN BYPASS: unlike the four WP-2 mutations above, this still constructs a
+/// ProjectStore on the ACP request task and writes a project record with no
+/// SessionCommand, no permission request and no durable run record. It makes
+/// no `runtimeAuthority` claim for that reason. Route it through
+/// `run_project_mutation` when the migration gains a typed mutation variant.
 async fn handle_project_migrate(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: ProjectMigrateParams = parse_params(args)?;
     let session_id = acp::SessionId::new(params.session_id);

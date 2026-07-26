@@ -2111,6 +2111,40 @@ impl MvpAgent {
             .await
     }
 
+    /// WP-2 project mutation entry: verifies the science context and the
+    /// mutation request both target this SessionActor, then delegates to the
+    /// session handle's begin/permission/finish protocol. This facade adds no
+    /// executor and never touches the project store.
+    pub async fn run_science_project_mutation(
+        &self,
+        session_id: &acp::SessionId,
+        store: xai_grok_science::ScienceStore,
+        project_root: std::path::PathBuf,
+        context: xai_grok_science::RunContext,
+        request: xai_grok_science::project::MutationRequest,
+        approval_timeout: std::time::Duration,
+    ) -> xai_grok_science::Result<xai_grok_science::project::MutationOutcome> {
+        if context.session_id != session_id.0.as_ref()
+            || request.session_id != session_id.0.as_ref()
+        {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "science context session does not match target SessionActor".into(),
+            ));
+        }
+        let handle = self.get_session_handle(session_id).ok_or_else(|| {
+            xai_grok_science::ScienceError::Invalid("science session not found".into())
+        })?;
+        handle
+            .run_science_project_mutation_with_approval_timeout(
+                store,
+                project_root,
+                context,
+                request,
+                approval_timeout,
+            )
+            .await
+    }
+
     /// S3 real SSH/SCP entry. The sole SessionActor owns admission, approval
     /// completion, and the process launch; this facade adds no executor.
     pub async fn run_science_ssh_scp_transport(

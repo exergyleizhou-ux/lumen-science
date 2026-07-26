@@ -2,7 +2,8 @@
 
 use super::*;
 use crate::session::commands::{
-    PreparedScienceCsv, PreparedScienceFetch, PreparedScienceImport, PreparedScienceSshScpAdmission,
+    PreparedScienceCsv, PreparedScienceFetch, PreparedScienceImport,
+    PreparedScienceProjectMutation, PreparedScienceSshScpAdmission,
 };
 
 /// Fetch transit tool: copies each staged input to its staged output. The
@@ -630,4 +631,188 @@ impl SessionActor {
             format!("{tool_name} via WorkspaceOps::call_tool"),
         )
     }
+
+    // ── WP-2 project mutations ────────────────────────────────────
+
+    /// WP-2 phase one inside the sole session actor: bind the mutation to this
+    /// session, refuse it if the operation id or the project belongs to
+    /// someone else, and open the durable run that its approval will finish.
+    ///
+    /// Nothing is written to the project store here. An operation id that has
+    /// already been applied short-circuits: it returns the recorded outcome
+    /// without opening a run or asking for permission again, which is what
+    /// makes a retry idempotent rather than a second prompt.
+    pub(super) fn prepare_science_project_mutation(
+        &self,
+        store: xai_grok_science::ScienceStore,
+        project_root: std::path::PathBuf,
+        context: xai_grok_science::RunContext,
+        request: xai_grok_science::project::MutationRequest,
+    ) -> xai_grok_science::Result<PreparedScienceProjectMutation> {
+        // Session binding: the actor only mutates on behalf of its own session.
+        if request.session_id != self.session_info.id.0.as_ref()
+            || context.session_id != self.session_info.id.0.as_ref()
+        {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "science mutation session does not match this SessionActor".into(),
+            ));
+        }
+        if request.owner_id != context.owner_id {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "science mutation owner does not match its run context".into(),
+            ));
+        }
+        let project_store = xai_grok_science::project::ProjectStore::new(&project_root);
+
+        // Project binding: the run context must name the project actually
+        // being mutated, so the durable record cannot point at another one.
+        if let Some(target) = request.mutation.target_project() {
+            if context.project_id.0 != target.0 {
+                return Err(xai_grok_science::ScienceError::Invalid(
+                    "science mutation project does not match its run context".into(),
+                ));
+            }
+            let project = project_store.load_project(target)?;
+            if project.owner_id.0 != request.owner_id {
+                return Err(xai_grok_science::ScienceError::Ownership);
+            }
+        }
+
+        let target = match request.mutation.target_project() {
+            Some(project_id) => format!("{}/projects/{}", project_root.display(), project_id.0),
+            None => format!("{}/projects", project_root.display()),
+        };
+
+        // Idempotent replay: already applied, so no run and no second prompt.
+        if let Some(record) = project_store.lookup_operation(&request.operation_id)? {
+            if record.session_id != request.session_id || record.owner_id != request.owner_id {
+                return Err(xai_grok_science::ScienceError::Ownership);
+            }
+            return Ok(PreparedScienceProjectMutation {
+                store,
+                project_root,
+                ticket: xai_grok_science::csv::ScienceRunTicket {
+                    // The run ticket uses the kernel's ProjectId; the record
+                    // carries the project-model one.
+                    project_id: xai_grok_science::ProjectId::new(record.project_id.0.clone()),
+                    run_id: context.run_id.clone(),
+                    owner_id: record.owner_id.clone(),
+                    call_id: xai_grok_science::CallId::new("science_project_mutation"),
+                },
+                request,
+                target,
+                replayed: Some(xai_grok_science::project::MutationOutcome {
+                    operation_id: record.operation_id,
+                    kind: record.kind,
+                    project_id: record.project_id,
+                    revision: record.revision,
+                    result: record.result,
+                    replayed: true,
+                }),
+            });
+        }
+
+        let ticket = begin_project_mutation_run(&store, context, request.mutation.kind())?;
+        Ok(PreparedScienceProjectMutation {
+            store,
+            project_root,
+            ticket,
+            request,
+            target,
+            replayed: None,
+        })
+    }
+
+    /// WP-2 phase two: apply the mutation only on an allow decision, and only
+    /// through `ProjectStore::apply_mutation`, which re-checks identity,
+    /// ownership and the expected revision while holding the store write lock.
+    pub(super) fn finish_science_project_mutation(
+        &self,
+        prepared: PreparedScienceProjectMutation,
+        decision: xai_grok_science::ApprovalDecision,
+        reason: String,
+    ) -> xai_grok_science::Result<xai_grok_science::project::MutationOutcome> {
+        if let Some(outcome) = prepared.replayed {
+            return Ok(outcome);
+        }
+        if decision != xai_grok_science::ApprovalDecision::Allow {
+            let terminal = xai_grok_science::csv::finish_without_execution(
+                &prepared.store,
+                &prepared.ticket,
+                decision,
+                reason,
+            )?;
+            return Err(xai_grok_science::ScienceError::Invalid(format!(
+                "science run {} finished {:?}",
+                prepared.ticket.run_id.0, terminal.state
+            )));
+        }
+        xai_grok_science::csv::mark_allowed(&prepared.store, &prepared.ticket)?;
+        let project_store = xai_grok_science::project::ProjectStore::new(&prepared.project_root);
+        let outcome = match project_store.apply_mutation(&prepared.request) {
+            Ok(outcome) => outcome,
+            Err(error) => {
+                let _ = xai_grok_science::csv::fail_running(
+                    &prepared.store,
+                    &prepared.ticket,
+                    format!("project mutation rejected: {error}"),
+                );
+                return Err(error);
+            }
+        };
+        prepared.store.append_event(
+            &prepared.ticket.run_id,
+            "SessionActor",
+            "project.mutation.applied",
+            serde_json::json!({
+                "operation_id": outcome.operation_id,
+                "kind": outcome.kind,
+                "project_id": outcome.project_id.0,
+                "revision": outcome.revision,
+                "replayed": outcome.replayed,
+            }),
+        )?;
+        prepared.store.transition(
+            &prepared.ticket.run_id,
+            xai_grok_science::RunState::Succeeded,
+            None,
+        )?;
+        Ok(outcome)
+    }
+}
+
+/// Open the durable run + pending approval for a project mutation. Mirrors
+/// `csv::begin_fixture`, with a call id that names this product path.
+fn begin_project_mutation_run(
+    store: &xai_grok_science::ScienceStore,
+    context: xai_grok_science::RunContext,
+    kind: &str,
+) -> xai_grok_science::Result<xai_grok_science::csv::ScienceRunTicket> {
+    let ticket = xai_grok_science::csv::ScienceRunTicket {
+        project_id: context.project_id.clone(),
+        run_id: context.run_id.clone(),
+        owner_id: context.owner_id.clone(),
+        call_id: xai_grok_science::CallId::new("science_project_mutation"),
+    };
+    store.create_run(context)?;
+    store.append_event(
+        &ticket.run_id,
+        "SessionActor",
+        "run.created",
+        serde_json::json!({"mutation": kind}),
+    )?;
+    store.request_approval(xai_grok_science::Approval {
+        project_id: ticket.project_id.clone(),
+        run_id: ticket.run_id.clone(),
+        call_id: ticket.call_id.clone(),
+        owner_id: ticket.owner_id.clone(),
+        decision: xai_grok_science::ApprovalDecision::Pending,
+        decided_at: None,
+    })?;
+    store.transition(
+        &ticket.run_id,
+        xai_grok_science::RunState::AwaitingApproval,
+        None,
+    )?;
+    Ok(ticket)
 }
