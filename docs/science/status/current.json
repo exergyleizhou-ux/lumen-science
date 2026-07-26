@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "generator": "scripts/generate-science-status.py",
   "doc": "Machine-generated product status. Derived from the source tree and git only. Prose documents must point here rather than restate status. Regenerate with: python3 scripts/generate-science-status.py",
-  "sourceCommit": "4b4481d3d37dc07338ea8f287191323daf1302d3",
-  "sourceCommitEpoch": 1785050802,
-  "sourceCommitIso": "2026-07-26T15:26:42+08:00",
+  "sourceCommit": "7e01b974fd33be1dca3a8727991fd8484308ee83",
+  "sourceCommitEpoch": 1785055516,
+  "sourceCommitIso": "2026-07-26T16:45:16+08:00",
   "gateVocabulary": {
     "states": [
       "pass",
@@ -104,23 +104,17 @@
       "science-release.yml": {
         "present": true,
         "continueOnError": 0,
-        "usesClobber": true,
+        "usesClobber": false,
         "actionRefs": 9,
-        "unpinnedActionRefs": [
-          "actions/checkout@v4",
-          "actions/download-artifact@v4",
-          "actions/setup-go@v5",
-          "actions/upload-artifact@v4",
-          "dtolnay/rust-toolchain@stable"
-        ],
-        "actionsFullyPinned": false,
-        "declaresTopLevelContentsWrite": true,
-        "usesProtectedEnvironment": false,
-        "verifiesTagPeel": false,
-        "usesVerifyTag": false,
-        "sourceDateEpochFromCommit": false,
-        "sourceDateEpochFromWallClock": true,
-        "lineCount": 200
+        "unpinnedActionRefs": [],
+        "actionsFullyPinned": true,
+        "declaresTopLevelContentsWrite": false,
+        "usesProtectedEnvironment": true,
+        "verifiesTagPeel": true,
+        "usesVerifyTag": true,
+        "sourceDateEpochFromCommit": true,
+        "sourceDateEpochFromWallClock": false,
+        "lineCount": 334
       },
       "release.yml": {
         "present": true,
@@ -176,7 +170,7 @@
         "usesVerifyTag": false,
         "sourceDateEpochFromCommit": false,
         "sourceDateEpochFromWallClock": false,
-        "lineCount": 231
+        "lineCount": 251
       }
     },
     "desktopCiAllowsTypecheckFailure": true
@@ -198,8 +192,14 @@
     "scienceAssetsSigned": false,
     "scienceAssetsHaveSbom": false,
     "scienceAssetsHaveProvenance": false,
-    "immutablePublish": false,
-    "notes": "science-release.yml publishes with `gh release upload --clobber` and grants contents: write at workflow scope; assets carry SHA256SUMS only. Signing, per-asset SBOM and provenance are core-only today."
+    "immutablePublish": true,
+    "verifiesTagBinding": true,
+    "reproducibleArchives": true,
+    "openGaps": [
+      "assets are unsigned",
+      "no per-asset SBOM",
+      "no build provenance attestation"
+    ]
   },
   "desktop": {
     "version": "1.1.0-dev",

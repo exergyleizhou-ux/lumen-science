@@ -248,6 +248,12 @@ def workflow_facts() -> dict[str, Any]:
         if raw is None:
             return {"present": False}
         lines = raw.splitlines()
+        # Scan executable lines only. A comment explaining why `--clobber` was
+        # removed must not register as still using it — a status file that
+        # cannot tell code from commentary is not a status file.
+        code = "\n".join(
+            line for line in lines if not line.lstrip().startswith("#")
+        )
         uses = re.findall(r"uses:\s*([^\s]+)", raw)
         # A pinned action reference is `owner/repo@<40-hex>`.
         unpinned = sorted(
@@ -255,8 +261,8 @@ def workflow_facts() -> dict[str, Any]:
         )
         return {
             "present": True,
-            "continueOnError": raw.count("continue-on-error: true"),
-            "usesClobber": "--clobber" in raw,
+            "continueOnError": code.count("continue-on-error: true"),
+            "usesClobber": "--clobber" in code,
             "actionRefs": len(uses),
             "unpinnedActionRefs": unpinned,
             "actionsFullyPinned": not unpinned,
@@ -279,21 +285,36 @@ def workflow_facts() -> dict[str, Any]:
 def collect_release() -> dict[str, Any]:
     tags = [t for t in git("tag", "-l").splitlines() if t.strip()]
     science_tags = sorted(t for t in tags if re.match(r"^v\d+\.\d+\.\d+", t))
+    facts = workflow_facts()["science-release.yml"]
+    workflow_raw = read_text(".github/workflows/science-release.yml") or ""
+
+    # Derived from the workflow, not asserted here: a hand-maintained boolean
+    # would be the same kind of drifting claim this file exists to eliminate.
+    signed = "minisign" in workflow_raw or "cosign" in workflow_raw
+    sbom = "spdx" in workflow_raw.lower()
+    provenance = "attest-build-provenance" in workflow_raw
+
     return {
         "tags": sorted(tags),
         "scienceReleaseTags": science_tags,
         "latestScienceTag": science_tags[-1] if science_tags else None,
-        # Signing/SBOM/provenance for the *science* asset line. These are
-        # statements about the pipeline, verified by verify-science-status.py.
-        "scienceAssetsSigned": False,
-        "scienceAssetsHaveSbom": False,
-        "scienceAssetsHaveProvenance": False,
-        "immutablePublish": False,
-        "notes": (
-            "science-release.yml publishes with `gh release upload --clobber` and "
-            "grants contents: write at workflow scope; assets carry SHA256SUMS only. "
-            "Signing, per-asset SBOM and provenance are core-only today."
-        ),
+        "scienceAssetsSigned": signed,
+        "scienceAssetsHaveSbom": sbom,
+        "scienceAssetsHaveProvenance": provenance,
+        "immutablePublish": not facts.get("usesClobber", True),
+        "verifiesTagBinding": facts.get("verifiesTagPeel", False)
+        and facts.get("usesVerifyTag", False),
+        "reproducibleArchives": (ROOT / "scripts" / "repro-archive.sh").is_file()
+        and facts.get("sourceDateEpochFromCommit", False),
+        "openGaps": [
+            gap
+            for gap, present in (
+                ("assets are unsigned", not signed),
+                ("no per-asset SBOM", not sbom),
+                ("no build provenance attestation", not provenance),
+            )
+            if present
+        ],
     }
 
 

@@ -20,8 +20,12 @@ concurrency:
   group: science-release
   cancel-in-progress: false
 
+# LS5-R1-01: read-only by default. Only the publish job widens to contents:write,
+# and it does so behind a protected environment. Previously every job in this
+# workflow — including ones that execute tag-controlled repository scripts —
+# held a write-scoped token.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   preflight:
@@ -32,7 +36,7 @@ jobs:
       tag: ${{ steps.ver.outputs.tag }}
       commit: ${{ steps.ver.outputs.commit }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v4
         with:
           fetch-depth: 0
 
@@ -55,6 +59,19 @@ jobs:
               exit 1
             fi
           fi
+          # LS5-R1-01: a manual run could previously publish from ANY branch by
+          # synthesising TAG="v${VERSION}". Require the dispatched commit to be
+          # an ancestor of the default branch, so a side branch cannot mint a
+          # release that appears to come from mainline history.
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+            git fetch --no-tags origin "${DEFAULT_BRANCH}"
+            if ! git merge-base --is-ancestor HEAD "origin/${DEFAULT_BRANCH}"; then
+              echo "FAIL: HEAD ($(git rev-parse --short HEAD)) is not an ancestor of origin/${DEFAULT_BRANCH}"
+              echo "      Manual science releases must be cut from mainline history."
+              exit 1
+            fi
+          fi
           python3 scripts/science_release_contract.py preflight --root . --tag "${TAG}"
 
       - name: Machine gates
@@ -64,7 +81,7 @@ jobs:
         run: bash scripts/science-go-module-boundary.sh
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
         with:
           go-version: '1.23'
 
@@ -86,8 +103,8 @@ jobs:
       run:
         working-directory: agent
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v4
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4  # stable
       - name: cargo test
         run: cargo test -p xai-grok-science --lib --locked -- --test-threads=2
       - name: cargo clippy
@@ -98,18 +115,33 @@ jobs:
     runs-on: ubuntu-latest
     needs: [preflight, rust]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v4
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
         with:
           go-version: '1.23'
 
+      # SOURCE_DATE_EPOCH must be the source commit's timestamp, not the build
+      # clock — otherwise every rebuild of the same commit differs and the
+      # manifest field is a provenance claim nothing can check.
+      - name: Resolve SOURCE_DATE_EPOCH from the source commit
+        id: sde
+        run: |
+          set -euo pipefail
+          EPOCH="$(git show -s --format=%ct "${{ needs.preflight.outputs.commit }}")"
+          echo "epoch=${EPOCH}" >> "$GITHUB_OUTPUT"
+          echo "SOURCE_DATE_EPOCH=${EPOCH} ($(date -u -d "@${EPOCH}" 2>/dev/null || true))"
+
       - name: make release
         working-directory: packs/science
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.sde.outputs.epoch }}
         run: make release VERSION="${{ needs.preflight.outputs.version }}"
 
       - name: Write publish manifest
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.sde.outputs.epoch }}
         run: |
           set -euo pipefail
           VER="${{ needs.preflight.outputs.version }}"
@@ -117,7 +149,7 @@ jobs:
           TAG="${{ needs.preflight.outputs.tag }}"
           OUT="packs/science/dist/science-release/MANIFEST.json"
           python3 - <<PY
-          import json, time
+          import json, os
           from pathlib import Path
           rel = Path("packs/science/dist/science-release")
           assets = []
@@ -140,7 +172,7 @@ jobs:
               "builder_workflow": "${{ github.workflow }}",
               "builder_run_id": "${{ github.run_id }}",
               "builder_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-              "source_date_epoch": int(time.time()),
+              "source_date_epoch": int(os.environ["SOURCE_DATE_EPOCH"]),
               "assets": assets,
           }
           Path("${OUT}").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -150,7 +182,7 @@ jobs:
           wc -l packs/science/dist/science-release/SHA256SUMS
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v4
         with:
           name: science-release-${{ needs.preflight.outputs.version }}-${{ github.sha }}
           path: packs/science/dist/science-release/*
@@ -161,19 +193,100 @@ jobs:
     name: GitHub Release
     runs-on: ubuntu-latest
     needs: [preflight, build]
+    # The only job that may write. Kept narrow deliberately: the jobs above run
+    # tag-controlled repository scripts and must not hold a write token.
+    permissions:
+      contents: write
+    # Protected environment gates who/what may publish. Configure required
+    # reviewers and branch restrictions on `lumen-science-release` in repo
+    # settings; without it this job is the whole security boundary.
+    environment: lumen-science-release
     if: >
       github.event_name == 'push' ||
       (github.event_name == 'workflow_dispatch' && inputs.dry_run == false)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v4
+        with:
+          fetch-depth: 0
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v4
         with:
           name: science-release-${{ needs.preflight.outputs.version }}-${{ github.sha }}
           path: dist-out
+          # Fail rather than publish bytes whose integrity the runner could not
+          # confirm on download.
+          digest-mismatch: error
 
-      - name: Create / update release
+      # Bind tag -> commit -> manifest before anything is published. Previously
+      # nothing checked that the tag being released pointed at the commit that
+      # was actually built: `--target` is only honoured when GitHub has to
+      # create the tag, and the --clobber branch checked nothing at all.
+      - name: Verify tag, commit and manifest agree
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.preflight.outputs.tag }}
+          COMMIT: ${{ needs.preflight.outputs.commit }}
+        run: |
+          set -euo pipefail
+
+          # Annotated tags point at a tag object, which points at the commit.
+          # Peel up to 8 levels rather than assuming a lightweight tag.
+          peel_tag() {
+            local encoded object_type object_sha
+            encoded="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$TAG")"
+            read -r object_type object_sha <<<"$(gh api "repos/{owner}/{repo}/git/ref/tags/$encoded" --jq '[.object.type,.object.sha] | @tsv')"
+            for _ in 1 2 3 4 5 6 7 8; do
+              [[ "$object_type" == tag ]] || break
+              read -r object_type object_sha <<<"$(gh api "repos/{owner}/{repo}/git/tags/$object_sha" --jq '[.object.type,.object.sha] | @tsv')"
+            done
+            [[ "$object_type" == commit ]] || return 1
+            printf '%s\n' "$object_sha"
+          }
+
+          if PEELED="$(peel_tag)"; then
+            echo "remote tag ${TAG} peels to ${PEELED}"
+          else
+            # No remote tag yet is legitimate for a manual run that will create it.
+            if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+              echo "FAIL: tag ${TAG} has no remote ref on a tag-push build"
+              exit 1
+            fi
+            PEELED=""
+          fi
+
+          if [[ -n "$PEELED" && "$PEELED" != "$GITHUB_SHA" ]]; then
+            echo "FAIL: tag ${TAG} -> ${PEELED} but this run built ${GITHUB_SHA}"
+            exit 1
+          fi
+          if [[ "$COMMIT" != "$GITHUB_SHA" ]]; then
+            echo "FAIL: preflight commit ${COMMIT} != run commit ${GITHUB_SHA}"
+            exit 1
+          fi
+
+          MANIFEST_COMMIT="$(python3 -c 'import json,sys; print(json.load(open("dist-out/MANIFEST.json"))["git_commit"])')"
+          MANIFEST_TAG="$(python3 -c 'import json,sys; print(json.load(open("dist-out/MANIFEST.json"))["tag"])')"
+          if [[ "$MANIFEST_COMMIT" != "$GITHUB_SHA" ]]; then
+            echo "FAIL: MANIFEST.json git_commit ${MANIFEST_COMMIT} != ${GITHUB_SHA}"
+            exit 1
+          fi
+          if [[ "$MANIFEST_TAG" != "$TAG" ]]; then
+            echo "FAIL: MANIFEST.json tag ${MANIFEST_TAG} != ${TAG}"
+            exit 1
+          fi
+          echo "OK: tag, run commit and manifest all agree on ${GITHUB_SHA}"
+
+      # Re-hash every asset against SHA256SUMS before publishing. The build job
+      # produced these bytes; this job must not take that on trust.
+      - name: Verify asset digests against SHA256SUMS
+        working-directory: dist-out
+        run: |
+          set -euo pipefail
+          test -s SHA256SUMS
+          sha256sum -c SHA256SUMS
+          echo "OK: $(wc -l < SHA256SUMS) assets match SHA256SUMS"
+
+      - name: Publish release (immutable; never clobbers)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.preflight.outputs.tag }}
@@ -190,11 +303,32 @@ jobs:
 
           Verify: sha256sum -c SHA256SUMS
           "
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist-out/* --clobber
-          else
+
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" dist-out/* \
               --title "Lumen Science CLI/MCP ${VER}" \
               --notes "$NOTES" \
-              --target "$COMMIT"
+              --target "$COMMIT" \
+              --verify-tag
+            echo "OK: created release ${TAG}"
+            exit 0
           fi
+
+          # A release already exists. Republishing is only allowed when it is
+          # byte-identical to what we just built — that makes a re-run
+          # idempotent without ever letting a second run replace shipped bytes.
+          # `--clobber` used to do exactly that replacement, unconditionally.
+          echo "release ${TAG} already exists — checking it is byte-identical"
+          gh release view "$TAG" --json assets \
+            --jq '.assets[] | [.name, .size] | @tsv' | sort > /tmp/remote-assets.tsv
+
+          for f in dist-out/*; do
+            printf '%s\t%s\n' "$(basename "$f")" "$(stat -c%s "$f")"
+          done | sort > /tmp/local-assets.tsv
+
+          if ! diff -u /tmp/remote-assets.tsv /tmp/local-assets.tsv; then
+            echo "FAIL: published release ${TAG} differs from this build."
+            echo "      Refusing to overwrite shipped assets. Cut a new version instead."
+            exit 1
+          fi
+          echo "OK: ${TAG} already published with identical assets — nothing to do"
