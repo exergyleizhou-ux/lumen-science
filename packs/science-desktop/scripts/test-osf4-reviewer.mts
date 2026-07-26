@@ -31,7 +31,7 @@ import {
 } from '../src/main/files/science-ipc.js'
 import { validateIpcChannel } from '../src/main/lumen-authority-policy.js'
 import { LocalProjectCatalog } from '../src/main/files/local-project-catalog.js'
-import { createHybridMembershipAsserter } from '../src/main/files/hybrid-membership.js'
+import { createOfflineCatalogMembershipAsserter } from '../src/main/files/hybrid-membership.js'
 import { AcpPreviewStore } from '../src/main/files/acp-preview-store.js'
 import { createNotebookService } from '../src/main/files/notebook-service.js'
 
@@ -298,7 +298,7 @@ async function run() {
   const ipc: IpcMainLike = { handle(ch, h) { if (handlers.has(ch)) throw new Error(`dup ${ch}`); handlers.set(ch, h) } }
   registerScienceIpcHandlers(ipc, {
     safeHandle, getLumenBinaryHash: () => 'h', previewStore: dsStore,
-    assertMembership: createHybridMembershipAsserter({ catalog }),
+    assertMembership: createOfflineCatalogMembershipAsserter({ catalog }),
     projectCatalog: catalog, reviewService: svc,
   })
   await test('ipc registers review channels', () => {

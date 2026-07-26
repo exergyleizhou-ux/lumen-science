@@ -23,7 +23,7 @@ import {
 } from '../src/main/files/science-ipc.js'
 import { validateIpcChannel } from '../src/main/lumen-authority-policy.js'
 import { LocalProjectCatalog } from '../src/main/files/local-project-catalog.js'
-import { createHybridMembershipAsserter } from '../src/main/files/hybrid-membership.js'
+import { createOfflineCatalogMembershipAsserter } from '../src/main/files/hybrid-membership.js'
 import { AcpPreviewStore } from '../src/main/files/acp-preview-store.js'
 
 let failures = 0
@@ -180,7 +180,7 @@ async function run() {
     safeHandle,
     getLumenBinaryHash: () => 'h',
     previewStore: new AcpPreviewStore(),
-    assertMembership: createHybridMembershipAsserter({ catalog }),
+    assertMembership: createOfflineCatalogMembershipAsserter({ catalog }),
     projectCatalog: catalog,
     notebookService: svc,
   })
