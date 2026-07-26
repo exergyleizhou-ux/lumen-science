@@ -711,7 +711,16 @@ mod tests {
     fn request(path: impl Into<PathBuf>) -> KernelAdmissionRequest {
         KernelAdmissionRequest::new("py-test", KernelKind::Python, path)
             .with_admitted_by("test-suite")
-            .with_probe_timeout(Duration::from_secs(5))
+            // Generous on purpose. These tests assert WHICH rejection reason a
+            // probe produces, not how fast it runs, so the budget only needs to
+            // exceed scheduling delay. Five seconds was enough on an idle
+            // machine and not enough on a loaded one — every probe test failed
+            // with `version_probe_timed_out` while two other builds were
+            // running. A shared CI runner is a loaded machine, so a budget
+            // tuned for an idle one is a flake waiting to happen, and a flaky
+            // test is worse than none: it teaches people to ignore failures.
+            // The single test that does assert timing sets its own 300ms.
+            .with_probe_timeout(Duration::from_secs(60))
     }
 
     /// Write an executable shebang script. Unix-only: there is no portable

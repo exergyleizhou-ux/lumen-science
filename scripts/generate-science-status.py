@@ -554,8 +554,20 @@ EVIDENCE_LEVELS = {
         },
     },
     "workflowKernel": {
-        "level": "E1",
-        "rationale": "DAG validation and admission types exist; no executor, no real kernel probe.",
+        "level": "E2",
+        "rationale": (
+            "A real executor now runs a WorkflowSpec: topological order, "
+            "at-least-once execution with exactly-once artifact commit, attempt "
+            "records, operation-id dedup, bounded retry on an injected clock, "
+            "cancellation, and crash recovery that marks in-flight attempts "
+            "Interrupted rather than re-running them. Kernel admission probes a "
+            "real interpreter — hashing its bytes, executing it for a version "
+            "under timeout — and can genuinely Reject; it previously wrote "
+            "exact_version \"unknown\" and returned Admitted unconditionally. "
+            "Not E4: the crate never spawns a step. StepRunner is a seam and the "
+            "default runner refuses everything, so no workflow has executed "
+            "end to end, and nothing is wired through the SessionActor yet."
+        ),
     },
     "dummyLabTwin": {
         "level": "E2",

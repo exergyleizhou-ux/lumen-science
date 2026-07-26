@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "generator": "scripts/generate-science-status.py",
   "doc": "Machine-generated product status. Derived from the source tree and git only. Prose documents must point here rather than restate status. Regenerate with: python3 scripts/generate-science-status.py",
-  "sourceCommit": "e1898f516f4e4e7e88bbd69f991dec043cc4b4e6",
-  "sourceCommitEpoch": 1785065423,
-  "sourceCommitIso": "2026-07-26T19:30:23+08:00",
+  "sourceCommit": "78a11e30704e0cd8d328b508e9f2096ea627062d",
+  "sourceCommitEpoch": 1785066511,
+  "sourceCommitIso": "2026-07-26T19:48:31+08:00",
   "gateVocabulary": {
     "states": [
       "pass",
@@ -350,8 +350,8 @@
       }
     },
     "workflowKernel": {
-      "level": "E1",
-      "rationale": "DAG validation and admission types exist; no executor, no real kernel probe."
+      "level": "E2",
+      "rationale": "A real executor now runs a WorkflowSpec: topological order, at-least-once execution with exactly-once artifact commit, attempt records, operation-id dedup, bounded retry on an injected clock, cancellation, and crash recovery that marks in-flight attempts Interrupted rather than re-running them. Kernel admission probes a real interpreter — hashing its bytes, executing it for a version under timeout — and can genuinely Reject; it previously wrote exact_version \"unknown\" and returned Admitted unconditionally. Not E4: the crate never spawns a step. StepRunner is a seam and the default runner refuses everything, so no workflow has executed end to end, and nothing is wired through the SessionActor yet."
     },
     "dummyLabTwin": {
       "level": "E2",
