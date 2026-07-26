@@ -14,6 +14,10 @@
 import { ChildProcess, spawn } from 'child_process';
 import { type IpcMain, app } from 'electron';
 import { validateIpcChannel } from './lumen-authority-policy';
+// Type-only import: erased at build time, so this does NOT make the bridge depend on the science
+// IPC surface at runtime. The contract is owned by the consumer because that module must stay
+// Electron-free to remain testable; the bridge conforms to it.
+import type { IpcMainLike } from './files/science-ipc';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -108,9 +112,16 @@ async function waitForAcpReady(timeoutMs = 30000): Promise<void> {
  * registration must go through this function.
  *
  * Returns the original handler if allowed, or a rejection handler.
+ *
+ * Takes IpcMainLike, not Electron's IpcMain. files/science-ipc.ts publishes SafeHandleFn over that
+ * minimal shape so its registration site can be exercised without booting Electron (see
+ * scripts/test-register-ipc-mock.mts), and this function is the ONLY production value passed for
+ * it — so demanding the full IpcMain here made the real implementation unassignable to the very
+ * contract it exists to satisfy. `handle` is the entire surface used below, so the narrow type is
+ * also the accurate one; the real ipcMain still satisfies it at the call site in ipc.ts.
  */
 export function safeHandle(
-  ipcMain: IpcMain,
+  ipcMain: IpcMainLike,
   channel: string,
   handler: (_event: unknown, ...args: unknown[]) => Promise<unknown>,
 ): void {
@@ -142,7 +153,11 @@ export async function acpCall(toolName: string, args: Record<string, unknown>): 
 
 let _guardInstalled = false
 
-export function installIpcGuard(ipcMain: IpcMain): void {
+// The IpcMain handle is deliberately unused: this guard must NOT raw-register any channel (asserted
+// by scripts/test-ipc-handlers.mts). It stays in the signature because callers pass it and because
+// re-acquiring the authority to register would be a one-line change here — keeping the parameter
+// makes that boundary explicit rather than implying the guard has no access to IPC at all.
+export function installIpcGuard(_ipcMain: IpcMain): void {
   if (_guardInstalled) return
   _guardInstalled = true
   // Channel registration is done by registerIpcHandlers via safeHandle.

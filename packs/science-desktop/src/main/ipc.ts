@@ -25,6 +25,7 @@
  */
 
 import { app, ipcMain, Notification } from 'electron'
+import type { AppIconPreview, AppIconVariant } from '../shared/settings'
 import { BackendShutdownCoordinator } from './lifecycle-shutdown'
 import { createLogger } from './logger'
 import { installIpcGuard, safeHandle, getLumenBinaryHash, acpCall } from './lumen-acp-bridge'
@@ -48,13 +49,15 @@ import {
 import { createHybridMembershipAsserter } from './files/hybrid-membership'
 import { getDefaultLocalProjectCatalog } from './files/local-project-catalog'
 import { join } from 'node:path'
-import { app } from 'electron'
 
 type IpcRegistrationOptions = {
   mainEntryPath: string
   headless?: boolean
-  onAppIconVariantChanged?: (variant: string) => void
-  listAppIconPreviews?: () => unknown[]
+  // AppIconVariant, not string: settings/ipc.ts validates with isAppIconVariant before emitting,
+  // and app-icon.ts's setVariant only accepts the union. `string` here was wider than either end of
+  // the wire, so index.ts's callback argument could not be forwarded to the controller.
+  onAppIconVariantChanged?: (variant: AppIconVariant) => void
+  listAppIconPreviews?: () => AppIconPreview[]
 }
 
 /**
@@ -111,6 +114,16 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
   })
 
   // ── Backend handles with shutdown contracts ─────────────────
+  //
+  // Both stubs must also answer storage/detect-active.ts, which asks each backend which of its
+  // sessions is mid-flight so the migration and close/quit flows can warn before interrupting work.
+  // This process cannot answer that from its own state — agent prompts and notebook kernels both
+  // run inside the Rust SessionActor — so it answers with the truth it has: none that IT is
+  // running. (Empty is also what the old code effectively meant, except it omitted the methods
+  // entirely, so detectActiveSessions threw a TypeError the first time a close/quit asked.)
+  // Surfacing the Rust process's real in-flight set is a separate task; it needs an ACP query.
+  type ActiveSessionSource = { projectName: string; sessionId: string }
+
   const runtime = {
     connectedAgents: [] as readonly never[],
     sessions: [] as readonly never[],
@@ -119,6 +132,7 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
     destroy: () => { log.info('lumen runtime destroy (no-op)') },
     shutdownForQuit: async () => ({ reaped: true }),
     shutdownForUpdateGate: async () => ({ reaped: true }),
+    getActivePromptSessions: (): ActiveSessionSource[] => [],
   }
 
   const notebook = {
@@ -126,6 +140,7 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
       log.info('notebook shutdown (no-op — kernels managed by Rust Lumen)')
       return { reaped: true }
     },
+    getActiveNotebookSessions: (): ActiveSessionSource[] => [],
   }
 
   const logs = createLogger('notifications')
@@ -156,7 +171,7 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
   })
 
   return {
-    runtime: runtime as any,
+    runtime,
     notebook,
     shutdownCoordinator,
     taskNotifications,

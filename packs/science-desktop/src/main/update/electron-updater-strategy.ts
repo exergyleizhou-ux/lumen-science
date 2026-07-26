@@ -2,7 +2,6 @@ import { app } from 'electron'
 import { spawnSync } from 'node:child_process'
 import { autoUpdater, CancellationToken } from 'electron-updater'
 
-import { APP } from '../../shared/app-config'
 import { requireUpdateFeedUrl } from '../../shared/update-policy'
 import type { UpdateStatus } from '../../shared/update'
 import { fetchManifest } from './manifest'

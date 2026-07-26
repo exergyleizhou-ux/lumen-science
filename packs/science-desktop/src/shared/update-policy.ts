@@ -43,9 +43,20 @@ const isForbidden = (hostname: string): boolean =>
 const isAllowed = (hostname: string): boolean =>
   ALLOWED_UPDATE_HOSTS.some((h) => hostname === h || hostname.endsWith(`.${h}`))
 
+/**
+ * The environment this policy is read from. Only the two LUMEN_* variables are meaningful; they are
+ * named explicitly so the contract is self-documenting and a typo in a test fixture is caught.
+ *
+ * The index signature is what makes `resolveUpdatePolicy(process.env)` — how all three real callers
+ * invoke it — legal. Without it this is a "weak type" (every property optional), and NodeJS.ProcessEnv
+ * declares none of its properties, so TypeScript rejects the call outright even though the value is
+ * exactly what the function is designed to read. The signature states the truth: any other variable
+ * may be present and is ignored.
+ */
 export type UpdatePolicyEnv = {
   LUMEN_UPDATE_FEED_URL?: string
   LUMEN_UPDATE_PUBLIC_KEY?: string
+  [key: string]: string | undefined
 }
 
 /**

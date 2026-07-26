@@ -106,7 +106,9 @@ export function createReviewService(opts: {
       // Check staleness against prior verdict
       const prev = history[history.length - 1]
       if (prev) {
-        const { stale, mismatches } = isVerdictStale(prev, req.artifacts)
+        // Only the staleness verdict is consumed here; the per-artifact `mismatches` detail is
+        // reported by the hash-mismatch branch above, which has the authoritative list.
+        const { stale } = isVerdictStale(prev, req.artifacts)
         if (stale) {
           prev.stale = true
         }
