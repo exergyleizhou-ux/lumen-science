@@ -185,6 +185,28 @@ jobs:
           test -f packs/science/dist/science-release/SHA256SUMS
           wc -l packs/science/dist/science-release/SHA256SUMS
 
+      # Per-asset SBOM. generate-release-sbom.sh cannot describe these: it reads
+      # `cargo metadata` and is hard-coded to the four Rust core assets. The
+      # science binaries are Go, so their dependency list is read from the
+      # module graph the Go linker embedded in each binary — what was actually
+      # linked, not what a lockfile predicted.
+      - name: Generate per-asset SBOMs
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.sde.outputs.epoch }}
+        run: |
+          set -euo pipefail
+          cd packs/science/dist/science-release
+          for bin in lumen-science-* lumen-mcp-*; do
+            case "$bin" in
+              *.tar.gz|*.zip|*.spdx.json) continue ;;
+            esac
+            [[ -f "$bin" ]] || continue
+            SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" \
+              python3 "$GITHUB_WORKSPACE/scripts/generate-science-sbom.py" \
+                "$bin" "${bin}.spdx.json" "${{ needs.preflight.outputs.tag }}"
+          done
+          ls -1 ./*.spdx.json | wc -l
+
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v4
         with:
@@ -201,6 +223,11 @@ jobs:
     # tag-controlled repository scripts and must not hold a write token.
     permissions:
       contents: write
+      # Build provenance: id-token signs the attestation via Sigstore,
+      # attestations stores it. A signature proves who signed the bytes; an
+      # attestation proves which workflow, at which commit, produced them.
+      id-token: write
+      attestations: write
     # Protected environment gates who/what may publish. Configure required
     # reviewers and branch restrictions on `lumen-science-release` in repo
     # settings; without it this job is the whole security boundary.
@@ -364,6 +391,15 @@ jobs:
             echo "  signed $(basename "$asset")"
           done
           echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      # Attest that these exact bytes came out of this workflow at this commit.
+      # Signing establishes WHO published; provenance establishes WHAT built it.
+      # Verify with:
+      #   gh attestation verify <asset> --repo exergyleizhou-ux/lumen-science
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45  # v2
+        with:
+          subject-path: 'dist-out/*.tar.gz, dist-out/*.zip'
 
       - name: Publish release (immutable; never clobbers)
         env:

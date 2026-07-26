@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "generator": "scripts/generate-science-status.py",
   "doc": "Machine-generated product status. Derived from the source tree and git only. Prose documents must point here rather than restate status. Regenerate with: python3 scripts/generate-science-status.py",
-  "sourceCommit": "de97e9a83288a6b3cb41e409c7bd826d82d0248d",
-  "sourceCommitEpoch": 1785058496,
-  "sourceCommitIso": "2026-07-26T17:34:56+08:00",
+  "sourceCommit": "f35d3091ff95565ba11909174a7d646ac1410302",
+  "sourceCommitEpoch": 1785058835,
+  "sourceCommitIso": "2026-07-26T17:40:35+08:00",
   "gateVocabulary": {
     "states": [
       "pass",
@@ -108,7 +108,7 @@
         "present": true,
         "continueOnError": 0,
         "usesClobber": false,
-        "actionRefs": 9,
+        "actionRefs": 10,
         "unpinnedActionRefs": [],
         "actionsFullyPinned": true,
         "declaresTopLevelContentsWrite": false,
@@ -117,7 +117,7 @@
         "usesVerifyTag": true,
         "sourceDateEpochFromCommit": true,
         "sourceDateEpochFromWallClock": false,
-        "lineCount": 413
+        "lineCount": 449
       },
       "release.yml": {
         "present": true,
@@ -192,15 +192,25 @@
       "v1.0.1"
     ],
     "latestScienceTag": "v1.0.1",
-    "scienceAssetsSigned": true,
-    "scienceAssetsHaveSbom": false,
-    "scienceAssetsHaveProvenance": false,
-    "immutablePublish": true,
-    "verifiesTagBinding": true,
-    "reproducibleArchives": true,
+    "pipeline": {
+      "signsAssets": true,
+      "generatesPerAssetSbom": true,
+      "attestsBuildProvenance": true,
+      "immutablePublish": true,
+      "verifiesTagBinding": true,
+      "reproducibleArchives": true,
+      "capabilitiesSince": "v1.0.2"
+    },
+    "publishedLatest": {
+      "tag": "v1.0.1",
+      "hasSignature": false,
+      "hasSbom": false,
+      "hasProvenance": false,
+      "note": "v1.0.1 was built before the signing/SBOM/provenance work landed, so its assets carry checksums only. The pipeline gains these from v1.0.2."
+    },
     "openGaps": [
-      "no per-asset SBOM",
-      "no build provenance attestation"
+      "the newest published release (v1.0.1) predates these controls and remains unsigned, without SBOM or provenance",
+      "reproducibility is implemented but no published tag has been independently rebuilt and compared"
     ]
   },
   "desktop": {

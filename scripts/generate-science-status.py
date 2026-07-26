@@ -290,28 +290,67 @@ def collect_release() -> dict[str, Any]:
 
     # Derived from the workflow, not asserted here: a hand-maintained boolean
     # would be the same kind of drifting claim this file exists to eliminate.
-    signed = "minisign" in workflow_raw or "cosign" in workflow_raw
-    sbom = "spdx" in workflow_raw.lower()
-    provenance = "attest-build-provenance" in workflow_raw
+    #
+    # CRITICAL DISTINCTION: these describe what the PIPELINE does on its next
+    # run. They say nothing about releases already published. v1.0.1 was built
+    # before signing/SBOM/provenance existed, so it carries none of them, and
+    # reporting a single "scienceAssetsSigned: true" would tell a user their
+    # installed binary is verifiable when it is not.
+    signs = "minisign" in workflow_raw or "cosign" in workflow_raw
+    sboms = "spdx" in workflow_raw.lower()
+    attests = "attest-build-provenance" in workflow_raw
+
+    # The tag at which each capability landed. A published tag older than this
+    # does not have it. Update when a capability is introduced.
+    capability_since = "v1.0.2"
+    latest = science_tags[-1] if science_tags else None
+    latest_predates = latest is not None and latest < capability_since
 
     return {
         "tags": sorted(tags),
         "scienceReleaseTags": science_tags,
-        "latestScienceTag": science_tags[-1] if science_tags else None,
-        "scienceAssetsSigned": signed,
-        "scienceAssetsHaveSbom": sbom,
-        "scienceAssetsHaveProvenance": provenance,
-        "immutablePublish": not facts.get("usesClobber", True),
-        "verifiesTagBinding": facts.get("verifiesTagPeel", False)
-        and facts.get("usesVerifyTag", False),
-        "reproducibleArchives": (ROOT / "scripts" / "repro-archive.sh").is_file()
-        and facts.get("sourceDateEpochFromCommit", False),
+        "latestScienceTag": latest,
+        # What the pipeline will do on its next run.
+        "pipeline": {
+            "signsAssets": signs,
+            "generatesPerAssetSbom": sboms,
+            "attestsBuildProvenance": attests,
+            "immutablePublish": not facts.get("usesClobber", True),
+            "verifiesTagBinding": facts.get("verifiesTagPeel", False)
+            and facts.get("usesVerifyTag", False),
+            "reproducibleArchives": (ROOT / "scripts" / "repro-archive.sh").is_file()
+            and facts.get("sourceDateEpochFromCommit", False),
+            "capabilitiesSince": capability_since,
+        },
+        # What users can actually verify about the newest PUBLISHED release.
+        "publishedLatest": {
+            "tag": latest,
+            "hasSignature": bool(signs and not latest_predates),
+            "hasSbom": bool(sboms and not latest_predates),
+            "hasProvenance": bool(attests and not latest_predates),
+            "note": (
+                f"{latest} was built before the signing/SBOM/provenance work landed, so its "
+                f"assets carry checksums only. The pipeline gains these from {capability_since}."
+                if latest_predates
+                else "Published assets carry whatever the pipeline flags above report."
+            ),
+        },
         "openGaps": [
             gap
             for gap, present in (
-                ("assets are unsigned", not signed),
-                ("no per-asset SBOM", not sbom),
-                ("no build provenance attestation", not provenance),
+                ("pipeline does not sign assets", not signs),
+                ("pipeline generates no per-asset SBOM", not sboms),
+                ("pipeline attests no build provenance", not attests),
+                (
+                    f"the newest published release ({latest}) predates these controls "
+                    "and remains unsigned, without SBOM or provenance",
+                    latest_predates,
+                ),
+                (
+                    "reproducibility is implemented but no published tag has been "
+                    "independently rebuilt and compared",
+                    True,
+                ),
             )
             if present
         ],
