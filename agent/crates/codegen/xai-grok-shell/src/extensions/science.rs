@@ -116,6 +116,9 @@ pub async fn handle(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
         "x.ai/science/seq_analyze" => handle_seq_analyze(agent, args).await,
         "x.ai/science/project_create" => handle_project_create(agent, args).await,
         "x.ai/science/project_get" => handle_project_get(agent, args).await,
+        "x.ai/science/project_assert_membership" => {
+            handle_project_assert_membership(agent, args).await
+        }
         "x.ai/science/project_list" => handle_project_list(agent, args).await,
         "x.ai/science/project_transition" => handle_project_transition(agent, args).await,
         "x.ai/science/claim_propose" => handle_claim_propose(agent, args).await,
@@ -298,6 +301,61 @@ async fn handle_project_get(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
     let pid = xai_grok_science::project::ProjectId(params.project_id);
     let bundle = store.load_bundle(&pid).map_err(internal)?;
     to_raw_response(&bundle)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ProjectAssertMembershipParams {
+    session_id: String,
+    store_root: PathBuf,
+    project_id: String,
+    owner_id: String,
+}
+
+/// Answer whether an owner may act on a project.
+///
+/// The desktop has always called `project_assert_membership`; it existed in
+/// neither engine, so the method registry refused it and every attempt to open
+/// a project failed closed. That was the correct failure — the desktop had
+/// invented the name — but it left the entire workspace unreachable.
+///
+/// Read-only on purpose, so it stays a plain query rather than taking the
+/// SessionActor route a mutation needs. It answers from the durable record: the
+/// project's stored owner is compared to the claimed one, and no other source
+/// participates.
+///
+/// A missing project is reported as NOT a member rather than as an error. A
+/// caller learning "this project does not exist" versus "you are not its owner"
+/// is a probe for which projects exist, and the honest answer to both is the
+/// same: you may not act on it.
+async fn handle_project_assert_membership(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: ProjectAssertMembershipParams = parse_params(args)?;
+    if params.owner_id.is_empty() {
+        return Err(acp::Error::invalid_params().data("ownerId is required"));
+    }
+    let session_id = acp::SessionId::new(params.session_id);
+    let handle = agent
+        .get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let store_root = canonical_dir_within(params.store_root, &workspace)?;
+    let store = xai_grok_science::project::ProjectStore::new(store_root);
+    let pid = xai_grok_science::project::ProjectId(params.project_id.clone());
+
+    let member = match store.load_project(&pid) {
+        Ok(project) => project.owner_id.0 == params.owner_id,
+        Err(_) => false,
+    };
+
+    to_raw_response(&serde_json::json!({
+        "ok": member,
+        "member": member,
+        "ownerId": params.owner_id,
+        "projectId": params.project_id,
+        "reason": if member { "owner matches the durable project record" }
+                  else { "not the owner of this project, or no such project" },
+        "runtimeAuthority": "SessionActor-gated ACP adapter",
+    }))
 }
 
 #[derive(Debug, Deserialize)]

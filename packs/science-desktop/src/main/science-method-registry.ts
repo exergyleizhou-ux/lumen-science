@@ -48,6 +48,10 @@ export const SCIENCE_METHODS = [
   'seq_analyze',
   'project_create',
   'project_get',
+  // Implemented in LS5-K18. It was on the invented list for as long as the
+  // desktop called a name no engine served; the fix was to add the method, not
+  // to keep routing round it.
+  'project_assert_membership',
   'project_list',
   'project_transition',
   'claim_propose',
@@ -59,6 +63,9 @@ export const SCIENCE_METHODS = [
   'project_migrate',
   'workflow_validate',
   'workflow_dry_run',
+  // LS5-K8 added this endpoint to the engine, but nothing added it here — so
+  // the desktop could not have called the route that was just built.
+  'workflow_execute',
   'kernel_admission',
   'multimodal_index',
   'review_record',
@@ -77,10 +84,6 @@ const ALLOWED = new Set<string>(SCIENCE_METHODS)
  * them. Each entry records the call site so the rejection names its own fix.
  */
 const NONEXISTENT_METHODS: Record<string, string> = {
-  project_assert_membership:
-    'no such method in either engine; files/acp-membership.ts invented it. ' +
-    'Membership has no ACP method yet — the local catalog path in ' +
-    'files/hybrid-membership.ts is the only real answer today.',
   artifact_resolve:
     'no such method in either engine; files/acp-preview-store.ts invented it. ' +
     'Previews must be seeded via put() from a real listing.',

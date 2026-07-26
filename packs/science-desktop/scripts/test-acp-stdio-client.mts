@@ -116,10 +116,13 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lumen-acp-test-'))
 
 // ── registry ─────────────────────────────────────────────────────
 
-await test('registry lists exactly the 24 engine methods', () => {
-  strictEqual(SCIENCE_METHODS.length, 24)
-  strictEqual(new Set(SCIENCE_METHODS).size, 24, 'no duplicates')
-  strictEqual(listScienceMethods().length, 24)
+// The count is the point: it fails when the engine gains a method nobody
+// mirrored here. That is exactly how it caught workflow_execute, which LS5-K8
+// added to the engine while the desktop had no way to call it.
+await test('registry lists exactly the 26 engine methods', () => {
+  strictEqual(SCIENCE_METHODS.length, 26)
+  strictEqual(new Set(SCIENCE_METHODS).size, 26, 'no duplicates')
+  strictEqual(listScienceMethods().length, 26)
 })
 
 await test('registry wire form carries the ACP ext prefix', () => {
@@ -152,12 +155,23 @@ await test('registry rejects an unknown method', () => {
   strictEqual(isScienceMethod('totally_made_up'), false)
 })
 
-await test('registry rejects the three methods that exist in NEITHER engine', () => {
-  for (const invented of [
-    'project_assert_membership',
-    'artifact_resolve',
-    'compute_plan',
-  ]) {
+await test('project_assert_membership is a real method now', () => {
+  // It exists in the Rust dispatch table (extensions/science.rs), so it must
+  // resolve to a wire name rather than be refused. A registry that still
+  // rejected it would leave the workspace unreachable for a method that works.
+  strictEqual(isScienceMethod('project_assert_membership'), true)
+  strictEqual(
+    resolveScienceMethod('project_assert_membership').wireMethod,
+    '_x.ai/science/project_assert_membership',
+  )
+})
+
+await test('registry rejects the methods that exist in NEITHER engine', () => {
+  // project_assert_membership was on this list until LS5-K18 implemented it in
+  // the Rust engine. The fix was to add the method, not to keep routing round
+  // a name the desktop had invented — so it moved to the allowlist and is
+  // asserted there instead, below.
+  for (const invented of ['artifact_resolve', 'compute_plan']) {
     throwsWith(CODES.methodNotAllowed, () => resolveScienceMethod(invented))
     const reason = explainRejection(invented)
     ok(reason, `${invented} must be rejected`)

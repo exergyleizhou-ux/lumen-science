@@ -6,6 +6,15 @@
 
 import type { MembershipAsserter, ArtifactListItem } from './session-binding'
 
+/**
+ * Where project state lives, relative to the engine's session workspace.
+ *
+ * A name rather than a path: the engine resolves it with
+ * `canonical_dir_within`, so the desktop cannot aim this at somewhere else on
+ * disk even if this constant were wrong.
+ */
+export const SCIENCE_STORE_DIR = 'science-store'
+
 export type AcpToolCall = (
   toolName: string,
   args: Record<string, unknown>,
@@ -13,7 +22,8 @@ export type AcpToolCall = (
 
 /**
  * Assert project membership through ACP.
- * Tool contract: project_assert_membership { owner_id, project_id }
+ * Tool contract: project_assert_membership { projectId, ownerId, storeRoot }
+ * `sessionId` is filled in by the session manager, which knows it.
  * → { ok: true, owner_id, project_id } | { ok: false, reason }
  *
  * Every failure is classified as `denied` or `unavailable`, because callers
@@ -29,8 +39,15 @@ export function createAcpMembershipAsserter(call: AcpToolCall): MembershipAssert
   return async (claim) => {
     try {
       const raw = await call('project_assert_membership', {
-        owner_id: claim.ownerId,
-        project_id: claim.projectId,
+        // camelCase, and exactly these fields: the Rust param structs are
+        // `deny_unknown_fields`, so a stray or snake_cased key is a hard
+        // rejection rather than a silently ignored argument.
+        projectId: claim.projectId,
+        ownerId: claim.ownerId,
+        // Resolved inside the session workspace by the engine. The desktop
+        // names the subdirectory; it does not get to point at an arbitrary
+        // path, and `canonical_dir_within` enforces that on the other side.
+        storeRoot: SCIENCE_STORE_DIR,
       })
       const body = unwrap(raw)
       if (!body) {

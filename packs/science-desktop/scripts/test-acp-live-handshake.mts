@@ -115,10 +115,13 @@ try {
     strictEqual(resolveScienceMethod('project_list').wireMethod, '_x.ai/science/project_list')
   })
 
+  // compute_plan, not project_assert_membership: the latter became a real
+  // method in LS5-K18, and an "unknown method" test must use one that is still
+  // genuinely unknown or it proves nothing.
   await test('an unknown science method is rejected without a round trip', async () => {
     let rejected = false
     try {
-      await manager.callScience('project_assert_membership', {})
+      await manager.callScience('compute_plan', {})
     } catch (e: unknown) {
       rejected = true
       strictEqual((e as { code?: string }).code, 'LUMEN_METHOD_NOT_ALLOWED')
