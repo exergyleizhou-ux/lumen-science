@@ -28,7 +28,13 @@ import { app, ipcMain, Notification } from 'electron'
 import type { AppIconPreview, AppIconVariant } from '../shared/settings'
 import { BackendShutdownCoordinator } from './lifecycle-shutdown'
 import { createLogger } from './logger'
-import { installIpcGuard, safeHandle, getLumenBinaryHash, acpCall } from './lumen-acp-bridge'
+import {
+  installIpcGuard,
+  safeHandle,
+  getLumenBinaryHash,
+  acpCall,
+  acpToolsFetch
+} from './lumen-acp-bridge'
 import { getAllowedChannels } from './lumen-authority-policy'
 import {
   buildTaskNotificationShow
@@ -102,6 +108,10 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
   registerScienceIpcHandlers(ipcMain, {
     safeHandle,
     getLumenBinaryHash,
+    // Injected so science-ipc.ts never reaches its defaultAcpFetch, which still
+    // POSTs at http://127.0.0.1:17000 — a port no engine has ever listened on.
+    // acpToolsFetch translates the /tools/* shape onto the real ACP stdio call.
+    acpFetch: acpToolsFetch,
     previewStore: wiredStore,
     // ACP is the sole authority. The local catalog is a display cache and can
     // no longer grant membership — see files/hybrid-membership.ts.

@@ -1,107 +1,110 @@
 /**
- * Lumen ACP Bridge — Electron main → Rust Lumen binary.
+ * Lumen ACP Bridge — Electron main → Rust Lumen binary, over ACP stdio.
  *
- * Replaces the Open Science agent-framework execution authority.
- * All science operations go through the Rust SessionActor via ACP.
- * Electron main process is ONLY responsible for window/tray/updater.
+ * All science operations go through the Rust SessionActor via ACP. The Electron
+ * main process is ONLY responsible for window/tray/updater. This file is not an
+ * execution path for science tools, notebooks, or reviewers.
  *
- * NOT an execution path for science tools, notebooks, or reviewers.
+ * WHAT THIS FILE USED TO DO, AND WHY IT NEVER WORKED
+ *
+ * Despite its name it spoke HTTP. It spawned
+ * `lumen-science serve --interface loopback --port 17000`, polled
+ * `GET /health`, and POSTed to `/tools/call` — and never wrote a byte to the
+ * child's stdin. No such subcommand and no such port exist in either engine:
+ * the Go CLI (packs/science/standalone/cmd/science/main.go) has no `serve`, and
+ * the Rust binary exposes the 24 `x.ai/science/*` methods only over
+ * `lumen agent stdio`. So the child died at once, `startLumen()` always
+ * rejected, index.ts logged and swallowed it, and every `acpCall` returned
+ * ECONNREFUSED. The desktop had never talked to an engine.
+ *
+ * It now runs the real protocol — spawn → initialize → authenticate →
+ * session/new → `_x.ai/science/*` — split across four modules:
+ *
+ *   lumen-process-manager.ts    spawn, hash-pin, stderr capture, SIGTERM/KILL
+ *   acp-stdio-transport.ts      NDJSON framing, id correlation, bounded frames
+ *   acp-session-manager.ts      handshake, session lifecycle, engine state
+ *   science-method-registry.ts  the allowlist of methods that actually exist
  *
  * Apache-2.0. Adapted from Open Science (d8f11e34) and modified for
  * Lumen Science Desktop authority model.
  */
 
-import { ChildProcess, spawn } from 'child_process';
-import { type IpcMain, app } from 'electron';
-import { validateIpcChannel } from './lumen-authority-policy';
+import { type IpcMain, app } from 'electron'
+import { validateIpcChannel } from './lumen-authority-policy'
 // Type-only import: erased at build time, so this does NOT make the bridge depend on the science
 // IPC surface at runtime. The contract is owned by the consumer because that module must stay
 // Electron-free to remain testable; the bridge conforms to it.
-import type { IpcMainLike } from './files/science-ipc';
-import path from 'path';
-import fs from 'fs';
-import crypto from 'crypto';
+import type { IpcMainLike } from './files/science-ipc'
+import { AcpSessionManager, type EngineState } from './acp-session-manager'
+import { listScienceMethods } from './science-method-registry'
 
-// ── Binary discovery ─────────────────────────────────────────────
+// ── Engine singleton ─────────────────────────────────────────────
 
-function lumenBinaryPath(): string {
-  // 1. BUNDLED_LUMEN env override (dev/testing)
-  if (process.env.LUMEN_BINARY) {
-    return process.env.LUMEN_BINARY;
-  }
-  // 2. App resources (production packaging)
-  const resourcesDir = path.join(process.resourcesPath || app.getAppPath(), 'bin');
-  const platform = process.platform;
-  const ext = platform === 'win32' ? '.exe' : '';
-  const candidate = path.join(resourcesDir, `lumen-science${ext}`);
-  if (fs.existsSync(candidate)) {
-    return candidate;
-  }
-  // 3. PATH fallback (development)
-  return `lumen-science${ext}`;
+let manager: AcpSessionManager | null = null
+let lastState: EngineState = { status: 'stopped' }
+
+/**
+ * Session workspace for the engine.
+ *
+ * Science store paths are pinned inside the session cwd by the Rust adapter
+ * (`canonical_dir_within`), so this is the root every project store must live
+ * under. userData keeps it per-install and writable in a packaged app.
+ */
+function sessionWorkspace(): string {
+  return app.getPath('userData')
 }
 
-// ── Lumen process lifecycle ──────────────────────────────────────
-
-let lumenProcess: ChildProcess | null = null;
-let binaryHash: string | null = null;
-
-export function getLumenBinaryHash(): string | null {
-  return binaryHash;
-}
-
-export async function startLumen(): Promise<void> {
-  const bin = lumenBinaryPath();
-
-  // Compute binary hash for attestation
-  if (fs.existsSync(bin)) {
-    const buf = fs.readFileSync(bin);
-    binaryHash = crypto.createHash('sha256').update(buf).digest('hex');
-  }
-
-  lumenProcess = spawn(bin, ['serve', '--interface', 'loopback', '--port', '17000'], {
-    stdio: ['pipe', 'pipe', 'pipe'],
-    env: {
-      ...process.env,
-      LUMEN_DESKTOP: '1',
-      LUMEN_NO_BROWSER: '1',
+function ensureManager(): AcpSessionManager {
+  if (manager) return manager
+  manager = new AcpSessionManager({
+    cwd: sessionWorkspace(),
+    clientVersion: app.getVersion(),
+    process: {
+      // process.resourcesPath is only defined in a packaged app; undefined
+      // here simply means the bundled candidate is skipped.
+      resourcesPath: process.resourcesPath,
+      childEnv: {
+        LUMEN_DESKTOP: '1',
+        LUMEN_NO_BROWSER: '1',
+      },
     },
-  });
-
-  lumenProcess.on('exit', (code) => {
-    console.log(`Lumen binary exited with code ${code}`);
-    lumenProcess = null;
-  });
-
-  lumenProcess.stderr?.on('data', (data: Buffer) => {
-    console.error(`[lumen] ${data.toString().trim()}`);
-  });
-
-  // Wait for ACP handshake readiness
-  await waitForAcpReady();
+    onStateChange: (state) => {
+      lastState = state
+    },
+    log: {
+      info: (message, meta) => console.log(`[lumen] ${message}`, meta ?? ''),
+      warn: (message, meta) => console.warn(`[lumen] ${message}`, meta ?? ''),
+      error: (message, meta) => console.error(`[lumen] ${message}`, meta ?? ''),
+    },
+  })
+  return manager
 }
 
-export function stopLumen(): void {
-  if (lumenProcess) {
-    lumenProcess.kill('SIGTERM');
-    setTimeout(() => {
-      if (lumenProcess) lumenProcess.kill('SIGKILL');
-    }, 5000);
-  }
+/** SHA-256 of the binary actually executed, or null before it is resolved. */
+export function getLumenBinaryHash(): string | null {
+  return manager?.getBinaryHash() ?? null
 }
 
-async function waitForAcpReady(timeoutMs = 30000): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const resp = await fetch('http://127.0.0.1:17000/health');
-      if (resp.ok) return;
-    } catch {
-      // Not ready yet
-    }
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  throw new Error('Lumen binary did not become ready within timeout');
+/**
+ * Engine state for diagnostics surfaces. `unavailable` always carries a reason;
+ * callers must render it rather than substituting a placeholder.
+ */
+export function getLumenEngineState(): EngineState {
+  return manager?.getState() ?? lastState
+}
+
+/** Spawn the engine and complete the ACP handshake. Rejects on failure. */
+export async function startLumen(): Promise<void> {
+  await ensureManager().start()
+}
+
+/** Graceful shutdown: close the transport, SIGTERM, then SIGKILL. */
+export async function stopLumen(): Promise<void> {
+  const current = manager
+  manager = null
+  if (!current) return
+  lastState = { status: 'stopped' }
+  await current.stop()
 }
 
 // ── Authority boundary enforcement ───────────────────────────────
@@ -140,13 +143,64 @@ export function safeHandle(
 
 // ── ACP proxy (renderer -> Electron main -> Rust Lumen) ──────────
 
-export async function acpCall(toolName: string, args: Record<string, unknown>): Promise<unknown> {
-  const resp = await fetch('http://127.0.0.1:17000/tools/call', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: toolName, arguments: args }),
-  });
-  return resp.json();
+/**
+ * Call one science method on the Rust engine.
+ *
+ * `toolName` is a science method name — the registry decides whether it may go
+ * on the wire. Three names this pack has been sending exist in neither engine
+ * (`project_assert_membership`, `artifact_resolve`, `compute_plan`) and three
+ * more are Go MCP tools rather than Rust ACP methods (`artifact_list`,
+ * `notebook_execute`, `start_review`); all six are rejected here, by name, with
+ * the reason. That rejection is deliberate and load-bearing: while the
+ * transport was fictional those calls failed with ECONNREFUSED, which read as
+ * "engine down" instead of "this method does not exist".
+ *
+ * Throws when the engine is unavailable. It never resolves with a mock or a
+ * stale value — the caller must surface the failure.
+ */
+export async function acpCall(
+  toolName: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  return ensureManager().callScience(toolName, args ?? {})
+}
+
+/**
+ * Adapter for consumers written against the old `/tools/*` HTTP shape.
+ *
+ * files/science-ipc.ts takes an injected `acpFetch(path, init)` and otherwise
+ * falls back to POSTing at 127.0.0.1:17000 — the same fiction this file just
+ * removed. Passing this from ipc.ts keeps that default unreachable until that
+ * module's own signature is reworked.
+ */
+export async function acpToolsFetch(path: string, init?: RequestInit): Promise<unknown> {
+  if (path === '/tools/list') {
+    return {
+      tools: listScienceMethods().map((m) => ({
+        name: m.name,
+        method: m.qualified,
+        transport: 'acp-stdio',
+      })),
+      authority: 'rust-acp-extension-methods',
+    }
+  }
+  if (path !== '/tools/call') {
+    throw new Error(`unsupported ACP path '${path}' — only /tools/call and /tools/list exist`)
+  }
+  const body = typeof init?.body === 'string' ? init.body : '{}'
+  let parsed: { name?: unknown; arguments?: unknown }
+  try {
+    parsed = JSON.parse(body) as { name?: unknown; arguments?: unknown }
+  } catch (error: unknown) {
+    throw new Error(
+      `ACP tool call body is not JSON: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+  const args =
+    parsed.arguments && typeof parsed.arguments === 'object'
+      ? (parsed.arguments as Record<string, unknown>)
+      : {}
+  return acpCall(String(parsed.name ?? ''), args)
 }
 
 // ── Wire into Electron IPC ───────────────────────────────────────
