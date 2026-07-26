@@ -1478,7 +1478,18 @@ impl WorkspaceOps {
                         ),
                     )
                 })?;
-                session.toolset().call(name, args, call_id, None).await
+                // Pass the session's working directory as the per-call cwd.
+                // It also becomes the tool registry's `workspace_root`, which
+                // verify-after-edit needs: with `None` here the registry found
+                // no `Cwd` resource (nothing inserts one in production), so the
+                // automatic edit-verify hook silently returned early and the
+                // whole feature did not exist for users — invisible to unit
+                // tests, caught by dogfooding a real edit.
+                let session_cwd = session.cwd().to_path_buf();
+                session
+                    .toolset()
+                    .call(name, args, call_id, Some(session_cwd))
+                    .await
             }
             Self::Proxy { client } => {
                 if !client.is_connected() {

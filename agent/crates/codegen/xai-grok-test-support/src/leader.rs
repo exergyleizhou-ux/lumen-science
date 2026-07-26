@@ -143,6 +143,12 @@ impl LeaderStdioClient {
             .env("GROK_LEADER_SOCKET", home.join(".grok").join("leader.sock"))
             .env("GROK_CLI_CHAT_PROXY_BASE_URL", server.url())
             .env("GROK_XAI_API_BASE_URL", server.url())
+            // Lumen BYOK defaults (deepseek-v4-pro) embed their own base_url and
+            // would ignore the two vars above, escaping this hermetic harness to
+            // the real provider. Pin every endpoint to the mock and supply the
+            // BYOK key so no request can leave the machine.
+            .env("LUMEN_INFERENCE_BASE_URL", server.url())
+            .env("DEEPSEEK_API_KEY", "test-key-for-ci")
             .env("XAI_API_KEY", "test-key-for-ci")
             .env("GROK_TELEMETRY_ENABLED", "false")
             .env("GROK_FEEDBACK_ENABLED", "false")

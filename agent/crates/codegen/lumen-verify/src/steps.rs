@@ -64,24 +64,62 @@ pub fn generate_steps(
                 });
             }
             "typescript" => {
-                steps.push(Step {
-                    language: "typescript".into(),
-                    label: "tsc --noEmit".into(),
-                    command: "npx".into(),
-                    args: vec!["tsc".into(), "--noEmit".into()],
-                });
-                steps.push(Step {
-                    language: "typescript".into(),
-                    label: "jest".into(),
-                    command: "npx".into(),
-                    args: vec!["jest".into(), "--passWithNoTests".into()],
-                });
+                // Prefer binaries already installed in the project's
+                // node_modules/.bin (no network, no package install). The npx
+                // fallback exists only for the standalone CLI; the automatic
+                // writer hook disables it via cfg.allow_package_runner=false.
+                match local_node_bin(root, "tsc") {
+                    Some(tsc) => steps.push(Step {
+                        language: "typescript".into(),
+                        label: "tsc --noEmit (local)".into(),
+                        command: tsc.to_string_lossy().into_owned(),
+                        args: vec!["--noEmit".into()],
+                    }),
+                    None if cfg.allow_package_runner => steps.push(Step {
+                        language: "typescript".into(),
+                        label: "tsc --noEmit".into(),
+                        command: "npx".into(),
+                        args: vec!["tsc".into(), "--noEmit".into()],
+                    }),
+                    None => {}
+                }
+                match local_node_bin(root, "jest") {
+                    Some(jest) => steps.push(Step {
+                        language: "typescript".into(),
+                        label: "jest (local)".into(),
+                        command: jest.to_string_lossy().into_owned(),
+                        args: vec!["--passWithNoTests".into()],
+                    }),
+                    None if cfg.allow_package_runner => steps.push(Step {
+                        language: "typescript".into(),
+                        label: "jest".into(),
+                        command: "npx".into(),
+                        args: vec!["jest".into(), "--passWithNoTests".into()],
+                    }),
+                    None => {}
+                }
             }
             _ => {}
         }
     }
 
     steps
+}
+
+/// Resolve a binary installed in the project's own `node_modules/.bin`.
+/// Returns None when it is not present — callers must not fall back to a
+/// package runner unless explicitly allowed.
+pub(crate) fn local_node_bin(root: &Path, name: &str) -> Option<PathBuf> {
+    let bin_dir = root.join("node_modules").join(".bin");
+    let candidates: &[String] = &if cfg!(windows) {
+        [format!("{name}.cmd"), format!("{name}.exe"), name.to_string()]
+    } else {
+        [name.to_string(), format!("{name}.cmd"), format!("{name}.exe")]
+    };
+    candidates
+        .iter()
+        .map(|c| bin_dir.join(c))
+        .find(|p| p.is_file())
 }
 
 fn command_args(command: &str, targets: &[String]) -> Vec<String> {
@@ -152,5 +190,55 @@ mod tests {
             go_targets(Path::new("/workspace"), &[], "workspace"),
             vec!["./..."]
         );
+    }
+
+    #[test]
+    fn typescript_without_local_bin_and_no_package_runner_emits_no_steps() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cfg = Config {
+            allow_package_runner: false,
+            ..Config::default()
+        };
+        let steps = generate_steps(
+            tmp.path(),
+            &[tmp.path().join("index.ts")],
+            &["typescript".to_string()],
+            &cfg,
+        );
+        assert!(steps.is_empty(), "no npx fallback allowed: {steps:#?}");
+    }
+
+    #[test]
+    fn typescript_with_package_runner_falls_back_to_npx() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cfg = Config::default();
+        let steps = generate_steps(
+            tmp.path(),
+            &[tmp.path().join("index.ts")],
+            &["typescript".to_string()],
+            &cfg,
+        );
+        assert!(steps.iter().any(|s| s.command == "npx"));
+    }
+
+    #[test]
+    fn typescript_prefers_local_node_bin() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let bin = tmp.path().join("node_modules/.bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join("tsc"), "").unwrap();
+        let cfg = Config {
+            allow_package_runner: false,
+            ..Config::default()
+        };
+        let steps = generate_steps(
+            tmp.path(),
+            &[tmp.path().join("index.ts")],
+            &["typescript".to_string()],
+            &cfg,
+        );
+        assert_eq!(steps.len(), 1);
+        assert!(steps[0].command.contains("node_modules"));
+        assert_eq!(steps[0].args, vec!["--noEmit".to_string()]);
     }
 }
