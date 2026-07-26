@@ -46,7 +46,7 @@
     "electron": "^31.0.0",
     "electron-builder": "^25.0.0",
     "electron-vite": "2.3.0",
-    "esbuild": "^0.25.12",
+    "esbuild": "^0.28.1",
     "eslint": "^9.0.0",
     "prettier": "^3.3.0",
     "typescript": "^5.5.0",
