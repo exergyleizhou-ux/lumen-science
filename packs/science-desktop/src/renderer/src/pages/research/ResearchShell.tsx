@@ -272,7 +272,7 @@ export const ResearchShell = (): React.JSX.Element => {
       setNbOut,
     )
 
-  const [reviewArtifacts, setReviewArtifacts] = useState('art-1:abc\nart-2:xyz')
+  const [reviewArtifacts, setReviewArtifacts] = useState('')
   const [reviewOut, setReviewOut] = useState('')
   const reviewPlan = async (): Promise<void> => {
     if (!lumen) return
@@ -782,6 +782,8 @@ export const ResearchShell = (): React.JSX.Element => {
                     value={reviewArtifacts}
                     onChange={(e) => setReviewArtifacts(e.target.value)}
                     spellCheck={false}
+                    aria-label="Artifacts to review, one per line as id:expected-sha256"
+                    placeholder={'artifact_id:expected_sha256 — one per line.\nRun a notebook cell, then use a hash from its report; the id IS the content hash.'}
                   />
                   <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                     <button type="button" className={cx.btn} onClick={() => void reviewPlan()}>
