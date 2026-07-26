@@ -84,6 +84,13 @@ const ALLOWED_CHANNELS = new Set<string>([
   // OSF-7 Connector catalog — read-only; no desktop fetch runtime
   'connectors:list',
   'connectors:fetch',
+  // LS5-K4 Environment identity — discovery and identification return
+  // observations (absolute path, sha256, exact version, os/arch, lock digest);
+  // request-admission forwards to the SessionActor and returns ITS verdict.
+  // None of the three can admit anything on the desktop's own authority.
+  'environment:discover',
+  'environment:identify',
+  'environment:request-admission',
   // OSF-8 / office admission / release honesty
   'office:admission-list',
   'office:preview-open',

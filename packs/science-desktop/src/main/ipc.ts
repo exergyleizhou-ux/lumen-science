@@ -54,6 +54,8 @@ import {
 } from './files/acp-membership'
 import { createAcpAuthoritativeMembershipAsserter } from './files/hybrid-membership'
 import { getDefaultLocalProjectCatalog } from './files/local-project-catalog'
+import { resolveStorageRoot } from './storage-root'
+import { runtimeRoot } from './notebook/runtime-paths'
 import { join } from 'node:path'
 
 type IpcRegistrationOptions = {
@@ -122,6 +124,10 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
       listArtifactsViaAcp(acpTool, { projectId, runId }),
     projectCatalog,
     defaultOwnerId: process.env.LUMEN_DESKTOP_OWNER_ID || 'local-user',
+    // LS5-K4: where this installation's environments live. Resolved here
+    // because it needs Electron's app paths; the adapter itself stays
+    // Electron-free so the authority scripts can execute the shipped module.
+    runtimeRoot: runtimeRoot(resolveStorageRoot()),
   })
 
   // ── Backend handles with shutdown contracts ─────────────────

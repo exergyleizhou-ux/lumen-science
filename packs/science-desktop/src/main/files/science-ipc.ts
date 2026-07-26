@@ -34,6 +34,12 @@ import {
   listOfficeAdmissions,
   type OfficePreviewOpenRequest,
 } from './office-preview-admission'
+import {
+  createEnvironmentService,
+  type AdmissionAsk,
+  type EnvironmentService,
+} from '../environment/service'
+import type { KernelKindName } from '../environment/interpreter-identity'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -89,6 +95,17 @@ export type ScienceIpcDeps = {
   computeService?: ComputeService
   /** Path to docs/science/fusion-sources.lock.json */
   connectorLockPath?: string
+  /**
+   * `<storageRoot>/runtime` — LS5-K4 environment identity.
+   *
+   * Injected because resolving it needs `electron`, and this module is executed
+   * by the authority scripts without one. Absent means the environment handlers
+   * report that they have no runtime root, which is the honest answer; they
+   * never guess a path and describe an installation that is not there.
+   */
+  runtimeRoot?: string
+  /** Optional inject environment service (tests). */
+  environmentService?: EnvironmentService
 }
 
 // No default transport. There is no fallback engine to reach, and the previous
@@ -461,6 +478,62 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     }
   })
 
+  // ── LS5-K4 Environment identity (facts only; admission is the engine's) ──
+  //
+  // These three channels are the driven surface of the environment adapter.
+  // They return observations and, for admission, the engine's own answer. None
+  // of them can produce an "admitted" of its own: `environment:request-admission`
+  // either forwards to the SessionActor or reports that it could not ask.
+  const environment: EnvironmentService | null =
+    deps.environmentService ??
+    (deps.runtimeRoot
+      ? createEnvironmentService({
+          runtimeRoot: deps.runtimeRoot,
+          acpCall: async (method, args) => callTool(method, args),
+        })
+      : null)
+
+  const noRuntimeRoot = {
+    ok: false as const,
+    reason:
+      'no runtime root configured for this process — environment identity is unavailable, ' +
+      'not empty',
+  }
+
+  safeHandle(ipcMain, 'environment:discover', async (_event, payload: unknown) => {
+    if (!environment) return noRuntimeRoot
+    const p = (payload ?? {}) as { language?: string }
+    const report = await environment.discover(p.language === 'r' ? 'r' : 'python')
+    return { ok: true, ...report, authority: 'observation-only' }
+  })
+
+  safeHandle(ipcMain, 'environment:identify', async (_event, payload: unknown) => {
+    if (!environment) return noRuntimeRoot
+    const p = (payload ?? {}) as { kind?: string; interpreterPath?: string; packageLockPath?: string }
+    const result = await environment.identify({
+      kind: normalizeKernelKind(p.kind),
+      interpreterPath: typeof p.interpreterPath === 'string' ? p.interpreterPath : '',
+      packageLockPath: typeof p.packageLockPath === 'string' ? p.packageLockPath : undefined,
+    })
+    return { ok: true, ...result, authority: 'observation-only' }
+  })
+
+  safeHandle(ipcMain, 'environment:request-admission', async (_event, payload: unknown) => {
+    if (!environment) return noRuntimeRoot
+    const p = (payload ?? {}) as Partial<AdmissionAsk> & { kind?: string }
+    const outcome = await environment.requestAdmission({
+      sessionId: typeof p.sessionId === 'string' ? p.sessionId : '',
+      storeRoot: typeof p.storeRoot === 'string' ? p.storeRoot : '',
+      kernelId: typeof p.kernelId === 'string' ? p.kernelId : '',
+      kind: normalizeKernelKind(p.kind),
+      interpreterPath: typeof p.interpreterPath === 'string' ? p.interpreterPath : '',
+      packageLockPath: typeof p.packageLockPath === 'string' ? p.packageLockPath : undefined,
+      allowedRoot: typeof p.allowedRoot === 'string' ? p.allowedRoot : undefined,
+      probeTimeoutMs: typeof p.probeTimeoutMs === 'number' ? p.probeTimeoutMs : undefined,
+    })
+    return { ok: true, ...outcome, authority: 'SessionActor/kernel_admission' }
+  })
+
   // ── Release honesty (no fake binary upload claims) ───────────
   safeHandle(ipcMain, 'release:checklist-status', async () => {
     const checklistPath = path.resolve(
@@ -479,6 +552,14 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
       note: 'P0: upload assets listed in SHA256SUMS to GitHub Release before claiming installable',
     }
   })
+}
+
+// The renderer supplies this string. Unknown values become 'python' rather than
+// being passed through, because the engine's parameter parser also defaults
+// unknown kinds to Python — narrowing here keeps the two ends agreeing instead
+// of letting a typo silently change which argv probes the binary.
+function normalizeKernelKind(kind: unknown): KernelKindName {
+  return kind === 'r' || kind === 'julia' ? kind : 'python'
 }
 
 function normalizeCellRequest(payload: unknown): NotebookCellRequest {
