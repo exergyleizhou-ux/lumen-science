@@ -115,7 +115,11 @@ SOURCE_DATE_EPOCH ?= $(shell git show -s --format=%ct HEAD 2>/dev/null || echo 0
 # --uname/--gname and no --sort. Support both rather than hard-failing on the
 # platform most of this is developed on. scripts/repro-archive.sh picks the
 # right flags and feeds a sorted, mtime-normalised file list.
-REPRO_ARCHIVE := ../../scripts/repro-archive.sh
+# ABSOLUTE. Every use is preceded by `cd $(RELEASE_DIR)`, so a path relative to
+# this Makefile resolves against dist/science-release instead and lands on
+# packs/science/scripts/, which does not exist. $(abspath) is expanded at parse
+# time, while the working directory is still packs/science.
+REPRO_ARCHIVE := $(abspath ../../scripts/repro-archive.sh)
 
 release: clean cross
 	@echo "Building release package version=$(VERSION) SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH)..."
