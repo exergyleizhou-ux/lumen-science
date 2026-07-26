@@ -29,7 +29,6 @@
     "**/*.spec.tsx",
     "src/renderer/src/components/Versions.tsx",
     "src/renderer/src/components/ui/scroll-area.tsx",
-    "src/renderer/src/env.d.ts",
     "src/renderer/src/office-preview/main.ts",
     "src/renderer/src/office-preview/office-preview-controller.ts",
     "src/renderer/src/office-preview/office-preview-frame-bridge.ts",

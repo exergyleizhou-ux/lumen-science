@@ -129,7 +129,6 @@
     "src/main/reviewer/stale-reviews.ts",
     "src/main/session-persistence/coordinator.ts",
     "src/main/session-persistence/ipc.ts",
-    "src/main/skills/js-yaml.d.ts",
     "src/main/storage/data-migration.ts",
     "src/main/storage/ipc.ts",
     "src/main/storage/migration-service.ts",
@@ -140,7 +139,6 @@
     "src/main/uploads/attachment-media.ts",
     "src/main/uploads/ipc.ts",
     "src/main/uploads/repository.ts",
-    "src/preload/index.d.ts",
     "src/preload/pack-preload.ts"
   ]
 }

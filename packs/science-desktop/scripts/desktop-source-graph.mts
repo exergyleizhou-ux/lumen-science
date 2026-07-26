@@ -41,6 +41,13 @@ const ENTRIES = [
 
 const SOURCE_RE = /\.(ts|tsx)$/
 const TEST_RE = /\.(test|spec)\.(ts|tsx)$/
+// Ambient declaration files are PROGRAM INPUTS, not nodes in the import graph: nothing imports
+// them, they contribute `declare module` / `declare global` blocks to whatever program includes
+// them. Reachability is therefore meaningless for them, and excluding one removes real typing from
+// the build. This cost us three of them — src/renderer/src/env.d.ts (the vite/client reference,
+// whose absence turned every `import icon from './x.svg'` into TS2307), src/main/skills/js-yaml.d.ts
+// and src/preload/index.d.ts — all swept into `exclude` by an earlier --write-tsconfig run.
+const DECLARATION_RE = /\.d\.ts$/
 
 const aliases: Array<[RegExp, string]> = [
   [/^@\//, 'src/renderer/src/'],
@@ -178,7 +185,9 @@ const report = {
     sourceFiles: allSource.length,
     adopted: adopted.length,
     unreachable: unreachable.length,
-    unreachableNonTest: unreachableNonTest.length
+    unreachableNonTest: unreachableNonTest.length,
+    // Reported separately so the "unreachable" figure is not read as "dead": these are always kept.
+    ambientDeclarations: allSource.filter((f) => DECLARATION_RE.test(rel(f))).length
   },
   deadDirectories: deadDirs,
   unresolvedRelativeImports: missing,
@@ -214,6 +223,9 @@ function buildExclusions(scope: 'node' | 'web'): string[] {
   const files = unreachable
     .filter((f) => prefixes.some((p) => f.startsWith(p)))
     .filter((f) => !TEST_RE.test(f))
+    // Never exclude an ambient declaration: it is unreachable BY CONSTRUCTION (see DECLARATION_RE),
+    // so "unreachable" carries no signal for it, and dropping one silently removes typing.
+    .filter((f) => !DECLARATION_RE.test(f))
   // Tests are covered by a glob rather than 400+ literal paths.
   return ['**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/*.spec.tsx', ...files.sort()]
 }
