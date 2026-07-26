@@ -83,7 +83,7 @@ const createMainWindow = (opts?: MainWindowCloseOptions): BrowserWindow => {
     height: 960,
     minWidth: 1100,
     minHeight: 720,
-    title: 'Open Science'
+    title: 'Lumen Science Desktop'
   })
 
   // The renderer decides pane-vs-window, but only once it has a live, responsive listener. If main

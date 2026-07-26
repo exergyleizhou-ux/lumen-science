@@ -28,6 +28,10 @@ import { planRemoteCompute } from './compute-plan'
 import { loadConnectorCatalog } from './connector-catalog'
 import { assertOfficePreviewAdmission } from './office-preview-admission'
 import { validateIpcChannel } from '../lumen-authority-policy'
+import {
+  isSha256Hex,
+  resolveAndProbeLumenScienceBinary,
+} from './lumen-binary'
 import path from 'node:path'
 
 export type Osf9Step = {
@@ -228,11 +232,32 @@ export async function runOsf9ProductPath(opts?: {
   )
   push('restart-preview', prev2.access.ok === true)
 
+  // Optional live binary: fill binaryHash only when a real binary is present.
+  // Offline CI keeps binaryHash=null — never invent a hash.
+  let binaryHash: string | null = null
+  const live = resolveAndProbeLumenScienceBinary()
+  if (!live) {
+    push('live-binary', true, 'skip: no lumen-science binary (offline OK)')
+  } else if (!live.ok || !isSha256Hex(live.binaryHash)) {
+    push(
+      'live-binary',
+      false,
+      live.detail || 'binary present but version/help/hash failed',
+    )
+  } else {
+    binaryHash = live.binaryHash
+    push(
+      'live-binary',
+      true,
+      `hash=${binaryHash.slice(0, 12)}… version=${live.versionOutput.split('\n')[0]}`,
+    )
+  }
+
   const ok = steps.every((s) => s.ok)
   return {
     ok,
     steps,
-    binaryHash: null, // filled by live harness when binary present
+    binaryHash,
     exportProjection: dossier,
   }
 }

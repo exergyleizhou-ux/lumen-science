@@ -17,7 +17,7 @@ See [docs/VERSIONING.md](../VERSIONING.md).
 |-----------|---------|--------|
 | Lumen Core (pager crate) | `0.1.222` | Shipping agent line |
 | Science CLI/MCP | `1.0.1` (`packs/science/VERSION`) | **Shipped** — GitHub Release [`v1.0.1`](https://github.com/exergyleizhou-ux/lumen-science/releases/tag/v1.0.1); `MANIFEST.json` `git_commit=4f75d7a…`, `builder_run_id=30192164855`, `independentFromCore=true` |
-| Science Desktop | `1.1.0-dev` | Source candidate only — Desktop CI required on `main`; no DMG/AppImage GA |
+| Science Desktop | `1.1.0-dev` | Authority suite + **unsigned pack-dir** (`Lumen Science Desktop.app`); not installable GA / no notarization |
 
 ## Quantified maturity (audit-aligned)
 
@@ -26,8 +26,8 @@ See [docs/VERSIONING.md](../VERSIONING.md).
 | 1.0 feature code (Rust/Go offline) | 85% | Tests + gates strong |
 | 1.0 formal release chain (tag→protected build) | **95%** | Science Release workflow green; MANIFEST provenance verified; optional GPG/minisign still open |
 | OSF-0…8 source fusion | 70% | IPC spine OSF-2…8 in tree |
-| OSF-0…8 desktop product evidence | 35–45% | lockfile + Desktop CI + authority suite required; no full electron-builder install smoke yet |
-| OSF-9 product-path (offline) | 70% | `test-osf9-product-path.mts` composition green; live Electron+hash E2E still open |
+| OSF-0…8 desktop product evidence | 45–55% | lockfile + Desktop CI + authority suite + unsigned pack-dir branded app |
+| OSF-9 product-path | 80% | offline composition + live binaryHash (SHA-256 of real `lumen-science`); headed Electron GUI E2E still open |
 | 2.0 Desktop Preview | 35% | UI + IPC, not installable GA |
 | 3.0 workbench GA | 25–30% | Live SessionActor E2E incomplete |
 | 5.0 embodied | 10–15% | Device/HIL not started |
@@ -52,8 +52,9 @@ See [docs/VERSIONING.md](../VERSIONING.md).
 
 ### P0 (still open — Desktop path)
 
-1. **Desktop reproducible package**: full `electron-builder` artifact + install smoke (unsigned OK; no fake notarization).
-2. **OSF-9 live E2E**: Electron + real `lumen-science` binary hash path (beyond offline composition suite).
+1. **Desktop installable package**: signed DMG/AppImage/Setup + auto-update feed (unsigned pack-dir proof exists via `npm run dist` / `scripts/pack-dir.mts`).
+2. **OSF-9 headed Electron E2E**: full GUI drive-through (live binaryHash probe is in authority suite; headed app E2E still open).
+3. **Full electron-vite product build**: pack-dir uses a minimal main/preload/renderer shell; full `src/main/index.ts` graph still has OS-absorb dep/type debt.
 
 ### P1
 

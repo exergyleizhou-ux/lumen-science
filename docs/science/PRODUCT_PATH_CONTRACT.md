@@ -43,14 +43,17 @@ connector fetch (fixture or authorized live)
 | Built-binary connector ACP | one e2e test path (debug binary historically) |
 | Go artifacts/notebook/reviewer/http_bridge | 49 unit tests (prototype servers) |
 | Motif full vendored build | **not** proven (deps blocked without network auth) |
-| Skills approved runtime | **0** approved (27 pending honest admission) |
-| Formal release binary | **not** published |
+| Skills approved runtime | desktop path: approved registry subset; bulk auto-approve **denied** |
+| Science CLI/MCP formal binary | **published** — GitHub Release [`v1.0.1`](https://github.com/exergyleizhou-ux/lumen-science/releases/tag/v1.0.1) with `MANIFEST.json` + `SHA256SUMS` (workflow-built) |
+| Science Desktop installable package | **not** GA (`1.1.0-dev`; authority suite + unpackaged dist only) |
 
 ## Forbidden claims
 
-- “Lumen Science 1.0 complete” without DS-48～58 release + live gates  
+- “Lumen Science Desktop GA” / installable auto-updating product without electron-builder install smoke + signed feed  
+- “Science CLI unreleased” after `v1.0.1` (CLI/MCP **is** released; Desktop is separate)  
 - “Claude Science parity” without Motif DS-45B ACCEPT + controlled skill tools  
 - “5.0 implemented” for WP data models without SessionActor product-path proof  
+- “Notarization complete” without stapled tickets
 
 ## Go MCP vs Rust target
 

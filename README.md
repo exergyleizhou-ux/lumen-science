@@ -22,7 +22,7 @@ Do not treat Go tags as the current shipping line.
 **Versions (three lines — see `docs/VERSIONING.md`):**
 
 - Lumen Core (pager): `agent/.../xai-grok-pager` crate version (currently `0.1.222`)
-- Lumen Science CLI/MCP: `packs/science/VERSION` (currently `1.0.0`; next clean release `v1.0.1`)
+- Lumen Science CLI/MCP: `packs/science/VERSION` (currently **`1.0.1`**, GitHub Release `v1.0.1`)
 - Lumen Science Desktop: `packs/science-desktop/package.json` (currently `1.1.0-dev`, **not GA**)
 
 Root `VERSION` remains used by some science install scripts; prefer `packs/science/VERSION` going forward.

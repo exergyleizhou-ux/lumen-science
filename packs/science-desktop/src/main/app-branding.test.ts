@@ -4,17 +4,17 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const projectRoot = resolve(__dirname, '../..')
-const displayName = 'Open Science'
-const appId = 'com.aipoch.open-science'
+const displayName = 'Lumen Science Desktop'
+const appId = 'com.exergyleizhou-ux.lumen-science-desktop'
 
 describe('app display branding', () => {
-  it('uses the Open Science display name in shell and workspace surfaces', () => {
+  it('uses the Lumen Science Desktop display name in shell and workspace surfaces', () => {
     const mainSource = readFileSync(resolve(projectRoot, 'src/main/index.ts'), 'utf8')
     const windowsSource = readFileSync(resolve(projectRoot, 'src/main/windows.ts'), 'utf8')
     const rendererHtmlSource = readFileSync(resolve(projectRoot, 'src/renderer/index.html'), 'utf8')
     const builderSource = readFileSync(resolve(projectRoot, 'electron-builder.yml'), 'utf8')
     const packageSource = readFileSync(resolve(projectRoot, 'package.json'), 'utf8')
-    // The product name now anchors the home screen brand (the workspace sidebar shows the project).
+    // The product name anchors the home screen brand (the workspace sidebar shows the project).
     const homePageSource = readFileSync(
       resolve(projectRoot, 'src/renderer/src/pages/home/HomePage.tsx'),
       'utf8'
@@ -30,12 +30,14 @@ describe('app display branding', () => {
     expect(homePageSource).toContain(displayName)
   })
 
-  it('uses the Aipoch app identifier for packaged and window integration metadata', () => {
+  it('uses the Lumen app identifier for packaged and window integration metadata', () => {
     const mainSource = readFileSync(resolve(projectRoot, 'src/main/index.ts'), 'utf8')
     const builderSource = readFileSync(resolve(projectRoot, 'electron-builder.yml'), 'utf8')
 
     expect(mainSource).toContain(`const APP_USER_MODEL_ID = '${appId}'`)
     expect(builderSource).toContain(`appId: ${appId}`)
+    expect(builderSource).not.toContain('com.aipoch.open-science')
+    expect(builderSource).not.toContain('executableName: open-science')
   })
 
   it('opens tall enough to show the complete first-run environment summary', () => {

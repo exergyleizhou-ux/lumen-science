@@ -224,7 +224,7 @@ const HomePage = (): React.JSX.Element => {
               rel="noreferrer"
               className="font-serif text-[26px] font-medium leading-none tracking-[-0.02em] text-text-000 transition-colors duration-150 ease-out hover:text-text-100"
             >
-              Open Science
+              Lumen Science Desktop
             </a>
             <div className="mt-1 text-[11px] text-text-100">Beta</div>
           </div>
