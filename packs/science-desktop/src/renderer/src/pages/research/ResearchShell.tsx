@@ -17,11 +17,12 @@ type UiProject = {
   defaultRunId: string
 }
 
-type TabId = 'question' | 'plan' | 'evidence' | 'result' | 'review'
+type TabId = 'question' | 'plan' | 'notebook' | 'evidence' | 'result' | 'review'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'question', label: 'Question' },
   { id: 'plan', label: 'Plan' },
+  { id: 'notebook', label: 'Notebook' },
   { id: 'evidence', label: 'Evidence' },
   { id: 'result', label: 'Result' },
   { id: 'review', label: 'Review' },
@@ -37,6 +38,8 @@ export const ResearchShell = (): React.JSX.Element => {
   const [hash, setHash] = useState<string | null>(null)
   const [error, setError] = useState<string | undefined>()
   const [previewMeta, setPreviewMeta] = useState<string>('')
+  const [nbCode, setNbCode] = useState('print("hello from lumen notebook plan")\n')
+  const [nbOut, setNbOut] = useState<string>('')
 
   const lumen = window.api?.lumen
 
@@ -119,6 +122,27 @@ export const ResearchShell = (): React.JSX.Element => {
       return
     }
     setPreviewMeta(`ok path=${res.path ?? '?'} sha256=${res.sha256 ?? '?'}`)
+  }
+
+  const notebookDryRun = async (): Promise<void> => {
+    if (!lumen) return
+    const res = await lumen.notebookDryRunCell({ language: 'python', code: nbCode })
+    setNbOut(JSON.stringify(res, null, 2))
+  }
+
+  const notebookExecute = async (): Promise<void> => {
+    if (!lumen || !active) {
+      setNbOut('Open a project first (trusted session required for live execute).')
+      return
+    }
+    const res = await lumen.notebookExecuteCell({ language: 'python', code: nbCode })
+    setNbOut(JSON.stringify(res, null, 2))
+  }
+
+  const notebookExport = async (): Promise<void> => {
+    if (!lumen) return
+    const res = await lumen.notebookExportIpynb()
+    setNbOut(JSON.stringify(res, null, 2))
   }
 
   return (
@@ -238,6 +262,36 @@ export const ResearchShell = (): React.JSX.Element => {
                       ? `1. Literature (PubMed/OpenAlex)\n2. Biological DBs (UniProt/ClinVar/ChEMBL)\n3. Notebook analysis\n4. Reviewer + EvidenceGraph\n5. Export package\n\nQuestion: ${question}`
                       : 'Enter a question first.'}
                   </pre>
+                </section>
+              )}
+
+              {tab === 'notebook' && (
+                <section style={styles.panel}>
+                  <h2 style={styles.h2}>Notebook</h2>
+                  <p style={styles.muted}>
+                    Plan / dry-run in desktop; live execute only via Lumen ACP{' '}
+                    <code>notebook_execute</code> → SessionActor / KernelAdapter. Electron
+                    KernelExecutor stays stubbed.
+                  </p>
+                  <textarea
+                    style={styles.textarea}
+                    rows={8}
+                    value={nbCode}
+                    onChange={(e) => setNbCode(e.target.value)}
+                    spellCheck={false}
+                  />
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                    <button type="button" style={styles.btn} onClick={() => void notebookDryRun()}>
+                      Dry-run plan
+                    </button>
+                    <button type="button" style={styles.btn} onClick={() => void notebookExecute()}>
+                      Execute (ACP)
+                    </button>
+                    <button type="button" style={styles.btn} onClick={() => void notebookExport()}>
+                      Export .ipynb
+                    </button>
+                  </div>
+                  {nbOut && <pre style={styles.pre}>{nbOut}</pre>}
                 </section>
               )}
 

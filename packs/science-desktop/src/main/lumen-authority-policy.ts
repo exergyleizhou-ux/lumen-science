@@ -57,6 +57,12 @@ const ALLOWED_CHANNELS = new Set<string>([
   'files:create-ui-project',
   'files:open-ui-project',
   'files:delete-ui-project',
+  // OSF-3 Notebook — plan/dry-run/export local; execute only via ACP
+  'notebook:plan-cell',
+  'notebook:dry-run-cell',
+  'notebook:execute-cell',
+  'notebook:history',
+  'notebook:export-ipynb',
 ])
 
 /**

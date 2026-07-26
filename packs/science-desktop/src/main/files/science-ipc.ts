@@ -1,7 +1,8 @@
 /**
  * Science IPC registration (testable without full Electron app bootstrap).
  *
- * Single registration site for ACP proxy + OSF-2 files + UI project catalog.
+ * Single registration site for ACP proxy + OSF-2 files + UI project catalog
+ * + OSF-3 notebook plan/execute (ACP only).
  * installIpcGuard does NOT register channels — only this module does via safeHandle.
  */
 
@@ -16,6 +17,8 @@ import {
   type SeedableStore,
 } from './session-binding'
 import type { LocalProjectCatalog } from './local-project-catalog'
+import { createNotebookService, type NotebookService } from './notebook-service'
+import type { NotebookCellRequest } from './notebook-plan'
 
 /** Minimal surface — works with Electron IpcMain or a test double. */
 export type IpcMainLike = {
@@ -47,6 +50,8 @@ export type ScienceIpcDeps = {
   projectCatalog?: LocalProjectCatalog
   /** Default owner for UI projects when renderer omits (dev: local-user). */
   defaultOwnerId?: string
+  /** Optional inject notebook service (tests). Default: ACP-backed. */
+  notebookService?: NotebookService
 }
 
 const DEFAULT_ACP_BASE = 'http://127.0.0.1:17000'
@@ -60,6 +65,19 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
   const acpFetch = deps.acpFetch ?? defaultAcpFetch
   const { safeHandle, getLumenBinaryHash, previewStore } = deps
   const defaultOwner = deps.defaultOwnerId ?? 'local-user'
+
+  const notebook =
+    deps.notebookService ??
+    createNotebookService({
+      acpCall: async (toolName, args) => {
+        const raw = await acpFetch('/tools/call', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: toolName, arguments: args }),
+        })
+        return raw
+      },
+    })
 
   safeHandle(ipcMain, 'acp:call', async (_event, toolName: unknown, args: unknown) => {
     try {
@@ -244,4 +262,37 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     const ok = deps.projectCatalog.delete(p.projectId ?? '')
     return { ok, authority: 'ui-local' }
   })
+
+  // ── OSF-3 Notebook (plan/dry-run local; execute via ACP only) ──
+  safeHandle(ipcMain, 'notebook:plan-cell', async (_event, payload: unknown) => {
+    const req = normalizeCellRequest(payload)
+    return notebook.plan(req)
+  })
+
+  safeHandle(ipcMain, 'notebook:dry-run-cell', async (_event, payload: unknown) => {
+    const req = normalizeCellRequest(payload)
+    return notebook.dryRun(req)
+  })
+
+  safeHandle(ipcMain, 'notebook:execute-cell', async (_event, payload: unknown) => {
+    const req = normalizeCellRequest(payload)
+    return notebook.execute(req)
+  })
+
+  safeHandle(ipcMain, 'notebook:history', async () => ({
+    cells: notebook.history(),
+    authority: 'ui-history-only',
+  }))
+
+  safeHandle(ipcMain, 'notebook:export-ipynb', async () => notebook.exportIpynb())
+}
+
+function normalizeCellRequest(payload: unknown): NotebookCellRequest {
+  const p = (payload ?? {}) as Partial<NotebookCellRequest>
+  return {
+    language: p.language === 'r' ? 'r' : 'python',
+    code: typeof p.code === 'string' ? p.code : '',
+    cellId: p.cellId,
+    dryRun: p.dryRun,
+  }
 }

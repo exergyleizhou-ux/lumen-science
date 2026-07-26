@@ -619,6 +619,24 @@ type OpenScienceAPI = {
       runId?: string
     }) => Promise<unknown>
     deleteUiProject: (request: { projectId: string }) => Promise<unknown>
+    /** OSF-3 Notebook — plan/dry-run/export; execute via Lumen ACP only */
+    notebookPlanCell: (request: {
+      language?: 'python' | 'r'
+      code: string
+      cellId?: string
+    }) => Promise<unknown>
+    notebookDryRunCell: (request: {
+      language?: 'python' | 'r'
+      code: string
+      cellId?: string
+    }) => Promise<unknown>
+    notebookExecuteCell: (request: {
+      language?: 'python' | 'r'
+      code: string
+      cellId?: string
+    }) => Promise<unknown>
+    notebookHistory: () => Promise<unknown>
+    notebookExportIpynb: () => Promise<unknown>
   }
   window: {
     // Closes the focused window (the Cmd+W / Ctrl+W fallback when no preview panel is open).
@@ -1181,6 +1199,16 @@ const api: OpenScienceAPI = {
       ipcRenderer.invoke('files:open-ui-project', request) as Promise<unknown>,
     deleteUiProject: (request) =>
       ipcRenderer.invoke('files:delete-ui-project', request) as Promise<unknown>,
+    notebookPlanCell: (request) =>
+      ipcRenderer.invoke('notebook:plan-cell', request) as Promise<unknown>,
+    notebookDryRunCell: (request) =>
+      ipcRenderer.invoke('notebook:dry-run-cell', request) as Promise<unknown>,
+    notebookExecuteCell: (request) =>
+      ipcRenderer.invoke('notebook:execute-cell', request) as Promise<unknown>,
+    notebookHistory: () =>
+      ipcRenderer.invoke('notebook:history') as Promise<unknown>,
+    notebookExportIpynb: () =>
+      ipcRenderer.invoke('notebook:export-ipynb') as Promise<unknown>,
   },
 }
 

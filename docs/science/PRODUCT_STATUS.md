@@ -60,7 +60,8 @@ Absorb **UI / preview / notebook UX / release engineering**.
 | Surface | Authority | State |
 |---------|-----------|--------|
 | Connectors / evidence / workflow (Rust) | SessionActor | Strong (offline tests) |
-| Desktop IPC science path | `acp:*` + `files:*` via safeHandle | OSF-2 bind/preview wired |
+| Desktop IPC science path | `acp:*` + `files:*` + `notebook:*` via safeHandle | OSF-2 + OSF-3 plan/execute path wired |
+| Notebook TS KernelExecutor | **Stub only** | Live path: ACP `notebook_execute` only |
 | OS `projects:*` / `artifacts:*` / TS compute | **Banned** | Not registered in greenfield `ipc.ts` |
 | UI project catalog | Electron UI state only | Local catalog + membership hybrid |
 | Go science pack | CLI/MCP compatibility | Not product authority |

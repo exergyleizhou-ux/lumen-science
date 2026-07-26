@@ -569,6 +569,23 @@ interface OpenScienceAPI {
       runId?: string
     }): Promise<unknown>
     deleteUiProject(request: { projectId: string }): Promise<unknown>
+    notebookPlanCell(request: {
+      language?: 'python' | 'r'
+      code: string
+      cellId?: string
+    }): Promise<unknown>
+    notebookDryRunCell(request: {
+      language?: 'python' | 'r'
+      code: string
+      cellId?: string
+    }): Promise<unknown>
+    notebookExecuteCell(request: {
+      language?: 'python' | 'r'
+      code: string
+      cellId?: string
+    }): Promise<unknown>
+    notebookHistory(): Promise<unknown>
+    notebookExportIpynb(): Promise<unknown>
   }
   window: {
     // Closes the focused window (the Cmd+W / Ctrl+W fallback when no preview panel is open).

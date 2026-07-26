@@ -75,6 +75,15 @@ The following Open Science subsystems have execution authority REMOVED:
 | src/main/office-preview/ | packs/science-desktop/src/main/office-preview/ | Planned | DOCX/XLSX/PPTX isolated renderer (follow-on) |
 | src/renderer/.../previews/ | packs/science-desktop/src/renderer/ | Planned | Multi-tab preview UI (follow-on) |
 
+### Batch 3 note (OSF-3 Notebook) — 2026-07-26
+
+| Destination | Modified? | Notes |
+|-------------|-----------|-------|
+| packs/science-desktop/src/main/files/notebook-plan.ts | Yes (Lumen) | pure plan + ban patterns + ipynb export projection |
+| packs/science-desktop/src/main/files/notebook-service.ts | Yes (Lumen) | dry-run local; execute only ACP notebook_execute |
+| packs/science-desktop/src/main/notebook/kernel-executor.ts | Stub | EXECUTION AUTHORITY REMOVED |
+| packs/science-desktop/src/main/notebook/ipc.ts | Stub | not registered in greenfield ipc.ts |
+
 ### Key modifications (OSF-2)
 - Preview gated by artifact_id only (no arbitrary path open)
 - Trusted session identity (main) vs store ownership — not client self-attestation
