@@ -1,12 +1,20 @@
 /**
  * Science IPC registration (testable without full Electron app bootstrap).
  *
- * Single registration site for ACP proxy + OSF-2 files preview.
+ * Single registration site for ACP proxy + OSF-2 files preview + session bind.
  * installIpcGuard does NOT register channels — only this module does via safeHandle.
  */
 
 import type { PreviewFileStore } from './preview-resolver'
 import { loadArtifactPreview } from './preview-service'
+import {
+  bindTrustedSession,
+  unbindTrustedSession,
+  seedPreviewStoreFromList,
+  type MembershipAsserter,
+  type ArtifactListItem,
+} from './session-binding'
+import type { SeedableStore } from './session-binding'
 
 /** Minimal surface — works with Electron IpcMain or a test double. */
 export type IpcMainLike = {
@@ -22,12 +30,27 @@ export type SafeHandleFn = (
   handler: (_event: unknown, ...args: unknown[]) => Promise<unknown>,
 ) => void
 
+export type ListArtifactsFn = (args: {
+  projectId: string
+  runId: string
+}) => Promise<ArtifactListItem[]>
+
 export type ScienceIpcDeps = {
   safeHandle: SafeHandleFn
   getLumenBinaryHash: () => string | null
   /** Optional override for acp:call body (tests inject). Default: loopback fetch. */
   acpFetch?: (path: string, init?: RequestInit) => Promise<unknown>
   previewStore: PreviewFileStore
+  /**
+   * Required for files:bind-session. Production uses ACP membership asserter;
+   * tests inject fixtures. Without it, bind always fails closed.
+   */
+  assertMembership?: MembershipAsserter
+  /**
+   * Optional artifact_list for post-bind seed. When omitted, bind still works
+   * but seeded count is 0.
+   */
+  listArtifacts?: ListArtifactsFn
 }
 
 const DEFAULT_ACP_BASE = 'http://127.0.0.1:17000'
@@ -38,7 +61,7 @@ async function defaultAcpFetch(path: string, init?: RequestInit): Promise<unknow
 }
 
 /**
- * Register ACP + files preview handlers exactly once per ipcMain.
+ * Register ACP + files preview + session bind handlers exactly once per ipcMain.
  * Throws if the same channel is registered twice (mock or Electron).
  */
 export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIpcDeps): void {
@@ -71,8 +94,6 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
   safeHandle(ipcMain, 'app:get-lumen-hash', async () => getLumenBinaryHash())
 
   // OSF-2 product surface: preview by artifact_id under trusted session identity.
-  // Identity is set only by main-process project/session open (session-identity.ts),
-  // never via a renderer self-attestation channel.
   safeHandle(ipcMain, 'files:preview-by-artifact', async (_event, payload: unknown) => {
     const req = (payload ?? {}) as {
       artifactId?: string
@@ -87,5 +108,63 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
       },
       { store: previewStore },
     )
+  })
+
+  // Bind only after membership assertion — never raw self-attestation.
+  safeHandle(ipcMain, 'files:bind-session', async (_event, payload: unknown) => {
+    const p = (payload ?? {}) as {
+      ownerId?: string
+      projectId?: string
+      runId?: string
+    }
+    const assertMembership = deps.assertMembership
+    if (!assertMembership) {
+      return {
+        ok: false,
+        reason: 'no membership asserter configured — fail closed',
+      }
+    }
+    const bound = await bindTrustedSession(
+      { ownerId: p.ownerId ?? '', projectId: p.projectId ?? '' },
+      { assertMembership },
+    )
+    if (!bound.ok) {
+      return bound
+    }
+
+    let seeded = 0
+    if (deps.listArtifacts && p.runId && 'put' in previewStore) {
+      try {
+        const items = await deps.listArtifacts({
+          projectId: bound.projectId,
+          runId: p.runId,
+        })
+        seeded = seedPreviewStoreFromList(
+          previewStore as unknown as SeedableStore,
+          items,
+          { ownerId: bound.ownerId, projectId: bound.projectId },
+        )
+      } catch (e: unknown) {
+        return {
+          ok: true,
+          ownerId: bound.ownerId,
+          projectId: bound.projectId,
+          seeded: 0,
+          seedError: (e as Error).message || String(e),
+        }
+      }
+    }
+
+    return {
+      ok: true,
+      ownerId: bound.ownerId,
+      projectId: bound.projectId,
+      seeded,
+    }
+  })
+
+  safeHandle(ipcMain, 'files:unbind-session', async () => {
+    unbindTrustedSession()
+    return { ok: true, cleared: true }
   })
 }

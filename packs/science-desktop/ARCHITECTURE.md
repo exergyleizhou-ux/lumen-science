@@ -60,6 +60,9 @@
 - All science operations go through `acp:call` → Rust tools/call.
 
 **OSF-2 Files/Preview** (gated in Electron, content via Lumen store/ACP):
+- `files:bind-session` — membership-asserted only (ACP `project_assert_membership`);
+  then optional `artifact_list` seed into preview index.
+- `files:unbind-session` — clear trusted identity.
 - `files:preview-by-artifact` — artifact_id + optional hash; trusted session
   identity required; path never accepted from renderer.
 

@@ -41,6 +41,10 @@ import { createDefaultSettingsService } from './settings/service'
 import { registerUpdateIpcHandlers } from './update/ipc'
 import { registerScienceIpcHandlers } from './files/science-ipc'
 import { AcpPreviewStore } from './files/acp-preview-store'
+import {
+  createAcpMembershipAsserter,
+  listArtifactsViaAcp,
+} from './files/acp-membership'
 
 type IpcRegistrationOptions = {
   mainEntryPath: string
@@ -53,7 +57,8 @@ type IpcRegistrationOptions = {
  * Registers every Lumen Desktop IPC surface.
  *
  * Science operations go through registerScienceIpcHandlers:
- *   acp:call / acp:list-tools / app:get-lumen-hash / files:preview-by-artifact
+ *   acp:* / app:get-lumen-hash / files:preview-by-artifact /
+ *   files:bind-session / files:unbind-session
  *
  * Only UI/window/settings/logs/lifecycle/update handlers are registered
  * outside that path. Science channels always pass through safeHandle.
@@ -80,13 +85,18 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
   })
 
   // ── Science + OSF-2 product path (single registration site) ──
-  // ACP-wired store: optional artifact_resolve via Lumen; seed via put() after list.
-  const wiredStore = new AcpPreviewStore(async (tool, args) => acpCall(tool, args))
+  // ACP-wired store + membership-gated bind + artifact_list seed.
+  const acpTool = async (tool: string, args: Record<string, unknown>) =>
+    acpCall(tool, args)
+  const wiredStore = new AcpPreviewStore(acpTool)
 
   registerScienceIpcHandlers(ipcMain, {
     safeHandle,
     getLumenBinaryHash,
     previewStore: wiredStore,
+    assertMembership: createAcpMembershipAsserter(acpTool),
+    listArtifacts: ({ projectId, runId }) =>
+      listArtifactsViaAcp(acpTool, { projectId, runId }),
   })
 
   // ── Backend handles with shutdown contracts ─────────────────

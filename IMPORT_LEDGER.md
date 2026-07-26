@@ -68,6 +68,8 @@ The following Open Science subsystems have execution authority REMOVED:
 | (Lumen original) | packs/science-desktop/src/main/files/preview-service.ts | Yes | product entry loadArtifactPreview |
 | (Lumen original) | packs/science-desktop/src/main/files/science-ipc.ts | Yes | single registration site: acp:* + files:preview-by-artifact |
 | (Lumen original) | packs/science-desktop/src/main/files/acp-preview-store.ts | Yes | durable index + optional ACP artifact_resolve |
+| (Lumen original) | packs/science-desktop/src/main/files/session-binding.ts | Yes | membership-gated bind + list seed |
+| (Lumen original) | packs/science-desktop/src/main/files/acp-membership.ts | Yes | ACP project_assert_membership + artifact_list normalize |
 | src/main/artifacts/ | packs/science-desktop/src/main/artifacts/ | Staged not wired | OS path; NOT registered in greenfield ipc.ts |
 | src/main/managed-preview-*.ts | packs/science-desktop/src/main/ | Staged not wired | Banned channel path; use files:preview-by-artifact |
 | src/main/office-preview/ | packs/science-desktop/src/main/office-preview/ | Planned | DOCX/XLSX/PPTX isolated renderer (follow-on) |

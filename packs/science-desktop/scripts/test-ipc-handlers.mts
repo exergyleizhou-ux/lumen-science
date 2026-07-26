@@ -69,7 +69,10 @@ const scienceSrc = fs.readFileSync('src/main/files/science-ipc.ts', 'utf-8')
 const scienceSafeChannels = extractChannelCalls(scienceSrc, /safeHandle\([^,]+,\s*'[^']+'/g)
 
 test(`science-ipc safeHandle channels count: ${scienceSafeChannels.length}`, () => {
-  ok(scienceSafeChannels.length >= 4, `expected >=4 (acp*2 + hash + preview), got ${scienceSafeChannels.length}`)
+  ok(
+    scienceSafeChannels.length >= 6,
+    `expected >=6 (acp*2 + hash + preview + bind + unbind), got ${scienceSafeChannels.length}`,
+  )
 })
 
 // Merge for policy checks

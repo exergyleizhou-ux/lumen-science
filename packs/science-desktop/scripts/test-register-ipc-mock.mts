@@ -87,6 +87,8 @@ async function run() {
   await test('registers files:preview-by-artifact', () =>
     ok(handlers.has('files:preview-by-artifact')),
   )
+  await test('registers files:bind-session', () => ok(handlers.has('files:bind-session')))
+  await test('registers files:unbind-session', () => ok(handlers.has('files:unbind-session')))
 
   await test('all registered channels pass validateIpcChannel', () => {
     for (const ch of handlers.keys()) {
