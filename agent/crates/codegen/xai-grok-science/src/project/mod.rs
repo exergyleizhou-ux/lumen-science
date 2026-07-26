@@ -16,4 +16,5 @@ pub use evidence_graph::{EdgeKind, EvidenceEdge, EvidenceGraph, EvidenceNode, No
 pub use migration::{HashVerification, MigrationResult, V1ToV2Migration};
 pub use model::{Hypothesis, HypothesisStatus, OwnerId, ProjectId, ProjectStatus, ResearchProject};
 pub use query::{ClaimComparison, ConsistencyReport, EvidenceTrace, ReproductionStatus, Violation, ViolationKind};
-pub use store::{ProjectBundle, ProjectStore};
+pub use evidence_graph::validate_sha256_hex;
+pub use store::{ProjectBundle, ProjectStore, RegisteredArtifact};

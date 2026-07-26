@@ -567,6 +567,212 @@ mod tests {
             .is_err());
     }
 
+    /// Set up a project with one claim and one registered artifact.
+    fn seeded(dir: &std::path::Path) -> (ProjectStore, ResearchProject, Claim, String) {
+        let store = ProjectStore::new(dir);
+        let project = store.create_project("o", "T", "Q").unwrap();
+        let claim = store
+            .propose_claim(&project.project_id, "o", "statement", "sci")
+            .unwrap();
+        let sha = "a".repeat(64);
+        store
+            .register_artifact(&project.project_id, "o", sha.clone(), "art", None)
+            .unwrap();
+        (store, project, claim, sha)
+    }
+
+    // ── Defect A regression: digest identity + registry ────────────
+
+    /// The defect: node identity was `art-{&sha[..16]}`, so two distinct
+    /// artifacts sharing a 16-character prefix collapsed onto one node.
+    #[test]
+    fn distinct_digests_sharing_a_prefix_get_distinct_nodes() {
+        let dir = tempdir().unwrap();
+        let store = ProjectStore::new(dir.path());
+        let p = store.create_project("o", "T", "Q").unwrap();
+        let claim = store.propose_claim(&p.project_id, "o", "s", "sci").unwrap();
+
+        let prefix = "0123456789abcdef";
+        let first = format!("{prefix}{}", "1".repeat(48));
+        let second = format!("{prefix}{}", "2".repeat(48));
+        for sha in [&first, &second] {
+            store
+                .register_artifact(&p.project_id, "o", sha.clone(), "art", None)
+                .unwrap();
+            store
+                .attach_evidence(&p.project_id, "o", &claim.claim_id, sha.clone(), "l", None)
+                .unwrap();
+        }
+
+        let graph = store.load_graph(&p.project_id).unwrap();
+        assert!(graph.nodes.contains_key(&ProjectStore::artifact_node_id(&first)));
+        assert!(graph.nodes.contains_key(&ProjectStore::artifact_node_id(&second)));
+        // claim node + two distinct artifact nodes
+        assert_eq!(graph.nodes.len(), 3, "prefix collision collapsed two artifacts");
+        assert_eq!(graph.edges.len(), 2);
+    }
+
+    #[test]
+    fn attach_evidence_rejects_non_canonical_digests() {
+        let dir = tempdir().unwrap();
+        let (store, p, claim, _) = seeded(dir.path());
+        for bad in [
+            "a".repeat(16),  // the old minimum — now rejected
+            "a".repeat(63),  // too short
+            "a".repeat(65),  // too long
+            "A".repeat(64),  // uppercase is not normalised
+            "g".repeat(64),  // non-hex
+            format!("sha256:{}", "a".repeat(57)),
+            String::new(),
+        ] {
+            let error = store
+                .attach_evidence(&p.project_id, "o", &claim.claim_id, bad.clone(), "l", None)
+                .unwrap_err();
+            assert!(
+                matches!(&error, ScienceError::Invalid(m) if m.contains("artifact digest")),
+                "digest {bad:?} was not rejected as malformed: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn attach_evidence_rejects_unregistered_artifact() {
+        let dir = tempdir().unwrap();
+        let (store, p, claim, _) = seeded(dir.path());
+        let unknown = "b".repeat(64);
+        let error = store
+            .attach_evidence(&p.project_id, "o", &claim.claim_id, unknown, "l", None)
+            .unwrap_err();
+        assert!(
+            matches!(&error, ScienceError::Invalid(m) if m.contains("not registered")),
+            "unexpected: {error}"
+        );
+    }
+
+    #[test]
+    fn attach_evidence_rejects_cross_project_artifact() {
+        let dir = tempdir().unwrap();
+        let store = ProjectStore::new(dir.path());
+        let a = store.create_project("o", "A", "Q").unwrap();
+        let b = store.create_project("o", "B", "Q").unwrap();
+        let claim = store.propose_claim(&b.project_id, "o", "s", "sci").unwrap();
+        let sha = "c".repeat(64);
+        store
+            .register_artifact(&a.project_id, "o", sha.clone(), "art", None)
+            .unwrap();
+
+        let error = store
+            .attach_evidence(&b.project_id, "o", &claim.claim_id, sha, "l", None)
+            .unwrap_err();
+        assert!(
+            matches!(&error, ScienceError::Invalid(m) if m.contains("cross projects")),
+            "unexpected: {error}"
+        );
+    }
+
+    #[test]
+    fn attach_evidence_rejects_unknown_claim_and_foreign_owner() {
+        let dir = tempdir().unwrap();
+        let (store, p, _claim, sha) = seeded(dir.path());
+        assert!(matches!(
+            store.attach_evidence(&p.project_id, "intruder", "claim-x", sha.clone(), "l", None),
+            Err(ScienceError::Ownership)
+        ));
+        assert!(store
+            .attach_evidence(&p.project_id, "o", "claim-does-not-exist", sha, "l", None)
+            .is_err());
+    }
+
+    #[test]
+    fn register_artifact_validates_digest_owner_and_is_idempotent() {
+        let dir = tempdir().unwrap();
+        let store = ProjectStore::new(dir.path());
+        let p = store.create_project("o", "T", "Q").unwrap();
+
+        assert!(store
+            .register_artifact(&p.project_id, "o", "a".repeat(16), "l", None)
+            .is_err());
+        assert!(store
+            .register_artifact(&p.project_id, "o", "A".repeat(64), "l", None)
+            .is_err());
+        assert!(matches!(
+            store.register_artifact(&p.project_id, "intruder", "a".repeat(64), "l", None),
+            Err(ScienceError::Ownership)
+        ));
+
+        let sha = "a".repeat(64);
+        let first = store
+            .register_artifact(&p.project_id, "o", sha.clone(), "l", None)
+            .unwrap();
+        let again = store
+            .register_artifact(&p.project_id, "o", sha.clone(), "other label", None)
+            .unwrap();
+        assert_eq!(first, again, "re-registration must be idempotent");
+        assert_eq!(store.list_artifacts(&p.project_id).unwrap().len(), 1);
+    }
+
+    /// A store written before digests were canonical must fail loudly on the
+    /// next mutation rather than being silently re-persisted.
+    #[test]
+    fn legacy_graph_with_truncated_digest_is_rejected_on_save() {
+        let dir = tempdir().unwrap();
+        let store = ProjectStore::new(dir.path());
+        let p = store.create_project("o", "T", "Q").unwrap();
+        let mut graph = store.load_graph(&p.project_id).unwrap();
+        graph.nodes.insert(
+            NodeId("art-aaaaaaaaaaaaaaaa".into()),
+            EvidenceNode {
+                node_id: NodeId("art-aaaaaaaaaaaaaaaa".into()),
+                kind: NodeKind::SourceArtifact,
+                project_id: p.project_id.clone(),
+                label: "legacy".into(),
+                artifact_sha256: Some("a".repeat(16)),
+                run_id: None,
+                created_by: "o".into(),
+                created_at: Utc::now(),
+                metadata: BTreeMap::new(),
+            },
+        );
+        let error = store.save_graph(&graph).unwrap_err();
+        assert!(
+            matches!(&error, ScienceError::Invalid(m) if m.contains("artifact digest")),
+            "unexpected: {error}"
+        );
+    }
+
+    /// A legacy graph that carries a full digest under a truncated node id is
+    /// refused too, rather than growing a second node for one artifact.
+    #[test]
+    fn legacy_truncated_node_id_blocks_attach() {
+        let dir = tempdir().unwrap();
+        let (store, p, claim, sha) = seeded(dir.path());
+        let mut graph = store.load_graph(&p.project_id).unwrap();
+        let legacy = NodeId(format!("art-{}", &sha[..16]));
+        graph.nodes.insert(
+            legacy.clone(),
+            EvidenceNode {
+                node_id: legacy,
+                kind: NodeKind::SourceArtifact,
+                project_id: p.project_id.clone(),
+                label: "legacy".into(),
+                artifact_sha256: Some(sha.clone()),
+                run_id: None,
+                created_by: "o".into(),
+                created_at: Utc::now(),
+                metadata: BTreeMap::new(),
+            },
+        );
+        store.save_graph(&graph).unwrap();
+
+        let error = store
+            .attach_evidence(&p.project_id, "o", &claim.claim_id, sha, "l", None)
+            .unwrap_err();
+        assert!(
+            matches!(&error, ScienceError::Invalid(m) if m.contains("legacy node")),
+            "unexpected: {error}"
+        );
+    }
+
     #[test]
     fn feature_gate_blocks_when_disabled() {
         let dir = tempdir().unwrap();
