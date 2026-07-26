@@ -1,6 +1,8 @@
 import {
+  isManagedAgentFrameworkId,
   providerValidationFailed,
   type AgentFrameworkId,
+  type ManagedAgentFrameworkId,
   type Preflight
 } from '../../shared/settings'
 import type { StoredProvider, StoredSettings } from './types'
@@ -40,12 +42,17 @@ const computePreflight = ({
   const claudeReady = Boolean(settings.claude?.resolvedPath) && claudePathExists
   const opencodeReady = Boolean(settings.opencodePath) && opencodePathExists
   const codexReady = Boolean(settings.codex?.resolvedPath) && codexPathExists
-  const readyByFramework: Record<AgentFrameworkId, boolean> = {
+  const readyByFramework: Record<ManagedAgentFrameworkId, boolean> = {
     'claude-code': claudeReady,
     opencode: opencodeReady,
     codex: codexReady
   }
-  const agentReady = readyByFramework[agentFrameworkId]
+  // A stubbed id owns no binary, so it is never "ready" — fail closed. Before the narrowing this
+  // read `readyByFramework[agentFrameworkId]`, which returned `undefined` for a stubbed id and was
+  // handed straight to `Preflight.agentReady: boolean`, putting a non-boolean into the gate.
+  const agentReady = isManagedAgentFrameworkId(agentFrameworkId)
+    ? readyByFramework[agentFrameworkId]
+    : false
 
   const activeProvider = settings.activeProviderId
     ? settings.providers.find((provider) => provider.id === settings.activeProviderId)

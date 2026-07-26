@@ -81,6 +81,7 @@ import {
 } from '../../shared/settings'
 import type { PackageMirror } from '../../shared/mirror'
 import {
+  AGENT_FRAMEWORK_UNAVAILABLE_MESSAGE,
   buildActiveModelIncompatibleMessage,
   CODEX_BRIDGE_UNSUPPORTED_MESSAGE,
   CLAUDE_EXECUTABLE_MISSING_MESSAGE,
@@ -104,6 +105,7 @@ import {
 import { resolveStorageRoot } from '../storage-root'
 import { buildAgentSpawnEnv } from '../acp/agent-process'
 import {
+  agentFrameworkLabel,
   DEFAULT_AGENT_FRAMEWORK_ID,
   getAgentFramework,
   listAgentFrameworks,
@@ -1241,17 +1243,21 @@ class SettingsService {
     const activeEndpoints = activeProvider
       ? this.resolveProviderApiEndpoints(activeProvider)
       : undefined
-    const activeProviderCompatible = activeProvider
-      ? isProviderUsableByFramework(
-          { apiEndpoints: activeEndpoints, type: activeProvider.type },
-          framework
-        ) &&
-        (framework.id !== 'codex' ||
-          isModelBridgeSupported(
-            activeProvider,
-            this.resolveActiveModel(activeProvider, settings.activeModel)
-          ))
-      : false
+    // No registered framework (the absorb's permanent state — see main/agent-framework/index.ts)
+    // means no provider can drive one, so compatibility is false rather than assumed. Preflight then
+    // reports "not ready" instead of dereferencing null and throwing out of a status read.
+    const activeProviderCompatible =
+      activeProvider && framework
+        ? isProviderUsableByFramework(
+            { apiEndpoints: activeEndpoints, type: activeProvider.type },
+            framework
+          ) &&
+          (framework.id !== 'codex' ||
+            isModelBridgeSupported(
+              activeProvider,
+              this.resolveActiveModel(activeProvider, settings.activeModel)
+            ))
+        : false
     const activeProviderKeyUsable =
       activeProvider && activeProvider.lastValidatedAt !== undefined
         ? await this.isProviderKeyUsable(activeProvider)
@@ -1287,20 +1293,24 @@ class SettingsService {
     return runEnvironmentCheck({
       storageRoot: this.storageRoot,
       agentFrameworkId,
+      // Labels come from agentFrameworkLabel, not from a registered framework object: this check
+      // reports on the host BINARIES it probed, which exist (or not) independently of whether any
+      // framework is registered. Reading .displayName off getAgentFramework() threw a TypeError
+      // here once the registry became a stub, taking the whole launch/onboarding check with it.
       frameworks: [
         {
           id: 'claude-code',
-          label: getAgentFramework('claude-code').displayName,
+          label: agentFrameworkLabel('claude-code'),
           runtime: claudeRuntime
         },
         {
           id: 'opencode',
-          label: getAgentFramework('opencode').displayName,
+          label: agentFrameworkLabel('opencode'),
           runtime: opencodeRuntime
         },
         {
           id: 'codex',
-          label: getAgentFramework('codex').displayName,
+          label: agentFrameworkLabel('codex'),
           runtime: codexRuntime
         }
       ],
@@ -2487,8 +2497,10 @@ class SettingsService {
                 // test proves that route (e.g. Claude Code hits /v1/messages, not /v1/chat/completions).
                 // Codex is excluded: it bridges the provider's OpenAI route under its `responses` protocol,
                 // so its HTTP route is decided by the bridge, not by supportedApiTypes — keep it as-is.
+                // With no registered framework there is no framework-specific route to prove either,
+                // so it falls through to the same `undefined` (probe the provider's own default).
                 frameworkEndpoints:
-                  framework.id === 'codex' ? undefined : framework.supportedApiTypes
+                  framework && framework.id !== 'codex' ? framework.supportedApiTypes : undefined
               }))
 
     if (resolved.storedId) {
@@ -3058,6 +3070,16 @@ class SettingsService {
   ): Promise<ResolvedAgentBackend> {
     const forcedSkillIds = new Set(context.forcedSkillIds ?? [])
     const framework = getAgentFramework(frameworkId)
+
+    // Everything below spawns and drives a peer agent runtime, which this pack no longer registers
+    // (main/agent-framework/index.ts). Fail here with the app-authored, classifier-recognized
+    // message instead of dereferencing null twenty lines later: the whole method's contract is to
+    // return a ResolvedAgentBackend containing a non-null `framework`, so there is nothing to
+    // degrade to. Sessions run through the Lumen ACP bridge, not through this path.
+    if (framework === null) {
+      throw new Error(AGENT_FRAMEWORK_UNAVAILABLE_MESSAGE)
+    }
+
     // 'default' means "don't override": nothing is sent over ACP or framework config, so the agent
     // keeps its own default effort. A concrete level is delivered through two channels deliberately
     // (defense-in-depth, mirroring how sessionModel reaches opencode): the framework's own config
@@ -3557,6 +3579,13 @@ class SettingsService {
     provider: ResolvedProvider,
     framework: ReturnType<typeof getAgentFramework>
   ): ValidateProviderResult | undefined {
+    // This verdict is about a PAIR (provider ↔ framework). With no registered framework there is no
+    // pair to judge, so it reports nothing and the plain credential probe decides on its own —
+    // inventing an "incompatible" verdict here would blame the provider for the absent registry.
+    // Previously the null framework reached isProviderUsableByFramework and threw a TypeError,
+    // failing every provider test that wasn't a Codex/Claude subscription.
+    if (framework === null) return undefined
+
     if (
       isProviderUsableByFramework(
         { apiEndpoints: provider.apiEndpoints, type: provider.type },

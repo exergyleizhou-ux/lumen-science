@@ -271,6 +271,26 @@ export type AgentFrameworkId =
   | 'opencode-stubbed'
   | 'codex-stubbed'
 
+// LS5-D1-02: the ids that name a REAL host runtime the app can detect, install and probe on npm.
+// Widening AgentFrameworkId above broke every `Record<AgentFrameworkId, …>` in the settings layer,
+// because those maps were never about all ids — they are about the three managed runtimes, and the
+// `*-stubbed` ids have no binary, no npm package and no readiness to report. Keying those maps by
+// this narrower union states that, instead of forcing four invented entries into each of them.
+// Callers that hold an AgentFrameworkId narrow with isManagedAgentFrameworkId first; a stub id
+// legitimately has no entry, and every such lookup site fails closed.
+export type ManagedAgentFrameworkId = 'claude-code' | 'opencode' | 'codex'
+
+export const MANAGED_AGENT_FRAMEWORK_IDS: readonly ManagedAgentFrameworkId[] = [
+  'claude-code',
+  'opencode',
+  'codex'
+]
+
+export const isManagedAgentFrameworkId = (
+  id: AgentFrameworkId
+): id is ManagedAgentFrameworkId =>
+  (MANAGED_AGENT_FRAMEWORK_IDS as readonly AgentFrameworkId[]).includes(id)
+
 // How much reasoning effort the user asks the agent to spend. 'default' means "don't override": the
 // agent keeps its own default and nothing is sent. The concrete levels form a relative scale
 // (low < medium < high < max): each agent/model maps the level onto its own supported rungs, using
