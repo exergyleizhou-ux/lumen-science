@@ -5,6 +5,7 @@ import { basename, join } from 'node:path'
 import { app, BrowserWindow, dialog, shell } from 'electron'
 
 import { APP } from '../../shared/app-config'
+import { requireUpdateFeedUrl } from '../../shared/update-policy'
 import { isNewer, selectDownload, type UpdateStatus } from '../../shared/update'
 import { downloadInstaller } from './downloader'
 import { fetchManifest } from './manifest'
@@ -81,7 +82,7 @@ export class UpdateService implements UpdateStrategy {
     this.platform = deps.platform ?? process.platform
     this.arch = deps.arch ?? process.arch
     this.currentVersion = deps.currentVersion ?? app.getVersion()
-    this.manifestUrl = deps.manifestUrl ?? APP.update.manifestUrl
+    this.manifestUrl = deps.manifestUrl ?? requireUpdateFeedUrl(process.env)
     this.broadcast = deps.broadcast ?? defaultBroadcast
     this.promptSavePath = deps.promptSavePath ?? ((name) => this.resolveSavePath(name))
     this.fileExists = deps.fileExists ?? existsSync

@@ -9,8 +9,11 @@ export type UpdateManifest = {
   downloads: Record<string, PlatformDownload>
 }
 
+// 'disabled' is distinct from 'error' and from 'up-to-date': updating is off by
+// policy, nothing failed, and nothing was checked. Collapsing it into either of
+// the others would tell the user something untrue. See shared/update-policy.ts.
 export type UpdateState =
-  'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'ready' | 'error'
+  'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'ready' | 'error' | 'disabled'
 
 // The single status the main process broadcasts and the renderer store mirrors.
 export type UpdateStatus = {

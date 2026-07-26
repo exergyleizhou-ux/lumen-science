@@ -18,7 +18,12 @@ import type { NotebookLanguage } from '../../shared/notebook'
 //      manifest is live before packaging an installer.
 export const DEFAULT_ENV_VERSION = 1
 
-export const DEFAULT_RUNTIME_CDN_BASE = 'https://statics.aipoch.com/open-science'
+// LS5-R1-02: this defaulted to the upstream project's CDN
+// (statics.aipoch.com/open-science), which would have had Lumen fetch and
+// execute Python/R runtime bundles served by a third party. There is no
+// default any more — a runtime CDN must be configured explicitly, and with
+// none configured runtimeCdnBase() throws rather than silently reaching out.
+export const DEFAULT_RUNTIME_CDN_BASE: string | undefined = undefined
 
 // The runtime bundle publisher and consumer must agree on the conda platform segment. Keep this
 // mapping here rather than letting each caller infer a CDN key independently.
@@ -37,7 +42,16 @@ export const runtimeSubdir = (
 }
 
 export const resolveRuntimeCdnBase = (override?: string): string => {
-  const value = override ?? process.env.OPEN_SCIENCE_ENV_CDN_BASE ?? DEFAULT_RUNTIME_CDN_BASE
+  const value = override ?? process.env.LUMEN_RUNTIME_CDN_BASE ?? DEFAULT_RUNTIME_CDN_BASE
+  if (!value) {
+    // Fail closed. Previously an unset env var fell through to the upstream
+    // project's CDN, so "not configured" and "configured to fetch third-party
+    // runtimes" were indistinguishable at runtime.
+    throw new Error(
+      'No notebook runtime CDN configured. Set LUMEN_RUNTIME_CDN_BASE to a Lumen-owned host; ' +
+        'Lumen does not fall back to a third-party runtime bundle source.'
+    )
+  }
   return value.replace(/\/+$/, '')
 }
 

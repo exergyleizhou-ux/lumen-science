@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process'
 import { autoUpdater, CancellationToken } from 'electron-updater'
 
 import { APP } from '../../shared/app-config'
+import { requireUpdateFeedUrl } from '../../shared/update-policy'
 import type { UpdateStatus } from '../../shared/update'
 import { fetchManifest } from './manifest'
 import type { InstallGate, UpdateStrategy } from './strategy'
@@ -198,7 +199,7 @@ export class ElectronUpdaterStrategy implements UpdateStrategy {
     this.arch = arch
     this.broadcast = deps.broadcast ?? defaultBroadcast
     this.fetchImpl = deps.fetchImpl
-    this.manifestUrl = deps.manifestUrl ?? APP.update.manifestUrl
+    this.manifestUrl = deps.manifestUrl ?? requireUpdateFeedUrl(process.env)
     this.log = deps.log ?? { info: () => {}, error: () => {} }
     this.createCancellationToken = deps.createCancellationToken ?? (() => new CancellationToken())
     this.installGate = deps.installGate
