@@ -145,35 +145,7 @@ let _guardInstalled = false
 export function installIpcGuard(ipcMain: IpcMain): void {
   if (_guardInstalled) return
   _guardInstalled = true
-
-  // ACP proxy handlers — route science calls to Rust binary
-  ipcMain.handle('acp:call', async (_event, toolName: string, args: Record<string, unknown>) => {
-    try {
-      return await acpCall(toolName, args)
-    } catch (e: unknown) {
-      return { _lumenError: true, message: (e as Error).message || String(e) }
-    }
-  })
-
-  ipcMain.handle('acp:list-tools', async () => {
-    try {
-      const resp = await fetch('http://127.0.0.1:17000/tools/list')
-      return resp.json()
-    } catch {
-      return { tools: [], _lumenUnavailable: true }
-    }
-  })
-
-  ipcMain.handle('acp:health', async () => {
-    try {
-      const resp = await fetch('http://127.0.0.1:17000/health')
-      return { ok: resp.ok, hash: getLumenBinaryHash() }
-    } catch {
-      return { ok: false, hash: null }
-    }
-  })
-
-  ipcMain.handle('app:get-lumen-hash', () => getLumenBinaryHash())
-
-  console.log('[lumen-security] IPC guard installed — safeHandle gates all future registrations')
+  // Channel registration is done by registerIpcHandlers via safeHandle.
+  // This guard only marks installation complete and logs the hash.
+  console.log('[lumen-security] IPC guard installed — hash:', getLumenBinaryHash() ?? 'unavailable')
 }
