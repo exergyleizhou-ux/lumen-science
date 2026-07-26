@@ -17,13 +17,17 @@ pub use executor::{
     ArtifactCommit, AttemptState, Clock, ErrorClass, ExecutionPolicy, KernelInvocation,
     ManualClock, RefusedStep, StepAttempt, StepFailure, StepOperation, StepOutput, StepPlan,
     StepRunner, SystemClock, UnboundStepRunner, WorkflowExecutionRequest, WorkflowExecutor,
-    WorkflowRecoveryReport, WorkflowRunRecord, WorkflowRunReport, WorkflowState,
+    WorkflowOperationRecord, WorkflowRecoveryReport, WorkflowRunRecord, WorkflowRunReport,
+    WorkflowState,
 };
 pub use kernel::{
     AdmissionStatus, KernelAdmission, KernelKind, KernelManifest, ReproductionAttempt,
     ReproductionLevel, ReproductionResult, ResourceCap,
 };
 pub use package::{ArtifactManifest, InputManifest, WorkflowPackage};
+pub use python_runner::{
+    CellSourceStore, DirCellSourceStore, PythonLoopRunner, materialize_python_loop_script,
+};
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

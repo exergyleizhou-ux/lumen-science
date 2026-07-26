@@ -851,6 +851,26 @@ impl WorkflowExecutor {
         Ok(Some(ProjectStore::read_json(&path)?))
     }
 
+    /// The reservation an operation id already holds, if any.
+    ///
+    /// Read-only: it reserves nothing and executes nothing. A caller that must
+    /// decide *before* running whether a request is a retry — an approval gate,
+    /// say, which should not prompt a second time for work already done — needs
+    /// to ask that question without also committing to the run. `execute` is
+    /// still the authority on what a replay returns; this only says whether one
+    /// would happen.
+    pub fn lookup_operation(&self, operation_id: &str) -> Result<Option<WorkflowOperationRecord>> {
+        // The id names a path component, so it is validated here exactly as
+        // `execute` validates it. A public lookup that skipped this would turn
+        // an operation id into a directory traversal.
+        crate::project::mutation::validate_operation_id(operation_id)?;
+        let path = self.operation_path(operation_id);
+        if !path.is_file() {
+            return Ok(None);
+        }
+        Ok(Some(ProjectStore::read_json(&path)?))
+    }
+
     /// Every artifact commit under this root, oldest key first.
     pub fn list_commits(&self) -> Result<Vec<ArtifactCommit>> {
         let dir = self.root.join("workflow-commits");

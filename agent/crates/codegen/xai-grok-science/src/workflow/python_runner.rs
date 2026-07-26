@@ -38,6 +38,34 @@ use sha2::{Digest, Sha256};
 use super::kernel::AdmissionStatus;
 use super::executor::{ErrorClass, StepFailure, StepOperation, StepOutput, StepPlan, StepRunner};
 
+/// The exec-loop driver, compiled into the binary.
+///
+/// The tests below can reach `resources/lumen_python_loop.py` through
+/// `CARGO_MANIFEST_DIR`; a shipped `lumen` cannot — that path names the machine
+/// it was built on. Embedding the script is what makes the runner usable from
+/// the product binary at all, and it also means the bytes that run are the
+/// bytes that were reviewed and compiled, not whatever happens to sit at a path
+/// at run time.
+pub const PYTHON_LOOP_SCRIPT: &str = include_str!("../../resources/lumen_python_loop.py");
+
+/// Write [`PYTHON_LOOP_SCRIPT`] under `dir` and return the path to it.
+///
+/// Content-addressed, so two versions of the driver never collide and an
+/// upgrade cannot leave a stale script behind under the same name. Idempotent:
+/// a file already holding these exact bytes is left alone.
+pub fn materialize_python_loop_script(dir: &Path) -> std::io::Result<PathBuf> {
+    let digest = hex_sha256(PYTHON_LOOP_SCRIPT.as_bytes());
+    let path = dir.join(format!("lumen_python_loop-{}.py", &digest[..16]));
+    // Re-read rather than trust the name: the digest is in the file name, and a
+    // truncated write would leave a file that still *looks* right.
+    if fs::read(&path).is_ok_and(|bytes| bytes == PYTHON_LOOP_SCRIPT.as_bytes()) {
+        return Ok(path);
+    }
+    fs::create_dir_all(dir)?;
+    fs::write(&path, PYTHON_LOOP_SCRIPT)?;
+    Ok(path)
+}
+
 /// Resolves the cell body the plan refers to by digest.
 ///
 /// The plan carries a digest rather than the source so it stays small and the
