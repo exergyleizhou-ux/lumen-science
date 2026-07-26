@@ -149,7 +149,7 @@ impl ProjectStore {
     /// left the records half-applied, and callers must run
     /// [`ProjectStore::recover_project`] in a fresh process rather than write
     /// more on top of it.
-    fn write_guard(&self) -> Result<MutexGuard<'_, ()>> {
+    pub(super) fn write_guard(&self) -> Result<MutexGuard<'_, ()>> {
         self.writes
             .lock()
             .map_err(|_| ScienceError::Invalid("project store write lock poisoned".into()))
@@ -232,6 +232,17 @@ impl ProjectStore {
         title: impl Into<String>,
         research_question: impl Into<String>,
     ) -> Result<ResearchProject> {
+        let _guard = self.write_guard()?;
+        self.create_project_inner(owner_id, title, research_question)
+    }
+
+    /// Caller must hold the write guard.
+    pub(super) fn create_project_inner(
+        &self,
+        owner_id: impl Into<String>,
+        title: impl Into<String>,
+        research_question: impl Into<String>,
+    ) -> Result<ResearchProject> {
         self.gates.require(ScienceFeature::ResearchProject)?;
         let project_id = ProjectId(Uuid::now_v7().to_string());
         let mut project = ResearchProject::new(
@@ -242,7 +253,6 @@ impl ProjectStore {
         );
         let graph = EvidenceGraph::new(project_id.clone());
         project.evidence_graph_id = Some(format!("graph-{}", project_id.0));
-        let _guard = self.write_guard()?;
         // Graph first: a project whose graph is missing cannot be recovered
         // from the project record, but an unreferenced empty graph is inert.
         self.write_graph_file(&graph)?;
@@ -285,6 +295,93 @@ impl ProjectStore {
         self.gates.require(ScienceFeature::EvidenceGraph)?;
         let _guard = self.write_guard()?;
         self.write_graph_file(graph)
+    }
+
+    // ── Revision + operation ledger ───────────────────────────────
+
+    /// A content-addressed revision for a project: the digest of every record
+    /// that belongs to it.
+    ///
+    /// Used as a compare-and-swap token. Content addressing rather than a
+    /// counter means it needs no schema change, cannot be forged by editing a
+    /// field, and moves whenever *any* record moves — including ones written
+    /// by a path that predates this API.
+    pub fn project_revision(&self, project_id: &ProjectId) -> Result<String> {
+        use sha2::{Digest, Sha256};
+        let dir = self.project_dir(project_id);
+        if !dir.join("project.json").is_file() {
+            return Err(ScienceError::Invalid(format!(
+                "project not found: {}",
+                project_id.0
+            )));
+        }
+        let mut hasher = Sha256::new();
+        hasher.update(project_id.0.as_bytes());
+        for name in ["project.json", "graph.json", "artifacts.json"] {
+            hasher.update(name.as_bytes());
+            match fs::read(dir.join(name)) {
+                Ok(bytes) => hasher.update(&bytes),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    hasher.update(b"<absent>")
+                }
+                Err(error) => return Err(error.into()),
+            }
+        }
+        // Claim files, in a deterministic order.
+        let claims_dir = dir.join("claims");
+        let mut claim_paths: Vec<PathBuf> = Vec::new();
+        if claims_dir.is_dir() {
+            for entry in fs::read_dir(&claims_dir)? {
+                let path = entry?.path();
+                if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
+                    claim_paths.push(path);
+                }
+            }
+        }
+        claim_paths.sort();
+        for path in claim_paths {
+            if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
+                hasher.update(name.as_bytes());
+            }
+            hasher.update(fs::read(&path)?);
+        }
+        Ok(format!("{:x}", hasher.finalize()))
+    }
+
+    fn operation_path(&self, operation_id: &str) -> PathBuf {
+        self.root
+            .join("operations")
+            .join(format!("{operation_id}.json"))
+    }
+
+    /// The durable record of an already-applied operation id, if any.
+    pub fn lookup_operation(
+        &self,
+        operation_id: &str,
+    ) -> Result<Option<super::mutation::OperationRecord>> {
+        super::mutation::validate_operation_id(operation_id)?;
+        let path = self.operation_path(operation_id);
+        if !path.is_file() {
+            return Ok(None);
+        }
+        Ok(Some(Self::read_json(&path)?))
+    }
+
+    /// Persist the idempotency record for an applied operation.
+    /// Caller must hold the write guard.
+    pub(super) fn record_operation(
+        &self,
+        record: &super::mutation::OperationRecord,
+    ) -> Result<()> {
+        super::mutation::validate_operation_id(&record.operation_id)?;
+        let path = self.operation_path(&record.operation_id);
+        if path.exists() {
+            return Err(ScienceError::Invalid(format!(
+                "operation {} already recorded",
+                record.operation_id
+            )));
+        }
+        Self::write_json(&path, record)
     }
 
     // ── Artifact registry ─────────────────────────────────────────
@@ -419,6 +516,16 @@ impl ProjectStore {
         // two concurrent transitions must not both validate against the same
         // stale status.
         let _guard = self.write_guard()?;
+        self.transition_project_inner(project_id, owner_id, new_status)
+    }
+
+    /// Caller must hold the write guard.
+    pub(super) fn transition_project_inner(
+        &self,
+        project_id: &ProjectId,
+        owner_id: &str,
+        new_status: ProjectStatus,
+    ) -> Result<ResearchProject> {
         let mut project = self.load_project(project_id)?;
         if project.owner_id.0 != owner_id {
             return Err(ScienceError::Ownership);
@@ -444,8 +551,19 @@ impl ProjectStore {
         statement: impl Into<String>,
         proposed_by: impl Into<String>,
     ) -> Result<Claim> {
-        self.gates.require(ScienceFeature::ClaimLifecycle)?;
         let _guard = self.write_guard()?;
+        self.propose_claim_inner(project_id, owner_id, statement, proposed_by)
+    }
+
+    /// Caller must hold the write guard.
+    pub(super) fn propose_claim_inner(
+        &self,
+        project_id: &ProjectId,
+        owner_id: &str,
+        statement: impl Into<String>,
+        proposed_by: impl Into<String>,
+    ) -> Result<Claim> {
+        self.gates.require(ScienceFeature::ClaimLifecycle)?;
         let project = self.load_project(project_id)?;
         if project.owner_id.0 != owner_id {
             return Err(ScienceError::Ownership);
@@ -544,9 +662,23 @@ impl ProjectStore {
         label: impl Into<String>,
         run_id: Option<String>,
     ) -> Result<(Claim, EvidenceGraph)> {
+        let _guard = self.write_guard()?;
+        self.attach_evidence_inner(project_id, owner_id, claim_id, artifact_sha256, label, run_id)
+    }
+
+    /// Caller must hold the write guard.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn attach_evidence_inner(
+        &self,
+        project_id: &ProjectId,
+        owner_id: &str,
+        claim_id: &str,
+        artifact_sha256: impl Into<String>,
+        label: impl Into<String>,
+        run_id: Option<String>,
+    ) -> Result<(Claim, EvidenceGraph)> {
         self.gates.require(ScienceFeature::EvidenceGraph)?;
         self.gates.require(ScienceFeature::ClaimLifecycle)?;
-        let _guard = self.write_guard()?;
         let project = self.load_project(project_id)?;
         if project.owner_id.0 != owner_id {
             return Err(ScienceError::Ownership);
