@@ -637,6 +637,19 @@ type OpenScienceAPI = {
     }) => Promise<unknown>
     notebookHistory: () => Promise<unknown>
     notebookExportIpynb: () => Promise<unknown>
+    /** OSF-4 Reviewer — artifact-bound; no orchestrator authority */
+    reviewPlan: (request: {
+      artifacts: { artifactId: string; expectedSha256: string; label?: string }[]
+      rubricVersion?: string
+    }) => Promise<unknown>
+    reviewSubmit: (request: {
+      artifacts: { artifactId: string; expectedSha256: string; label?: string }[]
+      rubricVersion?: string
+      runId?: string
+    }) => Promise<unknown>
+    reviewHistory: () => Promise<unknown>
+    reviewLatest: () => Promise<unknown>
+    reviewExportDossier: () => Promise<unknown>
   }
   window: {
     // Closes the focused window (the Cmd+W / Ctrl+W fallback when no preview panel is open).
@@ -1209,6 +1222,16 @@ const api: OpenScienceAPI = {
       ipcRenderer.invoke('notebook:history') as Promise<unknown>,
     notebookExportIpynb: () =>
       ipcRenderer.invoke('notebook:export-ipynb') as Promise<unknown>,
+    reviewPlan: (request) =>
+      ipcRenderer.invoke('review:plan', request) as Promise<unknown>,
+    reviewSubmit: (request) =>
+      ipcRenderer.invoke('review:submit', request) as Promise<unknown>,
+    reviewHistory: () =>
+      ipcRenderer.invoke('review:history') as Promise<unknown>,
+    reviewLatest: () =>
+      ipcRenderer.invoke('review:latest') as Promise<unknown>,
+    reviewExportDossier: () =>
+      ipcRenderer.invoke('review:export-dossier') as Promise<unknown>,
   },
 }
 

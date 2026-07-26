@@ -19,6 +19,8 @@ import {
 import type { LocalProjectCatalog } from './local-project-catalog'
 import { createNotebookService, type NotebookService } from './notebook-service'
 import type { NotebookCellRequest } from './notebook-plan'
+import { createReviewService, type ReviewService } from './review-service'
+import type { ReviewRequest } from './review-plan'
 
 /** Minimal surface — works with Electron IpcMain or a test double. */
 export type IpcMainLike = {
@@ -52,6 +54,8 @@ export type ScienceIpcDeps = {
   defaultOwnerId?: string
   /** Optional inject notebook service (tests). Default: ACP-backed. */
   notebookService?: NotebookService
+  /** Optional inject review service (tests). Default: ACP-backed. */
+  reviewService?: ReviewService
 }
 
 const DEFAULT_ACP_BASE = 'http://127.0.0.1:17000'
@@ -285,6 +289,42 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
   }))
 
   safeHandle(ipcMain, 'notebook:export-ipynb', async () => notebook.exportIpynb())
+
+  // ── OSF-4 Reviewer (plan/submit; no fix-loop authority) ──────
+  const review =
+    deps.reviewService ??
+    createReviewService({
+      acpCall: async (toolName, args) => {
+        const raw = await acpFetch('/tools/call', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: toolName, arguments: args }),
+        })
+        return raw
+      },
+    })
+
+  safeHandle(ipcMain, 'review:plan', async (_event, payload: unknown) => {
+    const req = (payload ?? {}) as ReviewRequest
+    return review.plan(req)
+  })
+
+  safeHandle(ipcMain, 'review:submit', async (_event, payload: unknown) => {
+    const req = (payload ?? {}) as ReviewRequest
+    return review.submit(req)
+  })
+
+  safeHandle(ipcMain, 'review:history', async () => ({
+    verdicts: review.history(),
+    authority: 'in-memory-projection-only',
+  }))
+
+  safeHandle(ipcMain, 'review:latest', async () => ({
+    verdict: review.latest(),
+    authority: 'in-memory-projection-only',
+  }))
+
+  safeHandle(ipcMain, 'review:export-dossier', async () => review.exportDossier())
 }
 
 function normalizeCellRequest(payload: unknown): NotebookCellRequest {

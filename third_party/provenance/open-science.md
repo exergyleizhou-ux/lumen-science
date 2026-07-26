@@ -20,7 +20,7 @@
 | OSF-1 | src/renderer/ (desktop shell) | packs/science-desktop/src/renderer/ | absorbed (branding + ResearchShell) |
 | OSF-2 | files/preview authority path | packs/science-desktop/src/main/files/* | **wired** bind/seed/preview + UI catalog |
 | OSF-3 | notebook UX + plan path | packs/science-desktop/src/main/files/notebook-* | **wired** plan/dry-run/export; execute via ACP only; OS kernel stubs remain |
-| OSF-4 | src/main/reviewer/ (UX) | packs/science-desktop/main/reviewer/ | staged; EvidenceGraph follow-on |
+| OSF-4 | reviewer UX + verdict proj | packs/science-desktop/src/main/files/review-* | **wired** artifact-bound submit; OS orchestrator stubs remain |
 | OSF-5 | src/main/skills/ (UX) | packs/science-desktop/main/skills/ | staged; DS-43 admission only |
 | OSF-6 | src/main/compute/ (UX) | packs/science-desktop/main/compute/ | staged; no TS SSH authority |
 | OSF-7 | connector catalog UX | packs/science-desktop/ | catalog only; Rust adapters stay |

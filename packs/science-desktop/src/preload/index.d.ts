@@ -586,6 +586,18 @@ interface OpenScienceAPI {
     }): Promise<unknown>
     notebookHistory(): Promise<unknown>
     notebookExportIpynb(): Promise<unknown>
+    reviewPlan(request: {
+      artifacts: { artifactId: string; expectedSha256: string; label?: string }[]
+      rubricVersion?: string
+    }): Promise<unknown>
+    reviewSubmit(request: {
+      artifacts: { artifactId: string; expectedSha256: string; label?: string }[]
+      rubricVersion?: string
+      runId?: string
+    }): Promise<unknown>
+    reviewHistory(): Promise<unknown>
+    reviewLatest(): Promise<unknown>
+    reviewExportDossier(): Promise<unknown>
   }
   window: {
     // Closes the focused window (the Cmd+W / Ctrl+W fallback when no preview panel is open).

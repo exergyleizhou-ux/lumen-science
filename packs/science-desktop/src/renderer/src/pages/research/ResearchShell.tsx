@@ -145,6 +145,40 @@ export const ResearchShell = (): React.JSX.Element => {
     setNbOut(JSON.stringify(res, null, 2))
   }
 
+  const [reviewArtifacts, setReviewArtifacts] = useState('art-1:abc\nart-2:xyz')
+  const [reviewOut, setReviewOut] = useState('')
+  const reviewPlan = async (): Promise<void> => {
+    if (!lumen) return
+    const artifacts = reviewArtifacts
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const [artifactId, expectedSha256] = line.split(':')
+        return { artifactId: artifactId?.trim() ?? '', expectedSha256: expectedSha256?.trim() ?? '' }
+      })
+      .filter((a) => a.artifactId && a.expectedSha256)
+    const res = await lumen.reviewPlan({ artifacts })
+    setReviewOut(JSON.stringify(res, null, 2))
+  }
+  const reviewSubmit = async (): Promise<void> => {
+    if (!lumen) return
+    const artifacts = reviewArtifacts
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const [artifactId, expectedSha256] = line.split(':')
+        return { artifactId: artifactId?.trim() ?? '', expectedSha256: expectedSha256?.trim() ?? '' }
+      })
+      .filter((a) => a.artifactId && a.expectedSha256)
+    const res = await lumen.reviewSubmit({ artifacts })
+    setReviewOut(JSON.stringify(res, null, 2))
+  }
+  const reviewExport = async (): Promise<void> => {
+    if (!lumen) return
+    const res = await lumen.reviewExportDossier()
+    setReviewOut(JSON.stringify(res, null, 2))
+  }
+
   return (
     <div style={styles.root}>
       <header style={styles.header}>
@@ -323,9 +357,37 @@ export const ResearchShell = (): React.JSX.Element => {
                 <section style={styles.panel}>
                   <h2 style={styles.h2}>Review</h2>
                   <p style={styles.muted}>
-                    Reviewer proposes; SessionActor records; user permission before
-                    correction. Verdicts enter EvidenceGraph (stale on re-run).
+                    Artifact-bound review plan/submit via ACP{' '}
+                    <code>start_review</code>. Verdicts project as pass/warn/fail + supports/
+                    contradicts edges into EvidenceGraph. No fix-loop orchestrator authority.
+                    Correction proposals are non-executing plans.
                   </p>
+                  <p style={styles.muted}>
+                    Evidence (one per line): <code>artifactId:expectedSha256</code>
+                  </p>
+                  <textarea
+                    style={styles.textarea}
+                    rows={4}
+                    value={reviewArtifacts}
+                    onChange={(e) => setReviewArtifacts(e.target.value)}
+                    spellCheck={false}
+                  />
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                    <button type="button" style={styles.btn} onClick={() => void reviewPlan()}>
+                      Plan review
+                    </button>
+                    <button
+                      type="button"
+                      style={styles.btn}
+                      onClick={() => void reviewSubmit()}
+                    >
+                      Submit review
+                    </button>
+                    <button type="button" style={styles.btn} onClick={() => void reviewExport()}>
+                      Export dossier
+                    </button>
+                  </div>
+                  {reviewOut && <pre style={styles.pre}>{reviewOut}</pre>}
                 </section>
               )}
             </>

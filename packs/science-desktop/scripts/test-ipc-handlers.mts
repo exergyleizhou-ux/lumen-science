@@ -70,8 +70,8 @@ const scienceSafeChannels = extractChannelCalls(scienceSrc, /safeHandle\([^,]+,\
 
 test(`science-ipc safeHandle channels count: ${scienceSafeChannels.length}`, () => {
   ok(
-    scienceSafeChannels.length >= 15,
-    `expected >=15 science channels (files+notebook), got ${scienceSafeChannels.length}`,
+    scienceSafeChannels.length >= 20,
+    `expected >=20 science channels (files+notebook+review), got ${scienceSafeChannels.length}`,
   )
 })
 

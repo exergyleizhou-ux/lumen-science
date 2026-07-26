@@ -63,6 +63,12 @@ const ALLOWED_CHANNELS = new Set<string>([
   'notebook:execute-cell',
   'notebook:history',
   'notebook:export-ipynb',
+  // OSF-4 Reviewer — artifact-bound only; no path-based orchestration
+  'review:plan',
+  'review:submit',
+  'review:history',
+  'review:latest',
+  'review:export-dossier',
 ])
 
 /**

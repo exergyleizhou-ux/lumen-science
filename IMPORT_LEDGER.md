@@ -75,6 +75,15 @@ The following Open Science subsystems have execution authority REMOVED:
 | src/main/office-preview/ | packs/science-desktop/src/main/office-preview/ | Planned | DOCX/XLSX/PPTX isolated renderer (follow-on) |
 | src/renderer/.../previews/ | packs/science-desktop/src/renderer/ | Planned | Multi-tab preview UI (follow-on) |
 
+### Batch 4 note (OSF-4 Reviewer + Dossier) — 2026-07-26
+
+| Destination | Modified? | Notes |
+|-------------|-----------|-------|
+| packs/science-desktop/src/main/files/review-plan.ts | Yes (Lumen) | pure plan + EvidenceGraph gate + verdict normalize |
+| packs/science-desktop/src/main/files/review-service.ts | Yes (Lumen) | submit via ACP start_review; dossier export projection |
+| packs/science-desktop/src/main/files/dossier-service.ts | Yes (Lumen) | fixture-backed Question→Plan→Evidence→Result→Review gold path |
+| packs/science-desktop/src/main/reviewer/ipc.ts | Stub | EXECUTION AUTHORITY REMOVED |
+
 ### Batch 3 note (OSF-3 Notebook) — 2026-07-26
 
 | Destination | Modified? | Notes |
