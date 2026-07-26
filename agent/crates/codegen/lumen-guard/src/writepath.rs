@@ -58,6 +58,11 @@ pub fn check_write_path(path: &str) -> CheckResult {
     if unsafe_mode() {
         return CheckResult::ok();
     }
+    check_write_path_strict(path)
+}
+
+/// Rule-table evaluation that ignores `LUMEN_UNSAFE` (see `check_bash_strict`).
+pub fn check_write_path_strict(path: &str) -> CheckResult {
     let p = strip_hidden_chars(path.trim());
     if p.is_empty() {
         return CheckResult::ok();

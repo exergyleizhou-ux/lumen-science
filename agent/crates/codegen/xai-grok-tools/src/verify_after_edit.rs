@@ -45,7 +45,14 @@ pub(crate) async fn feedback_for_output(
         }
         _ => return None,
     };
-    if changed_file.extension().and_then(|ext| ext.to_str()) != Some("go") {
+    // Cheap pre-filter only: skip files no verifier could ever handle, so a
+    // plain .md edit does not pay for a config load. The authoritative
+    // language + project-marker gating is in lumen_verify::run_after_edit.
+    let verifiable = matches!(
+        changed_file.extension().and_then(|ext| ext.to_str()),
+        Some("go" | "py" | "ts" | "tsx" | "js" | "jsx")
+    );
+    if !verifiable {
         return None;
     }
 
@@ -80,7 +87,11 @@ async fn feedback_for_output_with_config(
         _ => return None,
     };
 
-    if !cfg.enabled || changed_file.extension().and_then(|ext| ext.to_str()) != Some("go") {
+    // Language gating lives in lumen_verify::run_after_edit (go / python /
+    // typescript, each behind its own project marker). Duplicating a
+    // Go-only check here silently disabled the multi-language activation —
+    // caught by dogfooding a real Python fix, not by any unit test.
+    if !cfg.enabled {
         return None;
     }
 
@@ -120,7 +131,7 @@ async fn feedback_for_output_with_config(
     let feedback = match outcome {
         Ok(Ok(None)) => return None,
         Ok(Ok(Some(result))) if result.step_results.iter().all(|step| step.skipped) => {
-            "[verify-after-edit] SKIPPED: no allowed Go verifier executable was available on PATH. The edit remains unverified.".to_string()
+            "[verify-after-edit] SKIPPED: no allowed verifier executable was available on PATH for this language. The edit remains unverified.".to_string()
         }
         Ok(Ok(Some(result))) if result.ok => {
             tracker.record_pass(&repair_key);
@@ -232,6 +243,56 @@ mod tests {
         .await;
 
         assert!(feedback.is_none());
+    }
+
+    /// Regression: the caller used to re-implement a Go-only extension check,
+    /// silently disabling lumen-verify's python/typescript activation. Found by
+    /// dogfooding a real Python fix — every unit test passed while the feature
+    /// was dead in the product.
+    #[tokio::test]
+    async fn python_edit_reaches_the_verifier_instead_of_being_gated_out() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        std::fs::write(
+            tmp.path().join("pyproject.toml"),
+            "[project]\nname = \"fixture\"\nversion = \"0.0.0\"\n",
+        )
+        .unwrap();
+        let changed = tmp.path().join("app.py");
+        std::fs::write(&changed, "x = 1\n").unwrap();
+
+        let feedback = feedback_for_output_with_config(
+            tmp.path().to_path_buf(),
+            "session-py".to_string(),
+            VerifyAfterEditState::default(),
+            &applied_edit(changed),
+            lumen_verify::config::Config::default(),
+        )
+        .await;
+
+        // The verifier ran: either it passed, or every step skipped for a
+        // missing tool. What must NOT happen is a silent None from a
+        // language gate that should not exist here.
+        assert!(
+            feedback.is_some(),
+            "python edit must reach the verifier (got no feedback at all)"
+        );
+    }
+
+    #[tokio::test]
+    async fn non_source_edit_is_filtered_before_config_load() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let changed = tmp.path().join("NOTES.md");
+        std::fs::write(&changed, "notes\n").unwrap();
+        assert!(
+            feedback_for_output(
+                tmp.path().to_path_buf(),
+                "session-md".to_string(),
+                VerifyAfterEditState::default(),
+                &applied_edit(changed),
+            )
+            .await
+            .is_none()
+        );
     }
 
     #[tokio::test]
