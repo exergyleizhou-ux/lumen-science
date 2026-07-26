@@ -1,3 +1,6 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 // The bare names `Document`/`Element` resolve to the DOM lib's types, but every value here comes
 // from @xmldom/xmldom's parser, which implements its own structurally-different DOM. Aliasing the
 // package's own types keeps the annotations describing what is actually being passed around.

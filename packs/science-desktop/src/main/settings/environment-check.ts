@@ -1,3 +1,6 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { arch as hostArchitecture } from 'node:os'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { request as httpsRequest } from 'node:https'

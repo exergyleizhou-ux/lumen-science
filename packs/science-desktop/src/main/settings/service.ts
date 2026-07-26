@@ -1,3 +1,6 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { execFile } from 'node:child_process'
 import { access, chmod, mkdir, readdir, realpath, writeFile } from 'node:fs/promises'
 import { constants } from 'node:fs'

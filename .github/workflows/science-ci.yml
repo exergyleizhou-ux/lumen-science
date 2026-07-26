@@ -106,16 +106,16 @@ jobs:
       - name: Every pinned digest is attributed
         run: python3 scripts/verify-pinned-digests.py
 
-      # NOT YET WIRED: scripts/verify-adoption-provenance.py currently FAILS —
-      # 21 files modified from Open Science carry no statement of changes, which
-      # Apache-2.0 §4(b) requires. Adding it as a required gate while it is red
-      # would either block every PR or invite a `continue-on-error` that hides
-      # it. Fix the files, then add:
+      # Apache-2.0 §4 obligations for source adopted from Open Science: every
+      # modified file must carry a statement of changes, and the ledger's counts
+      # and pin must be internally consistent. Now wired — it was held back
+      # while 27 files still lacked a notice, since a knowingly-red required
+      # gate only invites a `continue-on-error` that hides it.
       #
-      #   - name: Adoption provenance ledger is consistent
-      #     run: python3 scripts/verify-adoption-provenance.py
-      #
-      # Run it locally meanwhile; it is committed and working.
+      # The freshness re-derivation needs an upstream clone, which CI does not
+      # have; it reports as skipped rather than silently counted as passing.
+      - name: Adoption provenance ledger is consistent
+        run: python3 scripts/verify-adoption-provenance.py
 
   rust-science:
     name: Rust xai-grok-science (test + clippy)

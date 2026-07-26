@@ -1,3 +1,6 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 // Shared model-settings & onboarding types crossing the main <-> renderer IPC boundary.
 //
 // The main process owns settings.json and all secret material. The renderer only ever receives the

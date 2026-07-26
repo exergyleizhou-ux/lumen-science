@@ -1,3 +1,6 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { Check, ChevronDown, File, Folder, Paperclip, Plus, Server } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 

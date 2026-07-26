@@ -1,3 +1,6 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 // Cross-process update types and pure helpers. No Electron/Node I/O so both main and renderer import it.
 
 export type PlatformDownload = { url: string; size: number; sha256: string }

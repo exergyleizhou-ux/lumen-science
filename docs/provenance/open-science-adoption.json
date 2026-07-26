@@ -9,16 +9,16 @@
     "noticeFile": "third_party/open-science/NOTICE"
   },
   "summary": {
-    "adopted-verbatim": 986,
-    "adopted-modified": 41,
-    "lumen-original": 36,
-    "totalShipped": 1063,
+    "adopted-verbatim": 980,
+    "adopted-modified": 47,
+    "lumen-original": 37,
+    "totalShipped": 1064,
     "upstreamSourceFiles": 1027,
     "upstreamFilesNotAdopted": 0
   },
   "licenseObligations": {
     "attributionRequiredFor": 1027,
-    "statementOfChangesRequiredFor": 41,
+    "statementOfChangesRequiredFor": 47,
     "note": "Apache-2.0 section 4 requires retaining attribution for adopted files and stating that modified files were changed. Files classified lumen-original carry no upstream obligation."
   },
   "files": {
@@ -114,7 +114,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/acp/ipc.ts",
       "upstreamSha256": "56ea915ed19f7b26e044e337628b0091bd05ae3a8cc0c7238d4dcb0f7726afce",
-      "localSha256": "b4d4f9039b3aac77066693cb33323c35223b48f5681a0bd60a8311b639deb1e0",
+      "localSha256": "af324391c01464fc7fa3857b7ba936fd2e13ae6c6ed62a0de34ebe540a13decd",
       "modified": true,
       "noticeRequired": true
     },
@@ -418,7 +418,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/app-branding.test.ts",
       "upstreamSha256": "301d7843d17e26f89f48d854227559ec80ba209202a9f7693eac942803dd9be0",
-      "localSha256": "1c3e35dcf5d62d9e75827d202978ff99ad91b69a70fa2f22f7e95dc447987a6e",
+      "localSha256": "0bb4b19086be8c594f0f3e888b992732e7c947bfc3138fd6e4fc5c518a2781a0",
       "modified": true,
       "noticeRequired": true
     },
@@ -1258,7 +1258,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/connectors/descriptors/literature-arxiv.ts",
       "upstreamSha256": "894335012fa58a1e1c6dc91da658092aa6f3827098deb9f1a9c0008f83a3b2ba",
-      "localSha256": "b3072c919952e0b5a180c822196f42ffd984de3d34bea09c2cafd97f927956fc",
+      "localSha256": "e606b9bd662ee12f624f97f7e63cfe80446b69d5fcbd75c4e0a4dcedef31d136",
       "modified": true,
       "noticeRequired": true
     },
@@ -1930,7 +1930,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/index.ts",
       "upstreamSha256": "38a6e301427ed6fcbb85a6560b87dd8ad2c547a4e494fdf5978105f41543492f",
-      "localSha256": "235c9ac3bc0cb06414feea6a8e8b40d70745dbd17b9701baee34759319565731",
+      "localSha256": "8357b69e907a94bfeb26389ad4203bd5331d9e8490e58180e48679f91d4e9a5c",
       "modified": true,
       "noticeRequired": true
     },
@@ -1946,7 +1946,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/ipc.ts",
       "upstreamSha256": "2532a17b9fac115335a74c7fabd9072b9dd2e3701389c567f28710e29f2b123f",
-      "localSha256": "c05d44a8f7441bd8ec045abe4496399bb7c11637bb6085b5bed1ead7d71eac97",
+      "localSha256": "7835a4e84e8cbe331d908f16b28bb4a0dda36f39a811618727ec0a3e33173a79",
       "modified": true,
       "noticeRequired": true
     },
@@ -3551,11 +3551,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/main/settings/codex-auth.ts": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/main/settings/codex-auth.ts",
       "upstreamSha256": "4d9fd710906f26808988058b969f29627d186cbe503a0cd25a5dd643cdf40acf",
-      "localSha256": "4d9fd710906f26808988058b969f29627d186cbe503a0cd25a5dd643cdf40acf",
-      "modified": false,
+      "localSha256": "98f43b1b868432aa25c03f332e718ac163212f4c9daa4ad69322045536de7ad1",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/main/settings/codex-detect.test.ts": {
@@ -3634,7 +3634,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/settings/environment-check.ts",
       "upstreamSha256": "9cf8f54ffea6af8de6f309c671d305cf38c1355ab66c7c82ab8e2238ef2d5ea5",
-      "localSha256": "8b7ebaf6c02e057fd9fb73f6439d53262b4a5ad0838de790345fff31594b9fca",
+      "localSha256": "c86e221e8455e281d0cbfb0b351083fc3fbe4b8722fec96ff2c8153e6ea65615",
       "modified": true,
       "noticeRequired": true
     },
@@ -3762,7 +3762,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/settings/preflight.ts",
       "upstreamSha256": "e9fa4cb727dcd76a5e677d9f1d5e286e30925ec95113a4b010539aee50c58d3f",
-      "localSha256": "0cac23b1b14afedf97b931e1b37326090e59cc6e60cb61c1b397508f51c364c0",
+      "localSha256": "38e01977969846ea825a9447d26ecad3d63d15c9479d18bae8ad91bf07575aaa",
       "modified": true,
       "noticeRequired": true
     },
@@ -3858,7 +3858,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/settings/service.ts",
       "upstreamSha256": "8db74dc5e571d01a3fb48c0d6c281761653a607e323d6f0a017e91091c733a2a",
-      "localSha256": "386f3f4eb61b511e506a7f77309205a0856c8b2b0d2f04a4f9a006970b105c66",
+      "localSha256": "97c0b7ef7d71ccb93d200bb9cb5072d55c4bc619b025024343cdf284fe8ac2e8",
       "modified": true,
       "noticeRequired": true
     },
@@ -4346,7 +4346,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/update/electron-updater-strategy.ts",
       "upstreamSha256": "1116021537f3406d8eb5a1a37a7e8ad45be67ce890c6672b27f84b2e0142687c",
-      "localSha256": "bd26d610fa771c2518d44dc3b8b497ecf0b7f0b316f480067ba8b1e5171b3ba4",
+      "localSha256": "af6310d34549d77d51a199dc2c5d4ddf2213d680986e9999d83e09394ba028b4",
       "modified": true,
       "noticeRequired": true
     },
@@ -4410,7 +4410,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/update/service.ts",
       "upstreamSha256": "f8d5cfa1a158d9da9f6c86692bf8ed44370797e2c89e3b5e88858f3526d98aa7",
-      "localSha256": "c9b30e18e0e386bfeaf949d5025eba627b8eb86232530f1aa30392052bffffea",
+      "localSha256": "938fd5f79cf3a953303b37d24aa3d8f814e28288b1c0e3fbc703a02a933e794f",
       "modified": true,
       "noticeRequired": true
     },
@@ -4642,7 +4642,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/windows.ts",
       "upstreamSha256": "843119d9058e3ef72aeb36016ae1ed220988ee71ee5cf1dc359b01c85a274ce3",
-      "localSha256": "52a63a7cbb9840a0292f768283ee3d763f7138e91bdc81f91a3fb6fbeb73eb45",
+      "localSha256": "86bb6521ceff4b6124c4c1a2e7e5c3b61dcfded46a0186e3c6687a22b661997e",
       "modified": true,
       "noticeRequired": true
     },
@@ -4650,7 +4650,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/preload/index.d.ts",
       "upstreamSha256": "54f89c86fa5e85843744afea9b67bb2e2a58e241185cad34214c57213f8f83c1",
-      "localSha256": "1d926c9c15f06708aee5f9d8b5304adda07fe9e76f4d3fb9a3e62b7a82700846",
+      "localSha256": "27074748b76e41ada951757e992131aa08cda93f40b37a5a26bcebf4bfb3a117",
       "modified": true,
       "noticeRequired": true
     },
@@ -4666,7 +4666,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/preload/index.ts",
       "upstreamSha256": "2e92b9a3236dc84ce6711d5495f2ab5ce38cfb4991cea96b21daee5a85bcc7ef",
-      "localSha256": "002da1c9a32ca18f925c1953523260df134e1fa01bb9aa3f28c6f6c8c1c6e986",
+      "localSha256": "db3431508e1333b305214ca5925a08dd5c0d828e87cd365fcc7960425719fb31",
       "modified": true,
       "noticeRequired": true
     },
@@ -4682,7 +4682,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/renderer/index.html",
       "upstreamSha256": "47262f38cbf82c32f90bb62dd41849d571ac1a305c18b486c268f4677d670098",
-      "localSha256": "95617f4f7805ae2e30ec554e9e67d6447cf1660dbaccca401d0fafcd0549889e",
+      "localSha256": "8928d06130c78b9d06ac560f665dc7a63600c9a910678ed2a70d3801200b63ef",
       "modified": true,
       "noticeRequired": true
     },
@@ -4714,7 +4714,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/App.tsx",
       "upstreamSha256": "82f30b128232ff10db85dfca144edfe3f51ea106b7a0984d8ed5928afbb29a68",
-      "localSha256": "c0c21c4913c0959e2e08c3b099ae1aa0b8b46c89f977951612289dbd65f9c574",
+      "localSha256": "575717529026557aec2e75f77b09d7eb2e4a62a3d9d982d1779158afbe4070c3",
       "modified": true,
       "noticeRequired": true
     },
@@ -5006,6 +5006,14 @@
       "modified": false,
       "noticeRequired": true
     },
+    "packs/science-desktop/src/renderer/src/components/icons/agent-backends.tsx": {
+      "origin": "lumen-original",
+      "upstreamPath": null,
+      "upstreamSha256": null,
+      "localSha256": "ebe0183dc545b4be6a1e35a03adf49f39fce53bea3acbbe9741844bce3c46c4e",
+      "modified": null,
+      "noticeRequired": false
+    },
     "packs/science-desktop/src/renderer/src/components/job-binding-utils.ts": {
       "origin": "adopted-verbatim",
       "upstreamPath": "src/renderer/src/components/job-binding-utils.ts",
@@ -5063,11 +5071,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/components/streamdown/LinkSafetyModal.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/components/streamdown/LinkSafetyModal.tsx",
       "upstreamSha256": "35f80a6624b6e0faf0ee937f4e4979ea15faf4751df9ecf8e24e07fe25253992",
-      "localSha256": "35f80a6624b6e0faf0ee937f4e4979ea15faf4751df9ecf8e24e07fe25253992",
-      "modified": false,
+      "localSha256": "f2f674987abfbb0a11570c58b41bdb05aa609ed65ec5e2f7daec98680a68fc20",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/components/streamdown/install-streamdown.download.test.ts": {
@@ -5610,7 +5618,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/home/HomePage.tsx",
       "upstreamSha256": "5daccd3e15d45f826104ccf3888e7a0162fe57b1f9ab5325791607f1779ad1e9",
-      "localSha256": "2d1a4cd67921b4299ab5e379f0007185a25674d468026d04d9e743ad424f9058",
+      "localSha256": "3f3c8621567873bca80a8f5b6b24f77e85a1c57a7d89d52cbd42082485f856e5",
       "modified": true,
       "noticeRequired": true
     },
@@ -5815,11 +5823,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/AgentPanel.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/AgentPanel.tsx",
       "upstreamSha256": "ac62dc2bc2f5fece5265ad8eec1ecebe7ed37e715388f4848fcfe77fb110e480",
-      "localSha256": "ac62dc2bc2f5fece5265ad8eec1ecebe7ed37e715388f4848fcfe77fb110e480",
-      "modified": false,
+      "localSha256": "0b8ecc3b370a6d7080474691c0996d1b22762abf9b62a406dcd673e35b009e74",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/AppIconSection.tsx": {
@@ -6010,7 +6018,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/GeneralPanel.tsx",
       "upstreamSha256": "40d9892b0bcbbe8a7445728896359bc0f95636669dbad33772a7cc193949ede3",
-      "localSha256": "9a46e2b7cdb570209ac09b5a19b523dfbb73196a682da5d16154c9e48dd5cbe1",
+      "localSha256": "cb9a33b150b86d04c9bf2230d1f1b348a065877e969a0e68ac2c2e02bb992ca4",
       "modified": true,
       "noticeRequired": true
     },
@@ -6359,11 +6367,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/provider-form-value.ts": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/provider-form-value.ts",
       "upstreamSha256": "24b6f71e6232b9b89ec468d2b0c15b8a1524b31bb4272de37d79554d94746192",
-      "localSha256": "24b6f71e6232b9b89ec468d2b0c15b8a1524b31bb4272de37d79554d94746192",
-      "modified": false,
+      "localSha256": "a26497bfbc85ffbadce24b890ec5640cddad6167769dfefb1a54b837947b47a8",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/provider-icons.tsx": {
@@ -6655,11 +6663,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/workspace/ProjectFilesView.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/workspace/ProjectFilesView.tsx",
       "upstreamSha256": "68f15f01289b3737956f951535a3ec05671382f96243d39720d40d67c82df8ba",
-      "localSha256": "68f15f01289b3737956f951535a3ec05671382f96243d39720d40d67c82df8ba",
-      "modified": false,
+      "localSha256": "a7fc700d04103128d8a26857d06f11203613a14cc7b4f6dea656318556a0562f",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/workspace/RenameSessionDialog.tsx": {
@@ -7154,7 +7162,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/workspace/error-report.test.ts",
       "upstreamSha256": "863c40441a71cebbec190a3cb6134d18fd0e32729ee917959d776767ce04946f",
-      "localSha256": "31937bcb08ea84f27120c08a5e5203379fb662e436fd960d88bb668d20ac1031",
+      "localSha256": "e24c52da99d02e1eb17d1345f25e482ef721c36541cc981aed36b625efe88727",
       "modified": true,
       "noticeRequired": true
     },
@@ -8023,11 +8031,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/stores/settings-store.ts": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/stores/settings-store.ts",
       "upstreamSha256": "f0e868b5f4006fb5e27f0bad8fdc0bf92f8b2435bb7a2713844a22aba0cc64af",
-      "localSha256": "f0e868b5f4006fb5e27f0bad8fdc0bf92f8b2435bb7a2713844a22aba0cc64af",
-      "modified": false,
+      "localSha256": "368fbc0e50ffa6271092cdc5a37fa1f5c1cbfef966ffb14846408b471f6676a5",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/stores/update-store.test.ts": {
@@ -8074,7 +8082,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/renderer/web/index.html",
       "upstreamSha256": "cc1df4aa7912f37c0a4e762ee72f06ae22ff30e021bf67b318397e5b4d343d91",
-      "localSha256": "53b465bd41be4dd9d6705a7faac81ab379995e33b4f60ba314eafc588e800a78",
+      "localSha256": "fea6bf81ffffab2ab090f9e02f75cd2c3adfaf43a1414394cef4523975398998",
       "modified": true,
       "noticeRequired": true
     },
@@ -8386,7 +8394,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/shared/run-error-classification.ts",
       "upstreamSha256": "05553f63cb861df3f51f03a5e4376e497405ae0855bf9bbcadc4cdbdcdd9bc2c",
-      "localSha256": "c3e31308d14c013fe900840ef2baea009284a4bd77336dc88375a95eecd95889",
+      "localSha256": "7efeb06cb29ee7a4590ddfde50ec8a192a48d0e18b724e7362d343830fc554e1",
       "modified": true,
       "noticeRequired": true
     },
@@ -8418,7 +8426,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/shared/settings.ts",
       "upstreamSha256": "970561063b7d3d4f1f6f24c681bcf68dfc5c8c126ba9f0f0f72b63595ffd5fb9",
-      "localSha256": "5ac0f7cc502f9ae6fc6724238aed183d67dace8ef6bbd4d31e7e93ad38407a17",
+      "localSha256": "adc9ccf428a58a04e8fb548f04a69fcd2044117da129685dfa0cbc26a8f77567",
       "modified": true,
       "noticeRequired": true
     },
@@ -8466,7 +8474,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/shared/update.ts",
       "upstreamSha256": "73440404d2ffa1cab7b47cb07939e722b33436562b625962c66ec613712992a4",
-      "localSha256": "d8c60768d450dc63f5a9a2e8ddad037e0bdb4a1fc9f5d051b326dccc1c11c938",
+      "localSha256": "b513c0d7ccd5927e85c62ec5e438ae72686391886e7bf12df53dd6073751322d",
       "modified": true,
       "noticeRequired": true
     },
@@ -8502,11 +8510,19 @@
       "modified": null,
       "noticeRequired": false
     },
-    "packs/science-desktop/src/types/openchemlib.d.ts": {
+    "packs/science-desktop/src/types/renderer-ui-deps.d.ts": {
       "origin": "lumen-original",
       "upstreamPath": null,
       "upstreamSha256": null,
-      "localSha256": "80cb9e651f8d65ed8d32571b1be818465650f9487c203f4b5f4a1fc3efb3b668",
+      "localSha256": "49f1875b3decbef71a4a8385895c52fa03f7c7db537932321ba3ea67b6fd8dd5",
+      "modified": null,
+      "noticeRequired": false
+    },
+    "packs/science-desktop/src/types/shadcn-message-scroller.d.ts": {
+      "origin": "lumen-original",
+      "upstreamPath": null,
+      "upstreamSha256": null,
+      "localSha256": "1d826baf7259fa25872e050d57e6aeb557037c5c57230ff2908b74e765ba9e0f",
       "modified": null,
       "noticeRequired": false
     },
@@ -8515,14 +8531,6 @@
       "upstreamPath": null,
       "upstreamSha256": null,
       "localSha256": "da29499dd3b250843592293097f6fe52be5756b7ea3ae1c9b21bb546ce33dee9",
-      "modified": null,
-      "noticeRequired": false
-    },
-    "packs/science-desktop/src/types/ws.d.ts": {
-      "origin": "lumen-original",
-      "upstreamPath": null,
-      "upstreamSha256": null,
-      "localSha256": "08467e8a76466324415e69c4988d067ab3b9d6b6514e8dfbd2bfaf1917768ba8",
       "modified": null,
       "noticeRequired": false
     }

@@ -1,3 +1,6 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { existsSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { basename, join } from 'node:path'
