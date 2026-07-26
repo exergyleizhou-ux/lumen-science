@@ -17,9 +17,20 @@ python3 scripts/science_release_contract.py preflight --tag v1.0.1
 # Core "Release Lumen" no-ops for science-only tags (see release.yml classify job)
 ```
 
-**Status note (2026-07-26):** `v1.0.0` may now list many GitHub assets; the
-remaining gap is **tag → protected CI → builder provenance**, not mere file
-presence. Desktop remains `1.1.0-dev` and is **out of scope** for `v1.0.1`.
+**Status (2026-07-26): SHIPPED**
+
+| Field | Value |
+|-------|--------|
+| Tag | `v1.0.1` (annotated) |
+| Commit | `4f75d7a2915363bea09a053ee77a563372bc6631` |
+| Workflow | Science Release run [`30192164855`](https://github.com/exergyleizhou-ux/lumen-science/actions/runs/30192164855) |
+| Release | https://github.com/exergyleizhou-ux/lumen-science/releases/tag/v1.0.1 |
+| Provenance | `MANIFEST.json` + `SHA256SUMS` (35 binary/archive assets); spot-check `darwin-arm64` tarball hash OK |
+| Core Release | no-op for science tag (classify) |
+| Desktop | still `1.1.0-dev` — **out of scope** for this tag |
+
+Remaining checklist gaps for “perfect install audit”: optional GPG/minisign (§3),
+multi-platform `lumen-science --version` smoke on all five targets (§4).
 
 **Automation (scaffold only):**
 
