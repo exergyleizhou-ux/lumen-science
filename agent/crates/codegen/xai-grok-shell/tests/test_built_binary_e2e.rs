@@ -2435,3 +2435,232 @@ fn test_connector_registry_active_40_inventory_42() {
     assert!(xai_grok_science::connectors::descriptor("biogrid").is_none());
     assert!(xai_grok_science::connectors::descriptor("kegg").is_none());
 }
+
+// ============================================================================
+// WP-2 project mutations over stdio ACP (LS5-P2-03 E4 proof)
+//
+// LS5-P2-03 routed project_create / project_transition / claim_propose /
+// evidence_attach through the SessionActor, but nothing exercised that route:
+// the science-crate unit tests cover the mutation semantics without the actor,
+// and every ACP-level science test needs a pre-built binary. Routing a mutation
+// through the actor and PROVING it goes through the actor are different claims,
+// so the status file deliberately stayed at E2.
+//
+// These close that gap. They drive the rebuilt binary over the real protocol,
+// so they cannot pass unless the shell wiring, the permission bridge and the
+// durable ledger all actually work.
+// ============================================================================
+
+/// A project mutation is actor-gated end to end, and replaying one operation
+/// id returns the first outcome instead of applying it twice.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_project_mutation_is_actor_gated_and_idempotent() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let store_root = workdir.path().join("science-store");
+
+        let client = GrokStdioClient::spawn(&server, workdir.path()).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+
+        let create = |operation_id: &str| {
+            serde_json::json!({
+                "sessionId": session_id.0.as_ref(),
+                "ownerId": "science-owner",
+                "storeRoot": store_root,
+                "title": "Restriction mapping",
+                "researchQuestion": "Where does EcoRI cut?",
+                "operationId": operation_id,
+                "approvalTimeoutMs": 5_000,
+            })
+        };
+
+        let first: serde_json::Value = serde_json::from_str(
+            tokio::time::timeout(
+                Duration::from_secs(30),
+                client.ext_method("x.ai/science/project_create", create("op-create-1")),
+            )
+            .await
+            .expect("project_create timed out")
+            .unwrap_or_else(|error| {
+                panic!(
+                    "project_create failed: {error:?}\nstderr:\n{}",
+                    client.stderr()
+                )
+            })
+            .0
+            .get(),
+        )
+        .expect("project_create returned JSON");
+
+        // The authority claim is only true because the mutation took the actor
+        // route; asserting it here is what stops the string drifting back into
+        // decoration.
+        assert_eq!(
+            first["runtimeAuthority"], "SessionActor-gated ACP adapter",
+            "response: {first}"
+        );
+        assert_eq!(first["replayed"], false, "first apply must not be a replay");
+        let project_id = first["projectId"].as_str().expect("projectId").to_owned();
+        assert!(!project_id.is_empty());
+
+        // Replaying the same operation id must return the SAME project rather
+        // than creating a second one. Without the durable operation ledger a
+        // retried request silently forks the store.
+        let replay: serde_json::Value = serde_json::from_str(
+            client
+                .ext_method("x.ai/science/project_create", create("op-create-1"))
+                .await
+                .expect("replay failed")
+                .0
+                .get(),
+        )
+        .expect("replay returned JSON");
+        assert_eq!(replay["replayed"], true, "replay: {replay}");
+        assert_eq!(replay["projectId"], project_id, "replay created a new project");
+
+        // A different operation id is a different mutation and must create a
+        // second project — otherwise the check above would pass trivially.
+        let second: serde_json::Value = serde_json::from_str(
+            client
+                .ext_method("x.ai/science/project_create", create("op-create-2"))
+                .await
+                .expect("second create failed")
+                .0
+                .get(),
+        )
+        .expect("second returned JSON");
+        assert_ne!(second["projectId"], serde_json::Value::String(project_id));
+
+        // Reopen the durable store from the test process and confirm exactly
+        // two projects exist — the replay must not have left a third.
+        let store = xai_grok_science::project::ProjectStore::new(&store_root);
+        let projects = store.list_projects().expect("list projects");
+        assert_eq!(
+            projects.len(),
+            2,
+            "expected 2 projects after create+replay+create, got {}",
+            projects.len()
+        );
+    })
+    .await;
+}
+
+/// `operationId` is required, and a denied permission leaves the store empty.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_project_mutation_fails_closed() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let store_root = workdir.path().join("science-store");
+
+        // 1. Missing operationId must be rejected. Without an idempotency key
+        //    a retry cannot be distinguished from a second intentional
+        //    mutation, so the field is mandatory rather than defaulted.
+        let client = GrokStdioClient::spawn(&server, workdir.path()).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+
+        let missing_op = client
+            .ext_method(
+                "x.ai/science/project_create",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "ownerId": "science-owner",
+                    "storeRoot": store_root,
+                    "title": "No operation id",
+                    "researchQuestion": "?",
+                }),
+            )
+            .await;
+        assert!(
+            missing_op.is_err(),
+            "project_create without operationId was accepted: {missing_op:?}"
+        );
+
+        // 2. A mutation into a session that does not exist must not reach the
+        //    store, even with a well-formed request.
+        let wrong_session = client
+            .ext_method(
+                "x.ai/science/project_create",
+                serde_json::json!({
+                    "sessionId": "not-a-real-session",
+                    "ownerId": "science-owner",
+                    "storeRoot": store_root,
+                    "title": "Forged session",
+                    "researchQuestion": "?",
+                    "operationId": "op-forged",
+                }),
+            )
+            .await;
+        assert!(
+            wrong_session.is_err(),
+            "mutation with an unknown session was accepted: {wrong_session:?}"
+        );
+
+        assert!(
+            !store_root.join("projects").exists(),
+            "a rejected mutation created durable state"
+        );
+    })
+    .await;
+}
+
+/// A denied permission must abort the mutation and leave no project behind.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_project_mutation_denied_writes_nothing() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let store_root = workdir.path().join("science-store");
+
+        let client = GrokStdioClient::spawn_with_permission_response(
+            &server,
+            workdir.path(),
+            PermissionResponse::Reject,
+        )
+        .await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+
+        let denied = client
+            .ext_method(
+                "x.ai/science/project_create",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "ownerId": "science-owner",
+                    "storeRoot": store_root,
+                    "title": "Denied",
+                    "researchQuestion": "?",
+                    "operationId": "op-denied",
+                    "approvalTimeoutMs": 5_000,
+                }),
+            )
+            .await;
+
+        assert!(
+            denied.is_err(),
+            "a denied permission still returned success: {denied:?}"
+        );
+        // The point of routing through the actor is that the permission
+        // decision gates the WRITE, not just the response.
+        let store = xai_grok_science::project::ProjectStore::new(&store_root);
+        let projects = store.list_projects().unwrap_or_default();
+        assert!(
+            projects.is_empty(),
+            "denied mutation persisted {} project(s)",
+            projects.len()
+        );
+    })
+    .await;
+}

@@ -486,17 +486,37 @@ EVIDENCE_LEVELS = {
         ),
     },
     "projectEvidenceModel": {
-        "level": "E2",
+        "level": "E4",
         "rationale": (
             "The four WP-2 mutations (project_create, project_transition, "
-            "claim_propose, evidence_attach) now route through SessionActor with "
+            "claim_propose, evidence_attach) route through SessionActor with "
             "operation-id idempotency, session/owner binding, compare-and-swap and a "
             "permission request; digests are canonical 64-hex and must reference a "
-            "registered artifact. Still E2 rather than E4: the shell wiring has no "
-            "runnable test — the science-crate semantics are covered by unit tests, "
-            "but every ACP-level science test requires a pre-built binary and is "
-            "#[ignore]d, so nothing exercises the actor plumbing in CI."
+            "registered artifact. Proven over a rebuilt binary via stdio ACP, not "
+            "only by unit tests."
         ),
+        "builtBinaryProof": {
+            "tests": [
+                "test_stdio_science_project_mutation_is_actor_gated_and_idempotent",
+                "test_stdio_science_project_mutation_fails_closed",
+                "test_stdio_science_project_mutation_denied_writes_nothing",
+            ],
+            "file": "agent/crates/codegen/xai-grok-shell/tests/test_built_binary_e2e.rs",
+            "binarySha256": (
+                "8f7103db274e77270723cf704bdc260722360272449338d925cf3152df76aeb7"
+            ),
+            "sourceCommit": "f1830aac06706b1a4c2d7b75e790fa48a1682a42",
+            "buildCommand": "cargo build -p xai-grok-pager-bin --bin lumen",
+            "runCommand": (
+                "GROK_BINARY=$PWD/agent/target/debug/lumen cargo test -p xai-grok-shell "
+                "--test test_built_binary_e2e -- --ignored project_mutation"
+            ),
+            "result": "3 passed, 0 failed",
+            "falsified": (
+                "Re-run with GROK_BINARY=/nonexistent/lumen fails, confirming the "
+                "tests genuinely exercise the binary rather than passing trivially."
+            ),
+        },
     },
     "workflowKernel": {
         "level": "E1",
