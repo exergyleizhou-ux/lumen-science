@@ -74,7 +74,7 @@ for (const sym of ['SystemSshRunner', 'SystemScpRunner', 'JobPoller', 'harvestJo
   test(`ipc.ts: no ${sym}`, () => ok(!IPC.includes(sym)));
 }
 test('ipc.ts imports safeHandle', () => ok(IPC.includes('safeHandle')));
-test('ipc.ts imports assertArtifactPreviewAccess', () => ok(IPC.includes('assertArtifactPreviewAccess')));
+test('ipc.ts imports validateIpcChannel from lumen-authority-policy', () => ok(IPC.includes('validateIpcChannel')));
 
 // ── Skills boundary ──────────────────────────────────────────────
 
