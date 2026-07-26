@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { PermissionPrompt } from '@/components/PermissionPrompt'
 import { describeError } from './describe-error'
+import { describeOpen, type OpenOutcome } from './describe-open'
 
 type UiProject = {
   id: string
@@ -49,6 +50,13 @@ export const ResearchShell = (): React.JSX.Element => {
   const [name, setName] = useState('')
   const [question, setQuestion] = useState('')
   const [status, setStatus] = useState<string>('')
+  /**
+   * The outcome of the last open, as a headline plus the engine's own words.
+   * Previously the raw internals went straight into the status bar, so the
+   * first thing a user saw inside a project was a paragraph about which Rust
+   * module dispatches which method.
+   */
+  const [opened, setOpened] = useState<OpenOutcome | null>(null)
   const [hash, setHash] = useState<string | null>(null)
   const [error, setError] = useState<string | undefined>()
   const [previewMeta, setPreviewMeta] = useState<string>('')
@@ -97,6 +105,10 @@ export const ResearchShell = (): React.JSX.Element => {
 
   const openProject = async (project: UiProject): Promise<void> => {
     if (!lumen) return
+    // Clear the previous outcome BEFORE asking. Otherwise a failed open leaves
+    // the last project's "Opened." line on screen next to the error explaining
+    // that nothing opened — two contradictory claims, one of them stale.
+    setOpened(null)
     setStatus('Opening (bind + seed)…')
     const res = (await lumen.openUiProject({
       projectId: project.id,
@@ -116,10 +128,8 @@ export const ResearchShell = (): React.JSX.Element => {
     setActive(project)
     setTab('question')
     setError(undefined)
-    setStatus(
-      `Open: seeded ${res.seeded ?? 0} artifacts` +
-        (res.seedError ? ` (seed: ${res.seedError})` : ''),
-    )
+    setStatus('')
+    setOpened(describeOpen(res))
   }
 
   const tryPreview = async (): Promise<void> => {
@@ -290,6 +300,22 @@ export const ResearchShell = (): React.JSX.Element => {
             </div>
           )
         })()}
+      {opened && (
+        <div className={cx.notice} role="status">
+          <p className={cx.noticeHeadline}>{opened.headline}</p>
+          {/* Present, not shouted. The engine's exact words stay one click
+              away rather than dominating the screen — dropping them would be
+              how a build silently stops seeding evidence it claims to have. */}
+          {opened.detail && (
+            <details className={cx.details}>
+              <summary className={cx.summary}>
+                {opened.expected ? 'Why' : 'Technical detail'}
+              </summary>
+              <p className={cx.noticeDetail}>{opened.detail}</p>
+            </details>
+          )}
+        </div>
+      )}
       {status && <div className={cx.status}>{status}</div>}
 
       <div className={cx.body}>
@@ -367,14 +393,20 @@ export const ResearchShell = (): React.JSX.Element => {
             </div>
           ) : (
             <>
-              <div className={cx.tabs}>
+              {/* role="tab" is only meaningful inside a tablist: on its own it
+                  tells a screen reader "this is a tab" without ever saying what
+                  set it belongs to or how many there are. The panel below is
+                  labelled by its tab for the same reason. */}
+              <div className={cx.tabs} role="tablist" aria-label="Project workspace">
                 {TABS.map((t) => (
                   <button
                     key={t.id}
                     type="button"
+                    id={`tab-${t.id}`}
                     className={tab === t.id ? cx.tabActive : cx.tab}
                     role="tab"
                     aria-selected={tab === t.id}
+                    aria-controls={`panel-${t.id}`}
                     onClick={() => setTab(t.id)}
                   >
                     {t.label}
@@ -383,7 +415,12 @@ export const ResearchShell = (): React.JSX.Element => {
               </div>
 
               {tab === 'question' && (
-                <section className={cx.panel}>
+                <section
+                  className={cx.panel}
+                  role="tabpanel"
+                  id="panel-question"
+                  aria-labelledby="tab-question"
+                >
                   <h2 className={cx.h2}>Research question</h2>
                   <textarea
                     className={cx.textarea}
@@ -401,7 +438,12 @@ export const ResearchShell = (): React.JSX.Element => {
               )}
 
               {tab === 'plan' && (
-                <section className={cx.panel}>
+                <section
+                  className={cx.panel}
+                  role="tabpanel"
+                  id="panel-plan"
+                  aria-labelledby="tab-plan"
+                >
                   <h2 className={cx.h2}>Plan</h2>
                   <p className={cx.muted}>
                     Workflow validate / dry-run via Rust WorkflowActor (ACP). No
@@ -416,7 +458,12 @@ export const ResearchShell = (): React.JSX.Element => {
               )}
 
               {tab === 'notebook' && (
-                <section className={cx.panel}>
+                <section
+                  className={cx.panel}
+                  role="tabpanel"
+                  id="panel-notebook"
+                  aria-labelledby="tab-notebook"
+                >
                   <h2 className={cx.h2}>Notebook</h2>
                   <p className={cx.muted}>
                     Plan / dry-run in desktop; live execute only via Lumen ACP{' '}
@@ -446,7 +493,12 @@ export const ResearchShell = (): React.JSX.Element => {
               )}
 
               {tab === 'evidence' && (
-                <section className={cx.panel}>
+                <section
+                  className={cx.panel}
+                  role="tabpanel"
+                  id="panel-evidence"
+                  aria-labelledby="tab-evidence"
+                >
                   <h2 className={cx.h2}>Evidence</h2>
                   <p className={cx.muted}>
                     Artifacts are hash-registered. Open preview by artifact_id after
@@ -460,7 +512,12 @@ export const ResearchShell = (): React.JSX.Element => {
               )}
 
               {tab === 'result' && (
-                <section className={cx.panel}>
+                <section
+                  className={cx.panel}
+                  role="tabpanel"
+                  id="panel-result"
+                  aria-labelledby="tab-result"
+                >
                   <h2 className={cx.h2}>Result</h2>
                   <p className={cx.muted}>
                     ResearchResult claims must cite evidence nodes. Export package
@@ -470,7 +527,12 @@ export const ResearchShell = (): React.JSX.Element => {
               )}
 
               {tab === 'connectors' && (
-                <section className={cx.panel}>
+                <section
+                  className={cx.panel}
+                  role="tabpanel"
+                  id="panel-connectors"
+                  aria-labelledby="tab-connectors"
+                >
                   <h2 className={cx.h2}>Connectors</h2>
                   <p className={cx.muted}>
                     Read-only catalog from fusion-sources.lock (42 inventory, 40
@@ -494,7 +556,12 @@ export const ResearchShell = (): React.JSX.Element => {
               )}
 
               {tab === 'compute' && (
-                <section className={cx.panel}>
+                <section
+                  className={cx.panel}
+                  role="tabpanel"
+                  id="panel-compute"
+                  aria-labelledby="tab-compute"
+                >
                   <h2 className={cx.h2}>Remote Compute</h2>
                   <p className={cx.muted}>
                     Dry-run plan only (LocalProcess → SSH fixture → authorized). Desktop never
@@ -520,7 +587,12 @@ export const ResearchShell = (): React.JSX.Element => {
               )}
 
               {tab === 'skills' && (
-                <section className={cx.panel}>
+                <section
+                  className={cx.panel}
+                  role="tabpanel"
+                  id="panel-skills"
+                  aria-labelledby="tab-skills"
+                >
                   <h2 className={cx.h2}>Skills</h2>
                   <p className={cx.muted}>
                     Lumen inventory (approved/pending) + quarantine import. DS-43
@@ -540,7 +612,12 @@ export const ResearchShell = (): React.JSX.Element => {
               )}
 
               {tab === 'review' && (
-                <section className={cx.panel}>
+                <section
+                  className={cx.panel}
+                  role="tabpanel"
+                  id="panel-review"
+                  aria-labelledby="tab-review"
+                >
                   <h2 className={cx.h2}>Review</h2>
                   <p className={cx.muted}>
                     Artifact-bound review plan/submit via ACP{' '}
@@ -657,6 +734,12 @@ const cx = {
   notice: 'shrink-0 border-b border-border bg-muted/50 px-6 py-3 text-foreground',
   noticeHeadline: 'text-sm font-medium',
   noticeDetail: 'mt-1 font-mono text-xs leading-relaxed text-muted-foreground',
+  // A disclosure, so the engine's exact words are one click away instead of
+  // being the largest thing on the screen.
+  details: 'mt-1',
+  summary:
+    'cursor-pointer text-xs text-muted-foreground underline-offset-2 hover:underline ' +
+    'marker:text-muted-foreground',
   status:
     'shrink-0 border-b border-border bg-muted/40 px-6 py-2 font-mono text-xs text-muted-foreground',
   // Engine identity reads as a status pill rather than stray monospace: it is
