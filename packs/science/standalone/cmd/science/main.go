@@ -862,7 +862,7 @@ func runWorkflow(args []string) error {
 	}
 	sub := args[0]
 	if sub != "validate" && sub != "dry-run" {
-		return fmt.Errorf("workflow requires validate or dry-run (got %%q)", sub)
+		return fmt.Errorf("workflow requires validate or dry-run (got %q)", sub)
 	}
 	flags := flag.NewFlagSet("workflow "+sub, flag.ContinueOnError)
 	flags.SetOutput(os.Stderr)

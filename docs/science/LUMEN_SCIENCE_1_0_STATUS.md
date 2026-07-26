@@ -59,6 +59,22 @@ lumen-science version   # 1.0.0
 - Remaining GPU/remote skills pending  
 - OpenAlex/S2/arXiv live when keys or rate limits allow  
 
+## Version / tag model (post-1.0.0)
+
+```text
+v1.0.0 (tag, GitHub Release)  = FROZEN 1.0 formal product — offline workbench
+main (branch tip)             = 5.0 software preview (WP-2～8), NOT a formal release
+                                 RealDevice=Disabled, all 5.0 paths are Preview gated
+```
+
+- `git checkout v1.0.0` to install the frozen 1.0 release.
+- `main` carries the WP-2～8 software preview surface (project records, evidence queries,
+  workflow validate+dry-run, kernel admission, multimodal index, review records,
+  remote dry-run plan). These are **Preview** paths behind `FeatureGates`; no
+  hardware, no 5.0 GA, no all-skills-approved — it is **not** a formal 5.0 release.
+- Clarity: no silent tag lag. Anyone pulling main gets the preview tip; 1.0 users
+  stay on the tag.
+
 ## Allowed claim
 
 > Lumen Science 1.0.0 is a local-first, auditable scientific workbench with

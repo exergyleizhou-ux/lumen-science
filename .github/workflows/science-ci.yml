@@ -48,6 +48,7 @@ jobs:
         run: |
           go test ./mcp/artifacts/... ./mcp/notebook/... ./mcp/reviewer/... ./mcp/http_bridge/... \
             ./standalone/internal/seqbench/... ./standalone/internal/pipeline/... \
+            ./standalone/internal/projectstore/... \
             -count=1 -timeout=60s
 
       - name: Vet

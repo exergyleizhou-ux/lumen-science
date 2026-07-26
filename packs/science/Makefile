@@ -71,7 +71,8 @@ cross-windows:
 
 test:
 	$(GO) test ./mcp/artifacts/... ./mcp/notebook/... ./mcp/reviewer/... ./mcp/http_bridge/... \
-		./standalone/internal/seqbench/... ./standalone/internal/pipeline/... -count=1 -timeout=60s
+		./standalone/internal/seqbench/... ./standalone/internal/pipeline/... \
+		./standalone/internal/projectstore/... -count=1 -timeout=60s
 	$(GO) build $(GOFLAGS) -o $(BUILD_DIR)/lumen-science ./standalone/cmd/science
 
 test-verbose:

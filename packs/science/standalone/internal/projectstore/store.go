@@ -539,14 +539,24 @@ func (s *Store) WorkflowValidate(spec map[string]any) (map[string]any, error) {
 	allowedKinds := map[string]bool{
 		"ConnectorFetch": true, "ArtifactTransform": true, "NotebookCell": true,
 		"Renderer": true, "Reviewer": true, "HumanApproval": true, "Export": true,
+		"evidence_attach": true, "claim_propose": true,
 	}
 	var steps []string
 	hasUnknown := false
 	links := map[string][]string{}
 	all := map[string]bool{}
 	for _, raw := range stepsRaw {
-		st := raw.(map[string]any)
-		sid := st["step_id"].(string)
+		st, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		sid, ok := st["step_id"].(string)
+		if !ok || sid == "" {
+			sid, ok = st["id"].(string) // tolerate "id" alias
+			if !ok || sid == "" {
+				continue
+			}
+		}
 		all[sid] = true
 		steps = append(steps, sid)
 		kind, _ := st["kind"].(string)
@@ -555,23 +565,24 @@ func (s *Store) WorkflowValidate(spec map[string]any) (map[string]any, error) {
 		}
 		inputs, _ := st["inputs"].([]any)
 		for _, in := range inputs {
-			is := in.(string)
-			links[is] = append(links[is], sid)
+			if is, ok := in.(string); ok {
+				links[is] = append(links[is], sid)
+			}
 		}
 	}
-	var errors []string
+	var errs []string
 	if hasUnknown {
-		errors = append(errors, "workflow contains Shell or unsupported StepKind")
+		errs = append(errs, "workflow contains Shell or unsupported StepKind")
 	}
 	for from := range links {
 		if !all[from] {
-			errors = append(errors, fmt.Sprintf("step %s referenced as input but not defined", from))
+			errs = append(errs, fmt.Sprintf("step %s referenced as input but not defined", from))
 		}
 	}
 	return map[string]any{
 		"workflow_id": spec["workflow_id"],
-		"is_valid":    len(errors) == 0,
-		"errors":      errors,
+		"is_valid":    len(errs) == 0,
+		"errors":      errs,
 		"steps_count": len(steps),
 		"has_unknown_step": hasUnknown,
 	}, nil
@@ -594,10 +605,20 @@ func (s *Store) WorkflowDryRun(spec map[string]any) (map[string]any, error) {
 	allowedKinds := map[string]bool{
 		"ConnectorFetch": true, "ArtifactTransform": true, "NotebookCell": true,
 		"Renderer": true, "Reviewer": true, "HumanApproval": true, "Export": true,
+		"evidence_attach": true, "claim_propose": true,
 	}
 	for _, raw := range stepsRaw {
-		st := raw.(map[string]any)
-		sid := st["step_id"].(string)
+		st, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		sid, ok := st["step_id"].(string)
+		if !ok || sid == "" {
+			sid, ok = st["id"].(string)
+			if !ok || sid == "" {
+				continue
+			}
+		}
 		kind, _ := st["kind"].(string)
 		if allowedKinds[kind] {
 			allowed = append(allowed, sid)

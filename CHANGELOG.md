@@ -7,6 +7,19 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed — WP-2～8 product surface completeness
+
+- **ProjectStore safety**: nil-safe WorkflowValidate/WorkflowDryRun map accessors;
+  tolerate `id` alias alongside `step_id` in workflow specs.
+- **Vet fix**: correct `%%q` → `%q` format verb in workflow sub-command dispatch
+  (`standalone/cmd/science/main.go:865`).
+- **CI test matrix**: projectstore tests added to `science-ci.yml` / `Makefile test`.
+- **Workflow StepKind allowlist**: add `evidence_attach` + `claim_propose` as
+  allowed kinds (both are shipped ACP paths).
+- **Version coherence**: `docs/science/LUMEN_SCIENCE_1_0_STATUS.md` now states
+  `v1.0.0` (tag) = frozen 1.0 product; `main` = 5.0 software preview tip
+  (WP-2～8, Preview gated, not a formal release).
+
 ### Added — v5 / WP-3～8 preview product paths
 
 - **WP-3**: evidence trace, claim comparison, graph consistency, V1→V2 migration via `ProjectStore` + CLI
