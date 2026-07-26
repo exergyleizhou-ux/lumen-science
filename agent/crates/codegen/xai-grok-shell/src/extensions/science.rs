@@ -129,6 +129,7 @@ pub async fn handle(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
         // WP-4/5/6/7/8 preview
         "x.ai/science/workflow_validate" => handle_workflow_validate(agent, args).await,
         "x.ai/science/workflow_dry_run" => handle_workflow_dry_run(agent, args).await,
+        "x.ai/science/workflow_execute" => handle_workflow_execute(agent, args).await,
         "x.ai/science/kernel_admission" => handle_kernel_admission(agent, args).await,
         "x.ai/science/multimodal_index" => handle_multimodal_index(agent, args).await,
         "x.ai/science/review_record" => handle_review_record(agent, args).await,
@@ -1025,6 +1026,186 @@ async fn handle_workflow_dry_run(agent: &MvpAgent, args: &acp::ExtRequest) -> Ex
     // workflow with notebook steps is reported as blocked rather than
     // assumed to pass. See ProjectStore::workflow_dry_run.
     store_handler(agent, &params.session_id, params.store_root, move |s| s.workflow_dry_run(&spec, None)).await
+}
+
+// ── LS5-K8: workflow execution ───────────────────────────────────
+//
+// The only ACP entry in this file that RUNS a workflow, and therefore the only
+// one that spawns an interpreter. Like the four WP-2 mutations above it takes
+// no authority of its own: it parses, confines every path to the session
+// workspace, and hands a typed binding to the SessionActor. It never
+// constructs a WorkflowExecutor, a StepRunner or a kernel admission — those
+// exist only on the far side of a permission decision, inside the actor.
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct WorkflowExecuteParams {
+    session_id: String,
+    owner_id: String,
+    store_root: PathBuf,
+    /// Idempotency key. REQUIRED — there is no default, because without one a
+    /// retry is indistinguishable from a second intentional execution.
+    operation_id: String,
+    #[serde(rename = "workflowSpec")]
+    spec: serde_json::Value,
+    /// Absolute path to the interpreter kernel steps run on. Never resolved
+    /// from `PATH`: which binary ran is part of the evidence.
+    interpreter_path: PathBuf,
+    #[serde(default = "_workflow_kernel_id")]
+    kernel_id: String,
+    #[serde(default = "_python_kind")]
+    kernel_kind: String,
+    /// Explicit opt-in to `StepKind::NotebookCell`.
+    ///
+    /// `ExecutionPolicy::default()` omits that kind so running arbitrary code
+    /// is a decision rather than a default; this is where the caller makes it,
+    /// visibly, in the request. Absent, kernel steps are refused by the
+    /// executor before the run is queued.
+    #[serde(default)]
+    allow_kernel_steps: bool,
+    #[serde(default)]
+    artifact_root: Option<PathBuf>,
+    #[serde(default = "_probe_timeout_ms")]
+    probe_timeout_ms: u64,
+    #[serde(default = "default_approval_timeout_ms")]
+    approval_timeout_ms: u64,
+}
+
+fn _workflow_kernel_id() -> String {
+    "session-kernel".into()
+}
+
+async fn handle_workflow_execute(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: WorkflowExecuteParams = parse_params(args)?;
+    if params.owner_id.is_empty() {
+        return Err(acp::Error::invalid_params().data("ownerId is required"));
+    }
+    if params.operation_id.is_empty() {
+        return Err(acp::Error::invalid_params().data("operationId is required"));
+    }
+    if !(1..=300_000).contains(&params.approval_timeout_ms) {
+        return Err(acp::Error::invalid_params().data("approvalTimeoutMs must be in 1..=300000"));
+    }
+    if !(1..=120_000).contains(&params.probe_timeout_ms) {
+        return Err(acp::Error::invalid_params().data("probeTimeoutMs must be in 1..=120000"));
+    }
+    if !params.interpreter_path.is_absolute() {
+        return Err(acp::Error::invalid_params().data("interpreterPath must be absolute"));
+    }
+    let kernel_kind = match params.kernel_kind.as_str() {
+        "r" | "R" => xai_grok_science::workflow::KernelKind::R,
+        "julia" => xai_grok_science::workflow::KernelKind::Julia,
+        "python" => xai_grok_science::workflow::KernelKind::Python,
+        other => {
+            return Err(acp::Error::invalid_params()
+                .data(format!("unknown kernelKind '{other}'")));
+        }
+    };
+    let spec: xai_grok_science::workflow::WorkflowSpec =
+        serde_json::from_value(params.spec).map_err(|error| {
+            acp::Error::invalid_params().data(format!("workflowSpec is not a WorkflowSpec: {error}"))
+        })?;
+
+    let session_id = acp::SessionId::new(params.session_id);
+    let handle = agent
+        .get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let store_root = canonical_dir_within(params.store_root, &workspace)?;
+    let artifact_root = match params.artifact_root {
+        Some(root) => canonical_dir_within(root, &workspace)?,
+        None => canonical_dir_within(store_root.join("runs"), &workspace)?,
+    };
+    // Kernel cell bodies, per-attempt outputs and the exec-loop driver all live
+    // inside the session workspace, confined by the same helper as every other
+    // science path. A workflow cannot read or write its way out of the session.
+    let cell_source_root = canonical_dir_within(store_root.join("workflow-cells"), &workspace)?;
+    let output_root = canonical_dir_within(store_root.join("workflow-outputs"), &workspace)?;
+    let runtime_root = canonical_dir_within(store_root.join("workflow-runtime"), &workspace)?;
+
+    let run_project = if spec.project_id.0.is_empty() {
+        format!("pending-{}", params.operation_id)
+    } else {
+        spec.project_id.0.clone()
+    };
+    let context = RunContext {
+        run_id: RunId::new_v7(),
+        project_id: ProjectId::new(run_project),
+        session_id: session_id.0.to_string(),
+        owner_id: params.owner_id.clone(),
+        workspace_root: workspace,
+        provider: "offline-deterministic".into(),
+        approval_policy: "production-session-permission".into(),
+        tool_profile: "science-workflow-execute-v1".into(),
+        artifact_root,
+        environment: BTreeMap::from([
+            ("network".into(), "disabled".into()),
+            ("locale".into(), "C".into()),
+        ]),
+    };
+    let binding = crate::session::commands::ScienceWorkflowBinding {
+        execution: xai_grok_science::workflow::WorkflowExecutionRequest {
+            operation_id: params.operation_id,
+            session_id: session_id.0.to_string(),
+            owner_id: params.owner_id,
+            spec,
+        },
+        executor_root: store_root.clone(),
+        cell_source_root,
+        output_root,
+        runtime_root,
+        kernel_id: params.kernel_id,
+        kernel_kind,
+        interpreter_path: params.interpreter_path,
+        probe_timeout: Duration::from_millis(params.probe_timeout_ms),
+        allow_kernel_steps: params.allow_kernel_steps,
+    };
+    let report = agent
+        .run_science_workflow_execution(
+            &session_id,
+            ScienceStore::new(store_root),
+            context,
+            binding,
+            Duration::from_millis(params.approval_timeout_ms),
+        )
+        .await
+        .map_err(internal)?;
+    workflow_execution_response(&report)
+}
+
+fn workflow_execution_response(
+    report: &xai_grok_science::workflow::WorkflowRunReport,
+) -> ExtResult {
+    to_raw_response(&serde_json::json!({
+        "operationId": report.run.operation_id,
+        "runId": report.run.run_id,
+        "workflowId": report.run.workflow_id,
+        "projectId": report.run.project_id.0,
+        "state": report.run.state,
+        "stepOrder": report.run.step_order,
+        "refusedSteps": report.run.refused_steps,
+        "failure": report.run.failure,
+        "artifactsCommitted": report.artifacts_committed,
+        "stepsReused": report.steps_reused,
+        "replayed": report.replayed,
+        "recovered": report.recovered,
+        "commits": report.commits.iter().map(|commit| serde_json::json!({
+            "commitKey": commit.commit_key,
+            "stepId": commit.step_id,
+            "outputManifest": commit.output_manifest,
+            "outputManifestHash": commit.output_manifest_hash,
+            "committedByAttempt": commit.committed_by_attempt,
+        })).collect::<Vec<_>>(),
+        "attempts": report.attempts.iter().map(|attempt| serde_json::json!({
+            "attemptId": attempt.attempt_id,
+            "stepId": attempt.step_id,
+            "attemptNumber": attempt.attempt_number,
+            "terminalState": attempt.terminal_state,
+            "errorClass": attempt.error_class,
+            "errorDetail": attempt.error_detail,
+        })).collect::<Vec<_>>(),
+        "runtimeAuthority": "SessionActor-gated ACP adapter",
+    }))
 }
 
 #[derive(Debug, Deserialize)]

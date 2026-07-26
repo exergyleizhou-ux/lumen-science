@@ -4,7 +4,9 @@ use super::*;
 use crate::session::commands::{
     PreparedScienceCsv, PreparedScienceFetch, PreparedScienceImport,
     PreparedScienceProjectMutation, PreparedScienceSshScpAdmission,
+    PreparedScienceWorkflowExecution,
 };
+use sha2::Digest as _;
 
 /// Fetch transit tool: copies each staged input to its staged output. The
 /// kernel re-parses the output bytes as connector responses, so a fetch is
@@ -779,6 +781,353 @@ impl SessionActor {
         )?;
         Ok(outcome)
     }
+
+    // ── LS5-K8 workflow execution ─────────────────────────────────
+
+    /// Phase one inside the sole session actor: bind the execution to this
+    /// session and open the durable run its approval will finish.
+    ///
+    /// NOTHING is executed here and no kernel is probed — a probe runs the
+    /// interpreter, which is work a caller has not yet been permitted to do.
+    /// The only writes are the durable run record and its pending approval,
+    /// which exist precisely so that a deny has something to close.
+    ///
+    /// An operation id that already ran short-circuits: it returns the recorded
+    /// report without opening a run, without prompting again, and without
+    /// spawning anything. That is what makes a retry a retry rather than a
+    /// second execution.
+    pub(super) fn prepare_science_workflow_execution(
+        &self,
+        store: xai_grok_science::ScienceStore,
+        context: xai_grok_science::RunContext,
+        binding: crate::session::commands::ScienceWorkflowBinding,
+    ) -> xai_grok_science::Result<PreparedScienceWorkflowExecution> {
+        use xai_grok_science::ScienceError;
+
+        // Session binding: the actor only executes on behalf of its own session.
+        if binding.execution.session_id != self.session_info.id.0.as_ref()
+            || context.session_id != self.session_info.id.0.as_ref()
+        {
+            return Err(ScienceError::Invalid(
+                "workflow execution session does not match this SessionActor".into(),
+            ));
+        }
+        if binding.execution.owner_id != context.owner_id {
+            return Err(ScienceError::Invalid(
+                "workflow execution owner does not match its run context".into(),
+            ));
+        }
+        if binding.execution.owner_id.is_empty() {
+            return Err(ScienceError::Invalid(
+                "workflow execution requires an owner id".into(),
+            ));
+        }
+        if !binding.interpreter_path.is_absolute() {
+            return Err(ScienceError::Invalid(
+                "interpreter path must be absolute; a kernel is never resolved from PATH".into(),
+            ));
+        }
+
+        // Structural spec faults are pure to detect, so detect them before the
+        // user is asked to approve a run that could never have executed.
+        binding
+            .execution
+            .spec
+            .validate_dag()
+            .map_err(ScienceError::Invalid)?;
+        binding
+            .execution
+            .spec
+            .topological_order()
+            .map_err(ScienceError::Invalid)?;
+
+        // Idempotent replay. The executor is the authority on what a replay
+        // returns, so ask it — with no runner bound, so that even if this were
+        // somehow not a replay nothing could execute behind the caller's back.
+        let ledger = xai_grok_science::workflow::WorkflowExecutor::new(
+            &binding.executor_root,
+            workflow_compute_environment(&binding),
+        );
+        if ledger
+            .lookup_operation(&binding.execution.operation_id)?
+            .is_some()
+        {
+            let report = ledger.execute(&binding.execution)?;
+            return Ok(PreparedScienceWorkflowExecution {
+                store,
+                ticket: xai_grok_science::csv::ScienceRunTicket {
+                    project_id: context.project_id.clone(),
+                    run_id: context.run_id.clone(),
+                    owner_id: context.owner_id.clone(),
+                    call_id: xai_grok_science::CallId::new("science_workflow_execute"),
+                },
+                target: workflow_permission_target(&binding),
+                binding,
+                replayed: Some(report),
+            });
+        }
+
+        let target = workflow_permission_target(&binding);
+        let ticket = begin_workflow_execution_run(&store, context, &binding)?;
+        Ok(PreparedScienceWorkflowExecution {
+            store,
+            ticket,
+            binding,
+            target,
+            replayed: None,
+        })
+    }
+
+    /// Phase two: build the executor and run the workflow, but ONLY on an allow
+    /// decision.
+    ///
+    /// Everything that touches the filesystem or spawns a process lives on this
+    /// side of the gate — materialising the exec-loop driver, staging cell
+    /// sources, probing the kernel, and the run itself. A denied, cancelled or
+    /// timed-out request therefore leaves no execution record, no attempt and
+    /// no artifact commit; only the closed Science run that says it was refused.
+    ///
+    /// This blocks the actor for the duration of the run, exactly as
+    /// `execute_science_ssh_scp_transport` does: the point of routing here is
+    /// that the actor holds execution authority, and handing the work to some
+    /// other task would give that authority away again.
+    pub(super) fn finish_science_workflow_execution(
+        &self,
+        prepared: PreparedScienceWorkflowExecution,
+        decision: xai_grok_science::ApprovalDecision,
+        reason: String,
+    ) -> xai_grok_science::Result<xai_grok_science::workflow::WorkflowRunReport> {
+        use xai_grok_science::ScienceError;
+        use xai_grok_science::workflow::{
+            AdmissionStatus, DirCellSourceStore, ExecutionPolicy, KernelAdmissionRequest,
+            KernelManifest, PythonLoopRunner, StepKind, WorkflowExecutor, WorkflowState,
+            materialize_python_loop_script, probe_kernel,
+        };
+
+        if let Some(report) = prepared.replayed {
+            return Ok(report);
+        }
+        if decision != xai_grok_science::ApprovalDecision::Allow {
+            let terminal = xai_grok_science::csv::finish_without_execution(
+                &prepared.store,
+                &prepared.ticket,
+                decision,
+                reason,
+            )?;
+            return Err(ScienceError::Invalid(format!(
+                "science run {} finished {:?}",
+                prepared.ticket.run_id.0, terminal.state
+            )));
+        }
+        xai_grok_science::csv::mark_allowed(&prepared.store, &prepared.ticket)?;
+
+        let binding = &prepared.binding;
+        let failed = |error: ScienceError| -> ScienceError {
+            let _ = xai_grok_science::csv::fail_running(
+                &prepared.store,
+                &prepared.ticket,
+                format!("workflow execution rejected: {error}"),
+            );
+            error
+        };
+
+        // The driver script, from the bytes compiled into this binary.
+        let loop_script = match materialize_python_loop_script(&binding.runtime_root) {
+            Ok(path) => path,
+            Err(error) => {
+                return Err(failed(ScienceError::Invalid(format!(
+                    "cannot materialise the kernel exec-loop: {error}"
+                ))));
+            }
+        };
+
+        // Stage every cell body the spec carries into the content-addressed
+        // source store. The runner re-hashes whatever it loads, so this is a
+        // delivery step, not a trust step: a source that does not hash to the
+        // digest the plan names still fails the step.
+        for step in &binding.execution.spec.steps {
+            if step.kind != StepKind::NotebookCell {
+                continue;
+            }
+            let Some(source) = step.notebook_cell.as_ref() else {
+                continue;
+            };
+            let digest = format!("{:x}", sha2::Sha256::digest(source.as_bytes()));
+            if let Err(error) = std::fs::create_dir_all(&binding.cell_source_root)
+                .and_then(|()| std::fs::write(binding.cell_source_root.join(digest), source))
+            {
+                return Err(failed(ScienceError::Invalid(format!(
+                    "cannot stage the source of step '{}': {error}",
+                    step.step_id
+                ))));
+            }
+        }
+
+        // Probe the interpreter. This RUNS it, which is why it is here and not
+        // in `prepare_*`.
+        let admission = probe_kernel(
+            &KernelAdmissionRequest::new(
+                binding.kernel_id.clone(),
+                binding.kernel_kind,
+                binding.interpreter_path.clone(),
+            )
+            .with_admitted_by(format!("session-actor:{}", self.session_info.id.0))
+            .with_probe_timeout(binding.probe_timeout),
+        )
+        .map_err(&failed)?;
+        if admission.admission_status != AdmissionStatus::Admitted {
+            return Err(failed(ScienceError::Invalid(format!(
+                "kernel '{}' was not admitted ({:?}); no step may run on it",
+                admission.kernel_id, admission.admission_status
+            ))));
+        }
+
+        // `ExecutionPolicy::default()` omits NotebookCell so that running
+        // arbitrary code is a decision. The decision arrives in the request and
+        // is applied here; the default itself is never lowered.
+        let policy = if binding.allow_kernel_steps {
+            ExecutionPolicy::default().allowing_kernel_steps()
+        } else {
+            ExecutionPolicy::default()
+        };
+
+        let runner = PythonLoopRunner::new(
+            loop_script,
+            std::sync::Arc::new(DirCellSourceStore::new(&binding.cell_source_root)),
+            &binding.output_root,
+        );
+        let executor = WorkflowExecutor::new(
+            &binding.executor_root,
+            workflow_compute_environment(binding),
+        )
+        .with_policy(policy)
+        .with_runner(std::sync::Arc::new(runner))
+        .with_kernels(KernelManifest {
+            kernels: vec![admission],
+            default_python: None,
+            default_r: None,
+            default_julia: None,
+        })
+        .map_err(&failed)?;
+
+        let report = executor
+            .execute(&binding.execution)
+            .map_err(&failed)?;
+
+        prepared.store.append_event(
+            &prepared.ticket.run_id,
+            "SessionActor",
+            "workflow.execution.finished",
+            serde_json::json!({
+                "operation_id": report.run.operation_id,
+                "workflow_run_id": report.run.run_id,
+                "workflow_id": report.run.workflow_id,
+                "state": format!("{:?}", report.run.state),
+                "artifacts_committed": report.artifacts_committed,
+                "steps_reused": report.steps_reused,
+                "replayed": report.replayed,
+            }),
+        )?;
+        // The ACP call succeeded either way; the Science run records what the
+        // WORKFLOW did, so a failed workflow is not filed as a successful run.
+        let terminal = if report.run.state == WorkflowState::Succeeded {
+            xai_grok_science::RunState::Succeeded
+        } else {
+            xai_grok_science::RunState::Failed
+        };
+        prepared
+            .store
+            .transition(&prepared.ticket.run_id, terminal, None)?;
+        Ok(report)
+    }
+}
+
+/// What the permission prompt names. A workflow step spawns an interpreter, so
+/// the prompt says which interpreter and which workflow — not merely "a
+/// workflow ran".
+fn workflow_permission_target(
+    binding: &crate::session::commands::ScienceWorkflowBinding,
+) -> String {
+    format!(
+        "execute workflow '{}' ({} step(s)) on {}",
+        binding.execution.spec.workflow_id,
+        binding.execution.spec.steps.len(),
+        binding.interpreter_path.display()
+    )
+}
+
+/// The compute environment recorded against a workflow run.
+///
+/// HONESTY NOTE: `lumen_binary_hash` is a version label, NOT a digest of this
+/// executable. Hashing a multi-hundred-megabyte binary on every execution is
+/// not something to do silently, and a field that says `version:` cannot be
+/// mistaken for one that says `sha256:`. Reproduction across builds therefore
+/// rests on the version string, and that limit is stated rather than papered
+/// over with a plausible-looking hash.
+fn workflow_compute_environment(
+    binding: &crate::session::commands::ScienceWorkflowBinding,
+) -> xai_grok_science::workflow::ComputeEnvironment {
+    xai_grok_science::workflow::ComputeEnvironment {
+        environment_id: format!("session-actor:{}", binding.kernel_id),
+        os: std::env::consts::OS.to_string(),
+        architecture: std::env::consts::ARCH.to_string(),
+        lumen_binary_hash: format!("version:{}", xai_grok_version::VERSION),
+        rust_lock_hash: None,
+        python_hash: None,
+        r_hash: None,
+        julia_hash: None,
+        dependency_lock_hash: format!("version:{}", xai_grok_version::VERSION),
+        locale: "C".into(),
+        timezone: "UTC".into(),
+        environment_allowlist: Vec::new(),
+        cpu_identity: None,
+        gpu_identity: None,
+        deterministic_flags: vec!["PYTHONHASHSEED=0".into()],
+        network_policy: xai_grok_science::workflow::NetworkPolicy::None,
+        container_digest: None,
+    }
+}
+
+/// Open the durable run + pending approval for a workflow execution. Mirrors
+/// `begin_project_mutation_run`, with a call id that names this product path.
+fn begin_workflow_execution_run(
+    store: &xai_grok_science::ScienceStore,
+    context: xai_grok_science::RunContext,
+    binding: &crate::session::commands::ScienceWorkflowBinding,
+) -> xai_grok_science::Result<xai_grok_science::csv::ScienceRunTicket> {
+    let ticket = xai_grok_science::csv::ScienceRunTicket {
+        project_id: context.project_id.clone(),
+        run_id: context.run_id.clone(),
+        owner_id: context.owner_id.clone(),
+        call_id: xai_grok_science::CallId::new("science_workflow_execute"),
+    };
+    store.create_run(context)?;
+    store.append_event(
+        &ticket.run_id,
+        "SessionActor",
+        "run.created",
+        serde_json::json!({
+            "workflow_id": binding.execution.spec.workflow_id,
+            "operation_id": binding.execution.operation_id,
+            "steps": binding.execution.spec.steps.len(),
+            "allow_kernel_steps": binding.allow_kernel_steps,
+            "interpreter": binding.interpreter_path.display().to_string(),
+        }),
+    )?;
+    store.request_approval(xai_grok_science::Approval {
+        project_id: ticket.project_id.clone(),
+        run_id: ticket.run_id.clone(),
+        call_id: ticket.call_id.clone(),
+        owner_id: ticket.owner_id.clone(),
+        decision: xai_grok_science::ApprovalDecision::Pending,
+        decided_at: None,
+    })?;
+    store.transition(
+        &ticket.run_id,
+        xai_grok_science::RunState::AwaitingApproval,
+        None,
+    )?;
+    Ok(ticket)
 }
 
 /// Open the durable run + pending approval for a project mutation. Mirrors

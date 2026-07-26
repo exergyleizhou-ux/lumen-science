@@ -2145,6 +2145,40 @@ impl MvpAgent {
             .await
     }
 
+    /// LS5-K8 workflow execution entry: verifies the science context and the
+    /// execution request both target this SessionActor, then delegates to the
+    /// session handle's begin/permission/finish protocol.
+    ///
+    /// This facade adds no executor, no runner and no kernel probe. Everything
+    /// that runs code happens inside the actor, after an allow decision.
+    pub async fn run_science_workflow_execution(
+        &self,
+        session_id: &acp::SessionId,
+        store: xai_grok_science::ScienceStore,
+        context: xai_grok_science::RunContext,
+        binding: crate::session::commands::ScienceWorkflowBinding,
+        approval_timeout: std::time::Duration,
+    ) -> xai_grok_science::Result<xai_grok_science::workflow::WorkflowRunReport> {
+        if context.session_id != session_id.0.as_ref()
+            || binding.execution.session_id != session_id.0.as_ref()
+        {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "science context session does not match target SessionActor".into(),
+            ));
+        }
+        let handle = self.get_session_handle(session_id).ok_or_else(|| {
+            xai_grok_science::ScienceError::Invalid("science session not found".into())
+        })?;
+        handle
+            .run_science_workflow_execution_with_approval_timeout(
+                store,
+                context,
+                binding,
+                approval_timeout,
+            )
+            .await
+    }
+
     /// S3 real SSH/SCP entry. The sole SessionActor owns admission, approval
     /// completion, and the process launch; this facade adds no executor.
     pub async fn run_science_ssh_scp_transport(

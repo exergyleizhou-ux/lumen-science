@@ -284,6 +284,8 @@ pub(super) async fn run_session(
             SessionCommand::FinishScienceFetch(command) => { let command = *command; let result = Box::pin(session.finish_science_fetch(command.prepared, command.decision, command.reason)).await; let _ = command.respond_to.send(result); }
             SessionCommand::BeginScienceProjectMutation(command) => { let command = *command; let result = session.prepare_science_project_mutation(command.store, command.project_root, command.context, command.request); let _ = command.respond_to.send(result); }
             SessionCommand::FinishScienceProjectMutation(command) => { let command = *command; let result = session.finish_science_project_mutation(command.prepared, command.decision, command.reason); let _ = command.respond_to.send(result); }
+            SessionCommand::BeginScienceWorkflowExecution(command) => { let command = *command; let result = session.prepare_science_workflow_execution(command.store, command.context, command.binding); let _ = command.respond_to.send(result); }
+            SessionCommand::FinishScienceWorkflowExecution(command) => { let command = *command; let result = session.finish_science_workflow_execution(command.prepared, command.decision, command.reason); let _ = command.respond_to.send(result); }
             /*
             SessionCommand::BeginScienceCsv { store, context, fixture_path, fixture,
             respond_to } => { let result = session.prepare_science_csv(store, context,
