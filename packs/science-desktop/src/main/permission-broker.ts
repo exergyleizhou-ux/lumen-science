@@ -32,6 +32,16 @@ export type PermissionAsk = {
   target: string
   /** Set when the engine described the concrete effect. */
   detail?: string
+  /**
+   * The option ids the ENGINE offered, by kind.
+   *
+   * The answer must name one of these. Returning an id the engine never
+   * offered is not an approval it can act on — it was read as a denial, so a
+   * user clicking Allow got their operation refused while everything looked
+   * like it worked.
+   */
+  allowOptionId?: string
+  rejectOptionId?: string
 }
 
 export type PermissionDecision = 'allow_once' | 'reject'
@@ -57,7 +67,6 @@ type PermissionOutcome =
   | { outcome: 'selected'; optionId: string }
   | { outcome: 'cancelled' }
 
-const ALLOW_OPTION = 'allow_once'
 
 /**
  * Read the engine's request into the shape a person can act on.
@@ -91,7 +100,27 @@ export function describeAsk(requestId: string, params: unknown): PermissionAsk |
         : 'unspecified target'
 
   const detail = typeof p.detail === 'string' ? p.detail : undefined
-  return { requestId, operation, target, detail }
+
+  // Read the offered options rather than assuming their ids. `allow_once` was
+  // hardcoded here and the engine had never offered that id.
+  const options = Array.isArray(p.options) ? (p.options as Record<string, unknown>[]) : []
+  const idOfKind = (...kinds: string[]): string | undefined => {
+    for (const kind of kinds) {
+      const hit = options.find((o) => o?.kind === kind)
+      const id = hit?.optionId ?? hit?.id
+      if (typeof id === 'string' && id.length > 0) return id
+    }
+    return undefined
+  }
+
+  return {
+    requestId,
+    operation,
+    target,
+    detail,
+    allowOptionId: idOfKind('allow_once', 'allow_always'),
+    rejectOptionId: idOfKind('reject_once', 'reject_always'),
+  }
 }
 
 export class PermissionBroker {
@@ -149,7 +178,19 @@ export class PermissionBroker {
     try {
       const decision = await this.withTimeout(ask)
       if (decision === 'allow_once') {
-        return { outcome: 'selected', optionId: ALLOW_OPTION }
+        if (!ask.allowOptionId) {
+          // The engine offered no allow option, so there is nothing to select.
+          // Cancelling is the honest reply; inventing an id produced a denial
+          // that looked like an approval to everyone except the engine.
+          this.onDenied?.(ask, 'the engine offered no allow option')
+          return { outcome: 'cancelled' }
+        }
+        return { outcome: 'selected', optionId: ask.allowOptionId }
+      }
+      // A reject option is selected when offered, so the engine records a
+      // decision rather than a cancellation — they are different facts.
+      if (ask.rejectOptionId) {
+        return { outcome: 'selected', optionId: ask.rejectOptionId }
       }
       return { outcome: 'cancelled' }
     } catch (error: unknown) {

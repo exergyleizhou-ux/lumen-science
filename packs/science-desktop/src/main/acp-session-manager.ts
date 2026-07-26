@@ -240,6 +240,11 @@ export class AcpSessionManager {
       defaultRequestTimeoutMs: this.opts.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
       onNotification: this.opts.onNotification,
       onServerRequest: this.opts.onServerRequest,
+      // Surfaced rather than swallowed: a dropped frame is no longer fatal, so
+      // it must at least be visible or an unexplained peer message becomes
+      // invisible instead of merely non-fatal.
+      onDropped: (reason, detail) =>
+        this.opts.log?.warn?.(`acp dropped a frame: ${reason}`, detail),
       onClose: (error) => {
         if (this.status !== 'stopped') this.markUnavailable(error.message)
       },

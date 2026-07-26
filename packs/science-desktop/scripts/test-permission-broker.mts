@@ -33,13 +33,26 @@ function check(label: string, condition: boolean, detail = ''): void {
   }
 }
 
+// Shaped like the engine's real request, including the options it offers. The
+// answer must name one of THESE ids: the broker used to return a hardcoded
+// 'allow_once', which the engine had never offered, so it read every approval
+// as a denial — the user clicked Allow and the operation was refused.
 const REQUEST = {
   method: 'x.ai/science/workflow_execute',
   target: 'project "Restriction mapping"',
   detail: 'runs 1 notebook cell',
+  options: [
+    { optionId: 'allow-1', name: 'Allow once', kind: 'allow_once' },
+    { optionId: 'reject-1', name: 'Reject', kind: 'reject_once' },
+  ],
 }
 
-const allowed = (o: { outcome: string }): boolean => o.outcome === 'selected'
+// `selected` alone no longer means allowed: a rejection now selects the
+// engine's reject option, so the engine records a decision rather than a
+// cancellation. Only selecting the ALLOW option is an approval, and conflating
+// the two is exactly the mistake that made a denial look like consent.
+const allowed = (o: { outcome: string; optionId?: string }): boolean =>
+  o.outcome === 'selected' && o.optionId === 'allow-1'
 
 console.log('test-permission-broker')
 
@@ -48,6 +61,39 @@ console.log('test-permission-broker')
   const broker = new PermissionBroker({ ask: async () => 'allow_once' })
   const outcome = await broker.handle('req-1', REQUEST)
   check('a human clicking allow produces an allow', allowed(outcome))
+  check(
+    'the allow names an option the engine actually offered',
+    (outcome as { optionId?: string }).optionId === 'allow-1',
+    JSON.stringify(outcome),
+  )
+}
+
+{
+  // An engine that offers no allow option cannot be approved. Inventing an id
+  // is what produced a denial dressed up as an approval.
+  const denials: string[] = []
+  const broker = new PermissionBroker({
+    ask: async () => 'allow_once',
+    onDenied: (_a, reason) => denials.push(reason),
+  })
+  const outcome = await broker.handle('req-1b', {
+    ...REQUEST,
+    options: [{ optionId: 'reject-1', name: 'Reject', kind: 'reject_once' }],
+  })
+  check('no allow option offered means no allow', !allowed(outcome))
+  check('and it says why', denials.some((d) => d.includes('no allow option')))
+}
+
+{
+  // A rejection SELECTS the reject option when offered, so the engine records a
+  // decision rather than a cancellation — those are different facts.
+  const broker = new PermissionBroker({ ask: async () => 'reject' })
+  const outcome = await broker.handle('req-1c', REQUEST)
+  check(
+    'a rejection selects the offered reject option',
+    (outcome as { outcome: string; optionId?: string }).optionId === 'reject-1',
+    JSON.stringify(outcome),
+  )
 }
 
 // ── everything else denies ───────────────────────────────────────

@@ -26,6 +26,16 @@ export type CreateUiProjectRequest = {
   name: string
   description?: string
   ownerId: string
+  /**
+   * The engine's project id, when the project was created there.
+   *
+   * This catalog used to mint its own uuid, so its id could never match the
+   * engine's — and membership, which compares them, could never pass. A display
+   * cache that invents identity is not a cache of anything.
+   *
+   * Optional only for the offline fixture path, which has no engine to ask.
+   */
+  id?: string
 }
 
 export class LocalProjectCatalog {
@@ -49,7 +59,10 @@ export class LocalProjectCatalog {
     if (!req.ownerId) throw new Error('ownerId required')
     const now = Date.now()
     const project: UiProject = {
-      id: randomUUID(),
+      // Prefer the engine's id. Falling back to a local uuid keeps the offline
+      // fixture path working, and such a project simply will not open against a
+      // real engine — which is the truth about it.
+      id: req.id ?? randomUUID(),
       name,
       description: req.description?.trim() || undefined,
       ownerId: req.ownerId,

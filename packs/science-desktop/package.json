@@ -22,7 +22,8 @@
     "pack:check": "npm run test:authority",
     "smoke:live": "npx tsx scripts/lumen-live-smoke.mts",
     "check:release": "npx tsx scripts/osf8-release-check.mts",
-    "test:e2e": "electron-vite build && playwright test"
+    "test:e2e": "electron-vite build && playwright test",
+    "test:e2e:live": "electron-vite build && LUMEN_E2E_LIVE=1 playwright test"
   },
   "dependencies": {
     "@aiden0z/pptx-renderer": "^1.2.4",

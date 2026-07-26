@@ -17,6 +17,7 @@ import {
   type SeedableStore,
 } from './session-binding'
 import type { LocalProjectCatalog } from './local-project-catalog'
+import { SCIENCE_STORE_DIR } from './acp-membership'
 import { createNotebookService, type NotebookService } from './notebook-service'
 import type { NotebookCellRequest } from './notebook-plan'
 import { createReviewService, type ReviewService } from './review-service'
@@ -40,6 +41,7 @@ import {
   type EnvironmentService,
 } from '../environment/service'
 import type { KernelKindName } from '../environment/interpreter-identity'
+import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -111,6 +113,14 @@ export type ScienceIpcDeps = {
 // No default transport. There is no fallback engine to reach, and the previous
 // default silently pointed every unwired caller at a loopback port nothing
 // serves — which is how this pack shipped for so long looking connected.
+/**
+ * How long the engine will hold a mutation open for approval.
+ *
+ * The permission prompt must not outlive this, or the desk accepts a click for
+ * an operation the engine has already given up on.
+ */
+export const ENGINE_APPROVAL_TIMEOUT_MS = 110_000
+
 const noTransport = async (): Promise<never> => {
   throw new Error('no science engine transport wired: callScienceTool was not provided')
 }
@@ -239,13 +249,57 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
       description?: string
       ownerId?: string
     }
+    const ownerId = p.ownerId || defaultOwner
+    const title = (p.name ?? '').trim()
+    if (!title) {
+      return { ok: false, reason: 'a project needs a name' }
+    }
+
+    // Create in the ENGINE first. Projects used to be written only to the local
+    // catalog, so the engine had never heard of them and correctly denied
+    // membership on open — the workspace was unreachable for every project the
+    // UI could make.
+    //
+    // This is an actor-gated mutation: it asks permission, carries an operation
+    // id for idempotency, and binds to this session and owner. The catalog is
+    // updated only AFTER the engine accepts, so a refusal cannot leave a row
+    // pointing at a project that does not exist.
+    let engineProjectId: string
+    try {
+      const raw = (await callTool('project_create', {
+        ownerId,
+        storeRoot: SCIENCE_STORE_DIR,
+        title,
+        researchQuestion: p.description?.trim() || title,
+        // Idempotency key. A retried IPC must not create a second project, and
+        // the engine dedupes on this rather than on the title.
+        operationId: randomUUID(),
+        // Explicit, and shorter than the broker's patience. The engine defaults
+        // to 120s while the prompt waits 300s, so a user who took three minutes
+        // would click Allow, see it accepted, and the engine would already have
+        // abandoned the run. Sending the window makes the two agree rather than
+        // coincide.
+        approvalTimeoutMs: ENGINE_APPROVAL_TIMEOUT_MS,
+      })) as { projectId?: string; project_id?: string }
+      const id = raw?.projectId ?? raw?.project_id
+      if (typeof id !== 'string' || id.length === 0) {
+        return { ok: false, reason: 'engine accepted the project but returned no id' }
+      }
+      engineProjectId = id
+    } catch (e: unknown) {
+      // Includes a denied permission. No catalog row is written, so the list
+      // never shows a project the engine will refuse to open.
+      return { ok: false, reason: (e as Error).message || String(e) }
+    }
+
     try {
       const project = deps.projectCatalog.create({
-        name: p.name ?? '',
+        id: engineProjectId,
+        name: title,
         description: p.description,
-        ownerId: p.ownerId || defaultOwner,
+        ownerId,
       })
-      return { ok: true, project, authority: 'ui-local' }
+      return { ok: true, project, authority: 'session-actor' }
     } catch (e: unknown) {
       return { ok: false, reason: (e as Error).message || String(e) }
     }

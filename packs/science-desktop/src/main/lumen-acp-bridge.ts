@@ -37,6 +37,7 @@ import { validateIpcChannel } from './lumen-authority-policy'
 import type { IpcMainLike } from './files/science-ipc'
 import { AcpSessionManager, type EngineState } from './acp-session-manager'
 import { PermissionBroker, type AskHuman } from './permission-broker'
+import { ENGINE_APPROVAL_TIMEOUT_MS } from './files/science-ipc'
 import { listScienceMethods } from './science-method-registry'
 
 // ── Engine singleton ─────────────────────────────────────────────
@@ -80,6 +81,11 @@ let permissionSeq = 0
 function ensureBroker(): PermissionBroker {
   if (broker) return broker
   broker = new PermissionBroker({
+    // Strictly shorter than the engine's approval window. If the prompt
+    // outlived it, a user could click Allow, watch the dialog close, and have
+    // the engine already have abandoned the run — the worst kind of failure,
+    // because it looks like success.
+    timeoutMs: ENGINE_APPROVAL_TIMEOUT_MS - 10_000,
     ask: async (request) => {
       if (!askHuman) {
         // No UI is listening. Refusing is the only honest answer: nobody

@@ -44,6 +44,7 @@ async function run() {
     await test(`policy allows ${ch}`, () => ok(validateIpcChannel(ch)))
   }
 
+  const engineCalls: Record<string, unknown>[] = []
   const catalog = new LocalProjectCatalog()
   const store = new AcpPreviewStore()
   store.put('seed-1', {
@@ -67,6 +68,13 @@ async function run() {
     getLumenBinaryHash: () => 'abc',
     previewStore: store,
     assertMembership: createOfflineCatalogMembershipAsserter({ catalog }),
+    // Projects are created in the ENGINE first, so a test without one is a
+    // test of the fail-closed path (asserted below), not of creation.
+    callScienceTool: async (tool: string, args: Record<string, unknown>) => {
+      if (tool !== 'project_create') throw new Error(`unexpected tool ${tool}`)
+      engineCalls.push(args)
+      return { projectId: 'engine-assigned-id' }
+    },
     projectCatalog: catalog,
     defaultOwnerId: 'local-user',
     listArtifacts: async () => [
@@ -81,11 +89,64 @@ async function run() {
   const create = handlers.get('files:create-ui-project')!
   const created = await create({}, { name: 'Dossier Alpha' })
   await test('create-ui-project', () => {
-    ok(created.ok)
+    ok(created.ok, JSON.stringify(created))
     ok(created.project?.id)
     strictEqual(created.project.name, 'Dossier Alpha')
-    strictEqual(created.authority, 'ui-local')
+    // NOT 'ui-local'. A project the engine has never heard of is one it will
+    // refuse to open, which made the workspace unreachable for everything the
+    // UI could create. The engine assigns the identity; the catalog records it.
+    strictEqual(created.authority, 'session-actor')
+    strictEqual(created.project.id, 'engine-assigned-id')
   })
+
+  await test('creation asks the engine before writing anything', () => {
+    strictEqual(engineCalls.length, 1)
+    const call = engineCalls[0] as { operationId?: string; approvalTimeoutMs?: number }
+    // An idempotency key, so a retried IPC cannot produce a second project.
+    ok(typeof call.operationId === 'string' && call.operationId.length > 0)
+    // An explicit approval window, so the engine's patience and the prompt's
+    // do not merely coincide.
+    ok(typeof call.approvalTimeoutMs === 'number' && call.approvalTimeoutMs > 0)
+  })
+
+
+  // ── creation fails closed ──────────────────────────────────────
+  // Two ways the engine can decline, and neither may leave a catalog row: a
+  // listed project the engine will refuse to open is worse than no project,
+  // because the failure surfaces later and looks like corruption.
+  for (const [label, callScienceTool] of [
+    ['no engine', async () => { throw new Error('ECONNREFUSED') }],
+    ['permission denied', async () => { throw new Error('science run 019f finished Denied') }],
+  ] as const) {
+    const isolatedCatalog = new LocalProjectCatalog()
+    const isolatedHandlers = new Map<string, Function>()
+    registerScienceIpcHandlers(
+      {
+        handle(ch: string, h: Function) {
+          isolatedHandlers.set(ch, h)
+        },
+      } as IpcMainLike,
+      {
+        safeHandle,
+        getLumenBinaryHash: () => 'abc',
+        previewStore: new AcpPreviewStore(),
+        assertMembership: createOfflineCatalogMembershipAsserter({ catalog: isolatedCatalog }),
+        projectCatalog: isolatedCatalog,
+        defaultOwnerId: 'local-user',
+        callScienceTool,
+      },
+    )
+    const attempt = await isolatedHandlers.get('files:create-ui-project')!({}, { name: 'Ghost' })
+    await test(`${label}: creation refuses`, () => {
+      ok(!attempt.ok, JSON.stringify(attempt))
+      // And says why, verbatim — "denied" and "could not reach it" are
+      // different facts and a user who cannot tell them apart cannot act.
+      ok((attempt.reason ?? '').length > 0)
+    })
+    await test(`${label}: no catalog row is left behind`, () => {
+      strictEqual(isolatedCatalog.list('local-user').length, 0)
+    })
+  }
 
   const list = handlers.get('files:list-ui-projects')!
   const listed = await list({})

@@ -182,6 +182,13 @@ async function run() {
     previewStore: new AcpPreviewStore(),
     assertMembership: createOfflineCatalogMembershipAsserter({ catalog }),
     projectCatalog: catalog,
+    // Creation is an engine mutation now; this suite is about the notebook, so
+    // it stands in a permissive engine rather than exercising that path.
+    // test-osf2-ui-projects.mts covers what happens when the engine declines.
+    callScienceTool: async (tool: string) => {
+      if (tool !== 'project_create') throw new Error(`unexpected tool ${tool}`)
+      return { projectId: 'nb-engine-project' }
+    },
     notebookService: svc,
   })
 

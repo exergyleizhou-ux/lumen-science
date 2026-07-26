@@ -45,7 +45,21 @@ export class AcpRemoteError extends Error {
   readonly data: unknown
 
   constructor(method: string, body: JsonRpcErrorBody) {
-    super(`${method} failed: [${body.code}] ${body.message}`)
+    // `data` carries the ACTUAL reason. JSON-RPC's `message` for -32603 is the
+    // generic "Internal error", so a message-only error told the user nothing:
+    // "project_create failed: [-32603] Internal error" while the engine had
+    // said "science run … finished TimedOut" in the field we discarded.
+    const detail =
+      typeof body.data === 'string'
+        ? body.data
+        : body.data === undefined
+          ? ''
+          : JSON.stringify(body.data)
+    super(
+      detail
+        ? `${method} failed: [${body.code}] ${body.message}: ${detail}`
+        : `${method} failed: [${body.code}] ${body.message}`,
+    )
     this.name = 'AcpRemoteError'
     this.rpcCode = body.code
     this.data = body.data
@@ -106,6 +120,8 @@ export type AcpStdioTransportOptions = {
   defaultRequestTimeoutMs?: number
   /** Peer notifications (no id). Never affects request correlation. */
   onNotification?: (method: string, params: unknown) => void
+  /** Diagnostics for frames that are dropped rather than acted on. */
+  onDropped?: (reason: string, detail: Record<string, unknown>) => void
   /**
    * Answers agent→client requests. Omitted means "this client offers nothing",
    * and every such request is refused with -32601 rather than left hanging.
@@ -135,6 +151,7 @@ export class AcpStdioTransport {
   private readonly maxFrameBytes: number
   private readonly defaultTimeoutMs: number
   private readonly onNotification?: (method: string, params: unknown) => void
+  private readonly onDropped?: (reason: string, detail: Record<string, unknown>) => void
   private readonly onServerRequest?: ServerRequestHandler
   private readonly onCloseCallback?: (error: Error) => void
 
@@ -152,6 +169,7 @@ export class AcpStdioTransport {
     this.maxFrameBytes = opts.maxFrameBytes ?? DEFAULT_MAX_FRAME_BYTES
     this.defaultTimeoutMs = opts.defaultRequestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
     this.onNotification = opts.onNotification
+    this.onDropped = opts.onDropped
     this.onServerRequest = opts.onServerRequest
     this.onCloseCallback = opts.onClose
 
@@ -345,28 +363,55 @@ export class AcpStdioTransport {
 
   private handleResponse(msg: Record<string, unknown>, line: string): void {
     const id = msg.id
+    // An UNCORRELATABLE response is dropped, not fatal.
+    //
+    // It used to close the transport, which meant one stray frame from the peer
+    // took down a working session: the desk showed "the engine is not running"
+    // while the engine was fine. A response we cannot match to a request we
+    // made cannot affect our state — there is no pending promise for it to
+    // resolve, and nothing to corrupt.
+    //
+    // Malformed FRAMING is different and still fatal: that means the stream
+    // itself is no longer trustworthy, so we can no longer rely on any later
+    // response either. This is a message we simply did not ask for.
     if (typeof id !== 'number') {
-      // Every id this client issues is a number. A string id can only be an
-      // echo of something we never sent.
-      this.close(
-        new AcpProtocolViolationError(
-          `response id ${JSON.stringify(id)} is not one this client issued`,
-        ),
-      )
+      // Reported in full rather than truncated: an unexplained frame is worth
+      // being able to identify later.
+      this.onDropped?.('response id is not one this client issued', { frame: line })
       return
     }
     const entry = this.pending.get(id)
     if (!entry) {
-      // Already settled locally (timeout/cancel) — dropping is correct.
+      // Two very different facts landed in this branch, and collapsing them
+      // into a single "drop" was wrong:
+      //
+      //   an id we DID issue, already settled by timeout or cancellation
+      //     — a late reply. Benign, and killing the session over it is the
+      //       bug that made one stray frame read as "the engine is not
+      //       running" while the engine was fine.
+      //
+      //   an id we NEVER issued
+      //     — the peer is inventing correlation ids. That is not a stray
+      //       message we can ignore: if its ids are unrelated to ours, no
+      //       later response can be trusted to answer the request we think
+      //       it answers, and a reply could be matched to the wrong call.
+      //
+      // Ids come from a monotonic counter, so `id >= nextId` PROVES the id was
+      // never issued. Deciding this on the `settled` set instead would make
+      // correctness depend on retention: settled entries are pruned, and a late
+      // reply for a long-finished id would then be misreported as a violation.
+      if (id >= this.nextId) {
+        this.close(new AcpProtocolViolationError(`response for unknown id ${id} (${truncate(line)})`))
+        return
+      }
       if (this.settled.has(id)) {
         this.settled.delete(id)
         return
       }
-      this.close(
-        new AcpProtocolViolationError(
-          `response for unknown id ${id} (${truncate(line)})`,
-        ),
-      )
+      this.onDropped?.('response for an id with no pending request', {
+        id,
+        frame: truncate(line),
+      })
       return
     }
 
