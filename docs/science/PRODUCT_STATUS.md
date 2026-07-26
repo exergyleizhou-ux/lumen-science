@@ -45,10 +45,10 @@ See [docs/VERSIONING.md](../VERSIONING.md).
 
 ### P0
 
-1. **`v1.0.1` clean Science release** from fully green commit with workflow-built assets + manifest `git_commit` + smoke artifacts (do not keep decorating broken tag provenance).
-2. **Desktop reproducible build**: lockfile committed; `npm ci` + typecheck + authority + build on clean machine; builder must not reference missing paths (fixed in electron-builder.yml).
-3. **Desktop CI** job required for `packs/science-desktop/**` changes.
-4. **OSF-9 built-product E2E**: install Desktop → exact Rust binary hash → ACP session → artifact preview → notebook plan → review → restart/replay + adversarial IPC tests.
+1. **`v1.0.1` clean Science release** — preflight: `bash scripts/science-release-preflight.sh` + `python3 scripts/science_release_contract.py preflight --tag v1.0.1`. Still need **protected workflow tag build** (not just local preflight).
+2. **Desktop reproducible build**: lockfile + `npm ci` OK; builder paths Lumenized. Full `electron-builder` package + typecheck still partial (deps/type debt from OS absorb).
+3. **Desktop CI** workflow present; enable as **required** check in branch protection (manual GitHub setting).
+4. **OSF-9 product-path**: offline composition test `test-osf9-product-path.mts` green (bind→preview→notebook→review→restart). Full installable Electron + exact binary hash E2E still open.
 
 ### P1
 

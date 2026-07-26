@@ -589,8 +589,8 @@ type OpenScienceAPI = {
     abortFixLoop: (sessionId: string) => Promise<void>
   }
   /**
-   * Lumen SessionActor product path (OSF-2). Prefer this over projects:*/artifacts:*
-   * which are banned in greenfield main and must not regain execution authority.
+   * Lumen SessionActor product path (OSF-2+). Prefer this over banned projects: and artifacts: channels
+   * which must not regain execution authority in greenfield main.
    */
   lumen: {
     getBinaryHash: () => Promise<string | null>

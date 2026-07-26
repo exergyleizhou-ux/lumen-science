@@ -541,7 +541,7 @@ interface OpenScienceAPI {
     // Sends an abort request to stop the running fix loop for a session.
     abortFixLoop(sessionId: string): Promise<void>
   }
-  /** Lumen SessionActor product path — prefer over banned projects:*/artifacts:* */
+  /** Lumen SessionActor product path — prefer over banned projects: and artifacts: channels */
   lumen: {
     getBinaryHash(): Promise<string | null>
     callTool(toolName: string, args?: Record<string, unknown>): Promise<unknown>
