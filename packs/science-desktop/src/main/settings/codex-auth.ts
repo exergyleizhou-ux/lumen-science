@@ -1,13 +1,9 @@
-import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { Readable, Writable } from 'node:stream'
 
-import * as acp from '@agentclientprotocol/sdk'
 
 import { codexSubscriptionStorageDir } from '../agent-framework/codex'
-import { terminateProcessTree } from '../process-tree'
 import { augmentedPathEnv } from './shell-path'
 
 export type CodexAuthMode = 'shared' | 'isolated'
@@ -325,54 +321,50 @@ export const ensureCodexAuthHome = async (
   await mkdir(codexSubscriptionStorageDir(storageRoot), { recursive: true })
 }
 
-export const openCodexAuthSession = async ({
-  adapterPath,
-  nativePath,
-  mode,
-  storageRoot
-}: CodexAuthLaunch): Promise<CodexAuthSession> => {
-  await ensureCodexAuthHome(mode, storageRoot)
-
-  const isJavaScript = /\.[cm]?js$/i.test(adapterPath)
-  const needsShell = process.platform === 'win32' && /\.(cmd|bat)$/i.test(adapterPath)
-  const command = isJavaScript ? process.execPath : needsShell ? `"${adapterPath}"` : adapterPath
-  const args = isJavaScript ? [adapterPath] : []
-  const env = createCodexAuthEnvironment(mode, storageRoot)
-  if (isJavaScript) env.ELECTRON_RUN_AS_NODE = '1'
-  if (nativePath) env.CODEX_PATH = nativePath
-
-  const child = spawn(command, args, {
-    env,
-    shell: needsShell,
-    stdio: 'pipe',
-    windowsHide: true
-  })
-  const stream = acp.ndJsonStream(
-    Writable.toWeb(child.stdin) as WritableStream<Uint8Array>,
-    Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>
-  )
-  const connection = acp.client({ name: 'open-science-auth' }).connect(stream)
-
+/**
+ * STUB: opening a Codex authentication session — capability REMOVED.
+ *
+ * Original (Open Science v0.7.1, Apache-2.0, d8f11e34) spawned the Codex CLI,
+ * wrapped its pipes in an ndjson ACP stream, and drove an interactive browser
+ * login, persisting credentials into an app-owned Codex home.
+ *
+ * `src/main/agent-framework/index.ts` already states the rule: "No Claude Code
+ * / OpenCode / Codex backend is admitted as a peer authority." Those frameworks
+ * are stubbed and cannot execute. Authenticating one is therefore not merely
+ * dead code — the original spawned a child process and wrote credential files
+ * for a backend that can never run. That is live credential and process-spawn
+ * surface bought for no capability, which is worse than unused code.
+ *
+ * It was also the last VALUE-position importer of `@agentclientprotocol/sdk` —
+ * a peer runtime's SDK this pack deliberately does not depend on — so it was
+ * the sole reason `npm run build` could not resolve its imports. The other 15
+ * importers are `import type` only and erase at build time.
+ *
+ * Deliberately scoped to this function. `CodexAuthController` above is a
+ * generic orchestrator over an injected `openSession` factory: it owns the
+ * deadlines, cancellation and fail-closed semantics, imports nothing from the
+ * SDK, and its tests inject their own session. Stubbing the whole module would
+ * have discarded that logic and its coverage for no benefit.
+ *
+ * Returns a session whose every method rejects, rather than throwing on open,
+ * so `CodexAuthController` handles it through its normal failure path and the
+ * UI shows a reason instead of an unhandled error.
+ */
+export const openCodexAuthSession = async (
+  _launch: CodexAuthLaunch
+): Promise<CodexAuthSession> => {
+  const refuse = async (): Promise<never> => {
+    throw new Error(
+      'Codex subscription sign-in is unavailable in Lumen Science Desktop: no Codex backend is admitted as an execution authority.'
+    )
+  }
   return {
-    initialize: () =>
-      connection.agent.request(acp.methods.agent.initialize, {
-        protocolVersion: acp.PROTOCOL_VERSION,
-        clientInfo: { name: 'open-science-auth', version: '0.0.0' },
-        clientCapabilities: {}
-      }),
-    status: () => connection.agent.request<CodexAuthenticationStatus>('authentication/status', {}),
-    authenticateChatGpt: () =>
-      connection.agent
-        .request(acp.methods.agent.authenticate, { methodId: 'chat-gpt' })
-        .then(() => undefined),
-    logout: () =>
-      connection.agent
-        .request<Record<string, never>>('authentication/logout', {})
-        .then(() => undefined),
-    close: async () => {
-      connection.close()
-      child.stdin.end()
-      await terminateProcessTree(child)
-    }
+    initialize: refuse,
+    status: refuse,
+    authenticateChatGpt: refuse,
+    logout: refuse,
+    // Closing an unopened session must succeed: teardown runs in a finally and
+    // must not mask the real reason the session was unusable.
+    close: async () => {}
   }
 }

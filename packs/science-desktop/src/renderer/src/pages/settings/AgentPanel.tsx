@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { RefreshCw, TriangleAlert } from 'lucide-react'
 
-// Import the bare Mono/Color components straight from their modules: each icon's entry point
-// eagerly attaches its Avatar/Combine companions, which drag in @lobehub/ui (antd-style + an
-// emoji-mart JSON import vitest can't parse). The Mono/Color components are self-contained.
-import ClaudeColor from '@lobehub/icons/es/Claude/components/Color'
-import Codex from '@lobehub/icons/es/Codex/components/Mono'
-import OpenCode from '@lobehub/icons/es/OpenCode/components/Mono'
+// Local marks rather than @lobehub/icons: that package drags in @lobehub/ui + antd
+// (220 MB) and @emoji-mart/react, which declares react ^16.8||^17||^18 and conflicts
+// with this pack's React 19. See components/icons/agent-backends.tsx.
+import {
+  ClaudeMark as ClaudeColor,
+  CodexMark as Codex,
+  OpenCodeMark as OpenCode
+} from '@/components/icons/agent-backends'
 import { ExternalTextLink } from '@/components/ExternalTextLink'
 import { Button } from '@/components/ui/button'
 import { selectAnyInstalling, useSettingsStore } from '@/stores/settings-store'
