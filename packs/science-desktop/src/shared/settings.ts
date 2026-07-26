@@ -252,7 +252,24 @@ export const providerValidationFailed = (provider: {
 
 // The agent backends the app can drive over ACP. Persisted settings and the UI reference these ids;
 // the main-process AgentFramework registry is keyed by the same union.
-export type AgentFrameworkId = 'claude-code' | 'opencode' | 'codex'
+// LS5-D1-02: the Lumen absorb removed execution authority from the Open Science
+// agent-framework module — Claude Code / OpenCode / Codex are no longer peer
+// runtimes, only controlled adapters behind the ACP bridge. The stubs in
+// main/agent-framework/index.ts therefore report `*-stubbed` ids, but this union
+// was never updated to admit them, so every consumer failed to typecheck.
+//
+// The union is additive rather than replaced: the three original ids are still
+// written into persisted settings and referenced as literals throughout the
+// settings layer, so dropping them breaks more than it fixes. The `*-stubbed`
+// ids are what the stub module reports today.
+export type AgentFrameworkId =
+  | 'claude-code'
+  | 'opencode'
+  | 'codex'
+  | 'lumen-stubbed'
+  | 'claude-code-stubbed'
+  | 'opencode-stubbed'
+  | 'codex-stubbed'
 
 // How much reasoning effort the user asks the agent to spend. 'default' means "don't override": the
 // agent keeps its own default and nothing is sent. The concrete levels form a relative scale

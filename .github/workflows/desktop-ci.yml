@@ -56,7 +56,23 @@ jobs:
       - name: Authority + release honesty + office gate
         run: npm run test:authority
 
-      - name: Typecheck (best-effort until deps fully pruned)
+      # LS5-D1-01: required. Proves the tsconfig exclusion list still matches
+      # the computed import graph — an excluded file must be genuinely
+      # unreachable, or exclusion would be hiding real type errors.
+      - name: Production source graph matches tsconfig exclusions
+        run: npx tsx scripts/desktop-source-graph.mts --check
+
+      # LS5-D1-02 IN PROGRESS — this is NOT a passing gate yet.
+      #
+      # Errors went 1566 -> 65 by excluding the unreachable Open Science code
+      # that the include globs were dragging in (see desktop-source-graph.mts).
+      # Every one of the 65 remaining errors is in code that actually ships, so
+      # they must be fixed rather than excluded. Until they are, this step stays
+      # advisory — but it now reports a real number instead of masking ~1500.
+      #
+      # Do not delete this step and do not raise the tolerance; the exit
+      # criterion is 0 errors, at which point continue-on-error is removed.
+      - name: Typecheck (advisory — 65 known errors in shipped code, tracked)
         run: npm run typecheck
         continue-on-error: true
 
