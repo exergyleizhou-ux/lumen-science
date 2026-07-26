@@ -18,12 +18,21 @@ assume root `VERSION` equals Desktop or the Rust pager crate.
    science tooling going forward. Root remains `1.0.0` for backward-compatible
    scripts until release_contract is split (tracked as follow-on).
 
-## Planned next tags
+## Released / planned tags
 
 ```text
-v1.0.1     Science CLI/MCP clean release from green commit + protected workflow
-1.1.0      Desktop alpha (reproducible build + installable + ACP smoke)
+v1.0.1     Science CLI/MCP — SHIPPED 2026-07-26
+           (Science Release run 30192164855; MANIFEST git_commit=4f75d7a…)
+1.1.0      Desktop alpha (reproducible build + installable + ACP smoke)  ← next
 2.0.0      Desktop product (Project/Evidence/Preview/Replay)
 3.0.0      Notebook + Reviewer + Skills + controlled remote GA
 4.0 / 5.0  Dummy Lab / HIL — not started
+```
+
+Verify a Science release:
+
+```bash
+gh release view v1.0.1 --repo exergyleizhou-ux/lumen-science
+# MANIFEST.json: product, version, git_commit, builder_run_id, independentFromCore
+# sha256sum -c SHA256SUMS
 ```
