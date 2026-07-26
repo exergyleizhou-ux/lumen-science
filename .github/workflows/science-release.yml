@@ -1,0 +1,200 @@
+# Science CLI/MCP release — independent of Lumen Core pager version.
+# Triggers on tags that match packs/science/VERSION (e.g. v1.0.1).
+# Does NOT build Desktop or Core agent.
+name: Science Release
+
+on:
+  push:
+    tags:
+      - 'v1.*'
+      - 'v2.*'
+      - 'v3.*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build artifacts without creating GitHub Release'
+        type: boolean
+        default: true
+
+concurrency:
+  group: science-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  preflight:
+    name: Science version + gates
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      tag: ${{ steps.ver.outputs.tag }}
+      commit: ${{ steps.ver.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve science version
+        id: ver
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '[:space:]' < packs/science/VERSION)"
+          TAG="${GITHUB_REF_NAME}"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            TAG="v${VERSION}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          # Tag must match science VERSION for push-tag builds
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            if [[ "${TAG}" != "v${VERSION}" ]]; then
+              echo "FAIL: tag ${TAG} != v${VERSION} (packs/science/VERSION)"
+              exit 1
+            fi
+          fi
+          python3 scripts/science_release_contract.py preflight --root . --tag "${TAG}"
+
+      - name: Machine gates
+        run: bash scripts/science-machine-gates.sh
+
+      - name: Go module boundary
+        run: bash scripts/science-go-module-boundary.sh
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Go tests
+        working-directory: packs/science
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          go test ./mcp ./mcp/artifacts/... ./mcp/notebook/... ./mcp/reviewer/... \
+            ./mcp/http_bridge/... \
+            ./standalone/internal/seqbench/... ./standalone/internal/projectstore/... \
+            -count=1 -timeout=90s
+
+  rust:
+    name: Rust science
+    runs-on: ubuntu-latest
+    needs: [preflight]
+    defaults:
+      run:
+        working-directory: agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: cargo test
+        run: cargo test -p xai-grok-science --lib --locked -- --test-threads=2
+      - name: cargo clippy
+        run: cargo clippy -p xai-grok-science --all-targets --locked -- -D warnings
+
+  build:
+    name: Cross-build release assets
+    runs-on: ubuntu-latest
+    needs: [preflight, rust]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: make release
+        working-directory: packs/science
+        run: make release VERSION="${{ needs.preflight.outputs.version }}"
+
+      - name: Write publish manifest
+        run: |
+          set -euo pipefail
+          VER="${{ needs.preflight.outputs.version }}"
+          COMMIT="${{ needs.preflight.outputs.commit }}"
+          TAG="${{ needs.preflight.outputs.tag }}"
+          OUT="packs/science/dist/science-release/MANIFEST.json"
+          python3 - <<PY
+          import json, time
+          from pathlib import Path
+          rel = Path("packs/science/dist/science-release")
+          assets = []
+          for p in sorted(rel.iterdir()):
+              if p.name in ("MANIFEST.json", "SHA256SUMS") or p.is_dir():
+                  continue
+              if p.name.endswith(".json") and p.name.startswith("SCIENCE"):
+                  continue
+              import hashlib
+              h = hashlib.sha256(p.read_bytes()).hexdigest()
+              assets.append({"name": p.name, "sha256": h, "size": p.stat().st_size})
+          manifest = {
+              "schemaVersion": 1,
+              "product": "lumen-science-cli-mcp",
+              "version": "${VER}",
+              "tag": "${TAG}",
+              "git_commit": "${COMMIT}",
+              "versionSource": "packs/science/VERSION",
+              "independentFromCore": True,
+              "builder_workflow": "${{ github.workflow }}",
+              "builder_run_id": "${{ github.run_id }}",
+              "builder_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "source_date_epoch": int(time.time()),
+              "assets": assets,
+          }
+          Path("${OUT}").write_text(json.dumps(manifest, indent=2) + "\n")
+          print(json.dumps(manifest, indent=2)[:2000])
+          PY
+          test -f packs/science/dist/science-release/SHA256SUMS
+          wc -l packs/science/dist/science-release/SHA256SUMS
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: science-release-${{ needs.preflight.outputs.version }}-${{ github.sha }}
+          path: packs/science/dist/science-release/*
+          retention-days: 30
+          if-no-files-found: error
+
+  publish:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    needs: [preflight, build]
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && inputs.dry_run == false)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: science-release-${{ needs.preflight.outputs.version }}-${{ github.sha }}
+          path: dist-out
+
+      - name: Create / update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.preflight.outputs.tag }}
+          VER: ${{ needs.preflight.outputs.version }}
+          COMMIT: ${{ needs.preflight.outputs.commit }}
+        run: |
+          set -euo pipefail
+          NOTES="Lumen Science CLI/MCP ${VER}
+
+          - git_commit: ${COMMIT}
+          - versionSource: packs/science/VERSION
+          - independent of Lumen Core pager crate
+          - built by workflow run ${{ github.run_id }}
+
+          Verify: sha256sum -c SHA256SUMS
+          "
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist-out/* --clobber
+          else
+            gh release create "$TAG" dist-out/* \
+              --title "Lumen Science CLI/MCP ${VER}" \
+              --notes "$NOTES" \
+              --target "$COMMIT"
+          fi

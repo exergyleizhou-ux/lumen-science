@@ -9,7 +9,8 @@
 
 .PHONY: all cross test lint release smoke clean cross-macos cross-linux cross-windows
 
-VERSION ?= $(shell cat ../../VERSION 2>/dev/null || echo "0.1.0-dev")
+# Prefer component VERSION (Science CLI/MCP); fall back to root then dev.
+VERSION ?= $(shell cat VERSION 2>/dev/null || cat ../../VERSION 2>/dev/null || echo "0.1.0-dev")
 BUILD_DIR := build
 RELEASE_DIR := dist/science-release
 

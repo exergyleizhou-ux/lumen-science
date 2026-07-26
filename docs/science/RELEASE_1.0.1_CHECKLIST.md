@@ -3,6 +3,20 @@
 **Goal:** Clean **Science CLI/MCP** release from a fully green commit with
 workflow-built assets. Do **not** re-decorate `v1.0.0` provenance.
 
+**Automation (repo):**
+
+```bash
+# version source
+cat packs/science/VERSION   # 1.0.1
+
+# preflight (no publish)
+bash scripts/science-release-preflight.sh
+python3 scripts/science_release_contract.py preflight --tag v1.0.1
+
+# publish path: push annotated tag v1.0.1 → workflow "Science Release"
+# Core "Release Lumen" no-ops for science-only tags (see release.yml classify job)
+```
+
 **Status note (2026-07-26):** `v1.0.0` may now list many GitHub assets; the
 remaining gap is **tag → protected CI → builder provenance**, not mere file
 presence. Desktop remains `1.1.0-dev` and is **out of scope** for `v1.0.1`.
