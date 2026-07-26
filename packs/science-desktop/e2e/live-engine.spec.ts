@@ -44,11 +44,14 @@ test.beforeAll(async () => {
     )
   }
 
-  // A scratch home, so a developer's real projects are neither read nor written.
+  // A scratch home AND a scratch userData: the project catalog lives in
+  // Electron's userData, so LUMEN_HOME alone left a developer's real projects
+  // (and every previous run's) in the sidebar.
   const home = await mkdtemp(path.join(tmpdir(), 'lumen-live-'))
+  const userData = await mkdtemp(path.join(tmpdir(), 'lumen-live-ud-'))
 
   app = await electron.launch({
-    args: [path.join(PACK, 'out/main/index.js')],
+    args: [path.join(PACK, 'out/main/index.js'), `--user-data-dir=${userData}`],
     cwd: PACK,
     env: {
       ...process.env,
@@ -83,7 +86,10 @@ test('the desk reports the engine as reachable, not offline', async () => {
 test('clicking Allow creates the project the user asked for', async () => {
   const NAME = `Live approval ${Date.now()}`
 
-  const nameField = page.locator('input[type="text"]').first()
+  // By placeholder, not by `input[type="text"]`: the input has no `type`
+  // attribute, so the attribute selector matched nothing while the field was
+  // plainly on screen.
+  const nameField = page.getByPlaceholder('New project name')
   await nameField.waitFor({ timeout: 15_000 })
   await nameField.fill(NAME)
 

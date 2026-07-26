@@ -62,10 +62,39 @@ export type PermissionBrokerOptions = {
 
 const DEFAULT_TIMEOUT_MS = 5 * 60_000
 
-/** The ACP outcome shape the agent expects back. */
+/**
+ * The user's decision, before it is put in the envelope ACP expects.
+ *
+ * This is NOT the wire shape — see `PermissionResponse`. Keeping the two named
+ * separately is the point: they differ by one level of nesting, they serialise
+ * to almost the same JSON, and confusing them costs nothing at compile time
+ * and everything at runtime.
+ */
 type PermissionOutcome =
   | { outcome: 'selected'; optionId: string }
   | { outcome: 'cancelled' }
+
+/**
+ * What actually goes back on the wire.
+ *
+ * `RequestPermissionResponse { outcome: RequestPermissionOutcome }` — the
+ * decision nested inside a field of the same name. The schema calls this out
+ * itself ("This extra-level is unfortunately needed because the output must be
+ * an object", client.rs:669).
+ *
+ * We were returning the INNER object alone. That deserialises as a response
+ * whose `outcome` is the string "selected" where an object is required, so the
+ * engine could not read the answer and recorded the run as Denied — a user
+ * clicked Allow and their project was refused, with the dialog, the click and
+ * the timing all looking exactly like success.
+ *
+ * Nothing in an engine-less test can catch this: it is a fact about what the
+ * engine accepts, and only e2e/live-engine.spec.ts talks to one.
+ */
+export type PermissionResponse = { outcome: PermissionOutcome }
+
+/** Put a decision in the envelope ACP requires. */
+const envelope = (outcome: PermissionOutcome): PermissionResponse => ({ outcome })
 
 
 /**
@@ -164,14 +193,14 @@ export class PermissionBroker {
    * fault rather than a decision, and the engine would be right to treat an
    * unanswered permission as a failure. Denying explicitly is the honest reply.
    */
-  async handle(requestId: string, params: unknown): Promise<PermissionOutcome> {
+  async handle(requestId: string, params: unknown): Promise<PermissionResponse> {
     const ask = describeAsk(requestId, params)
     if (!ask) {
       this.onDenied?.(
         { requestId, operation: 'unknown', target: 'unparseable request' },
         'the permission request could not be read',
       )
-      return { outcome: 'cancelled' }
+      return envelope({ outcome: 'cancelled' })
     }
 
     this.pending.set(requestId, ask)
@@ -183,20 +212,20 @@ export class PermissionBroker {
           // Cancelling is the honest reply; inventing an id produced a denial
           // that looked like an approval to everyone except the engine.
           this.onDenied?.(ask, 'the engine offered no allow option')
-          return { outcome: 'cancelled' }
+          return envelope({ outcome: 'cancelled' })
         }
-        return { outcome: 'selected', optionId: ask.allowOptionId }
+        return envelope({ outcome: 'selected', optionId: ask.allowOptionId })
       }
       // A reject option is selected when offered, so the engine records a
       // decision rather than a cancellation — they are different facts.
       if (ask.rejectOptionId) {
-        return { outcome: 'selected', optionId: ask.rejectOptionId }
+        return envelope({ outcome: 'selected', optionId: ask.rejectOptionId })
       }
-      return { outcome: 'cancelled' }
+      return envelope({ outcome: 'cancelled' })
     } catch (error: unknown) {
       // Includes the timeout. Any failure to obtain an answer is a denial.
       this.onDenied?.(ask, (error as Error)?.message || String(error))
-      return { outcome: 'cancelled' }
+      return envelope({ outcome: 'cancelled' })
     } finally {
       this.pending.delete(requestId)
     }

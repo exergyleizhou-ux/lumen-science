@@ -47,12 +47,20 @@ const REQUEST = {
   ],
 }
 
-// `selected` alone no longer means allowed: a rejection now selects the
-// engine's reject option, so the engine records a decision rather than a
-// cancellation. Only selecting the ALLOW option is an approval, and conflating
-// the two is exactly the mistake that made a denial look like consent.
-const allowed = (o: { outcome: string; optionId?: string }): boolean =>
-  o.outcome === 'selected' && o.optionId === 'allow-1'
+// Reads the WIRE shape: RequestPermissionResponse { outcome: { outcome, ... } }.
+// The decision is nested inside a field of the same name, and returning the
+// inner object alone is what made the engine unable to read an approval.
+// Asserting on the flat shape here is what let that ship.
+type Wire = { outcome?: { outcome?: string; optionId?: string } }
+const decision = (o: unknown): { outcome?: string; optionId?: string } =>
+  (o as Wire)?.outcome ?? {}
+
+// `selected` alone does not mean allowed: a rejection also selects an option,
+// so the engine records a decision rather than a cancellation. Only selecting
+// the ALLOW option is an approval, and conflating the two is exactly the
+// mistake that made a denial look like consent.
+const allowed = (o: unknown): boolean =>
+  decision(o).outcome === 'selected' && decision(o).optionId === 'allow-1'
 
 console.log('test-permission-broker')
 
@@ -63,7 +71,12 @@ console.log('test-permission-broker')
   check('a human clicking allow produces an allow', allowed(outcome))
   check(
     'the allow names an option the engine actually offered',
-    (outcome as { optionId?: string }).optionId === 'allow-1',
+    decision(outcome).optionId === 'allow-1',
+    JSON.stringify(outcome),
+  )
+  check(
+    'the answer is wrapped in the envelope ACP requires',
+    typeof (outcome as Wire).outcome === 'object',
     JSON.stringify(outcome),
   )
 }
@@ -91,7 +104,7 @@ console.log('test-permission-broker')
   const outcome = await broker.handle('req-1c', REQUEST)
   check(
     'a rejection selects the offered reject option',
-    (outcome as { outcome: string; optionId?: string }).optionId === 'reject-1',
+    decision(outcome).optionId === 'reject-1',
     JSON.stringify(outcome),
   )
 }
