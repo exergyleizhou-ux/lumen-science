@@ -43,16 +43,17 @@ Workflow                = white-listed StepKinds only; never arbitrary shell
 ```bash
 lumen-science project create|list|get
 lumen-science claim propose
-# Evidence queries (new):
-lumen-science project evidence trace --project ID --claim CID
-lumen-science project evidence compare --project ID --claim-a C1 --claim-b C2
-lumen-science project evidence consistency --project ID
-# Workflow (new):
-lumen-science workflow validate --spec-file workflow.json
-# Preview (new):
-lumen-science project multimodal --project ID
-lumen-science project review --project ID --reviewer R --verdict V
-lumen-science project collaborator invite --project ID --owner O --invitee I
+# Evidence queries:
+lumen-science project evidence trace --project ID --claim CID [--store DIR]
+lumen-science project evidence compare --project ID --claim-a C1 --claim-b C2 [--store DIR]
+lumen-science project evidence consistency --project ID [--store DIR]
+lumen-science project migrate --run RID --owner O --title T --question Q [--store DIR]
+# Workflow:
+lumen-science workflow validate --spec-file WF.json [--store DIR]
+# Preview surfaces:
+lumen-science project multimodal --project ID [--store DIR]
+lumen-science project review --project ID --reviewer R --verdict V [--store DIR]
+lumen-science project collaborator --project ID --owner O --invitee I [--store DIR]
 ```
 
 ## Rust ACP gates

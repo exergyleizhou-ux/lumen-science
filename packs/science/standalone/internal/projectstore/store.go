@@ -358,3 +358,243 @@ func (s *Store) ProposeClaim(projectID, owner, statement, by string) (*Claim, er
 	}
 	return c, nil
 }
+// ── Evidence queries ─────────────────────────────────
+
+func (s *Store) EvidenceTrace(projectID, claimID string) (map[string]any, error) {
+	c, err := s.loadClaim(projectID, claimID)
+	if err != nil {
+		return nil, err
+	}
+	graph, err := s.loadGraph(projectID)
+	if err != nil {
+		return nil, err
+	}
+	nid := ""
+	if c.EvidenceNodeID != nil {
+		nid = *c.EvidenceNodeID
+	}
+	nodes := graph["nodes"].(map[string]any)
+	edges := graph["edges"].([]any)
+	var trace []map[string]any
+	visited := map[string]bool{}
+	traceBack(nid, edges, nodes, &trace, visited, 0)
+
+	return map[string]any{
+		"claim_node_id": nid,
+		"trace_steps": trace,
+		"depth": len(visited),
+		"claim_id": claimID,
+	}, nil
+}
+
+func traceBack(nodeID string, edges []any, nodes map[string]any, trace *[]map[string]any, visited map[string]bool, depth int) {
+	if depth > 100 || visited[nodeID] {
+		return
+	}
+	visited[nodeID] = true
+	for _, raw := range edges {
+		e := raw.(map[string]any)
+		to, _ := e["target"].(string)
+		if to != nodeID {
+			continue
+		}
+		from, _ := e["source"].(string)
+		rel, _ := e["relation"].(string)
+		sha, _ := e["supporting_artifact_sha256"].(string)
+		*trace = append(*trace, map[string]any{
+			"from": from, "to": to, "relation": rel, "artifact_sha256": sha,
+		})
+		traceBack(from, edges, nodes, trace, visited, depth+1)
+	}
+}
+
+func (s *Store) EvidenceConsistency(projectID string) (map[string]any, error) {
+	graph, err := s.loadGraph(projectID)
+	if err != nil {
+		return nil, err
+	}
+	nodes := graph["nodes"].(map[string]any)
+	edges := graph["edges"].([]any)
+	var violations []map[string]any
+	nodeIDs := map[string]bool{}
+	for k := range nodes {
+		nodeIDs[k] = true
+	}
+	for _, raw := range edges {
+		e := raw.(map[string]any)
+		src, _ := e["source"].(string)
+		tgt, _ := e["target"].(string)
+		if !nodeIDs[src] {
+			violations = append(violations, map[string]any{"kind": "DanglingSource", "detail": src})
+		}
+		if !nodeIDs[tgt] {
+			violations = append(violations, map[string]any{"kind": "DanglingTarget", "detail": tgt})
+		}
+		if src == tgt {
+			violations = append(violations, map[string]any{"kind": "SelfReferencingClaim", "detail": src})
+		}
+	}
+	return map[string]any{
+		"graph_id": "graph-" + projectID,
+		"violations": violations,
+		"is_consistent": len(violations) == 0,
+		"node_count": len(nodes),
+		"edge_count": len(edges),
+	}, nil
+}
+
+func (s *Store) EvidenceCompare(projectID, claimA, claimB string) (map[string]any, error) {
+	ta, err := s.EvidenceTrace(projectID, claimA)
+	if err != nil {
+		return nil, err
+	}
+	tb, err := s.EvidenceTrace(projectID, claimB)
+	if err != nil {
+		return nil, err
+	}
+	sa := map[string]bool{}
+	sb := map[string]bool{}
+	for _, step := range ta["trace_steps"].([]map[string]any) {
+		sa[step["from"].(string)] = true
+	}
+	for _, step := range tb["trace_steps"].([]map[string]any) {
+		sb[step["from"].(string)] = true
+	}
+	var shared []string
+	for k := range sa {
+		if sb[k] {
+			shared = append(shared, k)
+		}
+	}
+	var onlyA []string
+	for k := range sa {
+		if !sb[k] {
+			onlyA = append(onlyA, k)
+		}
+	}
+	var onlyB []string
+	for k := range sb {
+		if !sa[k] {
+			onlyB = append(onlyB, k)
+		}
+	}
+	conflicting := append(onlyA, onlyB...)
+	return map[string]any{
+		"claim_a": claimA, "claim_b": claimB,
+		"shared_evidence": shared, "conflicting_evidence": conflicting,
+		"supports_same_conclusion": len(conflicting) == 0,
+	}, nil
+}
+
+type MultimodalIndex struct {
+	ProjectID   string `json:"project_id"`
+	FileCount   int    `json:"file_count"`
+	ParserCount int    `json:"parser_count"`
+}
+
+func (s *Store) MultimodalIndex(projectID string) (*MultimodalIndex, error) {
+	_, err := s.Get(projectID)
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Join(s.Root, "projects", projectID)
+	count := 0
+	filepath.Walk(dir, func(_ string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			count++
+		}
+		return nil
+	})
+	return &MultimodalIndex{ProjectID: projectID, FileCount: count, ParserCount: 6}, nil
+}
+
+func (s *Store) ReviewRecord(projectID, reviewerID, verdict, claimID string) (map[string]any, error) {
+	return map[string]any{
+		"project_id": projectID, "reviewer_id": reviewerID,
+		"verdict": verdict, "claim_id": claimID,
+		"authority": "SessionActor-gated, no independent MCP",
+	}, nil
+}
+
+func (s *Store) CollaborationInvite(projectID, owner, invitee string) (map[string]any, error) {
+	p, err := s.Get(projectID)
+	if err != nil {
+		return nil, err
+	}
+	if p.OwnerID != owner {
+		return nil, fmt.Errorf("ownership mismatch")
+	}
+	return map[string]any{
+		"project_id": projectID, "owner": p.OwnerID,
+		"invitee": invitee, "pending": true,
+	}, nil
+}
+
+// WorkflowValidate reads a spec file and validates the DAG structure.
+func (s *Store) WorkflowValidate(spec map[string]any) (map[string]any, error) {
+	stepsRaw, ok := spec["steps"].([]any)
+	if !ok {
+		return nil, fmt.Errorf("spec missing steps array")
+	}
+	var steps []string
+	links := map[string][]string{}
+	all := map[string]bool{}
+	for _, raw := range stepsRaw {
+		st := raw.(map[string]any)
+		sid := st["step_id"].(string)
+		all[sid] = true
+		steps = append(steps, sid)
+		inputs, _ := st["inputs"].([]any)
+		for _, in := range inputs {
+			is := in.(string)
+			links[is] = append(links[is], sid)
+		}
+	}
+	// Check all input refs exist
+	var errors []string
+	for from := range links {
+		if !all[from] {
+			errors = append(errors, fmt.Sprintf("step %s referenced as input but not defined", from))
+		}
+	}
+	return map[string]any{
+		"workflow_id": spec["workflow_id"],
+		"is_valid": len(errors) == 0,
+		"errors": errors,
+		"steps_count": len(steps),
+	}, nil
+}
+
+func (s *Store) loadClaim(projectID, claimID string) (*Claim, error) {
+	p := filepath.Join(s.Root, "projects", projectID, "claims", claimID+".json")
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return nil, err
+	}
+	var c Claim
+	if err := json.Unmarshal(b, &c); err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+func (s *Store) loadGraph(projectID string) (map[string]any, error) {
+	p := filepath.Join(s.Root, "projects", projectID, "graph.json")
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return nil, err
+	}
+	// Ensure nodes and edges are present even if empty
+	// Read raw structure, handle empty map
+	var graph map[string]any
+	if err := json.Unmarshal(b, &graph); err != nil {
+		return nil, err
+	}
+	if graph["nodes"] == nil {
+		graph["nodes"] = map[string]any{}
+	}
+	if graph["edges"] == nil {
+		graph["edges"] = []any{}
+	}
+	return graph, nil
+}

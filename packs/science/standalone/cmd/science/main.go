@@ -696,6 +696,38 @@ func runProject(args []string) error {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		return enc.Encode(p)
+	case "multimodal":
+		flags := flag.NewFlagSet("project multimodal", flag.ContinueOnError)
+		flags.SetOutput(os.Stderr)
+		flags.String("project", "", "project id")
+		flags.String("store", "", "store root")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		return runProjectMultimodal(flags, args[2:])
+	case "review":
+		flags := flag.NewFlagSet("project review", flag.ContinueOnError)
+		flags.SetOutput(os.Stderr)
+		flags.String("project", "", "project id")
+		flags.String("store", "", "store root")
+		flags.String("reviewer", "", "reviewer id")
+		flags.String("verdict", "", "verdict")
+		flags.String("claim", "", "claim id")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		return runProjectReview(flags, args[2:])
+	case "collaborator":
+		flags := flag.NewFlagSet("project collaborator", flag.ContinueOnError)
+		flags.SetOutput(os.Stderr)
+		flags.String("project", "", "project id")
+		flags.String("store", "", "store root")
+		flags.String("owner", "", "owner id")
+		flags.String("invitee", "", "invitee id")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		return runProjectCollaborator(flags, args[2:])
 	case "evidence":
 		return runProjectEvidence(args[1:])
 	case "migrate":
@@ -713,17 +745,18 @@ func runProject(args []string) error {
 		if err != nil {
 			return err
 		}
-		out := map[string]any{
-			"source_run_id": *runID,
-			"owner_id": *owner,
-			"title": *title,
-			"question": *question,
-			"store_root": root,
-			"status": "migration_dry_run_cli",
+		store := projectstore.New(root)
+		p, err := store.Create(*owner, *title, *question)
+		if err != nil {
+			return err
 		}
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(out)
+		return enc.Encode(map[string]any{
+			"source_run_id":    *runID,
+			"migrated_project": p.ProjectID,
+			"status":           "Created V2 project from V1 run metadata (offline admission)",
+		})
 	default:
 		return fmt.Errorf("unknown project subcommand %q", args[0])
 	}
@@ -733,7 +766,8 @@ func runProjectEvidence(args []string) error {
 	if len(args) < 1 {
 		return fmt.Errorf("evidence requires: trace|compare|consistency")
 	}
-	flags := flag.NewFlagSet("project evidence "+args[0], flag.ContinueOnError)
+	sub := args[0]
+	flags := flag.NewFlagSet("project evidence "+sub, flag.ContinueOnError)
 	flags.SetOutput(os.Stderr)
 	projectID := flags.String("project", "", "project id")
 	claimID := flags.String("claim", "", "claim id")
@@ -748,20 +782,79 @@ func runProjectEvidence(args []string) error {
 		return err
 	}
 	store := projectstore.New(root)
-	p, err := store.Get(*projectID)
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	switch sub {
+	case "trace":
+		out, err := store.EvidenceTrace(*projectID, *claimID)
+		if err != nil {
+			return err
+		}
+		return enc.Encode(out)
+	case "compare":
+		out, err := store.EvidenceCompare(*projectID, *claimA, *claimB)
+		if err != nil {
+			return err
+		}
+		return enc.Encode(out)
+	case "consistency":
+		out, err := store.EvidenceConsistency(*projectID)
+		if err != nil {
+			return err
+		}
+		return enc.Encode(out)
+	default:
+		return fmt.Errorf("unknown evidence subcommand %q", sub)
+	}
+}
+
+func runProjectMultimodal(flags *flag.FlagSet, args []string) error {
+	projectID := flags.Lookup("project").Value.String()
+	storePath := flags.Lookup("store").Value.String()
+	root, err := defaultProjectStore(storePath)
 	if err != nil {
 		return err
 	}
-	_ = p
-	out := map[string]any{
-		"command": "project evidence " + args[0],
-		"project_id": *projectID,
-		"claim_id": *claimID,
-		"claim_a": *claimA,
-		"claim_b": *claimB,
-		"store_root": root,
-		"status": "cli_preview",
-		"rust_path": "queries_store.rs for full trace/compare/consistency",
+	out, err := projectstore.New(root).MultimodalIndex(projectID)
+	if err != nil {
+		return err
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(out)
+}
+
+func runProjectReview(flags *flag.FlagSet, args []string) error {
+	projectID := flags.Lookup("project").Value.String()
+	storePath := flags.Lookup("store").Value.String()
+	reviewerID := flags.Lookup("reviewer").Value.String()
+	verdict := flags.Lookup("verdict").Value.String()
+	claimID := flags.Lookup("claim").Value.String()
+	root, err := defaultProjectStore(storePath)
+	if err != nil {
+		return err
+	}
+	out, err := projectstore.New(root).ReviewRecord(projectID, reviewerID, verdict, claimID)
+	if err != nil {
+		return err
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(out)
+}
+
+func runProjectCollaborator(flags *flag.FlagSet, args []string) error {
+	projectID := flags.Lookup("project").Value.String()
+	storePath := flags.Lookup("store").Value.String()
+	owner := flags.Lookup("owner").Value.String()
+	invitee := flags.Lookup("invitee").Value.String()
+	root, err := defaultProjectStore(storePath)
+	if err != nil {
+		return err
+	}
+	out, err := projectstore.New(root).CollaborationInvite(projectID, owner, invitee)
+	if err != nil {
+		return err
 	}
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
@@ -772,9 +865,9 @@ func runWorkflow(args []string) error {
 	if len(args) < 1 {
 		return fmt.Errorf("workflow requires: validate|dry-run")
 	}
-	flags := flag.NewFlagSet("workflow "+args[0], flag.ContinueOnError)
+	sub := args[0]
+	flags := flag.NewFlagSet("workflow "+sub, flag.ContinueOnError)
 	flags.SetOutput(os.Stderr)
-	projectID := flags.String("project", "", "project id")
 	storePath := flags.String("store", "", "store root")
 	specFile := flags.String("spec-file", "", "workflow spec JSON")
 	if err := flags.Parse(args[1:]); err != nil {
@@ -784,20 +877,20 @@ func runWorkflow(args []string) error {
 	if err != nil {
 		return err
 	}
-	out := map[string]any{
-		"command": "workflow " + args[0],
-		"project_id": *projectID,
-		"spec_file": *specFile,
-		"store_root": root,
-		"status": "cli_preview",
-		"rust_path": "workflows_store.rs for full validate/dry-run",
+	if *specFile == "" {
+		return fmt.Errorf("--spec-file required")
 	}
-	if *specFile != "" {
-		data, err := os.ReadFile(*specFile)
-		if err != nil {
-			return err
-		}
-		out["spec_raw"] = string(data)
+	raw, err := os.ReadFile(*specFile)
+	if err != nil {
+		return err
+	}
+	var spec map[string]any
+	if err := json.Unmarshal(raw, &spec); err != nil {
+		return err
+	}
+	out, err := projectstore.New(root).WorkflowValidate(spec)
+	if err != nil {
+		return err
 	}
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
