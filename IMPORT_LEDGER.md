@@ -57,42 +57,112 @@ The following Open Science subsystems have execution authority REMOVED:
 
 ---
 
-## Batch 2: Files + Preview (OSF-2) — pending
+## Batch 2: Files + Preview (OSF-2) — 2026-07-26
 
-(TBD)
+### Artifact/Files modules
 
----
+| Source Path | Destination | Modified? | Notes |
+|-------------|-------------|-----------|-------|
+| src/main/artifacts/ | packs/science-desktop/src/main/artifacts/ | Planned | Artifact registry, listing, preview protocol |
+| src/main/managed-file-preview.ts | packs/science-desktop/src/main/ | Planned | Managed preview resources |
+| src/main/managed-preview-*.ts | packs/science-desktop/src/main/ | Planned | Preview IPC and protocol |
+| src/main/office-preview/ | packs/science-desktop/src/main/office-preview/ | Planned | DOCX, XLSX, PPTX preview in isolated renderer |
+| src/main/project-files/ | packs/science-desktop/src/main/project-files/ | Planned | Project file indexing, pagination |
+| src/renderer/src/pages/workspace/previews/ | packs/science-desktop/src/renderer/ | Planned | Multi-tab preview UI, molecule viewer, code, FASTA, CSV, JSON |
+| src/renderer/src/stores/preview-workbench-store.ts | packs/science-desktop/src/renderer/ | Planned | Preview state management |
 
-## Batch 3: Notebook UX (OSF-3) — pending
+### Key modifications (OSF-2)
+- Preview content loaded by artifact_id (not arbitrary path)
+- Hash verified by Rust ArtifactRegistry before display
+- Cross-owner/project access rejected
+- Office preview renderer: dependency audit + hostile document tests required before Lumen admission
 
-(TBD)
+## Batch 3: Notebook UX (OSF-3) — 2026-07-26
 
----
+| Source Path | Destination | Modified? | Notes |
+|-------------|-------------|-----------|-------|
+| src/main/notebook/ | packs/science-desktop/src/main/notebook/ | Planned | Python/R REPL control, history, IPYNB export, environment management, MCP server |
+| src/renderer/src/pages/workspace/notebook/ | packs/science-desktop/src/renderer/ | Planned | Notebook UI, cell rendering, output display |
+| src/renderer/src/stores/notebook-env-store.ts | packs/science-desktop/src/renderer/ | Planned | Environment management UX |
+| src/shared/notebook*.ts | packs/science-desktop/src/shared/ | Planned | Notebook types and IPC contracts |
+| resources/notebook/ | packs/science-desktop/resources/notebook/ | Planned | Python/R loops, REPL scripts |
 
-## Batch 4: Reviewer UX (OSF-4) — pending
+### Key modifications (OSF-3)
+- TypeScript kernel executor REPLACED with Rust KernelAdapter
+- Kernel process lifecycle owned by SessionActor (not Electron)
+- Artifact scan after each cell execution → ArtifactRegistry
+- Network, cwd, timeout policies enforced by Rust
+- IPYNB export: UI reused; execution data from Rust artifact store
 
-(TBD)
+## Batch 4: Reviewer UX (OSF-4) — 2026-07-26
 
----
+| Source Path | Destination | Modified? | Notes |
+|-------------|-------------|-----------|-------|
+| src/main/reviewer/ | packs/science-desktop/src/main/reviewer/ | Planned | Rubric engine, artifact integrity, pass/warn/fail, stale detection, fix loop |
+| src/renderer/src/stores/review-store.ts | packs/science-desktop/src/renderer/ | Planned | Review state management |
+| src/shared/reviewer.ts | packs/science-desktop/src/shared/ | Planned | Reviewer types |
 
-## Batch 5: Skills UX (OSF-5) — pending
+### Key modifications (OSF-4)
+- Reviewer references artifacts by (artifact_id, expected_sha256, project_id), not file path
+- Correction proposals routed through SessionActor (not direct execution)
+- Reviewer verdicts enter EvidenceGraph (ReviewerVerdict node + supports/contradicts edges)
+- Independent re-review on stale verdicts
+- Fix-loop bounded; user can terminate
 
-(TBD)
+## Batch 5: Skills UX (OSF-5) — 2026-07-26
 
----
+| Source Path | Destination | Modified? | Notes |
+|-------------|-------------|-----------|-------|
+| src/main/skills/ | packs/science-desktop/src/main/skills/ | Planned | Skill creation, ZIP/.skill import, GitHub preview/import, materializer, registry |
+| src/renderer/src/pages/workspace/skills/ | packs/science-desktop/src/renderer/ | Planned | Skill selector UI |
+| src/shared/skill-import-limits.ts | packs/science-desktop/src/shared/ | Planned | Import size and file count limits |
+| resources/skills/ | packs/science-desktop/resources/skills/ | Planned | 18 built-in SKILL.md files (Open Science catalog) |
 
-## Batch 6: Remote Compute UX (OSF-6) — pending
+### Key modifications (OSF-5)
+- Imported skills enter quarantine (not auto-approved)
+- Lumen DS-43 admission required: hash → license → prompt-injection → tool list → human review
+- Read-only materialization only after admission
+- Open Science skills inventoried; Lumen's 10 approved + 17 pending count unaffected
 
-(TBD)
+## Batch 6: Remote Compute UX (OSF-6) — 2026-07-26
 
----
+| Source Path | Destination | Modified? | Notes |
+|-------------|-------------|-----------|-------|
+| src/main/compute/ | packs/science-desktop/src/main/compute/ | Planned | SSH/SCP job model, concurrency, dispatch, polling, result harvesting |
+| src/renderer/src/pages/workspace/compute/ | packs/science-desktop/src/renderer/ | Planned | Remote host UI, job submission, status, notifier |
+| src/renderer/src/stores/compute-store.ts | packs/science-desktop/src/renderer/ | Planned | Compute state management |
+| src/shared/compute.ts | packs/science-desktop/src/shared/ | Planned | Compute types |
 
-## Batch 7: Connector Catalog UX (OSF-7) — pending
+### Key modifications (OSF-6)
+- ssh-runner.ts, scp-runner.ts, job-dispatcher.ts NOT imported as runtime
+- Compute UI → x.ai/science/compute_plan → SessionActor admission → Rust SSH/Slurm ToolAdapter
+- Permission bound to plan hash
+- Output hash verification → ArtifactRegistry → EvidenceGraph
 
-(TBD)
+## Batch 7: Connector Catalog UX (OSF-7) — 2026-07-26
 
----
+| Source Path | Destination | Modified? | Notes |
+|-------------|-------------|-----------|-------|
+| src/main/connectors/ | packs/science-desktop/src/main/connectors/ | Planned | 24 connector groups, 200+ tools, catalog, metadata, health |
+| src/renderer/src/pages/workspace/connectors/ | packs/science-desktop/src/renderer/ | Planned | Connector catalog UI, tool schema presentation, permission UI |
 
-## Batch 8: Desktop Release Pipeline (OSF-8) — pending
+### Key modifications (OSF-7)
+- Connector RUNTIME NOT imported; Lumen's 40 Rust adapters remain authoritative
+- Only catalog UX, tool schema display, provider health/status, and permission UI imported
+- New connector capabilities identified for Lumen gap analysis: ClinicalTrials, drug regulatory, GWAS/eQTL, Cancer Models, EMDB, BioMart, RNA tools, ZINC, molecule viewer
 
-(TBD)
+## Batch 8: Desktop Release Pipeline (OSF-8) — 2026-07-26
+
+| Source Path | Destination | Modified? | Notes |
+|-------------|-------------|-----------|-------|
+| electron-builder.yml | packs/science-desktop/electron-builder.yml | Planned | macOS DMG+ZIP, Windows installer+ZIP, Linux AppImage+DEB |
+| build/ | packs/science-desktop/build/ | Planned | Installer resources (icons, entitlements) |
+| scripts/ (release) | packs/science-desktop/scripts/ | Planned | Release workflow, update feeds, blockmap |
+| .github/workflows/ (release) | Reference only | Reference | Open Science release Actions |
+
+### Key modifications (OSF-8)
+- macOS notarization via Developer ID (org cert required later)
+- Windows Authenticode (cert required later)
+- SLSA provenance attestation adopted
+- Update feeds adapted for Lumen endpoint
+- Build artifacts: lumen-science binary bundled alongside Electron
