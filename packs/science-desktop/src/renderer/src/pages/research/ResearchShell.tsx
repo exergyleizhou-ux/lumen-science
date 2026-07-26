@@ -17,7 +17,7 @@ type UiProject = {
   defaultRunId: string
 }
 
-type TabId = 'question' | 'plan' | 'notebook' | 'evidence' | 'result' | 'review'
+type TabId = 'question' | 'plan' | 'notebook' | 'evidence' | 'result' | 'review' | 'skills'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'question', label: 'Question' },
@@ -26,6 +26,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'evidence', label: 'Evidence' },
   { id: 'result', label: 'Result' },
   { id: 'review', label: 'Review' },
+  { id: 'skills', label: 'Skills' },
 ]
 
 export const ResearchShell = (): React.JSX.Element => {
@@ -177,6 +178,22 @@ export const ResearchShell = (): React.JSX.Element => {
     if (!lumen) return
     const res = await lumen.reviewExportDossier()
     setReviewOut(JSON.stringify(res, null, 2))
+  }
+
+  const [skillsOut, setSkillsOut] = useState('')
+  const skillsList = async (): Promise<void> => {
+    if (!lumen) return
+    setSkillsOut(JSON.stringify(await lumen.skillsList(), null, 2))
+  }
+  const skillsBulkDeny = async (): Promise<void> => {
+    if (!lumen) return
+    setSkillsOut(
+      JSON.stringify(
+        await lumen.skillsBulkAdmit({ skillIds: ['a', 'b', 'c'] }),
+        null,
+        2,
+      ),
+    )
   }
 
   return (
@@ -350,6 +367,26 @@ export const ResearchShell = (): React.JSX.Element => {
                     ResearchResult claims must cite evidence nodes. Export package
                     deferred to 3.0 product path.
                   </p>
+                </section>
+              )}
+
+              {tab === 'skills' && (
+                <section style={styles.panel}>
+                  <h2 style={styles.h2}>Skills</h2>
+                  <p style={styles.muted}>
+                    Lumen inventory (approved/pending) + quarantine import. DS-43
+                    admission required; <strong>no bulk auto-approve</strong>. GPU skills stay
+                    pending until file-level review.
+                  </p>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button type="button" style={styles.btn} onClick={() => void skillsList()}>
+                      List inventory
+                    </button>
+                    <button type="button" style={styles.btn} onClick={() => void skillsBulkDeny()}>
+                      Try bulk admit (must deny)
+                    </button>
+                  </div>
+                  {skillsOut && <pre style={styles.pre}>{skillsOut}</pre>}
                 </section>
               )}
 

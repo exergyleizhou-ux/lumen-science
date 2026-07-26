@@ -21,6 +21,9 @@ import { createNotebookService, type NotebookService } from './notebook-service'
 import type { NotebookCellRequest } from './notebook-plan'
 import { createReviewService, type ReviewService } from './review-service'
 import type { ReviewRequest } from './review-plan'
+import { createSkillService, type SkillService } from './skill-service'
+import type { SkillImportRequest, SkillAdmitRequest } from './skill-plan'
+import path from 'node:path'
 
 /** Minimal surface — works with Electron IpcMain or a test double. */
 export type IpcMainLike = {
@@ -56,6 +59,10 @@ export type ScienceIpcDeps = {
   notebookService?: NotebookService
   /** Optional inject review service (tests). Default: ACP-backed. */
   reviewService?: ReviewService
+  /** Optional inject skill service (tests). */
+  skillService?: SkillService
+  /** Override path to Lumen skills registry.json */
+  skillsRegistryPath?: string
 }
 
 const DEFAULT_ACP_BASE = 'http://127.0.0.1:17000'
@@ -326,6 +333,39 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
   }))
 
   safeHandle(ipcMain, 'review:export-dossier', async () => review.exportDossier())
+
+  // ── OSF-5 Skills (quarantine import; no bulk auto-approve) ───
+  const skills =
+    deps.skillService ??
+    createSkillService({
+      registryPath:
+        deps.skillsRegistryPath ||
+        path.resolve(process.cwd(), '../../packs/science/skills/registry.json'),
+    })
+
+  safeHandle(ipcMain, 'skills:list', async () => skills.listInventory())
+
+  safeHandle(ipcMain, 'skills:import', async (_event, payload: unknown) => {
+    return skills.import((payload ?? {}) as SkillImportRequest)
+  })
+
+  safeHandle(ipcMain, 'skills:admit', async (_event, payload: unknown) => {
+    return skills.admit((payload ?? {}) as SkillAdmitRequest)
+  })
+
+  safeHandle(ipcMain, 'skills:reject', async (_event, payload: unknown) => {
+    const p = (payload ?? {}) as { skillId?: string; reason?: string }
+    return skills.reject(p.skillId ?? '', p.reason ?? 'rejected')
+  })
+
+  safeHandle(ipcMain, 'skills:quarantine-list', async () => ({
+    skills: skills.quarantineList(),
+  }))
+
+  safeHandle(ipcMain, 'skills:bulk-admit', async (_event, payload: unknown) => {
+    const p = (payload ?? {}) as { skillIds?: string[] }
+    return skills.bulkAdmit(p.skillIds ?? [])
+  })
 }
 
 function normalizeCellRequest(payload: unknown): NotebookCellRequest {

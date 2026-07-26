@@ -598,6 +598,26 @@ interface OpenScienceAPI {
     reviewHistory(): Promise<unknown>
     reviewLatest(): Promise<unknown>
     reviewExportDossier(): Promise<unknown>
+    skillsList(): Promise<unknown>
+    skillsImport(request: {
+      skillId: string
+      content: string
+      displayName?: string
+      fileLicense?: string
+      sourceRepository?: string
+      exactCommit?: string
+      sourcePath?: string
+    }): Promise<unknown>
+    skillsAdmit(request: {
+      skillId: string
+      reviewer: string
+      promptInjectionPass: boolean
+      runtimePermissionsReviewed: boolean
+      explicitApprove: boolean
+    }): Promise<unknown>
+    skillsReject(request: { skillId: string; reason?: string }): Promise<unknown>
+    skillsQuarantineList(): Promise<unknown>
+    skillsBulkAdmit(request: { skillIds: string[] }): Promise<unknown>
   }
   window: {
     // Closes the focused window (the Cmd+W / Ctrl+W fallback when no preview panel is open).

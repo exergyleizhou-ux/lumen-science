@@ -69,6 +69,13 @@ const ALLOWED_CHANNELS = new Set<string>([
   'review:history',
   'review:latest',
   'review:export-dossier',
+  // OSF-5 Skills — quarantine import; single-skill admit; no bulk auto-approve
+  'skills:list',
+  'skills:import',
+  'skills:admit',
+  'skills:reject',
+  'skills:quarantine-list',
+  'skills:bulk-admit',
 ])
 
 /**
