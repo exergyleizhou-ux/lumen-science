@@ -11,8 +11,8 @@
   "summary": {
     "adopted-verbatim": 980,
     "adopted-modified": 47,
-    "lumen-original": 37,
-    "totalShipped": 1064,
+    "lumen-original": 38,
+    "totalShipped": 1065,
     "upstreamSourceFiles": 1027,
     "upstreamFilesNotAdopted": 0
   },
@@ -1730,7 +1730,7 @@
       "origin": "lumen-original",
       "upstreamPath": null,
       "upstreamSha256": null,
-      "localSha256": "693d717800e39dea5cf00aedea554dc95d91480a8da555751e56dd360a330658",
+      "localSha256": "3d9dcb705e3fb8d12aa8cbcf2ef489fb2c52cc24e849118feee559520fc2f6e0",
       "modified": null,
       "noticeRequired": false
     },
@@ -1786,7 +1786,7 @@
       "origin": "lumen-original",
       "upstreamPath": null,
       "upstreamSha256": null,
-      "localSha256": "14428db460678bd64d90d8bcd5b836024c64f4b28de4caf9dcbbb9b7d4769b6c",
+      "localSha256": "79ff037e648c328512038b34b2630aa1557009272cc56a513c96576b0308a1b8",
       "modified": null,
       "noticeRequired": false
     },
@@ -1834,7 +1834,7 @@
       "origin": "lumen-original",
       "upstreamPath": null,
       "upstreamSha256": null,
-      "localSha256": "1c09b294fd83e54b9becf45617e77f400bb1f30214ddd1861f91e20faa5f9a5f",
+      "localSha256": "519759f6d7b8ff8075b389ec43b3529a3bcd8dd43badd800ab0e2867b104bc65",
       "modified": null,
       "noticeRequired": false
     },
@@ -1882,7 +1882,7 @@
       "origin": "lumen-original",
       "upstreamPath": null,
       "upstreamSha256": null,
-      "localSha256": "56bbec507b1335e010d5ae7ae1d00afe7584894a32bf214f1dcef3cb15ccaac4",
+      "localSha256": "dfb67c193d24cb3677c6272389fce5192ecf6219510851e18d6c10cafdb18b4e",
       "modified": null,
       "noticeRequired": false
     },
@@ -1946,7 +1946,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/ipc.ts",
       "upstreamSha256": "2532a17b9fac115335a74c7fabd9072b9dd2e3701389c567f28710e29f2b123f",
-      "localSha256": "7835a4e84e8cbe331d908f16b28bb4a0dda36f39a811618727ec0a3e33173a79",
+      "localSha256": "69e2e9532db8447a7b2cd82e7ece1feab009af3558c6e84a4a8830cee70e966f",
       "modified": true,
       "noticeRequired": true
     },
@@ -3341,6 +3341,14 @@
       "localSha256": "4689e81cd434870201dcd7d2a8e22004d31cf3acdc294bf6440ff873ffa0ff45",
       "modified": false,
       "noticeRequired": true
+    },
+    "packs/science-desktop/src/main/science-method-registry.ts": {
+      "origin": "lumen-original",
+      "upstreamPath": null,
+      "upstreamSha256": null,
+      "localSha256": "cb8de9aafb16cb70f1a6a3217434b76ae6bbcb828dabaaa38adfd9a923524f1c",
+      "modified": null,
+      "noticeRequired": false
     },
     "packs/science-desktop/src/main/second-instance-router.test.ts": {
       "origin": "adopted-verbatim",

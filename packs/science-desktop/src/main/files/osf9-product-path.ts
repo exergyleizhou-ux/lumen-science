@@ -12,7 +12,7 @@
 
 import { LocalProjectCatalog } from './local-project-catalog'
 import { AcpPreviewStore } from './acp-preview-store'
-import { createHybridMembershipAsserter } from './hybrid-membership'
+import { createOfflineCatalogMembershipAsserter } from './hybrid-membership'
 import { bindTrustedSession, unbindTrustedSession } from './session-binding'
 import {
   setTrustedPreviewContext,
@@ -66,7 +66,9 @@ export async function runOsf9ProductPath(opts?: {
     description: 'offline product path',
   })
 
-  const membership = createHybridMembershipAsserter({ catalog })
+  // Offline fixture: no engine to ask. Named explicitly so this file cannot be
+  // mistaken for the production trust model — it grants from local state.
+  const membership = createOfflineCatalogMembershipAsserter({ catalog })
   const bind = await bindTrustedSession(
     { ownerId, projectId: project.id },
     { assertMembership: membership },

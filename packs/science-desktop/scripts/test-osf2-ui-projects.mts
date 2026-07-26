@@ -5,7 +5,7 @@
  */
 import { strictEqual, ok } from 'node:assert/strict'
 import { LocalProjectCatalog } from '../src/main/files/local-project-catalog.js'
-import { createHybridMembershipAsserter } from '../src/main/files/hybrid-membership.js'
+import { createOfflineCatalogMembershipAsserter } from '../src/main/files/hybrid-membership.js'
 import { AcpPreviewStore } from '../src/main/files/acp-preview-store.js'
 import {
   registerScienceIpcHandlers,
@@ -66,7 +66,7 @@ async function run() {
     safeHandle,
     getLumenBinaryHash: () => 'abc',
     previewStore: store,
-    assertMembership: createHybridMembershipAsserter({ catalog }),
+    assertMembership: createOfflineCatalogMembershipAsserter({ catalog }),
     projectCatalog: catalog,
     defaultOwnerId: 'local-user',
     listArtifacts: async () => [

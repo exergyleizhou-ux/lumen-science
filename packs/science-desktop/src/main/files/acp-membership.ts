@@ -13,10 +13,17 @@ export type AcpToolCall = (
 
 /**
  * Assert project membership through ACP.
- * Tool contract (best-effort): project_assert_membership { owner_id, project_id }
+ * Tool contract: project_assert_membership { owner_id, project_id }
  * → { ok: true, owner_id, project_id } | { ok: false, reason }
  *
- * Fallback when tool missing: reject (no silent self-attestation).
+ * Every failure is classified as `denied` or `unavailable`, because callers
+ * must treat them differently: a denial is the authority's answer and is final,
+ * while unavailability means we do not know. Collapsing both into a bare
+ * `ok: false` is what let the hybrid asserter grant what ACP had refused.
+ *
+ * A malformed or unrecognised response is `unavailable`, not `denied` — we
+ * cannot claim the authority denied something when we could not read its
+ * answer. Neither outcome grants anything.
  */
 export function createAcpMembershipAsserter(call: AcpToolCall): MembershipAsserter {
   return async (claim) => {
@@ -27,11 +34,14 @@ export function createAcpMembershipAsserter(call: AcpToolCall): MembershipAssert
       })
       const body = unwrap(raw)
       if (!body) {
-        return { ok: false, reason: 'empty membership response' }
+        // Reached the authority but could not read its answer.
+        return { ok: false, failure: 'unavailable', reason: 'empty membership response' }
       }
       if (body.ok === false || body.ok === 'false') {
+        // The authority answered no. This is the only true denial.
         return {
           ok: false,
+          failure: 'denied',
           reason: String(body.reason ?? body.error ?? 'membership denied'),
         }
       }
@@ -40,17 +50,24 @@ export function createAcpMembershipAsserter(call: AcpToolCall): MembershipAssert
       const projectId = String(body.project_id ?? body.projectId ?? claim.projectId)
       if (body.ok === true || body.ok === 'true' || body.member === true) {
         if (ownerId !== claim.ownerId || projectId !== claim.projectId) {
+          // The authority granted a DIFFERENT owner/project than was claimed.
+          // Treated as a denial of the claim actually made.
           return {
             ok: false,
+            failure: 'denied',
             reason: 'membership response identity mismatch',
           }
         }
         return { ok: true, ownerId, projectId }
       }
-      return { ok: false, reason: 'membership not confirmed by ACP' }
+      // Response parsed but affirmed nothing: not a denial, just no grant.
+      return { ok: false, failure: 'unavailable', reason: 'membership not confirmed by ACP' }
     } catch (e: unknown) {
+      // Transport error, missing tool, timeout, crashed child. We did not
+      // reach a decision — emphatically not a denial, and not permission.
       return {
         ok: false,
+        failure: 'unavailable',
         reason: `membership ACP error: ${(e as Error).message || String(e)}`,
       }
     }

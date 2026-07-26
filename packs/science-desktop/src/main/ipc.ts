@@ -46,7 +46,7 @@ import {
   createAcpMembershipAsserter,
   listArtifactsViaAcp,
 } from './files/acp-membership'
-import { createHybridMembershipAsserter } from './files/hybrid-membership'
+import { createAcpAuthoritativeMembershipAsserter } from './files/hybrid-membership'
 import { getDefaultLocalProjectCatalog } from './files/local-project-catalog'
 import { join } from 'node:path'
 
@@ -103,9 +103,10 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
     safeHandle,
     getLumenBinaryHash,
     previewStore: wiredStore,
-    assertMembership: createHybridMembershipAsserter({
+    // ACP is the sole authority. The local catalog is a display cache and can
+    // no longer grant membership — see files/hybrid-membership.ts.
+    assertMembership: createAcpAuthoritativeMembershipAsserter({
       acp: createAcpMembershipAsserter(acpTool),
-      catalog: projectCatalog,
     }),
     listArtifacts: ({ projectId, runId }) =>
       listArtifactsViaAcp(acpTool, { projectId, runId }),
