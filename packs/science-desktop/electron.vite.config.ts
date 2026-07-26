@@ -1,6 +1,10 @@
 import { createRequire } from 'node:module'
 import { resolve } from 'path'
-import { defineConfig, type PluginOption } from 'electron-vite'
+import { defineConfig } from 'electron-vite'
+// PluginOption is Vite's type, re-exported by nothing in electron-vite; importing it from
+// 'electron-vite' never resolved. electron-vite passes plugin arrays straight through to Vite, so
+// this is the same type the config actually needs.
+import type { PluginOption } from 'vite'
 import react from '@vitejs/plugin-react'
 
 const require = createRequire(import.meta.url)
