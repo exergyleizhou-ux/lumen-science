@@ -745,18 +745,13 @@ func runProject(args []string) error {
 		if err != nil {
 			return err
 		}
-		store := projectstore.New(root)
-		p, err := store.Create(*owner, *title, *question)
+		out, err := projectstore.New(root).MigrateFromV1(*runID, *owner, *title, *question)
 		if err != nil {
 			return err
 		}
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(map[string]any{
-			"source_run_id":    *runID,
-			"migrated_project": p.ProjectID,
-			"status":           "Created V2 project from V1 run metadata (offline admission)",
-		})
+		return enc.Encode(out)
 	default:
 		return fmt.Errorf("unknown project subcommand %q", args[0])
 	}
@@ -866,6 +861,9 @@ func runWorkflow(args []string) error {
 		return fmt.Errorf("workflow requires: validate|dry-run")
 	}
 	sub := args[0]
+	if sub != "validate" && sub != "dry-run" {
+		return fmt.Errorf("workflow requires validate or dry-run (got %%q)", sub)
+	}
 	flags := flag.NewFlagSet("workflow "+sub, flag.ContinueOnError)
 	flags.SetOutput(os.Stderr)
 	storePath := flags.String("store", "", "store root")
@@ -888,7 +886,13 @@ func runWorkflow(args []string) error {
 	if err := json.Unmarshal(raw, &spec); err != nil {
 		return err
 	}
-	out, err := projectstore.New(root).WorkflowValidate(spec)
+	store := projectstore.New(root)
+	var out map[string]any
+	if sub == "dry-run" {
+		out, err = store.WorkflowDryRun(spec)
+	} else {
+		out, err = store.WorkflowValidate(spec)
+	}
 	if err != nil {
 		return err
 	}
