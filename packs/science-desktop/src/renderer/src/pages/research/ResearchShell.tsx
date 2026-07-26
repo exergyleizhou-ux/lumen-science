@@ -49,6 +49,14 @@ export const ResearchShell = (): React.JSX.Element => {
   const [tab, setTab] = useState<TabId>('question')
   const [name, setName] = useState('')
   const [question, setQuestion] = useState('')
+  /**
+   * The question as the ENGINE has it recorded. Kept beside the editable text
+   * so the tab can say whether what is on screen has been saved — a textarea
+   * that looks identical whether or not its contents survived a tab switch is
+   * how an hour of work disappears silently.
+   */
+  const [savedQuestion, setSavedQuestion] = useState('')
+  const [questionStatus, setQuestionStatus] = useState('')
   const [status, setStatus] = useState<string>('')
   /**
    * The outcome of the last open, as a headline plus the engine's own words.
@@ -109,6 +117,7 @@ export const ResearchShell = (): React.JSX.Element => {
     // the last project's "Opened." line on screen next to the error explaining
     // that nothing opened — two contradictory claims, one of them stale.
     setOpened(null)
+    setQuestionStatus('')
     setStatus('Opening (bind + seed)…')
     const res = (await lumen.openUiProject({
       projectId: project.id,
@@ -130,9 +139,35 @@ export const ResearchShell = (): React.JSX.Element => {
     setError(undefined)
     setStatus('')
     setOpened(describeOpen(res))
+    // Show what is RECORDED, not whatever the previous project left in the box.
+    const recorded = (res as { researchQuestion?: string }).researchQuestion ?? ''
+    setQuestion(recorded)
+    setSavedQuestion(recorded)
+    setQuestionStatus('')
   }
 
   const [previewId, setPreviewId] = useState('')
+  const saveQuestion = async (): Promise<void> => {
+    if (!lumen || !active) return
+    setQuestionStatus('Saving…')
+    try {
+      const res = (await lumen.updateQuestion({ researchQuestion: question })) as {
+        ok?: boolean
+        reason?: string
+      }
+      if (!res.ok) {
+        // Includes a denied permission. The box keeps the user's text — losing
+        // it because the engine said no would punish them for our refusal.
+        setQuestionStatus(res.reason ?? 'the engine refused this change')
+        return
+      }
+      setSavedQuestion(question)
+      setQuestionStatus('Saved to the project record.')
+    } catch (e: unknown) {
+      setQuestionStatus((e as Error)?.message || String(e))
+    }
+  }
+
   const tryPreview = async (): Promise<void> => {
     if (!lumen || !active) return
     // An inline field, not window.prompt(): Electron renderers THROW on
@@ -441,10 +476,26 @@ export const ResearchShell = (): React.JSX.Element => {
                     value={question}
                     onChange={(e) => setQuestion(e.target.value)}
                   />
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className={cx.btn}
+                      // Nothing to save is not an error to explain after the
+                      // click; the control says so by being unavailable.
+                      disabled={!question.trim() || question === savedQuestion}
+                      onClick={() => void saveQuestion()}
+                    >
+                      Save question
+                    </button>
+                    {question !== savedQuestion && (
+                      <span className={cx.muted}>Unsaved changes</span>
+                    )}
+                    {questionStatus && <span className={cx.muted}>{questionStatus}</span>}
+                  </div>
                   <p className={cx.muted}>
-                    Month-2 golden path: literature → databases → notebook → Motif →
-                    reviewer → evidence package. Plan execution routes through Lumen
-                    only.
+                    The question is part of the project record, so saving it goes
+                    through the engine and asks for your approval like any other
+                    change to that record.
                   </p>
                 </section>
               )}

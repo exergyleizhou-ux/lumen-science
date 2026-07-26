@@ -34,6 +34,17 @@ pub enum ProjectMutation {
         project_id: ProjectId,
         status: ProjectStatus,
     },
+    /// Refine the research question of an existing project.
+    ///
+    /// A question is rarely right on day one — the product must allow
+    /// refinement, and routing it here (rather than editing desktop-side
+    /// state) keeps the durable record the single authority on what is being
+    /// asked. Same ownership check, permission prompt, idempotency and
+    /// revision CAS as every other mutation.
+    QuestionUpdate {
+        project_id: ProjectId,
+        research_question: String,
+    },
     ClaimPropose {
         project_id: ProjectId,
         statement: String,
@@ -54,6 +65,7 @@ impl ProjectMutation {
         match self {
             Self::ProjectCreate { .. } => "project_create",
             Self::ProjectTransition { .. } => "project_transition",
+            Self::QuestionUpdate { .. } => "question_update",
             Self::ClaimPropose { .. } => "claim_propose",
             Self::EvidenceAttach { .. } => "evidence_attach",
         }
@@ -64,6 +76,7 @@ impl ProjectMutation {
         match self {
             Self::ProjectCreate { .. } => None,
             Self::ProjectTransition { project_id, .. }
+            | Self::QuestionUpdate { project_id, .. }
             | Self::ClaimPropose { project_id, .. }
             | Self::EvidenceAttach { project_id, .. } => Some(project_id),
         }
@@ -249,6 +262,22 @@ impl ProjectStore {
                 )?;
                 Ok((project_id.clone(), serde_json::to_value(project)?))
             }
+            ProjectMutation::QuestionUpdate {
+                project_id,
+                research_question,
+            } => {
+                if research_question.is_empty() {
+                    return Err(ScienceError::Invalid(
+                        "question_update requires a research question".into(),
+                    ));
+                }
+                let project = self.update_question_inner(
+                    project_id,
+                    &request.owner_id,
+                    research_question.clone(),
+                )?;
+                Ok((project_id.clone(), serde_json::to_value(project)?))
+            }
             ProjectMutation::ClaimPropose {
                 project_id,
                 statement,
@@ -413,6 +442,62 @@ mod tests {
             ..second_claim
         };
         store.apply_mutation(&fresh).unwrap();
+    }
+
+    #[test]
+    fn question_update_persists_and_is_owner_gated() {
+        let dir = tempdir().unwrap();
+        let store = ProjectStore::new(dir.path());
+        let created = store.apply_mutation(&create_request("op-create-0006")).unwrap();
+        let project_id = created.project_id.clone();
+
+        let update = MutationRequest {
+            operation_id: "op-question-0001".into(),
+            session_id: "session-1".into(),
+            owner_id: "owner-1".into(),
+            expected_revision: Some(created.revision.clone()),
+            mutation: ProjectMutation::QuestionUpdate {
+                project_id: project_id.clone(),
+                research_question: "How does the refined question persist?".into(),
+            },
+        };
+        let outcome = store.apply_mutation(&update).unwrap();
+        assert_ne!(outcome.revision, created.revision, "revision must advance");
+
+        // Read back through the DURABLE record, not the outcome echo: the
+        // claim under test is persistence, and an echo can lie about that.
+        let reloaded = store.load_project(&project_id).unwrap();
+        assert_eq!(
+            reloaded.research_question,
+            "How does the refined question persist?"
+        );
+
+        // A non-owner cannot rewrite someone else's question.
+        let intruder = MutationRequest {
+            operation_id: "op-question-0002".into(),
+            owner_id: "owner-9".into(),
+            expected_revision: None,
+            mutation: ProjectMutation::QuestionUpdate {
+                project_id: project_id.clone(),
+                research_question: "hijacked".into(),
+            },
+            ..update.clone()
+        };
+        assert!(matches!(
+            store.apply_mutation(&intruder),
+            Err(ScienceError::Ownership)
+        ));
+
+        // And an empty question is refused rather than recorded.
+        let empty = MutationRequest {
+            operation_id: "op-question-0003".into(),
+            mutation: ProjectMutation::QuestionUpdate {
+                project_id,
+                research_question: String::new(),
+            },
+            ..update
+        };
+        assert!(store.apply_mutation(&empty).is_err());
     }
 
     #[test]

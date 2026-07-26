@@ -73,6 +73,8 @@ const ALLOWED_CHANNELS = new Set<string>([
   'files:create-ui-project',
   'files:open-ui-project',
   'files:delete-ui-project',
+  // LS5-K28 Question refinement — actor-gated engine mutation, never local state
+  'files:update-question',
   // OSF-3 Notebook — plan/dry-run/export local; execute only via ACP
   'notebook:plan-cell',
   'notebook:dry-run-cell',

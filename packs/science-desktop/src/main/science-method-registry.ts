@@ -54,6 +54,7 @@ export const SCIENCE_METHODS = [
   'project_assert_membership',
   'project_list',
   'project_transition',
+  'project_update_question',
   'claim_propose',
   'evidence_attach',
   'evidence_trace',

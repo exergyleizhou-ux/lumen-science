@@ -543,6 +543,25 @@ impl ProjectStore {
         Ok(project)
     }
 
+    /// Overwrite the research question. Ownership-checked like a transition;
+    /// the previous question is preserved in the mutation run record, not
+    /// here — the project file states what IS being asked, the run ledger
+    /// states what changed and when.
+    pub(super) fn update_question_inner(
+        &self,
+        project_id: &ProjectId,
+        owner_id: &str,
+        research_question: String,
+    ) -> Result<ResearchProject> {
+        let mut project = self.load_project(project_id)?;
+        if project.owner_id.0 != owner_id {
+            return Err(ScienceError::Ownership);
+        }
+        project.research_question = research_question;
+        self.write_project_file(&project)?;
+        Ok(project)
+    }
+
     /// Propose a claim node in the evidence graph.
     ///
     /// Two records change together (the claim file and `graph.json`). The

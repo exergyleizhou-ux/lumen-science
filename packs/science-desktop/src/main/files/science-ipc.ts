@@ -342,6 +342,36 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     }
   })
 
+  safeHandle(ipcMain, 'files:update-question', async (_event, payload: unknown) => {
+    const p = (payload ?? {}) as { researchQuestion?: string }
+    const question = (p.researchQuestion ?? '').trim()
+    if (!question) {
+      return { ok: false, reason: 'a research question cannot be empty' }
+    }
+    const bound = getTrustedPreviewContext()
+    if (!bound) {
+      return { ok: false, reason: 'no trusted session — open a project before editing its question' }
+    }
+    // The question is part of the durable record, so refining it is a record
+    // MUTATION: SessionActor route, permission prompt, idempotent operation
+    // id. The alternative — keeping edits in renderer state — is how the
+    // question a user spent an hour on vanished on tab switch while the
+    // engine's record silently said something else.
+    try {
+      const raw = (await callTool('project_update_question', {
+        ownerId: bound.ownerId,
+        storeRoot: SCIENCE_STORE_DIR,
+        projectId: bound.projectId,
+        researchQuestion: question,
+        operationId: randomUUID(),
+        approvalTimeoutMs: ENGINE_APPROVAL_TIMEOUT_MS,
+      })) as { revision?: string }
+      return { ok: true, revision: raw?.revision, authority: 'session-actor' }
+    } catch (e: unknown) {
+      return { ok: false, reason: (e as Error).message || String(e) }
+    }
+  })
+
   /**
    * Open workspace: catalog lookup → membership bind → artifact seed.
    * Single product action for renderer (Question/Plan shell entry).
@@ -385,6 +415,20 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
       }
     }
 
+    // The recorded question, read from the engine's durable bundle — the tab
+    // must show what IS recorded, not a blank local scratchpad. Absence is
+    // non-fatal: an older record without one simply shows empty.
+    let researchQuestion: string | undefined
+    try {
+      const bundle = (await callTool('project_get', {
+        storeRoot: SCIENCE_STORE_DIR,
+        projectId: bound.projectId,
+      })) as { project?: { research_question?: string } }
+      researchQuestion = bundle?.project?.research_question
+    } catch {
+      researchQuestion = undefined
+    }
+
     return {
       ok: true,
       project,
@@ -393,6 +437,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
       runId,
       seeded,
       seedError,
+      researchQuestion,
       authority: 'ui-local+lumen-bind',
     }
   })

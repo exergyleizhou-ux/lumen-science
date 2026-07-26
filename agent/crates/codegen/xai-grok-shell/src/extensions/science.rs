@@ -121,6 +121,9 @@ pub async fn handle(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
         }
         "x.ai/science/project_list" => handle_project_list(agent, args).await,
         "x.ai/science/project_transition" => handle_project_transition(agent, args).await,
+        "x.ai/science/project_update_question" => {
+            handle_project_update_question(agent, args).await
+        }
         "x.ai/science/claim_propose" => handle_claim_propose(agent, args).await,
         "x.ai/science/evidence_attach" => handle_evidence_attach(agent, args).await,
         // WP-3 evidence queries
@@ -255,6 +258,53 @@ struct ProjectCreateParams {
     artifact_root: Option<PathBuf>,
     #[serde(default = "default_approval_timeout_ms")]
     approval_timeout_ms: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct QuestionUpdateParams {
+    session_id: String,
+    owner_id: String,
+    store_root: PathBuf,
+    project_id: String,
+    research_question: String,
+    operation_id: String,
+    #[serde(default)]
+    expected_revision: Option<String>,
+    #[serde(default)]
+    artifact_root: Option<PathBuf>,
+    #[serde(default = "default_approval_timeout_ms")]
+    approval_timeout_ms: u64,
+}
+
+/// Refine an existing project's research question.
+///
+/// Same SessionActor route as every other record mutation — permission prompt,
+/// idempotent operation id, optional revision CAS. The alternative was the
+/// desktop keeping edits in component state, where the question a user spent
+/// an hour refining vanished on tab switch and the durable record silently
+/// disagreed with the screen.
+async fn handle_project_update_question(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: QuestionUpdateParams = parse_params(args)?;
+    if params.research_question.is_empty() {
+        return Err(acp::Error::invalid_params().data("researchQuestion is required"));
+    }
+    let outcome = run_project_mutation(
+        agent,
+        params.session_id,
+        params.owner_id,
+        params.store_root,
+        params.artifact_root,
+        params.operation_id,
+        params.expected_revision,
+        params.approval_timeout_ms,
+        xai_grok_science::project::ProjectMutation::QuestionUpdate {
+            project_id: xai_grok_science::project::ProjectId(params.project_id),
+            research_question: params.research_question,
+        },
+    )
+    .await?;
+    mutation_response(outcome)
 }
 
 async fn handle_project_create(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {

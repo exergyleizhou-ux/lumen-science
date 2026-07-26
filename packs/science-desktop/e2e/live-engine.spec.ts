@@ -285,3 +285,48 @@ test('the run\'s artifacts are previewable and reviewable — the evidence chain
   // The engine's record came back — this was not a local projection alone.
   expect(review).toContain('SessionActor')
 })
+
+test('a refined research question survives leaving the project', async () => {
+  // The question was renderer state only: typed, never sent anywhere, gone on
+  // the next open — while the engine's durable record said something else
+  // entirely. Persistence is the whole claim of this tab, so the test proves
+  // it the only way that counts: navigate away, come back, read it again.
+  const QUESTION = `Does the refined question persist? ${Date.now()}`
+
+  await page.getByRole('tab', { name: 'Question', exact: true }).click()
+  await page.locator('#panel-question').waitFor({ timeout: 10_000 })
+  await page.locator('#panel-question textarea').fill(QUESTION)
+
+  const save = page.getByRole('button', { name: 'Save question', exact: true })
+  await expect(save).toBeEnabled()
+  await save.click()
+
+  // Saving mutates the record, so the engine asks — same gate as any other
+  // change to it.
+  const allow = page.getByRole('button', { name: /allow/i }).first()
+  try {
+    await allow.waitFor({ timeout: 30_000 })
+    await allow.click()
+  } catch {
+    // An already-approved session may not re-prompt.
+  }
+  await expect
+    .poll(async () => page.locator('#panel-question').innerText(), { timeout: 60_000 })
+    .toContain('Saved to the project record')
+
+  // Leave the project entirely, then re-open it. Re-reading the same mounted
+  // textarea would prove nothing — the defect WAS that it looked fine until
+  // you came back.
+  const project = page.locator('aside button').filter({ hasText: /Live approval/ }).first()
+  await project.click()
+  await page.waitForTimeout(1500)
+  await page.getByRole('tab', { name: 'Question', exact: true }).click()
+  await page.locator('#panel-question').waitFor({ timeout: 10_000 })
+
+  await expect
+    .poll(async () => page.locator('#panel-question textarea').inputValue(), { timeout: 30_000 })
+    .toBe(QUESTION)
+
+  // And it is reported as saved, not as pending work.
+  expect(await page.locator('#panel-question').innerText()).not.toContain('Unsaved changes')
+})
