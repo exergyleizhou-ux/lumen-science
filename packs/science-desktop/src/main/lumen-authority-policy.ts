@@ -26,6 +26,12 @@ const ALLOWED_CHANNELS = new Set<string>([
   'app:quit',
   'app:get-version',
   'app:get-lumen-hash',
+
+  // Permission prompts. The renderer RESPONDS to an ask the engine initiated;
+  // it cannot originate one, and `permission:respond` carries a request id the
+  // main process issued, so a reply to an unknown id is discarded rather than
+  // resolving something else.
+  'permission:respond',
   // Tray & notifications
   'tray:update',
   'notification:show',

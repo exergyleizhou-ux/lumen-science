@@ -228,7 +228,18 @@ async function run(): Promise<void> {
 
     const notAnInterpreter = path.join(scratch, 'exits-nonzero')
     fs.writeFileSync(notAnInterpreter, '#!/bin/sh\nexit 3\n', { mode: 0o700 })
-    const bad = await identifyInterpreter({ kind: 'python', interpreterPath: notAnInterpreter })
+    // Generous budget on purpose. This asserts WHICH failure code a probe
+    // produces, not how fast it runs, so it only has to outlast scheduling
+    // delay. The 10s default was enough on an idle machine and not enough
+    // while other builds were running: the whole suite failed here with
+    // 'version_probe_timed_out' while passing in isolation. A budget tuned for
+    // an idle machine is a flake waiting for a shared CI runner, and a flaky
+    // test is worse than none — it teaches people to ignore failures.
+    const bad = await identifyInterpreter({
+      kind: 'python',
+      interpreterPath: notAnInterpreter,
+      probeTimeoutMs: 60_000,
+    })
     ok(!bad.identified)
     strictEqual(bad.failure.code, 'version_probe_exit_non_zero')
   })

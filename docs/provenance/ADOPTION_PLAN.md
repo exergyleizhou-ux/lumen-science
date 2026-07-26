@@ -139,6 +139,27 @@ harvest,状态 machine — and drive it from ours. Do not take the broker.
 change. As an adapter it may propose; the actor records. Their independence
 model (author ≠ reviewer) is worth copying as a *rule*, not as a runtime.
 
+### A correction: the three unserved tools
+
+`artifact_list`, `notebook_execute` and `start_review` are Go MCP tools, and the
+desktop's method registry refuses them (AUTH-7). The obvious fix — give the
+desktop an HTTP client for the Go bridge — is wrong, and worth writing down
+before someone does it.
+
+It would give the desktop two engines to talk to. That is the two-authority
+shape this branch spent forty commits removing, only with the second authority
+reached over a different transport. Nothing about it being Go rather than
+TypeScript makes it safe.
+
+Under the rule at the top of this document, the Go pack EXECUTES: it holds real
+science capability and no authority. So it belongs behind the actor, invoked by
+Rust as a typed adapter, exactly like `PythonLoopRunner` drives the exec-loop.
+The desktop keeps one transport and one authority.
+
+Until that routing exists those three call sites fail explicitly, which is the
+honest state: the capability is unreachable, and saying so is better than
+reaching it by a path that dissolves the invariant.
+
 ### Never
 
 **`acp/**` (18 files).** Their ACP client drives Claude Code / Codex / OpenCode

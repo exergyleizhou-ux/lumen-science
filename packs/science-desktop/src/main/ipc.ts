@@ -24,7 +24,7 @@
  * See: third_party/open-science/NOTICE
  */
 
-import { app, ipcMain, Notification } from 'electron'
+import { app, BrowserWindow, ipcMain, Notification } from 'electron'
 import type { AppIconPreview, AppIconVariant } from '../shared/settings'
 import { BackendShutdownCoordinator } from './lifecycle-shutdown'
 import { createLogger } from './logger'
@@ -33,9 +33,12 @@ import {
   safeHandle,
   getLumenBinaryHash,
   acpCall,
-  listScienceTools
+  listScienceTools,
+  setPermissionPrompt,
+  denyPendingPermissions
 } from './lumen-acp-bridge'
 import { getAllowedChannels } from './lumen-authority-policy'
+import { registerPermissionIpc } from './permission-ipc'
 import {
   buildTaskNotificationShow
 } from './notifications/electron-wiring'
@@ -99,6 +102,18 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
     service: settingsService,
   })
 
+  // ── Permission prompts ───────────────────────────────────────
+  // Until this was wired the engine's session/request_permission got -32601 and
+  // every approval-requiring mutation failed. The prompt is installed rather
+  // than defaulted: with none installed the broker DENIES, so an engine request
+  // arriving before a window exists is refused instead of auto-approved.
+  setPermissionPrompt(
+    registerPermissionIpc(ipcMain, {
+      safeHandle,
+      getWindow: () => BrowserWindow.getAllWindows()[0] ?? null,
+    }),
+  )
+
   // ── Science + OSF-2 product path (single registration site) ──
   // ACP-wired store + hybrid membership (ACP then local UI catalog) + seed.
   const acpTool = async (tool: string, args: Record<string, unknown>) =>
@@ -147,8 +162,19 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
     on: () => {},
     off: () => {},
     destroy: () => { log.info('lumen runtime destroy (no-op)') },
-    shutdownForQuit: async () => ({ reaped: true }),
-    shutdownForUpdateGate: async () => ({ reaped: true }),
+    // Deny anything still waiting on a human. The broker's timeout timers are
+    // deliberately ref'd so an awaited ask always settles, which means quit has
+    // to resolve them rather than leave the engine waiting on an answer that
+    // can no longer come. Closing the app is not approval.
+    shutdownForQuit: async () => {
+      const denied = denyPendingPermissions('the application is closing')
+      if (denied > 0) log.info(`denied ${denied} pending permission request(s) on quit`)
+      return { reaped: true }
+    },
+    shutdownForUpdateGate: async () => {
+      denyPendingPermissions('the application is updating')
+      return { reaped: true }
+    },
     getActivePromptSessions: (): ActiveSessionSource[] => [],
   }
 

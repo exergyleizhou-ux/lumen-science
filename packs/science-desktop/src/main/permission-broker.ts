@@ -1,0 +1,186 @@
+/**
+ * Carries an engine permission request to a human, and the answer back.
+ *
+ * The Rust SessionActor asks `session/request_permission` before anything
+ * consequential. The desktop passed no handler, so the transport answered
+ * `-32601` and every approval-requiring mutation failed. The seam was left
+ * deliberately unused: auto-approving in the main process would grant
+ * execution authority with nobody in the loop, which is worse than refusing.
+ *
+ * So this brokers to a real person. The design constraints all follow from one
+ * rule — **silence is never consent**:
+ *
+ *   - no window to ask        → deny
+ *   - the user closes the UI  → deny
+ *   - the request times out   → deny
+ *   - a malformed request     → deny
+ *   - the renderer answers an id we never issued → ignored, and the real
+ *     request still times out rather than being resolved by an unrelated reply
+ *
+ * Nothing here can produce an allow that a human did not click.
+ *
+ * Electron-free on purpose: `ask` is injected, so the authority scripts can
+ * execute this module and the decision logic is testable without a UI.
+ */
+
+/** What the engine asked, reduced to what a person needs to decide. */
+export type PermissionAsk = {
+  requestId: string
+  /** e.g. `x.ai/science/workflow_execute` */
+  operation: string
+  /** Human-readable target: a project title, a file, a command summary. */
+  target: string
+  /** Set when the engine described the concrete effect. */
+  detail?: string
+}
+
+export type PermissionDecision = 'allow_once' | 'reject'
+
+/** Presents the ask and resolves with what the human chose. */
+export type AskHuman = (ask: PermissionAsk) => Promise<PermissionDecision>
+
+export type PermissionBrokerOptions = {
+  ask: AskHuman
+  /**
+   * How long to wait for a human. Generous by default: a person reading a
+   * dialog is not a stalled process, and a short timeout would train the
+   * product to deny things the user was about to allow.
+   */
+  timeoutMs?: number
+  onDenied?: (ask: PermissionAsk, reason: string) => void
+}
+
+const DEFAULT_TIMEOUT_MS = 5 * 60_000
+
+/** The ACP outcome shape the agent expects back. */
+type PermissionOutcome =
+  | { outcome: 'selected'; optionId: string }
+  | { outcome: 'cancelled' }
+
+const ALLOW_OPTION = 'allow_once'
+
+/**
+ * Read the engine's request into the shape a person can act on.
+ *
+ * Returns null when the request is not recognisable. That is deliberately not
+ * an error to display: an unparseable permission request must be denied, and
+ * showing a dialog whose text we could not read would invite a click on
+ * something nobody understood.
+ */
+export function describeAsk(requestId: string, params: unknown): PermissionAsk | null {
+  if (typeof params !== 'object' || params === null) return null
+  const p = params as Record<string, unknown>
+
+  const update = (typeof p.toolCall === 'object' && p.toolCall !== null
+    ? (p.toolCall as Record<string, unknown>)
+    : {}) as Record<string, unknown>
+
+  const operation =
+    typeof p.method === 'string'
+      ? p.method
+      : typeof update.title === 'string'
+        ? update.title
+        : ''
+  if (!operation) return null
+
+  const target =
+    typeof p.target === 'string'
+      ? p.target
+      : typeof update.kind === 'string'
+        ? update.kind
+        : 'unspecified target'
+
+  const detail = typeof p.detail === 'string' ? p.detail : undefined
+  return { requestId, operation, target, detail }
+}
+
+export class PermissionBroker {
+  private readonly ask: AskHuman
+  private readonly timeoutMs: number
+  private readonly onDenied?: (ask: PermissionAsk, reason: string) => void
+  /** Asks currently awaiting a human, so a shutdown can deny them explicitly. */
+  private readonly pending = new Map<string, PermissionAsk>()
+
+  constructor(opts: PermissionBrokerOptions) {
+    this.ask = opts.ask
+    this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
+    this.onDenied = opts.onDenied
+  }
+
+  pendingCount(): number {
+    return this.pending.size
+  }
+
+  /**
+   * Deny every outstanding ask, for shutdown.
+   *
+   * The timeout timers are ref'd so an awaited request always settles, which
+   * means quit must actively resolve them rather than relying on the loop
+   * draining. Denying is the only safe answer: the user is closing the app, not
+   * approving anything.
+   */
+  denyAllPending(reason = 'the application is closing'): number {
+    const denied = this.pending.size
+    for (const ask of this.pending.values()) {
+      this.onDenied?.(ask, reason)
+    }
+    this.pending.clear()
+    return denied
+  }
+
+  /**
+   * Handle one `session/request_permission`.
+   *
+   * Never throws: a thrown handler would surface to the engine as a transport
+   * fault rather than a decision, and the engine would be right to treat an
+   * unanswered permission as a failure. Denying explicitly is the honest reply.
+   */
+  async handle(requestId: string, params: unknown): Promise<PermissionOutcome> {
+    const ask = describeAsk(requestId, params)
+    if (!ask) {
+      this.onDenied?.(
+        { requestId, operation: 'unknown', target: 'unparseable request' },
+        'the permission request could not be read',
+      )
+      return { outcome: 'cancelled' }
+    }
+
+    this.pending.set(requestId, ask)
+    try {
+      const decision = await this.withTimeout(ask)
+      if (decision === 'allow_once') {
+        return { outcome: 'selected', optionId: ALLOW_OPTION }
+      }
+      return { outcome: 'cancelled' }
+    } catch (error: unknown) {
+      // Includes the timeout. Any failure to obtain an answer is a denial.
+      this.onDenied?.(ask, (error as Error)?.message || String(error))
+      return { outcome: 'cancelled' }
+    } finally {
+      this.pending.delete(requestId)
+    }
+  }
+
+  private async withTimeout(ask: PermissionAsk): Promise<PermissionDecision> {
+    let timer: NodeJS.Timeout | undefined
+    try {
+      return await Promise.race([
+        this.ask(ask),
+        new Promise<never>((_, reject) => {
+          // Deliberately NOT unref'd. An unref'd timer lets the process exit
+          // while this race is still awaited, so the await never settles and
+          // the caller silently gets nothing — which is how the first run of
+          // the test suite ended after five assertions. Quit is handled by
+          // denyAllPending() instead, which resolves every waiter rather than
+          // abandoning it.
+          timer = setTimeout(
+            () => reject(new Error(`no answer within ${this.timeoutMs}ms`)),
+            this.timeoutMs,
+          )
+        }),
+      ])
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  }
+}

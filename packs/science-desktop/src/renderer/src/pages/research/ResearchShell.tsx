@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import { PermissionPrompt } from '@/components/PermissionPrompt'
 
 type UiProject = {
   id: string
@@ -242,6 +243,15 @@ export const ResearchShell = (): React.JSX.Element => {
 
   return (
     <div style={styles.root}>
+      {/* Mounted unconditionally. The engine can ask at any point, and a prompt
+          that only exists on some screen would leave those asks to time out
+          into a denial the user never saw. */}
+      {lumen ? (
+        <PermissionPrompt
+          subscribe={lumen.onPermissionAsk}
+          respond={lumen.respondToPermission}
+        />
+      ) : null}
       <header style={styles.header}>
         <div>
           <h1 style={styles.title}>Lumen Science</h1>

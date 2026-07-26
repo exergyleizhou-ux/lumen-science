@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "generator": "scripts/generate-science-status.py",
   "doc": "Machine-generated product status. Derived from the source tree and git only. Prose documents must point here rather than restate status. Regenerate with: python3 scripts/generate-science-status.py",
-  "sourceCommit": "9f41ed50575f562a4915a75381629c4af0e76b7f",
-  "sourceCommitEpoch": 1785068163,
-  "sourceCommitIso": "2026-07-26T20:16:03+08:00",
+  "sourceCommit": "f1f4535ebc35a9aea9231ce8e32cbf6938df0e7c",
+  "sourceCommitEpoch": 1785068542,
+  "sourceCommitIso": "2026-07-26T20:22:22+08:00",
   "gateVocabulary": {
     "states": [
       "pass",
@@ -259,9 +259,10 @@
           "x.ai/science/seq_analyze",
           "x.ai/science/ssh_scp_fixture",
           "x.ai/science/workflow_dry_run",
+          "x.ai/science/workflow_execute",
           "x.ai/science/workflow_validate"
         ],
-        "acpMethodCount": 24
+        "acpMethodCount": 25
       },
       "go": {
         "path": "packs/science",
@@ -307,8 +308,10 @@
       },
       {
         "id": "AUTH-8",
-        "summary": "Desktop has no permission UI, so any mutation requiring approval is refused. The seam is left open and unused deliberately: auto-approving in main would grant execution authority with no user in the loop",
-        "path": "packs/science-desktop/src/main/lumen-acp-bridge.ts"
+        "summary": "Desktop permission UI: the engine's session/request_permission now reaches a human, and nothing but a click can approve",
+        "path": "packs/science-desktop/src/main/permission-broker.ts",
+        "status": "closed",
+        "note": "Every non-answer denies: no window, a dismissed dialog, a timeout, an unparseable request, a reply naming a request id main never issued, and app quit. The renderer has no channel to originate an ask, only to answer one. 33 negative tests across test-permission-broker.mts and test-permission-ipc.mts."
       },
       {
         "id": "AUTH-3",

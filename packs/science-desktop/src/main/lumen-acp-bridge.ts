@@ -36,11 +36,32 @@ import { validateIpcChannel } from './lumen-authority-policy'
 // Electron-free to remain testable; the bridge conforms to it.
 import type { IpcMainLike } from './files/science-ipc'
 import { AcpSessionManager, type EngineState } from './acp-session-manager'
+import { PermissionBroker, type AskHuman } from './permission-broker'
 import { listScienceMethods } from './science-method-registry'
 
 // ── Engine singleton ─────────────────────────────────────────────
 
 let manager: AcpSessionManager | null = null
+let broker: PermissionBroker | null = null
+
+/**
+ * How a permission ask reaches a person. Installed by the IPC layer once a
+ * window exists.
+ *
+ * Absent until then, and absence DENIES rather than allows: an engine request
+ * arriving before the UI is ready must not be auto-approved just because no
+ * one could be asked yet.
+ */
+let askHuman: AskHuman | null = null
+
+export function setPermissionPrompt(ask: AskHuman | null): void {
+  askHuman = ask
+}
+
+/** Deny anything still waiting, for shutdown. Returns how many were denied. */
+export function denyPendingPermissions(reason?: string): number {
+  return broker?.denyAllPending(reason) ?? 0
+}
 let lastState: EngineState = { status: 'stopped' }
 
 /**
@@ -52,6 +73,27 @@ let lastState: EngineState = { status: 'stopped' }
  */
 function sessionWorkspace(): string {
   return app.getPath('userData')
+}
+
+let permissionSeq = 0
+
+function ensureBroker(): PermissionBroker {
+  if (broker) return broker
+  broker = new PermissionBroker({
+    ask: async (request) => {
+      if (!askHuman) {
+        // No UI is listening. Refusing is the only honest answer: nobody
+        // declined, but nobody approved either, and only an approval may
+        // proceed.
+        throw new Error('no permission UI is available to ask')
+      }
+      return askHuman(request)
+    },
+    onDenied: (request, reason) => {
+      console.warn(`[lumen] permission denied for ${request.operation}: ${reason}`)
+    },
+  })
+  return broker
 }
 
 function ensureManager(): AcpSessionManager {
@@ -67,6 +109,16 @@ function ensureManager(): AcpSessionManager {
         LUMEN_DESKTOP: '1',
         LUMEN_NO_BROWSER: '1',
       },
+    },
+    // The engine asks before anything consequential. Without this handler the
+    // transport answered -32601 and every approval-requiring mutation failed.
+    onServerRequest: async (method, params) => {
+      if (method !== 'session/request_permission') {
+        // Unknown server-initiated methods are refused, not guessed at.
+        throw new Error(`unsupported server request: ${method}`)
+      }
+      const requestId = `perm-${++permissionSeq}`
+      return ensureBroker().handle(requestId, params)
     },
     onStateChange: (state) => {
       lastState = state

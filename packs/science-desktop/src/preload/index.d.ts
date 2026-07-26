@@ -560,6 +560,24 @@ interface OpenScienceAPI {
       expectedSha256?: string
       mimeType?: string
     }): Promise<unknown>
+    /**
+     * Permission asks initiated by the ENGINE. The renderer can only answer
+     * one, never raise one, and the request id it answers with is the one main
+     * issued. Returns an unsubscribe so a remount cannot answer the same ask
+     * twice.
+     */
+    onPermissionAsk(
+      listener: (ask: {
+        requestId: string
+        operation: string
+        target: string
+        detail?: string
+      }) => void,
+    ): () => void
+    respondToPermission(
+      requestId: string,
+      decision: 'allow_once' | 'reject',
+    ): Promise<unknown>
     listUiProjects(): Promise<unknown>
     createUiProject(request: {
       name: string

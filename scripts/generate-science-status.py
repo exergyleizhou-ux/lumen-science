@@ -481,12 +481,18 @@ def collect_authority() -> dict[str, Any]:
             {
                 "id": "AUTH-8",
                 "summary": (
-                    "Desktop has no permission UI, so any mutation requiring approval "
-                    "is refused. The seam is left open and unused deliberately: "
-                    "auto-approving in main would grant execution authority with no "
-                    "user in the loop"
+                    "Desktop permission UI: the engine's session/request_permission "
+                    "now reaches a human, and nothing but a click can approve"
                 ),
-                "path": "packs/science-desktop/src/main/lumen-acp-bridge.ts",
+                "path": "packs/science-desktop/src/main/permission-broker.ts",
+                "status": "closed",
+                "note": (
+                    "Every non-answer denies: no window, a dismissed dialog, a "
+                    "timeout, an unparseable request, a reply naming a request id "
+                    "main never issued, and app quit. The renderer has no channel to "
+                    "originate an ask, only to answer one. 33 negative tests across "
+                    "test-permission-broker.mts and test-permission-ipc.mts."
+                ),
             },
             {
                 "id": "AUTH-3",

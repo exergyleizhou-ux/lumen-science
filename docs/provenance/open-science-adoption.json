@@ -11,8 +11,8 @@
   "summary": {
     "adopted-verbatim": 977,
     "adopted-modified": 51,
-    "lumen-original": 45,
-    "totalShipped": 1073,
+    "lumen-original": 49,
+    "totalShipped": 1077,
     "upstreamSourceFiles": 1027,
     "upstreamFilesNotAdopted": 0
   },
@@ -1822,6 +1822,14 @@
       "modified": null,
       "noticeRequired": false
     },
+    "packs/science-desktop/src/main/files/dossier-writer.ts": {
+      "origin": "lumen-original",
+      "upstreamPath": null,
+      "upstreamSha256": null,
+      "localSha256": "dd7ce16175be35a5b91f18fcd9ae44957d2406954476443e4afabea0a5557049",
+      "modified": null,
+      "noticeRequired": false
+    },
     "packs/science-desktop/src/main/files/hybrid-membership.ts": {
       "origin": "lumen-original",
       "upstreamPath": null,
@@ -1986,7 +1994,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/ipc.ts",
       "upstreamSha256": "2532a17b9fac115335a74c7fabd9072b9dd2e3701389c567f28710e29f2b123f",
-      "localSha256": "595b56874fdfa02bfb2a8ab629c4047f21352400748590cec6af31e560a7af88",
+      "localSha256": "176e14957376abd7ec17867971812d4e47960f9a3ee1520308404a3bf0678b15",
       "modified": true,
       "noticeRequired": true
     },
@@ -2058,7 +2066,7 @@
       "origin": "lumen-original",
       "upstreamPath": null,
       "upstreamSha256": null,
-      "localSha256": "d36baa0f7e251a9f0ffb3d307928a578b2cd30eb543e6c626c9ceb3f7ee74f50",
+      "localSha256": "c41f60bc701193e5113b8f49199ebfca36b645f85f477116d4a367acf399faa6",
       "modified": null,
       "noticeRequired": false
     },
@@ -2066,7 +2074,7 @@
       "origin": "lumen-original",
       "upstreamPath": null,
       "upstreamSha256": null,
-      "localSha256": "cdb5e671bdd5a7c0a65630e20d21d06ed9d06337570e2b0398799a1bcce6967c",
+      "localSha256": "86487d765d0c7b91218b2b1a534dccb880c6f73550fb8cac2e1f31655d7728f7",
       "modified": null,
       "noticeRequired": false
     },
@@ -3003,6 +3011,22 @@
       "upstreamPath": null,
       "upstreamSha256": null,
       "localSha256": "85a7479548dd5afc23628c6aac60b9ab01bc07f999851039ac10f307eee932b2",
+      "modified": null,
+      "noticeRequired": false
+    },
+    "packs/science-desktop/src/main/permission-broker.ts": {
+      "origin": "lumen-original",
+      "upstreamPath": null,
+      "upstreamSha256": null,
+      "localSha256": "b4fcc51f7c861e3aaca3416d214b9d74a0d8322ec984b17f192f9fca0d9b987c",
+      "modified": null,
+      "noticeRequired": false
+    },
+    "packs/science-desktop/src/main/permission-ipc.ts": {
+      "origin": "lumen-original",
+      "upstreamPath": null,
+      "upstreamSha256": null,
+      "localSha256": "9566f7136138bf9d8f2fd3e5bffc41da51a0374c6d99761ff03df320c070eaf0",
       "modified": null,
       "noticeRequired": false
     },
@@ -4706,7 +4730,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/preload/index.d.ts",
       "upstreamSha256": "54f89c86fa5e85843744afea9b67bb2e2a58e241185cad34214c57213f8f83c1",
-      "localSha256": "27074748b76e41ada951757e992131aa08cda93f40b37a5a26bcebf4bfb3a117",
+      "localSha256": "3791f3d903545cd261a6adc310a2db343fed7e23c2109650a94a0dce58b5e91b",
       "modified": true,
       "noticeRequired": true
     },
@@ -4722,7 +4746,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/preload/index.ts",
       "upstreamSha256": "2e92b9a3236dc84ce6711d5495f2ab5ce38cfb4991cea96b21daee5a85bcc7ef",
-      "localSha256": "db3431508e1333b305214ca5925a08dd5c0d828e87cd365fcc7960425719fb31",
+      "localSha256": "9887bc4715be37a2aaaac4911f0b199f378e0359752ad3c0856bde00e950b6fe",
       "modified": true,
       "noticeRequired": true
     },
@@ -4973,6 +4997,14 @@
       "localSha256": "07649427e0463a31e9327164cc32a89a8b40f01be0caa6c451bdd9a2ca015009",
       "modified": false,
       "noticeRequired": true
+    },
+    "packs/science-desktop/src/renderer/src/components/PermissionPrompt.tsx": {
+      "origin": "lumen-original",
+      "upstreamPath": null,
+      "upstreamSha256": null,
+      "localSha256": "94afbddc5622b855bc15402f532870245490d06d0156e3cfff033977d16866bf",
+      "modified": null,
+      "noticeRequired": false
     },
     "packs/science-desktop/src/renderer/src/components/RemoteJobBadge.render.test.tsx": {
       "origin": "adopted-verbatim",
@@ -5826,7 +5858,7 @@
       "origin": "lumen-original",
       "upstreamPath": null,
       "upstreamSha256": null,
-      "localSha256": "6bab528761ddae433cd2855f1d4e3e3cc39fdc4ee522af973589b68749ee1af9",
+      "localSha256": "09ddf2c5afd268f14ef180a87c3559b8f4bc1b5be584088b8af4961968063a26",
       "modified": null,
       "noticeRequired": false
     },
