@@ -1021,18 +1021,63 @@ async fn handle_workflow_validate(agent: &MvpAgent, args: &acp::ExtRequest) -> E
 async fn handle_workflow_dry_run(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: WorkflowGenParams = parse_params(args)?;
     let spec: xai_grok_science::workflow::WorkflowSpec = serde_json::from_value(params.spec).map_err(internal)?;
-    store_handler(agent, &params.session_id, params.store_root, move |s| s.workflow_dry_run(&spec)).await
+    // No kernel manifest is available on this read-only surface, so a
+    // workflow with notebook steps is reported as blocked rather than
+    // assumed to pass. See ProjectStore::workflow_dry_run.
+    store_handler(agent, &params.session_id, params.store_root, move |s| s.workflow_dry_run(&spec, None)).await
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct KernelAdmParams2 { session_id: String, store_root: PathBuf, kernel_id: String, #[serde(default = "_python_kind")] kind: String, exec_hash: String, lock_hash: String }
+struct KernelAdmParams2 {
+    session_id: String,
+    store_root: PathBuf,
+    kernel_id: String,
+    #[serde(default = "_python_kind")]
+    kind: String,
+    /// Absolute path to the interpreter to probe. Required: there is nothing
+    /// to admit without one.
+    interpreter_path: PathBuf,
+    /// Optional confinement root for the resolved interpreter.
+    #[serde(default)]
+    allowed_root: Option<PathBuf>,
+    /// Optional digest the caller asserts. VERIFIED against the probe and
+    /// rejected on mismatch — it is no longer echoed back into the record.
+    #[serde(default)]
+    exec_hash: Option<String>,
+    #[serde(default)]
+    package_lock_path: Option<PathBuf>,
+    #[serde(default)]
+    lock_hash: Option<String>,
+    #[serde(default = "_probe_timeout_ms")]
+    probe_timeout_ms: u64,
+}
 fn _python_kind() -> String { "python".into() }
+fn _probe_timeout_ms() -> u64 { 10_000 }
 
+/// KNOWN BYPASS: like the other WP-4/5 preview entries this builds a store on
+/// the ACP request task. Unlike them it now *executes* the interpreter to read
+/// its version, so it takes more authority than a read-only query: route it
+/// through `run_project_mutation`'s pattern (typed SessionCommand + permission
+/// request) before it is promoted past preview.
 async fn handle_kernel_admission(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: KernelAdmParams2 = parse_params(args)?;
     let kind = match params.kind.as_str() { "r" | "R" => xai_grok_science::workflow::KernelKind::R, "julia" => xai_grok_science::workflow::KernelKind::Julia, _ => xai_grok_science::workflow::KernelKind::Python };
-    store_handler(agent, &params.session_id, params.store_root, move |s| s.check_kernel_admission(params.kernel_id, kind, params.exec_hash, params.lock_hash)).await
+    if !(1..=120_000).contains(&params.probe_timeout_ms) {
+        return Err(acp::Error::invalid_params().data("probeTimeoutMs must be in 1..=120000"));
+    }
+    let mut request = xai_grok_science::workflow::KernelAdmissionRequest::new(
+        params.kernel_id,
+        kind,
+        params.interpreter_path,
+    )
+    .with_admitted_by(format!("acp-session:{}", params.session_id))
+    .with_probe_timeout(Duration::from_millis(params.probe_timeout_ms));
+    request.allowed_root = params.allowed_root;
+    request.supplied_executable_hash = params.exec_hash;
+    request.package_lock_path = params.package_lock_path;
+    request.supplied_package_lock_hash = params.lock_hash;
+    store_handler(agent, &params.session_id, params.store_root, move |s| s.check_kernel_admission(&request)).await
 }
 
 #[derive(Debug, Deserialize)]
