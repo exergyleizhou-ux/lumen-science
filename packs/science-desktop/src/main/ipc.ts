@@ -142,6 +142,17 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
     // the bridge pins to userData. Passing the same root here is what lets a
     // workflow report's relative artifact entries become absolute local paths.
     workspaceRoot: app.getPath('userData'),
+    // Resolved from where the files ACTUALLY are, in both shapes this app
+    // runs in. They were resolved relative to process.cwd(), which is the
+    // repo in dev and something else entirely in an installed app — so these
+    // two tabs worked only on a developer's machine. `extraResources` in
+    // electron-builder.yml is what puts them under resourcesPath.
+    skillsRegistryPath: app.isPackaged
+      ? join(process.resourcesPath, 'science', 'skills-registry.json')
+      : join(__dirname, '../../../../packs/science/skills/registry.json'),
+    connectorLockPath: app.isPackaged
+      ? join(process.resourcesPath, 'science', 'fusion-sources.lock.json')
+      : join(__dirname, '../../../../docs/science/fusion-sources.lock.json'),
     // ACP is the sole authority. The local catalog is a display cache and can
     // no longer grant membership — see files/hybrid-membership.ts.
     assertMembership: createAcpAuthoritativeMembershipAsserter({

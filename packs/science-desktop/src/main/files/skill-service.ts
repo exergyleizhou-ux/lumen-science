@@ -51,6 +51,8 @@ export function createSkillService(opts: {
     approved: string[]
     pending: string[]
     total: number
+    /** Set when the registry could not be read. Absent means it was read. */
+    unavailable?: string
   } {
     try {
       const raw = JSON.parse(fs.readFileSync(opts.registryPath, 'utf-8')) as {
@@ -73,8 +75,17 @@ export function createSkillService(opts: {
         pending,
         total: raw.summary?.total ?? skills.length,
       }
-    } catch {
-      return { approved: [], pending: [], total: 0 }
+    } catch (e: unknown) {
+      // NOT a silent empty. "No skills are registered" and "the registry could
+      // not be read" render identically as an empty list, and the second is a
+      // broken installation that the user would spend an afternoon on. The
+      // reason travels with the answer.
+      return {
+        approved: [],
+        pending: [],
+        total: 0,
+        unavailable: `skill registry unreadable at ${opts.registryPath}: ${(e as Error).message}`,
+      }
     }
   }
 
@@ -83,6 +94,8 @@ export function createSkillService(opts: {
       const reg = loadRegistry()
       const quarantined = [...quarantine.values()]
       return {
+        ok: reg.unavailable === undefined,
+        ...(reg.unavailable ? { reason: reg.unavailable } : {}),
         approved: reg.approved,
         pending: reg.pending,
         quarantined,

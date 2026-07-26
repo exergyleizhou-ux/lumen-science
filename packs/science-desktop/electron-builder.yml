@@ -24,6 +24,17 @@ files:
   - '!node_modules/pdfjs-dist/image_decoders{,/**/*}'
   - '!node_modules/pdfjs-dist/types{,/**/*}'
   - '!node_modules/pdfjs-dist/**/*.map'
+# Read-only data the Skills and Connectors tabs list. Both were resolved from
+# process.cwd() relative to the repo, so in a packaged app they were simply not
+# there — the Skills tab reported an empty inventory and the Connectors tab an
+# error, on every real install. Shipping them as resources is what makes those
+# tabs work outside a dev checkout.
+extraResources:
+  - from: ../../packs/science/skills/registry.json
+    to: science/skills-registry.json
+  - from: ../../docs/science/fusion-sources.lock.json
+    to: science/fusion-sources.lock.json
+
 asarUnpack:
   - resources/**
   - node_modules/@agentclientprotocol/claude-agent-acp/**

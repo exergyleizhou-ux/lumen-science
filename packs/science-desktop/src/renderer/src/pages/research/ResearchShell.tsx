@@ -147,6 +147,33 @@ export const ResearchShell = (): React.JSX.Element => {
   }
 
   const [previewId, setPreviewId] = useState('')
+  const removeFromList = async (project: UiProject): Promise<void> => {
+    if (!lumen) return
+    // Removal drops the local index row; the engine keeps the project. Saying
+    // so in the confirmation matters — a user who reads "Delete" and means it
+    // would otherwise believe their data is gone when it is not.
+    const confirmed = window.confirm(
+      `Remove "${project.name}" from this list?\n\n` +
+        'The project itself stays in the engine — this only removes it from this window.',
+    )
+    if (!confirmed) return
+    const res = (await lumen.deleteUiProject({ projectId: project.id })) as {
+      ok?: boolean
+      reason?: string
+    }
+    if (!res.ok) {
+      setError(res.reason ?? 'could not remove the project from this list')
+      return
+    }
+    if (active?.id === project.id) {
+      setActive(null)
+      setOpened(null)
+      setQuestion('')
+      setSavedQuestion('')
+    }
+    await refresh()
+  }
+
   const saveQuestion = async (): Promise<void> => {
     if (!lumen || !active) return
     setQuestionStatus('Saving…')
@@ -392,7 +419,7 @@ export const ResearchShell = (): React.JSX.Element => {
           </div>
           <ul className={cx.list}>
             {projects.map((p) => (
-              <li key={p.id}>
+              <li key={p.id} className={cx.projectRow}>
                 <button
                   type="button"
                   className={active?.id === p.id ? cx.projectBtnActive : cx.projectBtn}
@@ -406,6 +433,19 @@ export const ResearchShell = (): React.JSX.Element => {
                       one to the engine, so show enough of it to tell them
                       apart without dominating the row. */}
                   <span className={cx.projectId}>{p.id.slice(0, 8)}</span>
+                </button>
+                {/* "Remove", not "Delete": this drops the local index row and
+                    the engine keeps the project. An accessible name that says
+                    which project, because "Remove" alone in a list of rows
+                    tells a screen-reader user nothing. */}
+                <button
+                  type="button"
+                  className={cx.rowAction}
+                  aria-label={`Remove ${p.name} from this list`}
+                  title="Remove from this list (the project stays in the engine)"
+                  onClick={() => void removeFromList(p)}
+                >
+                  ✕
                 </button>
               </li>
             ))}
@@ -778,6 +818,13 @@ const cx = {
   btnQuiet:
     'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-transparent px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50',
   list: 'flex flex-col gap-1',
+  // The row action sits beside the open control rather than inside it: nesting
+  // a button in a button is invalid, and a click target inside another one is
+  // ambiguous to anyone navigating by keyboard.
+  projectRow: 'group flex items-center gap-1',
+  rowAction:
+    'shrink-0 rounded-md px-2 py-1 text-xs text-muted-foreground opacity-0 transition-opacity ' +
+    'hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100',
   projectBtn:
     'flex w-full flex-col items-start gap-0.5 rounded-md px-3 py-2 text-left transition-colors hover:bg-muted',
   // Selection is carried by background AND weight, not colour alone: a

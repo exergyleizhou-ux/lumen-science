@@ -442,13 +442,30 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     }
   })
 
+  /**
+   * Remove a project from THIS list. Not a delete.
+   *
+   * The engine has no project_delete route, and it should not gain one on the
+   * desktop's initiative: destroying a research record is irreversible and
+   * belongs to whoever owns the store, not to a window that indexes it. So
+   * this drops the local catalog row and nothing else — the project, its runs
+   * and its artifacts all remain in the engine.
+   *
+   * The `authority: 'ui-local'` is the honest label, and the UI says "Remove
+   * from list" rather than "Delete" so the two are not confused.
+   */
   safeHandle(ipcMain, 'files:delete-ui-project', async (_event, payload: unknown) => {
     if (!deps.projectCatalog) {
       return { ok: false, reason: 'project catalog not configured' }
     }
     const p = (payload ?? {}) as { projectId?: string }
     const ok = deps.projectCatalog.delete(p.projectId ?? '')
-    return { ok, authority: 'ui-local' }
+    return {
+      ok,
+      reason: ok ? undefined : 'no such project in this list',
+      removedFromListOnly: true,
+      authority: 'ui-local',
+    }
   })
 
   // ── OSF-3 Notebook (plan/dry-run local; execute via ACP only) ──

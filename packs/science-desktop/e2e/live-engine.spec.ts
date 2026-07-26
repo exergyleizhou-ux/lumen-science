@@ -330,3 +330,32 @@ test('a refined research question survives leaving the project', async () => {
   // And it is reported as saved, not as pending work.
   expect(await page.locator('#panel-question').innerText()).not.toContain('Unsaved changes')
 })
+
+test('the Skills and Connectors catalogs actually load', async () => {
+  // Both read files that were resolved from process.cwd(). Skills swallowed the
+  // read error and returned an empty inventory — indistinguishable from "no
+  // skills exist" — and Connectors reported a path error. Neither could work in
+  // a packaged app at all.
+  await page.getByRole('tab', { name: 'Skills', exact: true }).click()
+  await page.locator('#panel-skills').waitFor({ timeout: 10_000 })
+  await page.getByRole('button', { name: 'List inventory', exact: true }).click()
+  await expect
+    .poll(async () => page.locator('#panel-skills pre').textContent(), { timeout: 15_000 })
+    .toContain('"ok": true')
+
+  const skills = (await page.locator('#panel-skills pre').textContent()) ?? ''
+  // Non-empty: a green "ok" over a zero inventory is the exact failure this
+  // replaced, so assert the registry actually had contents.
+  const total = /"total":\s*(\d+)/.exec(skills)?.[1]
+  expect(Number(total ?? 0)).toBeGreaterThan(0)
+  expect(skills).not.toContain('unreadable')
+
+  await page.getByRole('tab', { name: 'Connectors', exact: true }).click()
+  await page.locator('#panel-connectors').waitFor({ timeout: 10_000 })
+  await page.getByRole('button', { name: 'List catalog', exact: true }).click()
+  await expect
+    .poll(async () => page.locator('#panel-connectors pre').textContent(), { timeout: 15_000 })
+    .toContain('"ok": true')
+  const conn = (await page.locator('#panel-connectors pre').textContent()) ?? ''
+  expect(conn).toContain('pubmed')
+})
