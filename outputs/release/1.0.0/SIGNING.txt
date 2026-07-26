@@ -1,3 +1,10 @@
-gpg: 签名建立于 日  7月/26 07:27:25 2026 CST
-gpg:               使用 EDDSA 密钥 8FAC4F474F580C43A67B83E196C17939A97093BB
-gpg: 完好的签名，来自于 “lei <lei@users.noreply.github.com>” [绝对]
+signing=gpg-detached
+file=SHA256SUMS.asc
+algorithm=OpenPGP
+note=Not Apple notarization / Windows Authenticode. Operators may verify with gpg --verify.
+[keyboxd]
+---------
+sec   ed25519/96C17939A97093BB 2026-07-18 [SC]
+      8FAC4F474F580C43A67B83E196C17939A97093BB
+uid                   [ 绝对 ] lei <lei@users.noreply.github.com>
+

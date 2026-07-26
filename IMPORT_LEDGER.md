@@ -134,7 +134,12 @@ The following Open Science subsystems have execution authority REMOVED:
 | src/shared/compute.ts | packs/science-desktop/src/shared/ | Planned | Compute types |
 
 ### Key modifications (OSF-6)
-- ssh-runner.ts, scp-runner.ts, job-dispatcher.ts NOT imported as runtime
+- ssh-runner.ts: STUBBED — no SSH execution; throws 'use Rust Lumen'
+- scp-runner.ts: STUBBED — no SCP execution
+- job-poller.ts: STUBBED — no-op EventEmitter
+- compute/ipc.ts: STUBBED — all handlers throw 'stubbed'
+- compute-approval-broker.ts: STUBBED
+- enabled-hosts-registry.ts: STUBBED
 - Compute UI → x.ai/science/compute_plan → SessionActor admission → Rust SSH/Slurm ToolAdapter
 - Permission bound to plan hash
 - Output hash verification → ArtifactRegistry → EvidenceGraph

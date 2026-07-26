@@ -228,31 +228,18 @@ const registerAcpIpcHandlers = (options: AcpIpcOptions): AcpRuntimeCoordinator =
   return runtime
 }
 
-// Creates the shared notebook runtime used by both renderer IPC and agent MCP calls.
+// LUMEN STUB: notebook runtime replaced with no-op. Science execution
+// routes through Rust Lumen KernelAdapter.
 const createDefaultNotebookRuntimeService = (): NotebookRuntimeService => {
-  const dataRoot = resolveDataRoot()
-  const artifactRepository = new ArtifactRepository(dataRoot)
-
-  return new NotebookRuntimeService({
-    configRoot: resolveConfigRoot(),
-    dataRoot,
-    projectName: DEFAULT_ARTIFACT_PROJECT_NAME,
-    repository: new NotebookRunRepository(dataRoot),
-    // Region default for manage_packages when no mirror is configured; the configured override is
-    // wired in main/ipc.ts via setPackageMirrorResolver once the settings service is constructed.
-    locale: app.getLocale(),
-    appVersion: app.getVersion(),
-    resolveArtifactPath: (request) =>
-      artifactRepository.resolveSessionArtifactFilePath(
-        request.projectName,
-        request.sessionId,
-        request.path
-      ),
-    callbacks: {
-      onNotebookAvailable: (event) => broadcast('notebook:available', event),
-      onNotebookChanged: (event) => broadcast('notebook:changed', event)
-    }
-  })
+  console.warn('[lumen-stub] NotebookRuntimeService from acp/ipc — EXECUTION AUTHORITY REMOVED.')
+  return {
+    execute: () => Promise.reject(new Error('Notebook exec stubbed — use Rust KernelAdapter')),
+    interrupt: () => {},
+    shutdown: () => {},
+    get history() { return [] },
+    on: () => {},
+    off: () => {},
+  } as unknown as NotebookRuntimeService
 }
 
 export { createDefaultNotebookRuntimeService, registerAcpIpcHandlers }

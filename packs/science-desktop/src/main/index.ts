@@ -9,8 +9,8 @@ import {
   NOTEBOOK_MCP_SERVER_ARG
 } from './mcp-server-args'
 
-const APP_NAME = 'Open Science'
-const APP_USER_MODEL_ID = 'com.aipoch.open-science'
+const APP_NAME = 'Lumen Science Desktop'
+const APP_USER_MODEL_ID = 'com.exergyleizhou-ux.lumen-science-desktop'
 const shouldRunArtifactMcpServer = process.argv.includes(ARTIFACT_MCP_SERVER_ARG)
 const shouldRunNotebookMcpServer = process.argv.includes(NOTEBOOK_MCP_SERVER_ARG)
 const shouldRunActivityGroupMcpServer = process.argv.includes(ACTIVITY_GROUP_MCP_SERVER_ARG)
@@ -135,6 +135,19 @@ async function startElectronApp(mainEntryPath: string): Promise<void> {
         node: process.versions.node,
         execPath: process.execPath,
         logFile: getLogFilePath()
+      })
+
+      // ── Lumen Rust binary supervision ──────────────────────────
+      // Start the Rust Lumen binary and surface its identity hash so the UI
+      // can attest "this desktop is backed by this exact science engine."
+      const { startLumen, getLumenBinaryHash, stopLumen } = await import('./lumen-acp-bridge')
+      app.on('before-quit', () => stopLumen())
+      startLumen().then(() => {
+        if (getLumenBinaryHash()) {
+          log.info('lumen binary started', { hash: getLumenBinaryHash() })
+        }
+      }).catch((err: unknown) => {
+        log.error('lumen binary failed to start (science engine unavailable)', err)
       })
 
       // Capture otherwise-silent crashes so a hang or unexpected exit leaves a trail in the log file.

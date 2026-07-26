@@ -1,18 +1,14 @@
 /**
- * STUB: Open Science ACP runtime — execution authority REMOVED.
+ * LUMEN STUB: ACP runtime — execution authority REMOVED.
  *
  * Original: Open Science v0.7.1, Apache-2.0, commit d8f11e34
- *   Fully-featured ACP agent runtime with Claude Code / OpenCode / Codex backend.
+ *   Fully-featured ACP agent runtime with Claude/Codex/OpenCode backends.
  *
- * Lumen Science Desktop: this file is a NO-OP stub.
- *   All science execution is routed through the Rust Lumen SessionActor
- *   via the Lumen ACP bridge (lumen-acp-bridge.ts).
- *
- * NEVER re-enable this module's execution paths. They would create a second
- * agent kernel authority, violating the Lumen single-authority architecture.
+ * Lumen Science Desktop: accepts the same constructor shape for drop-in
+ * compatibility with acp/ipc.ts and runtime-coordinator.ts, but all
+ * execution paths are no-ops. Science execution is through Rust Lumen.
  *
  * See: packs/science-desktop/ARCHITECTURE.md
- * See: third_party/open-science/NOTICE
  */
 
 import type {
@@ -26,56 +22,69 @@ import type {
   SessionNotification,
 } from '@agentclientprotocol/sdk'
 
-// ── Re-export types for compatibility with existing UI code ──────
-// These types are preserved so React components that reference them
-// still compile. No functions from this module should be called.
-
-export type AcpRuntimeCallbacks = Record<string, never>
-
-export type ReviewerSessionDisposition = Record<string, never>
+// Re-export all types needed by callers
+export type {
+  ActiveSession,
+  ClientConnection,
+  ContentBlock,
+  McpServer,
+  PromptResponse,
+  SessionConfigOption,
+  SessionModeState,
+  SessionNotification,
+}
 
 import type {
   AcpCancelPromptRequest,
   AcpConnectRequest,
+  AcpContextUsage,
   AcpCreateSessionRequest,
   AcpCreateSessionResponse,
-  AcpRuntimeEvent,
   AcpDeleteSessionRequest,
   AcpPermissionRequest,
   AcpPermissionResponse,
   AcpPromptRequest,
   AcpResumeSessionRequest,
   AcpRevokePermissionGrantRequest,
-  AcpContextUsage,
+  AcpRuntimeEvent,
   AcpSetPermissionProfileRequest,
   AcpStateSnapshot,
 } from '../../shared/acp'
 
-export type { ActiveSession, ContentBlock, McpServer, PromptResponse, SessionModeState }
 export type {
   AcpCancelPromptRequest,
   AcpConnectRequest,
+  AcpContextUsage,
   AcpCreateSessionRequest,
   AcpCreateSessionResponse,
-  AcpRuntimeEvent,
   AcpDeleteSessionRequest,
   AcpPermissionRequest,
   AcpPermissionResponse,
   AcpPromptRequest,
   AcpResumeSessionRequest,
   AcpRevokePermissionGrantRequest,
-  AcpContextUsage,
+  AcpRuntimeEvent,
   AcpSetPermissionProfileRequest,
   AcpStateSnapshot,
 }
 
-// ── Stub class — all methods throw ───────────────────────────────
+// Re-export shared acp helpers (keep tests compiling)
+export { getAcpRuntimeEventImage, MAX_ACP_SESSION_IMAGE_BYTES } from '../../shared/acp'
+export { ACP_PROMPT_FAILED_EVENT_TITLE } from '../../shared/acp'
+
+// ── Compatible runtime callbacks type ────────────────────────────
+
+export type AcpRuntimeCallbacks = Record<string, (...args: unknown[]) => void>
+
+export type ReviewerSessionDisposition = Record<string, never>
+
+// ── Stub class — drop-in replacement for original AcpRuntime ─────
 
 export class AcpRuntime {
-  constructor() {
-    console.error(
-      '[lumen-stub] AcpRuntime instantiated — EXECUTION AUTHORITY REMOVED.\n' +
-        'This module is a NO-OP stub. Science operations must go through:\n' +
+  constructor(_opts?: Record<string, unknown>) {
+    console.warn(
+      '[lumen-stub] AcpRuntime constructed — EXECUTION AUTHORITY REMOVED.\n' +
+        'All agent backend execution is stubbed. Science ops route via:\n' +
         '  Rust Lumen SessionActor → ACP bridge (lumen-acp-bridge.ts)\n' +
         'See: packs/science-desktop/ARCHITECTURE.md'
     )
@@ -85,86 +94,58 @@ export class AcpRuntime {
     return []
   }
 
-  connect(_request: AcpConnectRequest): Promise<ClientConnection> {
-    return Promise.reject(
-      new Error(
-        'AcpRuntime.connect() — EXECUTION AUTHORITY REMOVED.\n' +
-          'Use acpCall() from lumen-acp-bridge.ts to reach Rust Lumen.'
-      )
-    )
+  connect(): Promise<ClientConnection> {
+    return Promise.reject(new Error('AcpRuntime.connect() — STUBBED. Use lumen-acp-bridge.ts'))
   }
 
-  listAgentSessions(_connection: ClientConnection): Promise<ActiveSession[]> {
-    return Promise.reject(new Error('AcpRuntime.listAgentSessions() — STUBBED'))
+  listAgentSessions(): Promise<ActiveSession[]> {
+    return Promise.resolve([])
   }
 
-  createSession(
-    _connection: ClientConnection,
-    _request: AcpCreateSessionRequest
-  ): Promise<AcpCreateSessionResponse> {
+  createSession(): Promise<AcpCreateSessionResponse> {
     return Promise.reject(new Error('AcpRuntime.createSession() — STUBBED'))
   }
 
-  prompt(
-    _connection: ClientConnection,
-    _request: AcpPromptRequest
-  ): Promise<PromptResponse> {
+  prompt(): Promise<PromptResponse> {
     return Promise.reject(new Error('AcpRuntime.prompt() — STUBBED'))
   }
 
-  cancelPrompt(_request: AcpCancelPromptRequest): Promise<void> {
-    return Promise.reject(new Error('AcpRuntime.cancelPrompt() — STUBBED'))
+  cancelPrompt(): Promise<void> {
+    return Promise.resolve()
   }
 
-  requestPermission(
-    _request: AcpPermissionRequest
-  ): Promise<AcpPermissionResponse> {
-    // Permissions are managed by Rust SessionActor via Lumen bridge.
-    // This stub preserves the API shape so UI code compiles, but
-    // runtime permission decisions are NEVER made here.
+  requestPermission(): Promise<AcpPermissionResponse> {
     return Promise.resolve({
       outcome: 'cancelled',
-      reason: 'Permission broker stubbed — use Lumen bridge',
+      reason: 'Permission broker stubbed — authority is Rust Lumen',
     } as AcpPermissionResponse)
   }
 
-  deleteSession(_request: AcpDeleteSessionRequest): Promise<void> {
-    return Promise.reject(new Error('AcpRuntime.deleteSession() — STUBBED'))
+  deleteSession(): Promise<void> {
+    return Promise.resolve()
   }
 
-  resumeSession(
-    _connection: ClientConnection,
-    _request: AcpResumeSessionRequest
-  ): Promise<AcpCreateSessionResponse> {
+  resumeSession(): Promise<AcpCreateSessionResponse> {
     return Promise.reject(new Error('AcpRuntime.resumeSession() — STUBBED'))
   }
 
-  revokePermissionGrant(_request: AcpRevokePermissionGrantRequest): Promise<void> {
-    return Promise.reject(new Error('AcpRuntime.revokePermissionGrant() — STUBBED'))
+  revokePermissionGrant(): Promise<void> {
+    return Promise.resolve()
   }
 
   listMcpServers(): Promise<McpServer[]> {
     return Promise.resolve([])
   }
 
-  setPermissionProfile(_request: AcpSetPermissionProfileRequest): Promise<void> {
-    return Promise.reject(new Error('AcpRuntime.setPermissionProfile() — STUBBED'))
+  setPermissionProfile(): Promise<void> {
+    return Promise.resolve()
   }
 
-  disconnect(_connection: ClientConnection): Promise<void> {
-    return Promise.reject(new Error('AcpRuntime.disconnect() — STUBBED'))
+  disconnect(): Promise<void> {
+    return Promise.resolve()
   }
 
-  // Keep event emitter-ish API shape for UI compatibility
-  on(_event: string, _callback: (...args: unknown[]) => void): void {
-    // no-op
-  }
-
-  off(_event: string, _callback: (...args: unknown[]) => void): void {
-    // no-op
-  }
-
-  destroy(): void {
-    // no-op — no resources to clean up
-  }
+  on(_event: string, _callback: (...args: unknown[]) => void): void { /* no-op */ }
+  off(_event: string, _callback: (...args: unknown[]) => void): void { /* no-op */ }
+  destroy(): void { /* no-op */ }
 }

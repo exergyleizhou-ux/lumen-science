@@ -21,15 +21,26 @@ limitations under the License.
 Files imported from Open Science (commit d8f11e34) are MODIFIED per
 Apache-2.0 §4. Modifications include:
 
-- Rebranding: Lumen Science Desktop namespacing and brand assets
-- Authority removal: all agent-framework execution paths disconnected;
-  Rust Lumen SessionActor wired via ACP bridge
-- Connector catalog: UI reused; Rust adapters remain authoritative
-- Notebook executor: TypeScript executor replaced with Rust KernelAdapter
-- Reviewer: correction proposal routed through SessionActor; verdicts
-  enter EvidenceGraph
+- Rebranding: Lumen Science Desktop namespacing and brand assets.
+- Authority removal: all execution paths (ACP runtime, notebook kernel executor,
+  compute SSH/SCP runner, job poller, agent framework backends, permission
+  broker) replaced with descriptive no-op stubs. Stubbed modules throw or
+  return CANCELLED; no TS executor or SSH/SCP process can be launched.
+- Desktop bridge: lumen-acp-bridge.ts added for Rust Lumen SessionActor
+  integration (ACP loopback). Bridge orchestrates lumen binary lifecycle;
+  Electron main does NOT execute science tools directly.
+- Connector catalog: UI reused; Rust adapters remain authoritative.
+- Notebook: kernel-executor.ts and runtime-service.ts are STUBBED.
+  Actual notebook execution requires wiring Rust KernelAdapter (follow-on).
+- Reviewer: correction proposal routing through SessionActor is DESIGNED
+  but not yet wired; reviewer IPC stubbed.
 - Persistence: Electron local state limited to UI layout/session/draft;
-  science state owned by Rust ProjectStore/ArtifactRegistry/EvidenceGraph
+  science state owned by Rust ProjectStore/ArtifactRegistry/EvidenceGraph.
+- IPC: compute/ipc.ts, notebook/ipc.ts, compute/ssh-runner.ts,
+  compute/scp-runner.ts, compute/job-poller.ts, compute/compute-approval-broker.ts
+  are ALL stubbed — no production SSH/SCP/job/notebook execution through
+  Electron. Original Open Science executors are preserved in git history
+  but replaced by stubs in the working tree.
 
 === UPSTREAM CREDITS ===
 

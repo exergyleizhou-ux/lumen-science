@@ -1,6 +1,6 @@
-appId: com.aipoch.open-science
-productName: Open Science
-copyright: Copyright © 2026 AIPOCH
+appId: com.exergyleizhou-ux.lumen-science-desktop
+productName: Lumen Science Desktop
+copyright: Copyright © 2026 exergyleizhou-ux. Desktop UI adapted from Open Science (Apache-2.0).
 directories:
   buildResources: build
 # Apply a valid deep ad-hoc signature on macOS (no Developer ID available). Without this,
