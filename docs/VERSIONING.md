@@ -6,7 +6,7 @@ assume root `VERSION` equals Desktop or the Rust pager crate.
 | Component | Source of truth | Current (as of 2026-07-26) | Meaning |
 |-----------|-----------------|----------------------------|---------|
 | **Lumen Core** (coding agent / pager) | `agent/crates/codegen/xai-grok-pager/Cargo.toml` `version` | `0.1.222` | Rust agent product |
-| **Lumen Science CLI/MCP** | `packs/science/VERSION` (primary); root `VERSION` still used by some science install scripts | `1.0.0` | Offline science CLI + MCP release line (`v1.0.0` / next `v1.0.1`) |
+| **Lumen Science CLI/MCP** | `packs/science/VERSION` (primary); root `VERSION` still used by some science install scripts | `1.0.1` | Offline science CLI + MCP release line (tag `v1.0.1` via Science Release workflow) |
 | **Lumen Science Desktop** | `packs/science-desktop/package.json` `version` | `1.1.0-dev` | Electron desktop — **not GA** |
 
 ## Rules

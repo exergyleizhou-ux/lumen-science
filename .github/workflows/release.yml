@@ -13,8 +13,36 @@ permissions:
   contents: read
 
 jobs:
+  # Science CLI tags (v1.x matching packs/science/VERSION) use science-release.yml.
+  # Core agent release requires VERSION == xai-grok-pager Cargo version.
+  classify:
+    name: Classify tag (core vs science)
+    runs-on: ubuntu-24.04
+    outputs:
+      kind: ${{ steps.c.outputs.kind }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: c
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          SCI="$(tr -d '[:space:]' < packs/science/VERSION 2>/dev/null || echo '')"
+          if [[ -n "$SCI" && "$TAG" == "v${SCI}" ]]; then
+            echo "kind=science" >> "$GITHUB_OUTPUT"
+            echo "Science-only tag ${TAG} — Core Release will no-op; see Science Release workflow."
+            exit 0
+          fi
+          # Also treat pure v1.* science line as science when science VERSION is 1.x
+          if [[ "$TAG" =~ ^v1\. ]] && [[ "$SCI" == 1.* ]]; then
+            echo "kind=science" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "kind=core" >> "$GITHUB_OUTPUT"
+
   preflight:
     name: Verify release tag and source
+    needs: [classify]
+    if: needs.classify.outputs.kind == 'core'
     runs-on: ubuntu-24.04
     steps:
       # actions/checkout v7.0.0, pinned to the reviewed commit.
@@ -38,6 +66,7 @@ jobs:
   build:
     name: Build ${{ matrix.asset }}
     needs: preflight
+    if: needs.preflight.result == 'success'
     strategy:
       fail-fast: false
       matrix:
