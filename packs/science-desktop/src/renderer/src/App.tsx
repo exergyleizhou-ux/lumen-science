@@ -154,7 +154,11 @@ const App = (): React.JSX.Element | null => {
 
   if (
     resolveStartupView({
-      onboardingDone: onboardingCompletedAt !== undefined
+      onboardingDone: onboardingCompletedAt !== undefined,
+      // The engine owns environments, storage and execution here, so the
+      // upstream wizard has nothing left to configure — four of its five steps
+      // set up subsystems this build does not have.
+      lumenBridgePresent: Boolean(window.api?.lumen)
     }) === 'onboarding'
   ) {
     return <OnboardingWizard />

@@ -86,6 +86,26 @@ test('the renderer mounts without an unhandled page error', async () => {
   expect(errors).toEqual([])
 })
 
+test('the first screen is the research desk, not upstream onboarding', async () => {
+  // The upstream first-run wizard has five steps, and four configure subsystems
+  // this build does not have: environment provisioning, agent-framework choice,
+  // notebook runtime, data-root location. It blocked entry until the user
+  // configured them, so the first screen was a setup flow that could not
+  // succeed — which reads as broken rather than deliberately narrower.
+  const text = await page.evaluate(() => document.body.innerText)
+  expect(text).not.toContain('FIRST-TIME SETUP')
+  expect(text).toContain('Question')
+  expect(text).toContain('Evidence')
+})
+
+test('the desk says the engine is offline rather than looking healthy', async () => {
+  // LUMEN_BINARY points at nothing. Stating it is the point: an app that looks
+  // ready without an engine is the failure mode this whole branch removed, and
+  // a user who cannot see the engine is down cannot act on it.
+  const text = await page.evaluate(() => document.body.innerText)
+  expect(text.toLowerCase()).toContain('engine offline')
+})
+
 test('the UI does not ship under the upstream project name', async () => {
   // app-config.ts already said "Lumen Science", but 38 reachable components
   // carried the upstream name as hardcoded text, so the first screen a user saw
