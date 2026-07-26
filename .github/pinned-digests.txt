@@ -1,0 +1,32 @@
+# Reviewed artifact digests referenced by workflow files.
+#
+# A pinned checksum is a security control only if the value is real. Every
+# non-action digest hardcoded in .github/workflows/*.yml must be listed here
+# with what it pins and how it was obtained, and
+# scripts/verify-pinned-digests.py fails CI otherwise.
+#
+# "How obtained" must be something another person can repeat. "It looked right"
+# is not an origin.
+#
+# Format:  <digest>  <what it pins>  —  <how it was obtained>
+
+9a599b48ba6eb7b1e80f12f36b94ceca7c00b7a5173c95c3efc88d9822957e73  minisign 0.12 linux x86_64 tarball (minisign-0.12-linux.tar.gz)  —  reviewed with the Lumen Core release chain; pinned at .github/workflows/release.yml:256 since that chain was introduced, and reused verbatim by science-release.yml so both release lines trust one value. Re-derive with: curl -fsSL https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12-linux.tar.gz | sha256sum
+
+# --- pip --require-hashes lock for spdx-tools (release.yml SPDX validation) ---
+# Origin: PyPI-published sdist/wheel digests for the exact pinned versions below.
+# Re-derive any of them with:
+#   pip download --no-deps --only-binary=:all: <name>==<version> && sha256sum <file>
+# pip itself enforces these at install time, so a wrong value fails the install
+# rather than silently installing an unverified package.
+d16c9bbc61ea14637596c5f6fbff2ee99cbe3573e46a716401734ef50c3060c2  beartype==0.22.9 (PyPI)  —  pip --require-hashes lock, release.yml
+ef28a70bd43115208441b53a045d1549e2f0ec6e3d08a9d142cbc41c1938e8d9  boolean.py==5.0 (PyPI)  —  pip --require-hashes lock, release.yml
+e6f9f66136c816745b9d65817da91d61d957fb16e02e4dcd0552553c5a197b76  click==8.4.2 (PyPI)  —  pip --require-hashes lock, release.yml
+421788fdcadb41f049d2dc934ce666626265aeccefddd25e162a26f23bcbf8a4  license-expression==30.4.4 (PyPI)  —  pip --require-hashes lock, release.yml
+096f9b8350b65ebd2fd1346b12452efe5b9607f7482813ffca50c22722a807ce  ply==3.11 (PyPI)  —  pip --require-hashes lock, release.yml
+850ba148bd908d7e2411587e247a1e4f0327839c40e2e5e6d05a007ecc69911d  pyparsing==3.3.2 (PyPI)  —  pip --require-hashes lock, release.yml
+ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc  PyYAML==6.0.3 (PyPI)  —  pip --require-hashes lock, release.yml
+30c0a3ebf4c0e09215f066be7246794b6492e054e782d7ac2a34c9f70a15e0dd  rdflib==7.6.0 (PyPI)  —  pip --require-hashes lock, release.yml
+de78a3b8e0feda74cabc54aab2da702113e33ac9d9eb9d2389bcf1f58b7d9177  semantic-version==2.10.0 (PyPI)  —  pip --require-hashes lock, release.yml
+7c2d5865941be9d2e898f5b084e8d5422dd298dc5a29320ddb198fec304f59c4  spdx-tools==0.8.5 (PyPI)  —  pip --require-hashes lock, release.yml
+5682f8c58e96e379224fd72aec227a45432740c1fa860a06b3024d47c2968601  uritools==6.1.2 (PyPI)  —  pip --require-hashes lock, release.yml
+a4a00d300b0e1c59fc2bfccb53d7b2e88c32f200df138a0dd2229f842497026a  xmltodict==1.0.4 (PyPI)  —  pip --require-hashes lock, release.yml

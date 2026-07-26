@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "generator": "scripts/generate-science-status.py",
   "doc": "Machine-generated product status. Derived from the source tree and git only. Prose documents must point here rather than restate status. Regenerate with: python3 scripts/generate-science-status.py",
-  "sourceCommit": "68b88cdb83d59d1be00b684a3e8a3e55e9ab7eb1",
-  "sourceCommitEpoch": 1785056308,
-  "sourceCommitIso": "2026-07-26T16:58:28+08:00",
+  "sourceCommit": "de97e9a83288a6b3cb41e409c7bd826d82d0248d",
+  "sourceCommitEpoch": 1785058496,
+  "sourceCommitIso": "2026-07-26T17:34:56+08:00",
   "gateVocabulary": {
     "states": [
       "pass",
@@ -96,6 +96,9 @@
       "science-release.yml": {
         "state": "not_run"
       },
+      "supply-chain.yml": {
+        "state": "not_run"
+      },
       "windows-team-build.yml": {
         "state": "not_run"
       }
@@ -114,7 +117,7 @@
         "usesVerifyTag": true,
         "sourceDateEpochFromCommit": true,
         "sourceDateEpochFromWallClock": false,
-        "lineCount": 334
+        "lineCount": 413
       },
       "release.yml": {
         "present": true,
@@ -170,7 +173,7 @@
         "usesVerifyTag": false,
         "sourceDateEpochFromCommit": false,
         "sourceDateEpochFromWallClock": false,
-        "lineCount": 251
+        "lineCount": 268
       }
     },
     "desktopCiAllowsTypecheckFailure": true
@@ -189,14 +192,13 @@
       "v1.0.1"
     ],
     "latestScienceTag": "v1.0.1",
-    "scienceAssetsSigned": false,
+    "scienceAssetsSigned": true,
     "scienceAssetsHaveSbom": false,
     "scienceAssetsHaveProvenance": false,
     "immutablePublish": true,
     "verifiesTagBinding": true,
     "reproducibleArchives": true,
     "openGaps": [
-      "assets are unsigned",
       "no per-asset SBOM",
       "no build provenance attestation"
     ]
