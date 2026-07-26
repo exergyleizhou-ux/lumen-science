@@ -438,18 +438,26 @@ def collect_authority() -> dict[str, Any]:
             },
             {
                 "id": "AUTH-3",
-                "summary": "Project/Claim/Evidence mutations construct ProjectStore inside the ACP handler, bypassing SessionActor",
-                "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs:869",
+                "summary": (
+                    "seq_analyze writes artifacts from the ACP request task with no "
+                    "permission request and no durable run record"
+                ),
+                "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs:536",
+                "note": (
+                    "Its false 'SessionActor-gated' claim has been removed and it now "
+                    "reports 'ACP request task (not actor-gated)'."
+                ),
+            },
+            {
+                "id": "AUTH-6",
+                "summary": "project_migrate still mutates via a directly constructed ProjectStore",
+                "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs:981",
+                "note": "Marked KNOWN BYPASS in source; makes no authority claim.",
             },
             {
                 "id": "AUTH-4",
                 "summary": "FeatureGates is in-memory only; rebuilt from Default on every request, no operator control surface",
                 "path": "agent/crates/codegen/xai-grok-science/src/features.rs:122",
-            },
-            {
-                "id": "AUTH-5",
-                "summary": "attach_evidence accepts >=16-char hex digests and truncates to 16 for node identity",
-                "path": "agent/crates/codegen/xai-grok-science/src/project/store.rs:254",
             },
         ],
     }
@@ -479,7 +487,16 @@ EVIDENCE_LEVELS = {
     },
     "projectEvidenceModel": {
         "level": "E2",
-        "rationale": "Model plus JSON store plus unit tests; mutations bypass SessionActor.",
+        "rationale": (
+            "The four WP-2 mutations (project_create, project_transition, "
+            "claim_propose, evidence_attach) now route through SessionActor with "
+            "operation-id idempotency, session/owner binding, compare-and-swap and a "
+            "permission request; digests are canonical 64-hex and must reference a "
+            "registered artifact. Still E2 rather than E4: the shell wiring has no "
+            "runnable test — the science-crate semantics are covered by unit tests, "
+            "but every ACP-level science test requires a pre-built binary and is "
+            "#[ignore]d, so nothing exercises the actor plumbing in CI."
+        ),
     },
     "workflowKernel": {
         "level": "E1",

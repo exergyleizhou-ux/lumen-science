@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "generator": "scripts/generate-science-status.py",
   "doc": "Machine-generated product status. Derived from the source tree and git only. Prose documents must point here rather than restate status. Regenerate with: python3 scripts/generate-science-status.py",
-  "sourceCommit": "7f322eaa0ff23cb9417a6a17e2996fbf5a9cd062",
-  "sourceCommitEpoch": 1785059063,
-  "sourceCommitIso": "2026-07-26T17:44:23+08:00",
+  "sourceCommit": "894345d9d50e21d5ef6816987d562f3f1c980778",
+  "sourceCommitEpoch": 1785059382,
+  "sourceCommitIso": "2026-07-26T17:49:42+08:00",
   "gateVocabulary": {
     "states": [
       "pass",
@@ -304,18 +304,20 @@
       },
       {
         "id": "AUTH-3",
-        "summary": "Project/Claim/Evidence mutations construct ProjectStore inside the ACP handler, bypassing SessionActor",
-        "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs:869"
+        "summary": "seq_analyze writes artifacts from the ACP request task with no permission request and no durable run record",
+        "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs:536",
+        "note": "Its false 'SessionActor-gated' claim has been removed and it now reports 'ACP request task (not actor-gated)'."
+      },
+      {
+        "id": "AUTH-6",
+        "summary": "project_migrate still mutates via a directly constructed ProjectStore",
+        "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs:981",
+        "note": "Marked KNOWN BYPASS in source; makes no authority claim."
       },
       {
         "id": "AUTH-4",
         "summary": "FeatureGates is in-memory only; rebuilt from Default on every request, no operator control surface",
         "path": "agent/crates/codegen/xai-grok-science/src/features.rs:122"
-      },
-      {
-        "id": "AUTH-5",
-        "summary": "attach_evidence accepts >=16-char hex digests and truncates to 16 for node identity",
-        "path": "agent/crates/codegen/xai-grok-science/src/project/store.rs:254"
       }
     ]
   },
@@ -330,7 +332,7 @@
     },
     "projectEvidenceModel": {
       "level": "E2",
-      "rationale": "Model plus JSON store plus unit tests; mutations bypass SessionActor."
+      "rationale": "The four WP-2 mutations (project_create, project_transition, claim_propose, evidence_attach) now route through SessionActor with operation-id idempotency, session/owner binding, compare-and-swap and a permission request; digests are canonical 64-hex and must reference a registered artifact. Still E2 rather than E4: the shell wiring has no runnable test — the science-crate semantics are covered by unit tests, but every ACP-level science test requires a pre-built binary and is #[ignore]d, so nothing exercises the actor plumbing in CI."
     },
     "workflowKernel": {
       "level": "E1",
