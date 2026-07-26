@@ -143,3 +143,59 @@ test('opening the approved project reaches the workspace, not a membership refus
   })
   expect(banner.toLowerCase()).not.toContain('could not confirm you have access')
 })
+
+test('the workspace explains itself to a researcher, not to an implementer', async () => {
+  // Twice now, honest internal notes shipped as user-facing copy: the first
+  // screen inside a project named one of our source files, and the Notebook
+  // tab read "Electron KernelExecutor stays stubbed".
+  //
+  // Neither was a lie — that is what makes this worth a test rather than a
+  // review note. The guarantee they encode is the product's whole argument
+  // (nothing executes in this window; the engine runs it and records what ran),
+  // and stating it in module names buries the one thing a researcher should
+  // take away.
+  //
+  // Requires an OPEN project, so it can only live in the live suite: the panels
+  // do not render without one.
+  //
+  // EVERY tab, not just the visible one. Only the active panel is mounted, so
+  // reading document.body once checks Question and nothing else — the first
+  // version of this test passed with "Electron KernelExecutor stays stubbed"
+  // put back into the Notebook panel, which is how it was caught.
+  //
+  // The check is on rendered text only. Attribution and architecture belong in
+  // file headers and docs/, and this must not push anyone toward stripping them.
+  const TABS = ['Question', 'Plan', 'Notebook', 'Evidence', 'Result', 'Review', 'Skills', 'Compute', 'Connectors']
+  let text = ''
+  for (const tab of TABS) {
+    await page.getByRole('tab', { name: tab, exact: true }).click()
+    // Wait for the PANEL, not a sleep: click resolves before React re-renders,
+    // so reading immediately captured the previous tab's text and the Compute
+    // panel never appeared in the sweep at all.
+    await page.locator(`#panel-${tab.toLowerCase()}`).waitFor({ timeout: 10_000 })
+    text += `\n${await page.evaluate(() => document.body.innerText)}`
+  }
+
+  const JARGON = [
+    'SessionActor',
+    'KernelExecutor',
+    'KernelAdapter',
+    'WorkflowActor',
+    'ToolAdapter',
+    'SystemSshRunner',
+    'fusion-sources.lock',
+    'Electron',
+    'extensions/science.rs',
+  ]
+  // Case-insensitively: innerText returns text as CSS renders it, and these
+  // headings are `uppercase`, so an exact-case match would silently skip any
+  // jargon that happens to sit in a heading.
+  const haystack = text.toLowerCase()
+  const found = JARGON.filter((term) => haystack.includes(term.toLowerCase()))
+  expect(found, `implementation detail visible in the UI: ${found.join(', ')}`).toEqual([])
+
+  // And the sweep must actually have visited the panels, or the assertion above
+  // is satisfied by a page that rendered nothing.
+  expect(haystack).toContain('remote compute')
+  expect(haystack).toContain('research question')
+})

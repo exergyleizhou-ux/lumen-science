@@ -367,8 +367,8 @@ export const ResearchShell = (): React.JSX.Element => {
             )}
           </ul>
           <p className={cx.sidebarNote}>
-            This list is a UI catalog. Project state lives in the Rust
-            SessionActor, not here.
+            This list is just an index. The projects themselves live in the
+            engine, which is what any of these results can be checked against.
           </p>
         </aside>
 
@@ -446,8 +446,8 @@ export const ResearchShell = (): React.JSX.Element => {
                 >
                   <h2 className={cx.h2}>Plan</h2>
                   <p className={cx.muted}>
-                    Workflow validate / dry-run via Rust WorkflowActor (ACP). No
-                    Electron executor.
+                    Steps are validated and dry-run by the engine before anything
+                    runs. This window never executes a workflow itself.
                   </p>
                   <pre className={cx.pre}>
                     {question
@@ -466,9 +466,8 @@ export const ResearchShell = (): React.JSX.Element => {
                 >
                   <h2 className={cx.h2}>Notebook</h2>
                   <p className={cx.muted}>
-                    Plan / dry-run in desktop; live execute only via Lumen ACP{' '}
-                    <code>notebook_execute</code> → SessionActor / KernelAdapter. Electron
-                    KernelExecutor stays stubbed.
+                    Write and dry-run cells here; every real execution happens in the
+                    engine, which records what ran. No code runs inside this window.
                   </p>
                   <textarea
                     className={cx.textarea}
@@ -482,7 +481,7 @@ export const ResearchShell = (): React.JSX.Element => {
                       Dry-run plan
                     </button>
                     <button type="button" className={cx.btn} onClick={() => void notebookExecute()}>
-                      Execute (ACP)
+                      Run in engine
                     </button>
                     <button type="button" className={cx.btn} onClick={() => void notebookExport()}>
                       Export .ipynb
@@ -535,9 +534,9 @@ export const ResearchShell = (): React.JSX.Element => {
                 >
                   <h2 className={cx.h2}>Connectors</h2>
                   <p className={cx.muted}>
-                    Read-only catalog from fusion-sources.lock (42 inventory, 40
-                    implemented, 2 rejected). Desktop never fetches — Rust
-                    SessionActor adapters only.
+                    A read-only catalog of the 42 data sources this build knows about
+                    (40 implemented, 2 declined). All fetching is done by the engine —
+                    this window never contacts a source directly.
                   </p>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button type="button" className={cx.btn} onClick={() => void connectorsList()}>
@@ -564,9 +563,10 @@ export const ResearchShell = (): React.JSX.Element => {
                 >
                   <h2 className={cx.h2}>Remote Compute</h2>
                   <p className={cx.muted}>
-                    Dry-run plan only (LocalProcess → SSH fixture → authorized). Desktop never
-                    runs SystemSshRunner/SCP. Live schedule via SessionActor ToolAdapter + plan
-                    hash permission. Generic shell denied.
+                    Plans a remote run and shows you exactly what it would do. Scheduling
+                    it for real needs your approval of that specific plan, and only the
+                    engine can carry it out — this window runs nothing remotely, and an
+                    open-ended shell command is refused outright.
                   </p>
                   <input
                     className={cx.input}
@@ -620,10 +620,10 @@ export const ResearchShell = (): React.JSX.Element => {
                 >
                   <h2 className={cx.h2}>Review</h2>
                   <p className={cx.muted}>
-                    Artifact-bound review plan/submit via ACP{' '}
-                    <code>start_review</code>. Verdicts project as pass/warn/fail + supports/
-                    contradicts edges into EvidenceGraph. No fix-loop orchestrator authority.
-                    Correction proposals are non-executing plans.
+                    Reviews are bound to specific artifacts, and each verdict — pass, warn
+                    or fail — is recorded as supporting or contradicting evidence. A review
+                    can propose corrections but can never apply them: proposals are plans,
+                    not actions.
                   </p>
                   <p className={cx.muted}>
                     Evidence (one per line): <code>artifactId:expectedSha256</code>
