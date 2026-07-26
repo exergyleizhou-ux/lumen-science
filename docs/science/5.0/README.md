@@ -2,7 +2,7 @@
 
 **Target Version**: 5.0  
 **Status**: IN PROGRESS — WP-2～8 **software preview / contract** (not product GA)  
-**Prerequisite**: **Lumen Science 1.0.0** formal release — **DONE** (`v1.0.0`)
+**Prerequisite**: **Lumen Science CLI/MCP** formal release — **DONE** (`v1.0.0`, current line **`v1.0.1`**)
 
 ## Evidence levels (how to read status)
 
@@ -24,7 +24,7 @@ packages, live SSH/Slurm, Dummy Lab built-binary e2e, or 5.0 RC.
 
 | Version | Deliverable | Status (honest) |
 |---------|-------------|-----------------|
-| 1.0 | Offline workbench + multi-platform assets on Release | ✅ **RELEASED** (`v1.0.0`; binaries + SHA256SUMS) |
+| 1.0 | Offline workbench + multi-platform assets on Release | ✅ **RELEASED** (`v1.0.1` current; MANIFEST + SHA256SUMS; Desktop still `1.1.0-dev`) |
 | 2.0 (WP-2/3) | ResearchProject + EvidenceGraph + Queries | 🔧 **PREVIEW** — source/unit/CLI/ACP; not full restart/replay release |
 | 3.0 (WP-4/5) | Workflow DAG + dry-run + kernel admission | 🔧 **PREVIEW** — validate/dry-run models only; no full Workflow Actor |
 | 4.0 (WP-6) | Multimodal index + review | 🔧 **PREVIEW** — index/admission surface; not full pinned parser product chain |

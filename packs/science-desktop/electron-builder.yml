@@ -27,13 +27,9 @@ files:
 asarUnpack:
   - resources/**
   - node_modules/@agentclientprotocol/claude-agent-acp/**
-# Only ship paths that exist in-repo. Missing open-science/cli/micromamba
-# staging dirs are intentionally omitted until CI stages them.
-extraResources:
-  - from: node_modules/.prisma
-    to: node_modules/.prisma
-  - from: node_modules/@prisma/client
-    to: node_modules/@prisma/client
+# Only ship paths that exist in-repo. Prisma / open-science/cli/micromamba
+# staging dirs are intentionally omitted until CI stages them (builder warns
+# and fails when from: paths are missing).
 win:
   executableName: lumen-science-desktop
   artifactName: lumen-science-desktop-${version}-win-${arch}.${ext}

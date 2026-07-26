@@ -8,63 +8,54 @@
  * Run: npx tsx scripts/lumen-live-smoke.mts
  */
 import { spawnSync } from 'node:child_process'
-import fs from 'node:fs'
 import path from 'node:path'
+import {
+  isSha256Hex,
+  resolveAndProbeLumenScienceBinary,
+  sha256File,
+} from '../src/main/files/lumen-binary.js'
 
-function resolveBinary(): string | null {
-  if (process.env.LUMEN_BINARY && fs.existsSync(process.env.LUMEN_BINARY)) {
-    return process.env.LUMEN_BINARY
-  }
-  const candidates = [
-    path.join(process.env.HOME || '', '.local/bin/lumen-science'),
-    'lumen-science',
-  ]
-  for (const c of candidates) {
-    if (c === 'lumen-science') {
-      const which = spawnSync('which', ['lumen-science'], { encoding: 'utf-8' })
-      if (which.status === 0 && which.stdout.trim()) return which.stdout.trim()
-      continue
-    }
-    if (fs.existsSync(c)) return c
-  }
-  return null
-}
-
-const bin = resolveBinary()
-if (!bin) {
+const probe = resolveAndProbeLumenScienceBinary()
+if (!probe) {
   console.log('SKIP  lumen-science binary not found (set LUMEN_BINARY to enable live smoke)')
   process.exit(0)
 }
 
-console.log(`PROBE binary=${bin}`)
+console.log(`PROBE binary=${probe.binaryPath}`)
+console.log(`PROBE sha256=${probe.binaryHash}`)
 
 let failures = 0
-function run(name: string, args: string[], expectSubstring?: string) {
-  const r = spawnSync(bin!, args, { encoding: 'utf-8', timeout: 30_000 })
-  const out = `${r.stdout || ''}${r.stderr || ''}`
-  if (r.error) {
+
+if (!isSha256Hex(probe.binaryHash)) {
+  failures++
+  console.log(`FAIL binaryHash not 64-hex: ${probe.binaryHash}`)
+} else {
+  const recompute = sha256File(probe.binaryPath)
+  if (recompute !== probe.binaryHash) {
     failures++
-    console.log(`FAIL ${name}: ${r.error.message}`)
-    return
+    console.log(`FAIL binaryHash mismatch recompute=${recompute}`)
+  } else {
+    console.log('OK  binaryHash')
   }
-  if (r.status !== 0) {
-    failures++
-    console.log(`FAIL ${name}: exit ${r.status}\n${out.slice(0, 500)}`)
-    return
-  }
-  if (expectSubstring && !out.includes(expectSubstring)) {
-    failures++
-    console.log(`FAIL ${name}: expected substring ${expectSubstring}\n${out.slice(0, 300)}`)
-    return
-  }
-  console.log(`OK  ${name}`)
 }
 
-run('version', ['version'], '1.')
-run('help mentions SessionActor', ['--help'], 'SessionActor')
+if (!probe.versionOk) {
+  failures++
+  console.log(`FAIL version: ${probe.detail || probe.versionOutput.slice(0, 200)}`)
+} else {
+  console.log(`OK  version (${probe.versionOutput.split('\n')[0]})`)
+}
+
+if (!probe.helpOk) {
+  failures++
+  console.log(`FAIL help: ${probe.detail || probe.helpOutput.slice(0, 200)}`)
+} else {
+  console.log('OK  help mentions SessionActor')
+}
+
 // doctor may need repo root — try without, allow soft fail as SKIP message
 {
-  const r = spawnSync(bin, ['doctor'], {
+  const r = spawnSync(probe.binaryPath, ['doctor'], {
     encoding: 'utf-8',
     timeout: 60_000,
     cwd: path.resolve(process.cwd(), '../..'),
@@ -76,6 +67,12 @@ run('help mentions SessionActor', ['--help'], 'SessionActor')
       `WARN doctor exit ${r.status} (non-fatal for smoke if version/help pass)\n${(r.stdout || r.stderr || '').slice(0, 200)}`,
     )
   }
+}
+
+if (!probe.ok && failures === 0) {
+  // defensive: probe.ok false should have failed version/help above
+  failures++
+  console.log(`FAIL probe.ok=false detail=${probe.detail}`)
 }
 
 console.log(`\n${failures === 0 ? 'ALL LIVE SMOKE PASSED' : `${failures} LIVE SMOKE FAILED`}`)

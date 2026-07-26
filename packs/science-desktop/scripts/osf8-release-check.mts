@@ -45,6 +45,10 @@ test('scripts include pack:check, test:authority, dist', () => {
   ok(pkg.scripts?.['pack:check'])
   ok(pkg.scripts?.['test:authority'])
   ok(pkg.scripts?.dist)
+  ok(
+    (pkg.scripts?.dist || '').includes('pack-dir') ||
+      (pkg.scripts?.dist || '').includes('electron-builder'),
+  )
 })
 test('electron-builder.yml has appId', () => {
   ok(yml.includes('appId:'))
@@ -88,6 +92,13 @@ test('no aipoch/open-science execution naming in builder', () => {
 test('builder does not reference missing cli/ or packages/open-science', () => {
   ok(!/from:\s*cli\s*$/m.test(yml))
   ok(!yml.includes('packages/open-science'))
+})
+test('builder does not require missing prisma extraResources', () => {
+  // Exclude globs under files: are fine; a from: extraResources path that does not
+  // exist makes electron-builder fail. Prisma must stay optional until staged.
+  ok(!/^\s*from:\s*node_modules\/\.prisma/m.test(yml), 'no prisma extraResources from:')
+  ok(!/^\s*from:\s*node_modules\/@prisma\/client/m.test(yml), 'no @prisma/client extraResources from:')
+  ok(!/extraResources:[\s\S]*from:\s*node_modules\/\.prisma/.test(yml))
 })
 test('auto-update publish feed disabled', () => {
   ok(!yml.includes('provider: generic') || !yml.includes('statics.aipoch.com'))

@@ -4,6 +4,12 @@
  * Run: npx tsx scripts/test-osf9-product-path.mts
  */
 import { ok, strictEqual } from 'node:assert/strict'
+import { createHash } from 'node:crypto'
+import fs from 'node:fs'
+import {
+  isSha256Hex,
+  resolveLumenScienceBinary,
+} from '../src/main/files/lumen-binary.js'
 import { runOsf9ProductPath } from '../src/main/files/osf9-product-path.js'
 
 let failures = 0
@@ -29,6 +35,30 @@ async function main() {
     const d = report.exportProjection as { artifacts?: unknown[] }
     ok(Array.isArray(d.artifacts) && d.artifacts.length >= 3)
   })
+
+  const liveStep = report.steps.find((s) => s.name === 'live-binary')
+  await test('osf9 live-binary step present', () => {
+    ok(liveStep, 'missing live-binary step')
+  })
+
+  if (report.binaryHash) {
+    await test('binaryHash is 64-hex when live', () => {
+      ok(isSha256Hex(report.binaryHash))
+    })
+    await test('binaryHash matches file contents when live', () => {
+      const bin = resolveLumenScienceBinary()
+      ok(bin, 'binaryHash set but resolve returned null')
+      const fileHash = createHash('sha256').update(fs.readFileSync(bin!)).digest('hex')
+      strictEqual(report.binaryHash, fileHash)
+    })
+    console.log(`REPORT binaryHash=${report.binaryHash}`)
+  } else {
+    await test('binaryHash null when offline skip', () => {
+      strictEqual(report.binaryHash, null)
+      ok(liveStep?.detail?.includes('skip') || liveStep?.detail?.includes('no lumen'), liveStep?.detail)
+    })
+    console.log('REPORT binaryHash=null (offline skip)')
+  }
 
   console.log(`\nsteps=${report.steps.length} failures=${failures}`)
   console.log(failures === 0 ? 'ALL TESTS PASSED' : `${failures} TESTS FAILED`)
