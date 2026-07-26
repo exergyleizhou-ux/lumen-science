@@ -106,6 +106,35 @@ test('the desk says the engine is offline rather than looking healthy', async ()
   expect(text.toLowerCase()).toContain('engine offline')
 })
 
+test('the design system is actually applied, not just referenced', async () => {
+  // Tailwind was silently OFF for the whole app. electron.vite.config.ts
+  // require()d @tailwindcss/vite, which is ESM-only, so it always threw
+  // ERR_REQUIRE_ESM — and a catch swallowed it as "optional when not
+  // installed". The bundle still carried theme variables, so the build looked
+  // fine while every screen shipped unstyled.
+  //
+  // Asserting COMPUTED style, not class names: a className present in the DOM
+  // proves nothing about whether a rule was generated for it, which is exactly
+  // how this hid.
+  const applied = await page.evaluate(() => {
+    const heading = document.querySelector('h1')
+    const root = document.getElementById('root')?.firstElementChild
+    return {
+      headingSize: heading ? parseFloat(getComputedStyle(heading).fontSize) : 0,
+      headingWeight: heading ? getComputedStyle(heading).fontWeight : '',
+      background: root ? getComputedStyle(root).backgroundColor : '',
+    }
+  })
+
+  // text-xl is 20px; the browser default for h1 is 32px and an unstyled
+  // inherited size is 16px. Either would mean no utility was generated.
+  expect(applied.headingSize).toBeGreaterThan(16)
+  expect(applied.headingSize).toBeLessThan(32)
+  expect(Number(applied.headingWeight)).toBeGreaterThanOrEqual(500)
+  // A themed surface, not the transparent default.
+  expect(applied.background).not.toBe('rgba(0, 0, 0, 0)')
+})
+
 test('the UI does not ship under the upstream project name', async () => {
   // app-config.ts already said "Lumen Science", but 38 reachable components
   // carried the upstream name as hardcoded text, so the first screen a user saw

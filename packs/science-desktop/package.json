@@ -2,7 +2,7 @@
   "name": "lumen-science-desktop",
   "productName": "Lumen Science Desktop",
   "version": "1.1.0-dev",
-  "description": "Lumen Science Desktop \u2014 auditable scientific workbench powered by Rust Lumen SessionActor. Desktop UI adapted from Open Science (Apache-2.0).",
+  "description": "Lumen Science Desktop — auditable scientific workbench powered by Rust Lumen SessionActor. Desktop UI adapted from Open Science (Apache-2.0).",
   "main": "./out/main/index.js",
   "author": "exergyleizhou-ux",
   "license": "Apache-2.0",
@@ -67,6 +67,7 @@
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",
     "@playwright/test": "^1.62.0",
+    "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^20.14.0",
     "@types/papaparse": "^5.5.2",

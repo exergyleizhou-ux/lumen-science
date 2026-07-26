@@ -9,8 +9,8 @@
     "noticeFile": "third_party/open-science/NOTICE"
   },
   "summary": {
-    "adopted-verbatim": 947,
-    "adopted-modified": 81,
+    "adopted-verbatim": 946,
+    "adopted-modified": 82,
     "lumen-original": 50,
     "totalShipped": 1078,
     "upstreamSourceFiles": 1027,
@@ -18,7 +18,7 @@
   },
   "licenseObligations": {
     "attributionRequiredFor": 1028,
-    "statementOfChangesRequiredFor": 81,
+    "statementOfChangesRequiredFor": 82,
     "note": "Apache-2.0 section 4 requires retaining attribution for adopted files and stating that modified files were changed. Files classified lumen-original carry no upstream obligation."
   },
   "files": {
@@ -4802,7 +4802,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/App.tsx",
       "upstreamSha256": "82f30b128232ff10db85dfca144edfe3f51ea106b7a0984d8ed5928afbb29a68",
-      "localSha256": "575717529026557aec2e75f77b09d7eb2e4a62a3d9d982d1779158afbe4070c3",
+      "localSha256": "ee3c7551fb454d990bbe01c9acbac102a349bc278ed956d745ae43c5ee90f27d",
       "modified": true,
       "noticeRequired": true
     },
@@ -5855,18 +5855,18 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/onboarding/startup-gate.ts": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/onboarding/startup-gate.ts",
       "upstreamSha256": "716782c5b06ec1f865d2b98a9fc3f0cd5254eba7b907626364b4ce1a7aae6d8f",
-      "localSha256": "716782c5b06ec1f865d2b98a9fc3f0cd5254eba7b907626364b4ce1a7aae6d8f",
-      "modified": false,
+      "localSha256": "b7828d647ec56560e8a631bd10701fcbfb0d2b75ba3f5a9cb4c0970cee08c3d2",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/research/ResearchShell.tsx": {
       "origin": "lumen-original",
       "upstreamPath": null,
       "upstreamSha256": null,
-      "localSha256": "09ddf2c5afd268f14ef180a87c3559b8f4bc1b5be584088b8af4961968063a26",
+      "localSha256": "834c25132a98cfa2a2adaf24b3964d0d6bedc7abde77589914d947238bb2104b",
       "modified": null,
       "noticeRequired": false
     },

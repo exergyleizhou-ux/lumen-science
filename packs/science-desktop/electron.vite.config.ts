@@ -13,7 +13,7 @@ const require = createRequire(import.meta.url)
  * Optional plugins from the Open Science absorb. Missing packages must not
  * block an honest Lumen pack proof (`electron-builder --dir`).
  */
-function optionalPlugins(): PluginOption[] {
+async function optionalPlugins(): Promise<PluginOption[]> {
   const plugins: PluginOption[] = []
 
   try {
@@ -33,19 +33,23 @@ function optionalPlugins(): PluginOption[] {
     // Pack / CI without file-viewer: skip
   }
 
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const tailwindcss = require('@tailwindcss/vite').default as () => PluginOption
-    plugins.push(tailwindcss())
-  } catch {
-    // Tailwind v4 vite plugin optional when not installed
-  }
+  // Tailwind v4's Vite plugin is ESM-only. It used to be require()d, which
+  // ALWAYS threw ERR_REQUIRE_ESM, and the catch below swallowed it as "not
+  // installed" — so Tailwind was silently off and the entire app shipped with
+  // no utility CSS at all. The bundle still contained the theme variables, so
+  // it looked like a build that worked.
+  //
+  // Dynamic import is the only correct way to load it from here. A failure is
+  // now RE-THROWN: styling is not optional, and a silent fallback to unstyled
+  // is exactly how this went unnoticed.
+  const tailwindcss = (await import('@tailwindcss/vite')).default
+  plugins.push(tailwindcss())
 
   plugins.push(react())
   return plugins
 }
 
-export default defineConfig({
+export default defineConfig(async () => ({
   main: {},
   preload: {
     build: {
@@ -70,7 +74,7 @@ export default defineConfig({
       // needless rescans/HMR churn during dev.
       watch: { ignored: ['**/.claude/**'] },
     },
-    plugins: optionalPlugins(),
+    plugins: await optionalPlugins(),
     build: {
       rollupOptions: {
         input: {
@@ -80,4 +84,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))
