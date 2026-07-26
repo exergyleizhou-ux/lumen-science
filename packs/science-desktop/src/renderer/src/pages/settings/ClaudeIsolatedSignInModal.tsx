@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { useEffect, useRef, useState } from 'react'
 import { AlertDialog } from 'radix-ui'
 import { Check, Copy, Loader2 } from 'lucide-react'
@@ -123,7 +129,7 @@ const ClaudeIsolatedSignInModalBody = ({
         </AlertDialog.Title>
         <AlertDialog.Description className={dialogDescriptionClassName}>
           Use a long-lived OAuth token from <code className="font-mono">claude setup-token</code>.
-          The token is encrypted in Open Science app storage and never read from or written to{' '}
+          The token is encrypted in Lumen Science app storage and never read from or written to{' '}
           <code className="font-mono">~/.claude</code>. See{' '}
           <a
             href={SETUP_TOKEN_DOCS_URL}

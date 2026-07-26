@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { ExternalTextLink } from '@/components/ExternalTextLink'
 import { FieldHelp } from '@/components/FieldHelp'
 import { Input } from '@/components/ui/input'
@@ -256,19 +262,19 @@ const ProviderForm = ({
                 <span>
                   {value.type === 'codex-shared'
                     ? 'Import existing Codex sign-in'
-                    : 'Sign in with Open Science'}
+                    : 'Sign in with Lumen Science'}
                 </span>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="codex-shared">Import existing Codex sign-in</SelectItem>
-                <SelectItem value="codex-isolated">Sign in with Open Science</SelectItem>
+                <SelectItem value="codex-isolated">Sign in with Lumen Science</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <p className="text-xs text-muted-foreground">
             {value.type === 'codex-shared'
-              ? 'Copies only Codex authentication into Open Science app data. Global config, Skills and sessions are not imported.'
-              : 'Stores a separate Codex login in Open Science app data without changing your Codex CLI profile.'}
+              ? 'Copies only Codex authentication into Lumen Science app data. Global config, Skills and sessions are not imported.'
+              : 'Stores a separate Codex login in Lumen Science app data without changing your Codex CLI profile.'}
           </p>
         </div>
       ) : isClaudeSubscription ? (
@@ -301,7 +307,7 @@ const ProviderForm = ({
             <p className="text-xs text-muted-foreground">
               {value.type === 'claude-shared'
                 ? 'Recommended. Uses your existing Claude login from ~/.claude. Sign in once via browser OAuth and use across all Claude tools.'
-                : 'Advanced. Signs in through the browser and stores a separate Claude login in Open Science, completely isolated from your personal Claude profile.'}
+                : 'Advanced. Signs in through the browser and stores a separate Claude login in Lumen Science, completely isolated from your personal Claude profile.'}
             </p>
             <div className="space-y-1.5 border-t border-border-200 pt-3">
               <p className="text-xs text-muted-foreground">

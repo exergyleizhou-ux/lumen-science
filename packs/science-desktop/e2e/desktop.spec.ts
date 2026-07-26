@@ -86,6 +86,19 @@ test('the renderer mounts without an unhandled page error', async () => {
   expect(errors).toEqual([])
 })
 
+test('the UI does not ship under the upstream project name', async () => {
+  // app-config.ts already said "Lumen Science", but 38 reachable components
+  // carried the upstream name as hardcoded text, so the first screen a user saw
+  // said Open Science. Its own header warns against exactly this: shipping
+  // under another project's name and copyright.
+  //
+  // Checks rendered TEXT, not source. Attribution lives in file headers and in
+  // third_party/open-science/NOTICE, where the licence requires it — this must
+  // not push anyone toward stripping that.
+  const visible = await page.evaluate(() => document.body.innerText)
+  expect(visible).not.toContain('Open Science')
+})
+
 test('the preload exposes the lumen surface, and nothing more', async () => {
   const surface = await page.evaluate(() => {
     const api = (window as unknown as { api?: { lumen?: Record<string, unknown> } }).api

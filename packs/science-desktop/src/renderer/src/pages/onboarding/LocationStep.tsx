@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { AlertDialog } from 'radix-ui'
 import { useRef, useState } from 'react'
 
@@ -135,7 +141,7 @@ const LocationStep = ({
     <>
       <CardHeader className="gap-1 rounded-t-lg px-6 py-5">
         <CardTitle className="text-[15px] font-semibold">
-          Where should Open Science store your data?
+          Where should Lumen Science store your data?
         </CardTitle>
         <CardDescription className="text-xs leading-5">
           Large files (artifacts, notebooks, environments) go here. Your settings and history always
@@ -177,7 +183,7 @@ const LocationStep = ({
             {chosenDataRoot ? (
               <p className="mt-2 text-xs text-text-100">
                 Your data will be stored in <span className="font-mono">{chosenDataRoot}</span>.
-                Open Science will restart to set this up.{' '}
+                Lumen Science will restart to set this up.{' '}
                 <button
                   type="button"
                   onClick={handleResetLocation}
@@ -190,7 +196,7 @@ const LocationStep = ({
 
             {chosenKind === 'adopt' ? (
               <p className="mt-2 text-xs text-text-100">
-                This folder already contains Open Science data — it will be used as-is (nothing is
+                This folder already contains Lumen Science data — it will be used as-is (nothing is
                 moved).
               </p>
             ) : null}
@@ -227,7 +233,7 @@ const LocationStep = ({
               Restart to set up your data?
             </AlertDialog.Title>
             <AlertDialog.Description className={dialogDescriptionClassName}>
-              Open Science will restart to set up your data at{' '}
+              Lumen Science will restart to set up your data at{' '}
               <span className="font-mono">{chosenDataRoot}</span>.
             </AlertDialog.Description>
             <div className="mt-6 flex justify-end gap-2">

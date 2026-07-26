@@ -289,7 +289,7 @@ const GeneralPanel = (): React.JSX.Element => {
         <div className="flex flex-wrap items-center gap-2">
           <GitHubStarBadge className="border border-border" />
           {/* LS5-R1-02: the inherited Discord and X links pointed at the upstream
-              Open Science project's community. Sending Lumen Science users there
+              Lumen Science project's community. Sending Lumen Science users there
               under Lumen branding misrepresents both projects, so they are gone
               rather than re-pointed — Lumen has no equivalent channels yet. */}
           <a

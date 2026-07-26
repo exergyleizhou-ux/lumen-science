@@ -336,7 +336,7 @@ export type AppIconVariantInfo = {
 // The ordered icon variants shown in Settings. The default (light) leads.
 export const APP_ICON_VARIANT_INFOS: readonly AppIconVariantInfo[] = [
   { id: 'light', label: 'Light', description: 'The current light dotted mark.' },
-  { id: 'dark', label: 'Dark', description: 'The original Open Science icon.' }
+  { id: 'dark', label: 'Dark', description: 'The original Lumen Science icon.' }
 ]
 
 // Renderer-facing descriptor for one selectable agent framework (built from the main registry).

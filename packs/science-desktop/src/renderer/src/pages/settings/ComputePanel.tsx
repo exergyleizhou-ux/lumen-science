@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { Folder, Info, Plus, Server, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
@@ -225,7 +231,7 @@ export function ComputePanel({ onNavigate }: ComputePanelProps): React.JSX.Eleme
           <p className="py-6 text-center text-sm text-muted-foreground">Loading hosts…</p>
         ) : hosts.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            No SSH hosts yet. Add one to let Open Science run compute on your servers.
+            No SSH hosts yet. Add one to let Lumen Science run compute on your servers.
           </p>
         ) : (
           hosts.map((host) => (

@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { Button } from '@/components/ui/button'
 import { CardContent, CardFooter } from '@/components/ui/card'
 import { useSettingsStore } from '@/stores/settings-store'
@@ -33,7 +39,7 @@ const AgentStep = ({ onBack, onContinue }: AgentStepProps): React.JSX.Element =>
         <AgentPanel
           variant="onboarding"
           title="Set up the agent runtime"
-          description="Pick the agent Open Science drives, then install it. Only this agent needs to be installed to continue."
+          description="Pick the agent Lumen Science drives, then install it. Only this agent needs to be installed to continue."
         />
       </CardContent>
       <CardFooter className="mt-auto items-center justify-between gap-4 rounded-b-lg border-border-200 bg-bg-10 px-6 py-3">

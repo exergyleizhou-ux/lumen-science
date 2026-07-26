@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { TriangleAlert } from 'lucide-react'
 
 // Shared advisory shown wherever the data-root folder is chosen or displayed (onboarding's
@@ -11,7 +17,7 @@ const DataRootWarning = (): React.JSX.Element => (
   >
     <TriangleAlert className="mt-px size-3.5 shrink-0" aria-hidden="true" />
     <span>
-      Open Science manages this folder. Don&apos;t move, rename, or delete files inside it — doing
+      Lumen Science manages this folder. Don&apos;t move, rename, or delete files inside it — doing
       so can break your projects and history.
     </span>
   </p>

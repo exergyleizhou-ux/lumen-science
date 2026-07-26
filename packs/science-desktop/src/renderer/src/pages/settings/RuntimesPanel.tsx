@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { CheckCircle2, FolderInput, RefreshCw } from 'lucide-react'
 import { AlertDialog } from 'radix-ui'
 import { useEffect, useState } from 'react'
@@ -325,7 +331,7 @@ const RuntimesPanel = ({ title, description }: RuntimesPanelProps): React.JSX.El
             <SettingsRow
               className="min-h-0 py-0"
               label="Allow package install"
-              description="Lets Open Science install packages into this environment. Installs go to your own environment, not the app-managed storage."
+              description="Lets Lumen Science install packages into this environment. Installs go to your own environment, not the app-managed storage."
             >
               <div className="flex justify-end">
                 <SettingsToggle

@@ -577,7 +577,7 @@ EVIDENCE_LEVELS = {
         },
     },
     "workflowKernel": {
-        "level": "E2",
+        "level": "E4",
         "rationale": (
             "A real executor now runs a WorkflowSpec: topological order, "
             "at-least-once execution with exactly-once artifact commit, attempt "
@@ -587,9 +587,12 @@ EVIDENCE_LEVELS = {
             "real interpreter — hashing its bytes, executing it for a version "
             "under timeout — and can genuinely Reject; it previously wrote "
             "exact_version \"unknown\" and returned Admitted unconditionally. "
-            "Not E4: the crate never spawns a step. StepRunner is a seam and the "
-            "default runner refuses everything, so no workflow has executed "
-            "end to end, and nothing is wired through the SessionActor yet."
+            "Now E4: PythonLoopRunner binds the StepRunner seam and a WorkflowSpec "
+            "runs end to end through a real python3, and x.ai/science/workflow_execute "
+            "routes through the SessionActor with a permission request, operation-id "
+            "idempotency and session/owner binding — proven over a rebuilt binary "
+            "and falsified twice (a missing binary, and a binary with the dispatch "
+            "arm removed, which returns -32601)."
         ),
     },
     "dummyLabTwin": {

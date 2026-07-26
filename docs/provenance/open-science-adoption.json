@@ -9,19 +9,27 @@
     "noticeFile": "third_party/open-science/NOTICE"
   },
   "summary": {
-    "adopted-verbatim": 977,
-    "adopted-modified": 51,
-    "lumen-original": 49,
-    "totalShipped": 1077,
+    "adopted-verbatim": 947,
+    "adopted-modified": 81,
+    "lumen-original": 50,
+    "totalShipped": 1078,
     "upstreamSourceFiles": 1027,
     "upstreamFilesNotAdopted": 0
   },
   "licenseObligations": {
     "attributionRequiredFor": 1028,
-    "statementOfChangesRequiredFor": 51,
+    "statementOfChangesRequiredFor": 81,
     "note": "Apache-2.0 section 4 requires retaining attribution for adopted files and stating that modified files were changed. Files classified lumen-original carry no upstream obligation."
   },
   "files": {
+    "packs/science-desktop/src/main/absent-capability-ipc.ts": {
+      "origin": "lumen-original",
+      "upstreamPath": null,
+      "upstreamSha256": null,
+      "localSha256": "066cce698bee2f7aa44b9058bb447e6b34d6781140ae7f0a4c3e595a177ca329",
+      "modified": null,
+      "noticeRequired": false
+    },
     "packs/science-desktop/src/main/acp/agent-process.test.ts": {
       "origin": "adopted-verbatim",
       "upstreamPath": "src/main/acp/agent-process.test.ts",
@@ -175,11 +183,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/main/acp/permission-profile-controller.ts": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/main/acp/permission-profile-controller.ts",
       "upstreamSha256": "08ce79d94d66cfe57df7a09c842e27b12b00a7c5c4f0904d163b1cde663c033d",
-      "localSha256": "08ce79d94d66cfe57df7a09c842e27b12b00a7c5c4f0904d163b1cde663c033d",
-      "modified": false,
+      "localSha256": "2bc8c6a379d24547160225b024a74bce51ba9d0134d38798d18eda5299291b2a",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/main/acp/prompt-error.test.ts": {
@@ -375,11 +383,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/main/agent-framework/codex.ts": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/main/agent-framework/codex.ts",
       "upstreamSha256": "6ed36455115562cf332e0530ca168159c2b8460f983e6e1dcf67691e3d40e306",
-      "localSha256": "6ed36455115562cf332e0530ca168159c2b8460f983e6e1dcf67691e3d40e306",
-      "modified": false,
+      "localSha256": "3f148a3eee0d466a88c3f7f2ca30e6a4b28c8c1c2076ea3e099dcc3c06bf3d22",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/main/agent-framework/index.ts": {
@@ -1711,11 +1719,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/main/connectors/skill-doc.ts": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/main/connectors/skill-doc.ts",
       "upstreamSha256": "be19da26fdc36a2b94609877c8b4ce0d9b36b2dfa93d4707b16561dabcdf1df7",
-      "localSha256": "be19da26fdc36a2b94609877c8b4ce0d9b36b2dfa93d4707b16561dabcdf1df7",
-      "modified": false,
+      "localSha256": "1d41f2304f6fefaadbf84f20b251078eb44c198b75360aec9876a1e47cdeb116",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/main/connectors/types.ts": {
@@ -1994,7 +2002,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/ipc.ts",
       "upstreamSha256": "2532a17b9fac115335a74c7fabd9072b9dd2e3701389c567f28710e29f2b123f",
-      "localSha256": "176e14957376abd7ec17867971812d4e47960f9a3ee1520308404a3bf0678b15",
+      "localSha256": "e8c5165626dc750192713d26a4425f10d61a8229d5afbbae03914ca475ddf057",
       "modified": true,
       "noticeRequired": true
     },
@@ -2074,7 +2082,7 @@
       "origin": "lumen-original",
       "upstreamPath": null,
       "upstreamSha256": null,
-      "localSha256": "86487d765d0c7b91218b2b1a534dccb880c6f73550fb8cac2e1f31655d7728f7",
+      "localSha256": "3984d9200baa91f98eede07ff9fc62b40429aedcddd9fb706add8af87b7e6e9b",
       "modified": null,
       "noticeRequired": false
     },
@@ -3714,7 +3722,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/settings/environment-check.ts",
       "upstreamSha256": "9cf8f54ffea6af8de6f309c671d305cf38c1355ab66c7c82ab8e2238ef2d5ea5",
-      "localSha256": "c86e221e8455e281d0cbfb0b351083fc3fbe4b8722fec96ff2c8153e6ea65615",
+      "localSha256": "615e5c9a5f5e0b80eed20f7e1971d848620df109c6638d4db564f3eeadace29b",
       "modified": true,
       "noticeRequired": true
     },
@@ -3938,7 +3946,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/settings/service.ts",
       "upstreamSha256": "8db74dc5e571d01a3fb48c0d6c281761653a607e323d6f0a017e91091c733a2a",
-      "localSha256": "97c0b7ef7d71ccb93d200bb9cb5072d55c4bc619b025024343cdf284fe8ac2e8",
+      "localSha256": "54868196bbf120734ed2c62d42ab6dbb27bf8e66c84d41e7741eb973245cbb34",
       "modified": true,
       "noticeRequired": true
     },
@@ -4287,11 +4295,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/main/storage/migration-state.ts": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/main/storage/migration-state.ts",
       "upstreamSha256": "ee2d5ad8af4aba0efa259c4f1afd0bdd1e383ce7f79b6347cbbf23b6c95a9393",
-      "localSha256": "ee2d5ad8af4aba0efa259c4f1afd0bdd1e383ce7f79b6347cbbf23b6c95a9393",
-      "modified": false,
+      "localSha256": "3a766b59cb6d15e4d899a0494c3b13952789a8e90d27e4cb354a0eac2b58c77e",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/main/storage/normalize-legacy-paths.test.ts": {
@@ -4367,11 +4375,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/main/tray.ts": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/main/tray.ts",
       "upstreamSha256": "e9a40ac2181f259a72df0ff93458892c482a7442d6349bf5bc39cb8060826442",
-      "localSha256": "e9a40ac2181f259a72df0ff93458892c482a7442d6349bf5bc39cb8060826442",
-      "modified": false,
+      "localSha256": "b70c9c22547d6c2eb0c69cad452d088ef71c8bd8334de079fd07f1cf1e74c913",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/main/update/create-strategy.test.ts": {
@@ -4599,19 +4607,19 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/main/web-service/index.ts": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/main/web-service/index.ts",
       "upstreamSha256": "6b23d80ded3a37489d7082378833fbe09176b1bfe94020ac28a55734246ba7e5",
-      "localSha256": "6b23d80ded3a37489d7082378833fbe09176b1bfe94020ac28a55734246ba7e5",
-      "modified": false,
+      "localSha256": "58e249f5498d269d44c91e9c1bfab109c93a9e329772ad016c9fce11128406dc",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/main/web-service/options.ts": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/main/web-service/options.ts",
       "upstreamSha256": "dfad4e51ca2d521ec051b739eb5015f1bbd8186a132fc03a30e6bfe2a33710b3",
-      "localSha256": "dfad4e51ca2d521ec051b739eb5015f1bbd8186a132fc03a30e6bfe2a33710b3",
-      "modified": false,
+      "localSha256": "45270b3727a3dc7908ca45ebeb8b0adfae396776efd10063e3806c924a2ca56d",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/main/web-service/rpc-capture.test.ts": {
@@ -4671,11 +4679,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/main/window-close-confirm.ts": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/main/window-close-confirm.ts",
       "upstreamSha256": "24e14bdd2af1a5244698b1f7d1c632c10ab37c36a840b4d9bf1bb139e303b065",
-      "localSha256": "24e14bdd2af1a5244698b1f7d1c632c10ab37c36a840b4d9bf1bb139e303b065",
-      "modified": false,
+      "localSha256": "0630bf16a8d82f3e363998eee7dd689bd9b141e77f18a52955b47ff39fe60879",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/main/window-ipc.test.ts": {
@@ -4831,11 +4839,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/components/CloseConfirmModal.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/components/CloseConfirmModal.tsx",
       "upstreamSha256": "bc388a587e505e626a8396d3b46763cb41a84a9bcecb3cde3f65129ac2571844",
-      "localSha256": "bc388a587e505e626a8396d3b46763cb41a84a9bcecb3cde3f65129ac2571844",
-      "modified": false,
+      "localSha256": "b3b99766e6d2ba6c47325124661c60faebcd09cf1bca17484fa52ac5abe2c9c0",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/components/CompletedJobCard.tsx": {
@@ -4855,19 +4863,19 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/components/DataRootMissingDialog.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/components/DataRootMissingDialog.tsx",
       "upstreamSha256": "e5c17636ece008c8f91e6e422be7164f4278940761c87311ebe9a2a361d85ffa",
-      "localSha256": "e5c17636ece008c8f91e6e422be7164f4278940761c87311ebe9a2a361d85ffa",
-      "modified": false,
+      "localSha256": "accc4fd4640063c4feeb4a2caf820a4864af222d29132fa7b91615c93fd4602d",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/components/DataRootWarning.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/components/DataRootWarning.tsx",
       "upstreamSha256": "f13680dd2ef51f1299315b981810e5fd93074cc70bcfa88d46a9363ca2a9f0a6",
-      "localSha256": "f13680dd2ef51f1299315b981810e5fd93074cc70bcfa88d46a9363ca2a9f0a6",
-      "modified": false,
+      "localSha256": "dbe1a77d9d73ac7e1afcde95292a534c0474163a773cfdc9736aecc603ce0660",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/components/DownloadProgressLine.render.test.tsx": {
@@ -4975,11 +4983,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/components/LegacyDataMoveDialog.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/components/LegacyDataMoveDialog.tsx",
       "upstreamSha256": "d0bde6c0c51272048907811f0b65c20f365ddae3779470163e2119f21893c44c",
-      "localSha256": "d0bde6c0c51272048907811f0b65c20f365ddae3779470163e2119f21893c44c",
-      "modified": false,
+      "localSha256": "0a614b836967087707d2c4290c3a72222d882d1d915aaee843a5175dec7692bc",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/components/LifecycleToast.test.tsx": {
@@ -5735,11 +5743,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/onboarding/AgentStep.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/onboarding/AgentStep.tsx",
       "upstreamSha256": "62cd565e8bde3ee090fb2c391c16babe5fff9348eedafdc62ec5b8bbd42cf3a0",
-      "localSha256": "62cd565e8bde3ee090fb2c391c16babe5fff9348eedafdc62ec5b8bbd42cf3a0",
-      "modified": false,
+      "localSha256": "635b9670ec7990c6b7ff75b25447804a3976f924eda574eb7ebe17e02ec79923",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/onboarding/EnvironmentSetupCard.tsx": {
@@ -5759,11 +5767,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/onboarding/EnvironmentStep.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/onboarding/EnvironmentStep.tsx",
       "upstreamSha256": "3335ca88d126d3aa5d3bebeb55810614d6c2b518975f3c02707943f634ebf22d",
-      "localSha256": "3335ca88d126d3aa5d3bebeb55810614d6c2b518975f3c02707943f634ebf22d",
-      "modified": false,
+      "localSha256": "63df5e8d52e76290ce2d22a371dd28fead81150092cc5e5e2576158c70396d44",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/onboarding/LocationStep.render.test.tsx": {
@@ -5775,11 +5783,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/onboarding/LocationStep.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/onboarding/LocationStep.tsx",
       "upstreamSha256": "112686b959afb16c63d5d1538e06a17f25339b91974512d145be38e139d1b29d",
-      "localSha256": "112686b959afb16c63d5d1538e06a17f25339b91974512d145be38e139d1b29d",
-      "modified": false,
+      "localSha256": "c966028fedc144f245d6187c7ee36fa62cf04bb134190a51b9f318ece890a415",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/onboarding/NotebookStep.render.test.tsx": {
@@ -5807,11 +5815,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/onboarding/OnboardingWizard.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/onboarding/OnboardingWizard.tsx",
       "upstreamSha256": "14e98c7c56309a5c43b7f3e5764cf6a966714f9ee501e05804e57912d93b0b1f",
-      "localSha256": "14e98c7c56309a5c43b7f3e5764cf6a966714f9ee501e05804e57912d93b0b1f",
-      "modified": false,
+      "localSha256": "95899928c6ab6e2d5463a926ec32b74e593076a03845eb8a31cb09fe9f3594ab",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/onboarding/ProviderStep.render.test.tsx": {
@@ -5823,11 +5831,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/onboarding/ProviderStep.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/onboarding/ProviderStep.tsx",
       "upstreamSha256": "f8f24160f9720169cf713e5d018c9eb2c6ddfdb4fae4e46f19a4dd5feac9c2fb",
-      "localSha256": "f8f24160f9720169cf713e5d018c9eb2c6ddfdb4fae4e46f19a4dd5feac9c2fb",
-      "modified": false,
+      "localSha256": "e241291daa841c6e631102e213f367267058127b7d2abfe6eea5e02e25063887",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/onboarding/onboarding-test-utils.ts": {
@@ -5895,11 +5903,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/AgentHomeImportView.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/AgentHomeImportView.tsx",
       "upstreamSha256": "881a0aa59ec5ea54e82e0690fe8247fe4206a4203f32a37444d5994c416f671d",
-      "localSha256": "881a0aa59ec5ea54e82e0690fe8247fe4206a4203f32a37444d5994c416f671d",
-      "modified": false,
+      "localSha256": "b90f286dce3d9da2a49cc43de13a78e0b1b45d77418d8e1fd9853b9bb5303f86",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/AgentInstallSourceMenu.tsx": {
@@ -5951,19 +5959,19 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/ClaudeIsolatedSignInModal.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/ClaudeIsolatedSignInModal.tsx",
       "upstreamSha256": "6599d06fede7e5c344bf13139ff0083c7852aa7513de1150cede35f5410fe379",
-      "localSha256": "6599d06fede7e5c344bf13139ff0083c7852aa7513de1150cede35f5410fe379",
-      "modified": false,
+      "localSha256": "a50fd18bebdfcad7b0510d33856cf3a29a04748a579cdf2d4753801c07f42fda",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/ComputeAddForm.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/ComputeAddForm.tsx",
       "upstreamSha256": "e8faf9de8f53742e832d7599233cdac75e33c1eefcf95a6c5b139fc178a0878d",
-      "localSha256": "e8faf9de8f53742e832d7599233cdac75e33c1eefcf95a6c5b139fc178a0878d",
-      "modified": false,
+      "localSha256": "9f89d1ffeb59c6d351a8f2d475fc69385c322b1657271a966a3100acd58933da",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/ComputeApprovalDialog.render.test.tsx": {
@@ -5991,11 +5999,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/ComputeHostDetail.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/ComputeHostDetail.tsx",
       "upstreamSha256": "98fb7619d5da9d6935dbdeb75d483494855a695f1400f5acbe588da559523cec",
-      "localSha256": "98fb7619d5da9d6935dbdeb75d483494855a695f1400f5acbe588da559523cec",
-      "modified": false,
+      "localSha256": "1b3e5b20d81c00919e56a2a5789190de4fb7686efc92edf506bf67bf75eb66e0",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/ComputePanel.render.test.tsx": {
@@ -6007,11 +6015,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/ComputePanel.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/ComputePanel.tsx",
       "upstreamSha256": "ff62035b0ee586c9befdd3a3bd09d547af436eaaf6fb027300d8dfca770e9480",
-      "localSha256": "ff62035b0ee586c9befdd3a3bd09d547af436eaaf6fb027300d8dfca770e9480",
-      "modified": false,
+      "localSha256": "3fc8c813a4882fb210e577f7a81dcf3668d28db31a59ed4440714cc7bcd887db",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/ConnectorAddForm.render.test.tsx": {
@@ -6106,7 +6114,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/GeneralPanel.tsx",
       "upstreamSha256": "40d9892b0bcbbe8a7445728896359bc0f95636669dbad33772a7cc193949ede3",
-      "localSha256": "cb9a33b150b86d04c9bf2230d1f1b348a065877e969a0e68ac2c2e02bb992ca4",
+      "localSha256": "fb2c97b912f0f9ae2901a8284feaeb428c517877e57db75a8ab70c7808656fb2",
       "modified": true,
       "noticeRequired": true
     },
@@ -6143,11 +6151,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/ProviderForm.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/ProviderForm.tsx",
       "upstreamSha256": "39066c305f0c9369c88b4cc612f4dd36e4bb163adc504ec06f9cc71ad29b86dc",
-      "localSha256": "39066c305f0c9369c88b4cc612f4dd36e4bb163adc504ec06f9cc71ad29b86dc",
-      "modified": false,
+      "localSha256": "5b368248ce69abb33dab06f72ac232feef7e73ecd7e4428c959b77e322b39f73",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/ProviderList.render.test.tsx": {
@@ -6159,11 +6167,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/ProviderList.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/ProviderList.tsx",
       "upstreamSha256": "b4c1c5d3a41995e04968e1c295d75ea1a0c5a3b99915a8b20f1b0551db138a05",
-      "localSha256": "b4c1c5d3a41995e04968e1c295d75ea1a0c5a3b99915a8b20f1b0551db138a05",
-      "modified": false,
+      "localSha256": "de7a8b2e1a317ddd8fd335222a620a1114909e577e56daa0a39d989a0d24fc07",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/ProvidersPanel.race.test.tsx": {
@@ -6175,11 +6183,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/ProvidersPanel.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/ProvidersPanel.tsx",
       "upstreamSha256": "97ec01b539d473f4596921c05cedd8e884e310682747a95bf114a558df7e5783",
-      "localSha256": "97ec01b539d473f4596921c05cedd8e884e310682747a95bf114a558df7e5783",
-      "modified": false,
+      "localSha256": "2261ee4c380f977b175d4b862156f5296e0d5f1a1ad81c9830f30eb0e29e330d",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/ReasoningEffortSelect.render.test.tsx": {
@@ -6231,11 +6239,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/RuntimesPanel.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/RuntimesPanel.tsx",
       "upstreamSha256": "e67e068e6b265c3807a576e174fd2d5cad447e0b8782c0ca68c75d0229f0d5fa",
-      "localSha256": "e67e068e6b265c3807a576e174fd2d5cad447e0b8782c0ca68c75d0229f0d5fa",
-      "modified": false,
+      "localSha256": "727ccbf724a7c426ff2d5e2e93896f720c6a2d795e9e9918fa74b3d64c11b046",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/SettingsLayout.tsx": {
@@ -6335,11 +6343,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/StorageMigrationModal.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/StorageMigrationModal.tsx",
       "upstreamSha256": "cd35991d948486a420e5090cacd873ed312609b9513ca01a40bf22dba73cc8a2",
-      "localSha256": "cd35991d948486a420e5090cacd873ed312609b9513ca01a40bf22dba73cc8a2",
-      "modified": false,
+      "localSha256": "6ca45c2a7054e935d815804505a269c9c8d0a71861ff1756e3db1cfae69ada41",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/StoragePanel.render.test.tsx": {
@@ -6351,11 +6359,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/StoragePanel.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/StoragePanel.tsx",
       "upstreamSha256": "e985048610ab79b01a8adb1259231027ad18693a4083741c7a26989ac11860dc",
-      "localSha256": "e985048610ab79b01a8adb1259231027ad18693a4083741c7a26989ac11860dc",
-      "modified": false,
+      "localSha256": "0401d955289061152516f5d5382a8fa0d05aaab0ac35c2b9be2d3e0183684cfa",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/SwitchFrameworkDialog.render.test.tsx": {
@@ -6458,7 +6466,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/provider-form-value.ts",
       "upstreamSha256": "24b6f71e6232b9b89ec468d2b0c15b8a1524b31bb4272de37d79554d94746192",
-      "localSha256": "a26497bfbc85ffbadce24b890ec5640cddad6167769dfefb1a54b837947b47a8",
+      "localSha256": "a93aee856cb6f761c76e4c5e2a37779c6d3bbbf989a8d0999f89a4712609bbf2",
       "modified": true,
       "noticeRequired": true
     },
@@ -6471,11 +6479,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/provider-key-security.ts": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/provider-key-security.ts",
       "upstreamSha256": "7f948fbd151a15528276b06841d3c612cab94c54a2cf708c0d2760c136cbeb6e",
-      "localSha256": "7f948fbd151a15528276b06841d3c612cab94c54a2cf708c0d2760c136cbeb6e",
-      "modified": false,
+      "localSha256": "d0a122f489edeeb8e714cf1fb2fa45675a2c8cb3d9bda0568dcd7ae09af1fa4d",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/settings/runtime-uninstall-hint.test.ts": {
@@ -6535,11 +6543,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/workspace/ComposerAgentControlsMenu.tsx": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/workspace/ComposerAgentControlsMenu.tsx",
       "upstreamSha256": "30117d79df70d664ddb8f7d39d9b146e28f88312822e4872860bb37bd8b486bb",
-      "localSha256": "30117d79df70d664ddb8f7d39d9b146e28f88312822e4872860bb37bd8b486bb",
-      "modified": false,
+      "localSha256": "678c69e26516cd2af3901f3749a39b5bdf518d7fd63f8b3e27c7c188248f8b9f",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/renderer/src/pages/workspace/ComposerContextUsage.render.test.tsx": {
@@ -8522,7 +8530,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/shared/settings.ts",
       "upstreamSha256": "970561063b7d3d4f1f6f24c681bcf68dfc5c8c126ba9f0f0f72b63595ffd5fb9",
-      "localSha256": "adc9ccf428a58a04e8fb548f04a69fcd2044117da129685dfa0cbc26a8f77567",
+      "localSha256": "bfa79c7694bab105bfbcac709b9e2158b6cd4c8182904d7761ec3e5b883c61ed",
       "modified": true,
       "noticeRequired": true
     },

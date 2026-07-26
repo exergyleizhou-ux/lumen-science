@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { useEffect, useState } from 'react'
 
 import type { AgentHomeSkillView } from '../../../../shared/settings'
@@ -96,7 +102,7 @@ const AgentHomeImportView = ({ onImported }: AgentHomeImportViewProps): React.JS
       <h2 className="text-base font-semibold text-foreground">From your agent home</h2>
       <p className="mt-0.5 text-[13px] leading-5 text-muted-foreground">
         Skills under <code className="font-mono">{agentHomeRoot}</code> on this machine. Import
-        one to copy it into Open Science; the source file stays where it is.
+        one to copy it into Lumen Science; the source file stays where it is.
       </p>
 
       <div className="mt-4 flex items-center gap-2">

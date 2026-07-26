@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import type { SessionModeState } from '@agentclientprotocol/sdk'
 
 import type {
@@ -71,7 +77,7 @@ const resolvePermissionProfileApplication = (
         ...(!nativeAuto
           ? {
               message:
-                'This model does not provide native auto review. Open Science will auto-approve only clearly low-risk workspace operations.'
+                'This model does not provide native auto review. Lumen Science will auto-approve only clearly low-risk workspace operations.'
             }
           : {})
       }

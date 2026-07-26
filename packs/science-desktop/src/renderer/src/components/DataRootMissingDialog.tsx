@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { AlertDialog } from 'radix-ui'
 import { FolderInput, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
@@ -124,7 +130,7 @@ const DataRootMissingDialog = ({
               </Button>
             </AlertDialog.Cancel>
             <p className="text-xs text-muted-foreground">
-              Open Science will recreate the folder as you use it. Files from the old location
+              Lumen Science will recreate the folder as you use it. Files from the old location
               won&apos;t be available until it&apos;s reconnected.
             </p>
           </div>

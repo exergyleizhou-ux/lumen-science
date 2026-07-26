@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { ChevronDown } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
@@ -86,7 +92,7 @@ export function ComputeAddForm({ onCreated, onCancel }: ComputeAddFormProps): Re
     <div className="p-5">
       <p className="mb-5 text-[13px] leading-5 text-muted-foreground">
         Pick a host alias from your <code className="font-mono text-xs">~/.ssh/config</code>, or
-        type one. Open Science will use it as a compute provider via your existing SSH key — no
+        type one. Lumen Science will use it as a compute provider via your existing SSH key — no
         credentials are copied.
       </p>
 
@@ -130,7 +136,7 @@ export function ComputeAddForm({ onCreated, onCancel }: ComputeAddFormProps): Re
         <div className="flex flex-col gap-1.5">
           <div className="flex items-baseline justify-between gap-2">
             <label htmlFor="compute-details" className="text-sm font-medium text-foreground">
-              Anything Open Science should know? (optional)
+              Anything Lumen Science should know? (optional)
             </label>
             <span
               className={`text-xs ${detailsTooLong ? 'text-destructive' : 'text-muted-foreground'}`}
@@ -168,7 +174,7 @@ export function ComputeAddForm({ onCreated, onCancel }: ComputeAddFormProps): Re
           {advancedOpen ? (
             <div className="flex flex-col gap-4 border-t border-border px-3 py-3">
               <p className="text-xs text-muted-foreground">
-                By default Open Science resolves connection details via{' '}
+                By default Lumen Science resolves connection details via{' '}
                 <code className="font-mono">ssh -G &lt;alias&gt;</code> from your{' '}
                 <code className="font-mono">~/.ssh/config</code>. Set these only if you need to
                 override that.

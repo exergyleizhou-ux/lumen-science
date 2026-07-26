@@ -251,7 +251,7 @@ const CLAUDE_PROBE_TIMEOUT_MS = 20_000
 const SETUP_TOKEN_LIFETIME_MS = 365 * 24 * 60 * 60 * 1000
 const CLAUDE_SHARED_AUTH_STATUS_TTL_MS = 5_000
 const CLAUDE_SHARED_DISCONNECTED_MESSAGE =
-  'Claude is disconnected from Open Science. Sign in again to use your shared Claude profile.'
+  'Claude is disconnected from Lumen Science. Sign in again to use your shared Claude profile.'
 const CODEX_INSTALL_TARGET: InstallTarget = {
   npmPackage: '@agentclientprotocol/codex-acp',
   // Codex exposes no supported shell installer; InstallCodexRequest cannot select this branch.
@@ -270,7 +270,7 @@ const CODEX_BRIDGE_NOTEBOOK_TOOLS: ResponsesBridgeNamespacedTool[] = NOTEBOOK_RP
     name: tool.name,
     description:
       tool.name === 'notebook_execute'
-        ? `${tool.description} For Open Science data connectors, the Python code MUST call host.mcp(server, method, arguments). Never use requests, urllib, httpx, curl, or a raw upstream API for connector data; those bypass app permissions, credentials, and rate limits. Codex MCP resource-list tools are not connector discovery.`
+        ? `${tool.description} For Lumen Science data connectors, the Python code MUST call host.mcp(server, method, arguments). Never use requests, urllib, httpx, curl, or a raw upstream API for connector data; those bypass app permissions, credentials, and rate limits. Codex MCP resource-list tools are not connector discovery.`
         : tool.description,
     parameters: z.toJSONSchema(z.object(tool.inputSchema), {
       target: 'draft-7'
@@ -286,7 +286,7 @@ const CODEX_BRIDGE_ARTIFACT_TOOLS: ResponsesBridgeNamespacedTool[] = [
     namespace: CODEX_ARTIFACT_TOOL_NAMESPACE,
     name: 'write_artifact_file',
     description:
-      'Attach a generated image, chart, report, data export, or archive to the current Open Science response. The file must already exist before using a localPath source.',
+      'Attach a generated image, chart, report, data export, or archive to the current Lumen Science response. The file must already exist before using a localPath source.',
     parameters: z.toJSONSchema(z.object(writeArtifactFileToolSchema), {
       target: 'draft-7'
     }) as ResponsesBridgeNamespacedTool['parameters']
@@ -1479,7 +1479,7 @@ class SettingsService {
     // Build diagnostic message based on what was found
     let diagnostic: string | undefined
     if (components.nativeCliFound && !components.adapterFound) {
-      diagnostic = `Native Codex ${components.nativeCliVersion} is installed at ${components.nativeCliPath}, but the Codex ACP adapter required by Open Science is missing.`
+      diagnostic = `Native Codex ${components.nativeCliVersion} is installed at ${components.nativeCliPath}, but the Codex ACP adapter required by Lumen Science is missing.`
     } else if (!components.nativeCliFound && components.adapterFound) {
       if (components.adapterFailureReason === 'smoke-test-failed') {
         diagnostic = `Codex ACP adapter ${components.adapterVersion} is installed at ${components.adapterPath}, but it failed to initialize (native Codex CLI may be missing or incompatible).`
@@ -2580,7 +2580,7 @@ class SettingsService {
       message:
         status.message ??
         (status.mode === 'shared'
-          ? 'No existing Codex login was found. Run `codex login` or use the isolated Open Science login.'
+          ? 'No existing Codex login was found. Run `codex login` or use the isolated Lumen Science login.'
           : isolatedFallback)
     }
   }
@@ -3345,7 +3345,7 @@ class SettingsService {
     const adapterPath =
       this.codexDetectDeps.managedAdapterPath ?? managedCodexAdapterEntry(this.storageRoot)
     if (!(await this.pathExists(adapterPath))) {
-      throw new Error('Open Science Codex ACP adapter not found. Install Codex in settings.')
+      throw new Error('Lumen Science Codex ACP adapter not found. Install Codex in settings.')
     }
 
     await ensureManagedCodexContextUsage(adapterPath)

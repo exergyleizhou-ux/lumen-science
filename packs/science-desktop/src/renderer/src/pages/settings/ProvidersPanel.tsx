@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { useEffect, useRef, useState } from 'react'
 import { Plus } from 'lucide-react'
 
@@ -256,11 +262,11 @@ const ProvidersPanel = ({
     try {
       const result = await logoutSharedClaude()
       if (!result.ok) {
-        setProviderTestError(result.message ?? 'Could not disconnect Claude from Open Science.')
+        setProviderTestError(result.message ?? 'Could not disconnect Claude from Lumen Science.')
       }
     } catch (error) {
       setProviderTestError(
-        error instanceof Error ? error.message : 'Could not disconnect Claude from Open Science.'
+        error instanceof Error ? error.message : 'Could not disconnect Claude from Lumen Science.'
       )
     }
   }

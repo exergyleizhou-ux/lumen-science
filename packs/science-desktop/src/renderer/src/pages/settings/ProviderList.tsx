@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import {
   CircleCheck,
   KeyRound,
@@ -263,9 +269,9 @@ const ProviderList = ({
                   </div>
                   <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
                     {provider.type === 'codex-shared' ? (
-                      <div>Authentication imported into Open Science</div>
+                      <div>Authentication imported into Lumen Science</div>
                     ) : provider.type === 'codex-isolated' ? (
-                      <div>Codex login stored separately by Open Science</div>
+                      <div>Codex login stored separately by Lumen Science</div>
                     ) : provider.type === 'claude-isolated' && isClaudeIsolatedLoginPending ? (
                       // Browser sign-in in flight. `claude setup-token` opens the browser itself and
                       // waits on a localhost callback; when the browser fails to open it stays silent
@@ -421,7 +427,7 @@ const ProviderList = ({
                   ) : null}
                   {provider.type === 'claude-shared' && isVerified ? (
                     <SettingsIconAction
-                      label="Disconnect from Open Science"
+                      label="Disconnect from Lumen Science"
                       icon={LogOut}
                       onClick={() => onLogoutSharedClaude?.()}
                       className="border border-border text-foreground"

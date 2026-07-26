@@ -149,7 +149,7 @@ export const PROVIDER_KINDS: ProviderKind[] = [
   {
     key: 'codex-subscription',
     label: codexSubscriptionProviderIdentity().name,
-    description: 'Use an existing Codex profile or sign in with a separate Open Science profile.',
+    description: 'Use an existing Codex profile or sign in with a separate Lumen Science profile.',
     group: 'codex'
   },
   {
@@ -158,7 +158,7 @@ export const PROVIDER_KINDS: ProviderKind[] = [
     // app-owned config dir). Surfaced only when Claude Code is the active framework.
     key: 'claude-subscription',
     label: claudeIsolatedProviderIdentity().name,
-    description: 'Use an existing Claude profile or sign in with a separate Open Science profile.',
+    description: 'Use an existing Claude profile or sign in with a separate Lumen Science profile.',
     group: 'claude'
   },
   ...OFFICIAL_VENDORS.map((vendor): ProviderKind => ({
