@@ -6,38 +6,45 @@
  * verified against the shipped lumen-authority-policy,
  * and checked for hash match before any file handle is returned.
  *
- * This is NOT a full Electron-managed-preview orchestration.
- * It is the authority gate between renderer preview requests
- * and the Rust-backed artifact store.
+ * Trust model:
+ *   - Client supplies artifactId (+ optional expectedSha256 / mimeType)
+ *   - Trusted owner/project comes from main-process session identity
+ *   - Store returns durable ownership metadata for the artifact
+ *   - Policy compares trusted identity to store metadata (fail-closed)
  *
  * See: packs/science-desktop/ARCHITECTURE.md
  * See: OSF-2 acceptance criterion 3
  */
 
 import { assertArtifactPreviewAccess, type AccessResult } from '../lumen-authority-policy'
+import type { TrustedPreviewContext } from './session-identity'
 
 // ── Types ────────────────────────────────────────────────────────
 
 export interface PreviewFileRequest {
+  /** Client-supplied artifact id (never a filesystem path) */
   artifactId: string
-  ownerId: string
-  projectId: string
   expectedSha256?: string
   mimeType?: string
 }
 
 export interface PreviewFileResult {
-  /** Access check result */
   access: AccessResult
-  /** The resolved file path (only present if access is ok) */
   path?: string
-  /** Content type for renderer */
   mimeType?: string
+  sha256?: string
+}
+
+export interface PreviewFileRecord {
+  path: string
+  sha256: string
+  ownerId: string
+  projectId: string
 }
 
 export interface PreviewFileStore {
-  /** Resolve an artifact_id to a filesystem path and SHA-256 digest */
-  resolveById(artifactId: string): Promise<{ path: string; sha256: string } | null>
+  /** Resolve artifact_id to path + digest + ownership from durable store */
+  resolveById(artifactId: string): Promise<PreviewFileRecord | null>
 }
 
 // ── Preview resolution (shipped function) ────────────────────────
@@ -46,23 +53,26 @@ export interface PreviewFileStore {
  * Resolve a preview file request through the artifact_id authority gate.
  *
  * Fails closed: rejects wrong owner, wrong project, hash mismatch,
- * and empty/null identifiers. Only returns a file path after ALL
- * access checks pass.
+ * empty identifiers, and unknown artifact ids. Only returns a file path
+ * after ALL access checks pass against trusted session context.
  */
 export async function resolvePreview(
   req: PreviewFileRequest,
-  store: PreviewFileStore
+  store: PreviewFileStore,
+  trusted: TrustedPreviewContext,
 ): Promise<PreviewFileResult> {
-  // 1. Authority gate: owner, project, artifact_id validation
-  const access = assertArtifactPreviewAccess(
-    { artifactId: req.artifactId, ownerId: req.ownerId, projectId: req.projectId, expectedSha256: req.expectedSha256 },
-    { ownerId: req.ownerId, projectId: req.projectId }
-  )
-  if (!access.ok) {
-    return { access }
+  if (!req.artifactId) {
+    return {
+      access: { ok: false, reason: 'artifact_id, owner_id, and project_id are required' },
+    }
+  }
+  if (!trusted.ownerId || !trusted.projectId) {
+    return {
+      access: { ok: false, reason: 'trusted session owner_id and project_id are required' },
+    }
   }
 
-  // 2. Resolve artifact to filesystem path via the store
+  // 1. Resolve durable metadata first (ownership lives in the store, not the client)
   const resolved = await store.resolveById(req.artifactId)
   if (!resolved) {
     return {
@@ -70,19 +80,38 @@ export async function resolvePreview(
     }
   }
 
-  // 3. Hash verification (if expectedSha256 is provided)
-  if (req.expectedSha256 && req.expectedSha256 !== resolved.sha256) {
-    return {
-      access: { ok: false, reason: `sha256 mismatch: expected=${req.expectedSha256} actual=${resolved.sha256}` },
-    }
+  // 2. Authority gate: trusted session identity vs store-owned metadata + optional hash
+  const access = assertArtifactPreviewAccess(
+    {
+      artifactId: req.artifactId,
+      ownerId: trusted.ownerId,
+      projectId: trusted.projectId,
+      expectedSha256: req.expectedSha256,
+    },
+    {
+      ownerId: resolved.ownerId,
+      projectId: resolved.projectId,
+      digest: resolved.sha256,
+    },
+  )
+  if (!access.ok) {
+    return { access }
   }
 
-  // 4. Cross-owner/project rejection
-  // Already checked in step 1 via assertArtifactPreviewAccess
+  // 3. Hash re-check when client supplied expectedSha256 (store digest is authoritative)
+  if (req.expectedSha256 && req.expectedSha256 !== resolved.sha256) {
+    return {
+      access: {
+        ok: false,
+        reason: `sha256 mismatch: expected=${req.expectedSha256} actual=${resolved.sha256}`,
+      },
+    }
+  }
 
   return {
     access: { ok: true },
     path: resolved.path,
     mimeType: req.mimeType,
+    sha256: resolved.sha256,
   }
 }

@@ -47,6 +47,8 @@ const ALLOWED_CHANNELS = new Set<string>([
   'acp:call',
   'acp:list-tools',
   'acp:health',
+  // OSF-2 Files/Preview — artifact_id only; isolation via trusted session + store
+  'files:preview-by-artifact',
 ])
 
 /**

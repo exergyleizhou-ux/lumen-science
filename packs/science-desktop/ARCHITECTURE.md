@@ -39,7 +39,10 @@
    the Rust side enforces hard-deny policies.
 
 3. **Artifact integrity**: every artifact goes through SHA-256 registration
-   in Rust; the files/preview UI loads by artifact_id, not path.
+   in Rust; the files/preview UI loads by artifact_id, not path. Electron
+   enforces owner/project isolation via trusted main-process session identity
+   (`files/session-identity.ts`) + store metadata before any path is returned
+   (`files:preview-by-artifact` → `loadArtifactPreview` → `resolvePreview`).
 
 4. **Evidence chain**: reviewer verdicts, workflow steps, and connector
    fetches all enter EvidenceGraph via Rust — never via Electron persistence.
@@ -55,6 +58,10 @@
 
 **ACP-proxied** (validated by Rust before execution):
 - All science operations go through `acp:call` → Rust tools/call.
+
+**OSF-2 Files/Preview** (gated in Electron, content via Lumen store/ACP):
+- `files:preview-by-artifact` — artifact_id + optional hash; trusted session
+  identity required; path never accepted from renderer.
 
 **Banned** (rejected at Electron main before reaching Rust):
 - Any direct project/artifact/notebook/reviewer/connector/compute IPC.

@@ -63,19 +63,24 @@ The following Open Science subsystems have execution authority REMOVED:
 
 | Source Path | Destination | Modified? | Notes |
 |-------------|-------------|-----------|-------|
-| src/main/artifacts/ | packs/science-desktop/src/main/artifacts/ | Planned | Artifact registry, listing, preview protocol |
-| src/main/managed-file-preview.ts | packs/science-desktop/src/main/ | Planned | Managed preview resources |
-| src/main/managed-preview-*.ts | packs/science-desktop/src/main/ | Planned | Preview IPC and protocol |
-| src/main/office-preview/ | packs/science-desktop/src/main/office-preview/ | Planned | DOCX, XLSX, PPTX preview in isolated renderer |
-| src/main/project-files/ | packs/science-desktop/src/main/project-files/ | Planned | Project file indexing, pagination |
-| src/renderer/src/pages/workspace/previews/ | packs/science-desktop/src/renderer/ | Planned | Multi-tab preview UI, molecule viewer, code, FASTA, CSV, JSON |
-| src/renderer/src/stores/preview-workbench-store.ts | packs/science-desktop/src/renderer/ | Planned | Preview state management |
+| (Lumen original) | packs/science-desktop/src/main/files/preview-resolver.ts | Yes | artifact_id resolve + trusted-context isolation |
+| (Lumen original) | packs/science-desktop/src/main/files/session-identity.ts | Yes | main-process trusted owner/project (globalThis singleton) |
+| (Lumen original) | packs/science-desktop/src/main/files/preview-service.ts | Yes | product entry loadArtifactPreview |
+| (Lumen original) | packs/science-desktop/src/main/files/science-ipc.ts | Yes | single registration site: acp:* + files:preview-by-artifact |
+| (Lumen original) | packs/science-desktop/src/main/files/acp-preview-store.ts | Yes | durable index + optional ACP artifact_resolve |
+| src/main/artifacts/ | packs/science-desktop/src/main/artifacts/ | Staged not wired | OS path; NOT registered in greenfield ipc.ts |
+| src/main/managed-preview-*.ts | packs/science-desktop/src/main/ | Staged not wired | Banned channel path; use files:preview-by-artifact |
+| src/main/office-preview/ | packs/science-desktop/src/main/office-preview/ | Planned | DOCX/XLSX/PPTX isolated renderer (follow-on) |
+| src/renderer/.../previews/ | packs/science-desktop/src/renderer/ | Planned | Multi-tab preview UI (follow-on) |
 
 ### Key modifications (OSF-2)
-- Preview content loaded by artifact_id (not arbitrary path)
-- Hash verified by Rust ArtifactRegistry before display
-- Cross-owner/project access rejected
-- Office preview renderer: dependency audit + hostile document tests required before Lumen admission
+- Preview gated by artifact_id only (no arbitrary path open)
+- Trusted session identity (main) vs store ownership — not client self-attestation
+- Hash mismatch fail-closed (policy + resolver)
+- Product IPC: `files:preview-by-artifact` via safeHandle allowlist
+- Mock ipcMain registration test enforces Electron double-handle contract
+- OS managed-preview / artifacts:read-preview remain banned
+- Office preview renderer: dependency audit + hostile document tests still required
 
 ## Batch 3: Notebook UX (OSF-3) — 2026-07-26
 

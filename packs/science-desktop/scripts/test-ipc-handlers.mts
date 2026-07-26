@@ -58,20 +58,38 @@ test('bridge installIpcGuard: no raw ipcMain.handle channels', () => {
 })
 
 test(`safeHandle channels count: ${safeHandleChannels.length}`, () => {
-  ok(safeHandleChannels.length >= 3, `expected >=3, got ${safeHandleChannels.length}`)
+  // Science channels live in science-ipc.ts; ipc.ts must call registerScienceIpcHandlers
+  ok(
+    IPC_SRC.includes('registerScienceIpcHandlers'),
+    'ipc.ts must delegate science channels to registerScienceIpcHandlers',
+  )
 })
 
+const scienceSrc = fs.readFileSync('src/main/files/science-ipc.ts', 'utf-8')
+const scienceSafeChannels = extractChannelCalls(scienceSrc, /safeHandle\([^,]+,\s*'[^']+'/g)
+
+test(`science-ipc safeHandle channels count: ${scienceSafeChannels.length}`, () => {
+  ok(scienceSafeChannels.length >= 4, `expected >=4 (acp*2 + hash + preview), got ${scienceSafeChannels.length}`)
+})
+
+// Merge for policy checks
+const allSafeChannels = [...safeHandleChannels, ...scienceSafeChannels]
+
 // ── No duplicate safeHandle channels ────────────────────────────
-const duplicates = safeHandleChannels.filter((ch, i) =>
-  safeHandleChannels.indexOf(ch) !== i
+const duplicates = allSafeChannels.filter((ch, i) =>
+  allSafeChannels.indexOf(ch) !== i
 )
 test('safeHandle: no duplicate channel registrations', () => {
   strictEqual(duplicates.length, 0,
     `duplicate channels would crash Electron: ${[...new Set(duplicates)].join(', ')}`)
 })
 
+test('science-ipc includes files:preview-by-artifact', () => {
+  ok(allSafeChannels.includes('files:preview-by-artifact'))
+})
+
 // ── All safeHandle channels pass shipped policy ─────────────────
-for (const ch of safeHandleChannels) {
+for (const ch of allSafeChannels) {
   test(`safeHandle channel '${ch}' passes validateIpcChannel`, () => {
     ok(validateIpcChannel(ch), `channel '${ch}' must be in all ALLOWED set`)
   })
@@ -87,7 +105,7 @@ const BANNED_PREFIXES = [
   'preview:load', 'preview:save', 'preview:delete',
 ]
 for (const banned of BANNED_PREFIXES) {
-  const hits = safeHandleChannels.filter(ch => ch.startsWith(banned))
+  const hits = allSafeChannels.filter(ch => ch.startsWith(banned))
   test(`safeHandle: no '${banned}'`, () => {
     strictEqual(hits.length, 0, `found: ${hits.join(', ')}`)
   })

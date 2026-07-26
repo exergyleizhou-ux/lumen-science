@@ -74,7 +74,11 @@ for (const sym of ['SystemSshRunner', 'SystemScpRunner', 'JobPoller', 'harvestJo
   test(`ipc.ts: no ${sym}`, () => ok(!IPC.includes(sym)));
 }
 test('ipc.ts imports safeHandle', () => ok(IPC.includes('safeHandle')));
-test('ipc.ts imports validateIpcChannel from lumen-authority-policy', () => ok(IPC.includes('validateIpcChannel')));
+test('ipc.ts wires registerScienceIpcHandlers', () => ok(IPC.includes('registerScienceIpcHandlers')));
+test('policy allows files:preview-by-artifact', () =>
+  strictEqual(validateIpcChannel('files:preview-by-artifact'), true));
+test('policy still rejects artifacts:read-preview', () =>
+  strictEqual(validateIpcChannel('artifacts:read-preview'), false));
 
 // ── Skills boundary ──────────────────────────────────────────────
 
