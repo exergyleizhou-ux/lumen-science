@@ -284,6 +284,16 @@ impl KernelAdmissionRequest {
         self
     }
 
+    /// Set the sandbox policy the execution seam must enforce.
+    ///
+    /// Lowering `require_process_isolation` is an operator decision, not a
+    /// default, and it is recorded on the resulting admission record so a
+    /// reviewer can see under what terms a kernel was admitted.
+    pub fn with_policy(mut self, policy: KernelPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
     pub fn with_admitted_by(mut self, who: impl Into<String>) -> Self {
         self.admitted_by = who.into();
         self

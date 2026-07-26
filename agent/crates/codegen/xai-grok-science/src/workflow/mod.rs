@@ -5,6 +5,7 @@ pub mod admission;
 pub mod executor;
 pub mod kernel;
 pub mod package;
+pub mod python_runner;
 
 #[cfg(test)]
 mod e2e_tests;

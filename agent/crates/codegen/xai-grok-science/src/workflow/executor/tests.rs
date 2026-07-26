@@ -389,7 +389,19 @@ fn a_kernel_step_plan_is_argv_never_a_shell_line() {
         panic!("expected a kernel cell operation");
     };
     assert!(invocation.interpreter_path.ends_with("python3"));
-    assert_eq!(invocation.argv, vec!["-".to_string()]);
+    // Empty: the RUNNER decides how to drive the interpreter, because only it
+    // knows which driver it uses (PythonLoopRunner passes its exec-loop script).
+    // A `-` here would arrive as a stray argument to that script. The invariant
+    // this test guards is that argv is a LIST, never a shell line — asserted
+    // below on the whole vector rather than by its contents.
+    assert!(invocation.argv.is_empty(), "argv: {:?}", invocation.argv);
+    assert!(
+        !invocation
+            .argv
+            .iter()
+            .any(|a| a.contains(';') || a.contains('|') || a.contains('&')),
+        "argv must never carry shell metacharacters"
+    );
     assert!(!invocation.network_allowed);
     assert!(invocation.process_isolation_required);
     // The cell body is addressed by digest, not interpolated into a string.

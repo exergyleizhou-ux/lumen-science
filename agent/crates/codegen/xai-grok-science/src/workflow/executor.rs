@@ -1139,9 +1139,15 @@ impl WorkflowExecutor {
                     kernel: Box::new(kernel.clone()),
                     invocation: KernelInvocation {
                         interpreter_path: kernel.interpreter_path.clone(),
-                        // argv, never a command line. The runner feeds the
-                        // cell source on stdin; nothing is interpolated.
-                        argv: vec!["-".into()],
+                        // Empty on purpose, and argv rather than a command
+                        // line either way — nothing is ever interpolated into a
+                        // shell string. The RUNNER decides how to drive the
+                        // interpreter, because only it knows which driver it
+                        // uses; PythonLoopRunner passes its exec-loop script
+                        // here. A `-` ("read program from stdin") would be a
+                        // stray argument to that script, and this field is not
+                        // the place to guess the runner's invocation.
+                        argv: Vec::new(),
                         cell_source_sha256: hex_sha256(cell.as_bytes()),
                         working_dir: None,
                         environment: BTreeMap::new(),
