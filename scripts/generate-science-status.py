@@ -461,10 +461,13 @@ def collect_authority() -> dict[str, Any]:
                 ),
                 "path": "packs/science-desktop/src/main/files/dossier-package.ts:112",
                 "note": (
-                    "verify-dossier.py now FAILS such a package rather than passing "
-                    "it with a footnote; a partially-shipped package still passes with "
-                    "the gap listed."
+                    "Closed by files/dossier-writer.ts, which writes the bytes under "
+                    "artifacts/<sha256>, re-hashes each before writing, aborts on a "
+                    "mismatch, and ships verify-dossier.py inside the package. "
+                    "test-dossier-writer.mts runs the real verifier against the real "
+                    "export — the only test that checks the two agree."
                 ),
+                "status": "closed",
             },
             {
                 "id": "AUTH-7",
