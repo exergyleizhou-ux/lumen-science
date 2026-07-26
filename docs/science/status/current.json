@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "generator": "scripts/generate-science-status.py",
   "doc": "Machine-generated product status. Derived from the source tree and git only. Prose documents must point here rather than restate status. Regenerate with: python3 scripts/generate-science-status.py",
-  "sourceCommit": "d91021d1f0f984acd35d55bfc1a9f56136b154cc",
-  "sourceCommitEpoch": 1785072408,
-  "sourceCommitIso": "2026-07-26T21:26:48+08:00",
+  "sourceCommit": "039a8bf7050b392bdfc7bc578d2f2ca9330b9dc0",
+  "sourceCommitEpoch": 1785080771,
+  "sourceCommitIso": "2026-07-26T23:46:11+08:00",
   "gateVocabulary": {
     "states": [
       "pass",
@@ -248,6 +248,7 @@
           "x.ai/science/import_preview",
           "x.ai/science/kernel_admission",
           "x.ai/science/multimodal_index",
+          "x.ai/science/project_assert_membership",
           "x.ai/science/project_create",
           "x.ai/science/project_get",
           "x.ai/science/project_list",
@@ -262,7 +263,7 @@
           "x.ai/science/workflow_execute",
           "x.ai/science/workflow_validate"
         ],
-        "acpMethodCount": 25
+        "acpMethodCount": 26
       },
       "go": {
         "path": "packs/science",
@@ -283,14 +284,13 @@
         "artifact_list",
         "artifact_resolve",
         "compute_plan",
-        "notebook_execute",
         "project_assert_membership",
-        "start_review"
+        "start_review",
+        "workflow_execute"
       ],
       "toolNamesUnservedByEitherEngine": [
         "artifact_resolve",
-        "compute_plan",
-        "project_assert_membership"
+        "compute_plan"
       ]
     },
     "knownAuthorityGaps": [

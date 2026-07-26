@@ -132,20 +132,32 @@ export const ResearchShell = (): React.JSX.Element => {
     setOpened(describeOpen(res))
   }
 
+  const [previewId, setPreviewId] = useState('')
   const tryPreview = async (): Promise<void> => {
     if (!lumen || !active) return
-    const artifactId = window.prompt('artifact_id to preview (hash-gated path)')
-    if (!artifactId) return
-    const res = (await lumen.previewByArtifact({ artifactId })) as {
-      access?: { ok?: boolean; reason?: string }
-      path?: string
-      sha256?: string
-    }
-    if (!res.access?.ok) {
-      setPreviewMeta(res.access?.reason ?? 'denied')
+    // An inline field, not window.prompt(): Electron renderers THROW on
+    // prompt() ("prompt() is and will not be supported"), so the tab's only
+    // control died on first click with an unhandled rejection and no feedback.
+    const artifactId = previewId.trim()
+    if (!artifactId) {
+      setPreviewMeta('Enter an artifact_id first.')
       return
     }
-    setPreviewMeta(`ok path=${res.path ?? '?'} sha256=${res.sha256 ?? '?'}`)
+    try {
+      const res = (await lumen.previewByArtifact({ artifactId })) as {
+        access?: { ok?: boolean; reason?: string }
+        path?: string
+        sha256?: string
+      }
+      if (!res.access?.ok) {
+        setPreviewMeta(res.access?.reason ?? 'denied')
+        return
+      }
+      setPreviewMeta(`ok path=${res.path ?? '?'} sha256=${res.sha256 ?? '?'}`)
+    } catch (e: unknown) {
+      // A failed preview is a result to show, never an unhandled rejection.
+      setPreviewMeta((e as Error)?.message || String(e))
+    }
   }
 
   const notebookDryRun = async (): Promise<void> => {
@@ -503,9 +515,21 @@ export const ResearchShell = (): React.JSX.Element => {
                     Artifacts are hash-registered. Open preview by artifact_id after
                     session bind.
                   </p>
-                  <button type="button" className={cx.btn} onClick={() => void tryPreview()}>
-                    Preview by artifact_id
-                  </button>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <input
+                      className={cx.input}
+                      value={previewId}
+                      onChange={(e) => setPreviewId(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void tryPreview()
+                      }}
+                      placeholder="artifact_id"
+                      aria-label="Artifact id to preview"
+                    />
+                    <button type="button" className={cx.btn} onClick={() => void tryPreview()}>
+                      Preview
+                    </button>
+                  </div>
                   {previewMeta && <pre className={cx.pre}>{previewMeta}</pre>}
                 </section>
               )}
