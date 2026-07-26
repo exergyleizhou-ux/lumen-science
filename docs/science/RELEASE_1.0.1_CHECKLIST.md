@@ -2,6 +2,18 @@
 
 Audit finding: `v1.0.0` has SHA256SUMS for ~35 assets but GitHub Release only hosts metadata.
 
+**Automation (scaffold only):**
+
+```bash
+cd packs/science-desktop
+npm run check:release   # osf8-release-check.mts — config + honesty
+npm run pack:check      # full authority suite (OSF-2…8)
+npm run smoke:live      # optional lumen-science binary on PATH
+```
+
+IPC honesty surface: `release:checklist-status` always reports  
+`binariesUploaded=false` and `notarizationComplete=false` until release-ops flips process (not code).
+
 ## Must ship for ACCEPT “downloadable install”
 
 1. CI builds platform archives (darwin-arm64/amd64, linux-amd64/arm64, windows-amd64).
@@ -14,7 +26,7 @@ Audit finding: `v1.0.0` has SHA256SUMS for ~35 assets but GitHub Release only ho
 
 ```bash
 cd packs/science-desktop
-npm run pack:check   # authority tests + typecheck
+npm run pack:check
 npm run dist         # electron-builder --dir (unsigned scaffold)
 ```
 
@@ -23,5 +35,7 @@ Notarization / Developer ID: deferred until org certs exist (documented, not fak
 ## Do not claim
 
 - 5.0 GA
-- Full OSF-3…9 complete
+- Full OSF-0…9 product GA
 - Device / HIL ready
+- “Notarization complete” without stapled tickets
+- “All platforms released” without uploaded assets

@@ -696,6 +696,13 @@ type OpenScienceAPI = {
     /** OSF-7 Connector catalog — list only; fetch always denied on desktop */
     connectorsList: () => Promise<unknown>
     connectorsFetch: (request: { connectorId: string }) => Promise<unknown>
+    officeAdmissionList: () => Promise<unknown>
+    officePreviewOpen: (request: {
+      format: 'docx' | 'xlsx' | 'pptx' | 'pdf' | 'unknown'
+      artifactId?: string
+      expectedSha256?: string
+    }) => Promise<unknown>
+    releaseChecklistStatus: () => Promise<unknown>
   }
   window: {
     // Closes the focused window (the Cmd+W / Ctrl+W fallback when no preview panel is open).
@@ -1301,6 +1308,12 @@ const api: OpenScienceAPI = {
       ipcRenderer.invoke('connectors:list') as Promise<unknown>,
     connectorsFetch: (request) =>
       ipcRenderer.invoke('connectors:fetch', request) as Promise<unknown>,
+    officeAdmissionList: () =>
+      ipcRenderer.invoke('office:admission-list') as Promise<unknown>,
+    officePreviewOpen: (request) =>
+      ipcRenderer.invoke('office:preview-open', request) as Promise<unknown>,
+    releaseChecklistStatus: () =>
+      ipcRenderer.invoke('release:checklist-status') as Promise<unknown>,
   },
 }
 

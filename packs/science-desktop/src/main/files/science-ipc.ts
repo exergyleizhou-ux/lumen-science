@@ -29,6 +29,12 @@ import {
   loadConnectorCatalog,
   rejectDesktopConnectorFetch,
 } from './connector-catalog'
+import {
+  assertOfficePreviewAdmission,
+  listOfficeAdmissions,
+  type OfficePreviewOpenRequest,
+} from './office-preview-admission'
+import fs from 'node:fs'
 import path from 'node:path'
 
 /** Minimal surface — works with Electron IpcMain or a test double. */
@@ -434,6 +440,44 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
   safeHandle(ipcMain, 'connectors:fetch', async (_event, payload: unknown) => {
     const p = (payload ?? {}) as { connectorId?: string }
     return rejectDesktopConnectorFetch(p.connectorId || 'unknown')
+  })
+
+  // ── Office preview admission (fail-closed) ───────────────────
+  safeHandle(ipcMain, 'office:admission-list', async () => ({
+    admissions: listOfficeAdmissions(),
+    note: 'hostile-doc suite required before admitted=true',
+  }))
+
+  safeHandle(ipcMain, 'office:preview-open', async (_event, payload: unknown) => {
+    const req = (payload ?? {}) as OfficePreviewOpenRequest
+    const gate = assertOfficePreviewAdmission(req)
+    if (!gate.ok) {
+      return { ok: false, reason: gate.reason }
+    }
+    return {
+      ok: true,
+      admission: gate.admission,
+      note: 'admission passed — isolated renderer open may proceed',
+    }
+  })
+
+  // ── Release honesty (no fake binary upload claims) ───────────
+  safeHandle(ipcMain, 'release:checklist-status', async () => {
+    const checklistPath = path.resolve(
+      process.cwd(),
+      '../../docs/science/RELEASE_1.0.1_CHECKLIST.md',
+    )
+    const exists = fs.existsSync(checklistPath)
+    return {
+      ok: true,
+      checklistPath: exists ? checklistPath : null,
+      checklistPresent: exists,
+      // Honest defaults — only release-ops can flip these after upload
+      binariesUploaded: false,
+      notarizationComplete: false,
+      productVersion: process.env.npm_package_version || '1.1.0-dev',
+      note: 'P0: upload assets listed in SHA256SUMS to GitHub Release before claiming installable',
+    }
   })
 }
 

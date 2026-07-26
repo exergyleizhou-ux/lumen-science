@@ -84,6 +84,10 @@ const ALLOWED_CHANNELS = new Set<string>([
   // OSF-7 Connector catalog — read-only; no desktop fetch runtime
   'connectors:list',
   'connectors:fetch',
+  // OSF-8 / office admission / release honesty
+  'office:admission-list',
+  'office:preview-open',
+  'release:checklist-status',
 ])
 
 /**

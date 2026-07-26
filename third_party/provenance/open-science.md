@@ -24,7 +24,7 @@
 | OSF-5 | skills import/admit path | packs/science-desktop/src/main/files/skill-* | **wired** quarantine+DS-43; no bulk auto-approve; OS skill modules staged for UI only |
 | OSF-6 | compute UX + plan path | packs/science-desktop/src/main/files/compute-* | **wired** dry-run plan; SSH/SCP runners remain stubs |
 | OSF-7 | connector catalog UX | packs/science-desktop/src/main/files/connector-catalog.ts | **wired** read-only from fusion-sources.lock; no desktop fetch |
-| OSF-8 | electron-builder.yml + release | packs/science-desktop/ | scaffold present; notarization/certs deferred |
+| OSF-8 | electron-builder + release honesty | packs/science-desktop/scripts/osf8-release-check.mts | **wired** automated scaffold check; binary upload still P0 ops; notarization deferred |
 
 ## Authority boundary (NON-NEGOTIABLE)
 

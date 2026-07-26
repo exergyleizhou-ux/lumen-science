@@ -67,6 +67,9 @@ Absorb **UI / preview / notebook UX / release engineering**.
 | OSF-5 Skills admission | Quarantine import; single admit | Bulk auto-approve denied; registry 10/17 |
 | OSF-6 Remote Compute | Dry-run plan only | No desktop SSH/SCP; live execute denied |
 | OSF-7 Connector catalog | Read-only lock file | 42/40/2; desktop fetch denied |
+| OSF-8 Release scaffold | pack:check + checklist automation | Binaries upload still P0 ops |
+| Live binary smoke | Optional PATH/LUMEN_BINARY | version/help; doctor soft |
+| Office preview admission | Fail-closed table | hostile-doc required before open |
 | OS `projects:*` / `artifacts:*` / TS compute | **Banned** | Not registered in greenfield `ipc.ts` |
 | UI project catalog | Electron UI state only | Local catalog + membership hybrid |
 | Go science pack | CLI/MCP compatibility | Not product authority |

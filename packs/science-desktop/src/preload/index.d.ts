@@ -641,6 +641,13 @@ interface OpenScienceAPI {
     computeHistory(): Promise<unknown>
     connectorsList(): Promise<unknown>
     connectorsFetch(request: { connectorId: string }): Promise<unknown>
+    officeAdmissionList(): Promise<unknown>
+    officePreviewOpen(request: {
+      format: 'docx' | 'xlsx' | 'pptx' | 'pdf' | 'unknown'
+      artifactId?: string
+      expectedSha256?: string
+    }): Promise<unknown>
+    releaseChecklistStatus(): Promise<unknown>
   }
   window: {
     // Closes the focused window (the Cmd+W / Ctrl+W fallback when no preview panel is open).

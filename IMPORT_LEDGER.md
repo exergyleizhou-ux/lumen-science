@@ -75,6 +75,15 @@ The following Open Science subsystems have execution authority REMOVED:
 | src/main/office-preview/ | packs/science-desktop/src/main/office-preview/ | Planned | DOCX/XLSX/PPTX isolated renderer (follow-on) |
 | src/renderer/.../previews/ | packs/science-desktop/src/renderer/ | Planned | Multi-tab preview UI (follow-on) |
 
+### Batch 8 note (OSF-8 release + office admission + live smoke) — 2026-07-26
+
+| Destination | Modified? | Notes |
+|-------------|-----------|-------|
+| packs/science-desktop/scripts/osf8-release-check.mts | Yes | packaging honesty; no fake upload claims |
+| packs/science-desktop/scripts/lumen-live-smoke.mts | Yes | optional PATH/LUMEN_BINARY version/help/doctor |
+| packs/science-desktop/src/main/files/office-preview-admission.ts | Yes | fail-closed until hostile-doc suite |
+| docs/science/OFFICE_PREVIEW_ADMISSION.md | Yes | admission rules |
+
 ### Batch 7 note (OSF-7 Connector catalog) — 2026-07-26
 
 | Destination | Modified? | Notes |
