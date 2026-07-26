@@ -57,14 +57,54 @@ Our `check_kernel_admission` currently fabricates its answer: `exact_version:
 "unknown"`, always `Admitted`. Reproducibility claims mean nothing on top of an
 environment nobody identified.
 
-| Take | From | For |
-|---|---|---|
-| `environment-discovery.ts` (21 KB) | notebook | real interpreter discovery and identification |
-| `micromamba-cache.ts` (17 KB) | notebook | pinned, content-addressed toolchain |
-| `provisioner.ts` (83 KB) | notebook | reproducible environment construction |
-| `package-manager.ts` (28 KB) | notebook | resolved, lockable dependency sets |
+| Take | From | For | Outcome |
+|---|---|---|---|
+| `environment-discovery.ts` (21 KB) | notebook | real interpreter discovery and identification | **taken** (LS5-K4) |
+| `micromamba-cache.ts` (17 KB) | notebook | pinned, content-addressed toolchain | **taken** (LS5-K4) |
+| `runtime-paths.ts` (19 KB) | notebook | path layout, env prefixes, ready markers | **taken** (LS5-R1-02, LS5-K4) |
+| `bundle-manifest.ts` (12 KB) | notebook | content-addressed digests (`sha256File`) | **taken** (LS5-K4) |
+| `provisioner.ts` (83 KB) | notebook | reproducible environment construction | **not taken** — see below |
+| `package-manager.ts` (28 KB) | notebook | resolved, lockable dependency sets | **not taken** — see below |
 
 Already done: `python_loop.py` → `lumen_python_loop.py`, hardened (LS5-K2).
+
+#### What LS5-K4 actually landed
+
+`src/main/environment/` is a driven adapter over the four adopted modules:
+`identify` hashes the interpreter's bytes, runs it with a *fixed* version argv,
+and records path/sha256/version/os/arch/lock digest; `requestAdmission` builds
+`x.ai/science/kernel_admission` params and returns the SessionActor's verdict
+verbatim. It has no `admitted` field of its own, and with no transport wired it
+reports that it could not ask rather than answering.
+
+Two decisions moved out of the adopted code:
+
+* **Origin.** `runtime-paths.resolveRuntimeCdnBase` and
+  `bundle-manifest.manifestUrl`/`packUrl` used to trust whatever base they were
+  handed. Both now go through `shared/runtime-origin-policy.ts` (https +
+  Lumen-owned host + the `update-policy` denylist), default disabled.
+* **Pinning.** Discovery accepted a bare `python3` from the Settings catalog. A
+  PATH-relative name is not an identity, so unpinned candidates are refused and
+  reported with a reason instead of silently becoming an environment.
+
+#### Why `provisioner.ts` was not taken
+
+It is the decision module, not a mechanic. `planStartupAction` (l.1468) tells
+the app-startup gate to `upgrade` / `repair` / build `fresh`, and the gate then
+provisions on its own initiative — a second execution authority booting itself.
+Its closure also drags the third-party download path (`language-pack-fetch.ts`
+→ `net/resilient-download.ts`), which can only function against a runtime CDN
+that is now disabled by default. Rebuild the *job model* behind the actor; do
+not import the gate.
+
+#### Why `package-manager.ts` was not taken
+
+It is clean of IPC — the entanglement is not the problem. Its whole public
+surface is `installPackages` plus `defaultSpawn`, which launches
+micromamba/pip/R. It writes no lock file, so it contributes nothing to the
+identity facts P1 exists to produce. Adopting it would place a
+package-installing spawner in the reachable graph with no caller: capability
+without purpose. Take it when something drives it.
 
 ### P2 — makes execution durable
 
