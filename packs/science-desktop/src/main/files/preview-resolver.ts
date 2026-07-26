@@ -16,6 +16,8 @@
  * See: OSF-2 acceptance criterion 3
  */
 
+import { createHash } from 'node:crypto'
+import fs from 'node:fs/promises'
 import { assertArtifactPreviewAccess, type AccessResult } from '../lumen-authority-policy'
 import type { TrustedPreviewContext } from './session-identity'
 
@@ -45,6 +47,12 @@ export interface PreviewFileRecord {
 export interface PreviewFileStore {
   /** Resolve artifact_id to path + digest + ownership from durable store */
   resolveById(artifactId: string): Promise<PreviewFileRecord | null>
+  /**
+   * Seed or update a record. Optional: read-only stores may not support it,
+   * and callers that seed (e.g. registering a workflow run's committed
+   * artifacts) must check before calling rather than assume.
+   */
+  put?(artifactId: string, record: PreviewFileRecord): void
 }
 
 // ── Preview resolution (shipped function) ────────────────────────
@@ -104,6 +112,31 @@ export async function resolvePreview(
       access: {
         ok: false,
         reason: `sha256 mismatch: expected=${req.expectedSha256} actual=${resolved.sha256}`,
+      },
+    }
+  }
+
+  // 4. The bytes themselves. The record CLAIMS these bytes exist at this path
+  // with this digest; a preview that never reads the file would present a
+  // missing or silently-modified artifact as previewable, and the claim would
+  // only fail later, somewhere the reason is gone. Re-hashing here makes the
+  // content address mean what it says every time it is used.
+  try {
+    const bytes = await fs.readFile(resolved.path)
+    const actual = createHash('sha256').update(bytes).digest('hex')
+    if (actual !== resolved.sha256) {
+      return {
+        access: {
+          ok: false,
+          reason: `artifact bytes do not match their record: expected=${resolved.sha256} actual=${actual}`,
+        },
+      }
+    }
+  } catch (e: unknown) {
+    return {
+      access: {
+        ok: false,
+        reason: `artifact file unreadable at its recorded path: ${(e as Error).message}`,
       },
     }
   }

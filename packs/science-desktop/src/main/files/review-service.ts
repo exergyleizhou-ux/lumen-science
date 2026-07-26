@@ -1,16 +1,30 @@
 /**
  * OSF-4 Reviewer product service.
  *
- * Plan / validate locally; submit via ACP start_review with artifact hashes;
+ * Plan / validate locally; record via the engine's `review_record`;
  * hash-mismatch fail-closed at submission time. Dossier export includes
  * artifact IDs, hashes, and plan/verdict refs.
+ *
+ * ## Why review_record, and what the verdict means
+ *
+ * Submission used to call `start_review` — a Go MCP tool the method registry
+ * rejects, so no submission had ever reached an engine. The Rust engine's real
+ * method is `review_record`: it does not judge, it RECORDS a verdict under
+ * SessionActor authority.
+ *
+ * The judgment itself happens here, and it is exactly one check: every cited
+ * artifact resolves in the content-addressed store and its actual hash equals
+ * the expected hash. Any miss or mismatch fails closed BEFORE anything is
+ * recorded, so the verdict that reaches the engine is 'pass' by construction —
+ * not because reviews cannot fail, but because a failed validation refuses to
+ * produce a record at all. What is recorded is an attestation: "these exact
+ * bytes were reviewed", bound to the project by the actor.
  */
 
 import {
   planReview,
   assertReviewAccess,
   normalizeReviewResult,
-  buildReviewAcpPayload,
   validateArtifactHashes,
   isVerdictStale,
   type ReviewRequest,
@@ -51,6 +65,7 @@ export function createReviewService(opts: {
   acpCall?: AcpReviewCall
   /** Mandatory for hash-mismatch validation at submit — fail-closed when absent */
   previewStore: PreviewFileStore
+  storeRoot?: string
 }): ReviewService {
   const history: ReviewVerdictProjection[] = []
 
@@ -123,14 +138,41 @@ export function createReviewService(opts: {
       }
 
       try {
-        const acpPayload = buildReviewAcpPayload(plan, req.artifacts, trusted, req.runId)
-        const raw = await opts.acpCall('start_review', acpPayload as unknown as Record<string, unknown>)
-        const verdict = normalizeReviewResult(raw, plan)
+        const record = (await opts.acpCall('review_record', {
+          storeRoot: opts.storeRoot ?? 'science-store',
+          projectId: trusted.projectId,
+          reviewerId: trusted.ownerId,
+          // Earned above, not asserted: a hash miss or mismatch has already
+          // returned before this line.
+          verdict: 'pass',
+          ...(req.claimId ? { claimId: req.claimId } : {}),
+        })) as { verdict?: string; notes?: string[] }
+
+        // The projection is built from facts this process verified plus the
+        // engine's own record — not parsed back out of a foreign response
+        // shape. `resolved` carries the actual hashes read from the store.
+        const verdict = normalizeReviewResult(
+          {
+            report: {
+              outcome: record?.verdict ?? 'pass',
+              summary: (record?.notes ?? []).join(' ') || 'Artifact hashes verified against the content-addressed store.',
+              artifacts: resolved.map((a) => ({
+                artifact_id: a.artifactId,
+                passed: true,
+                reason: 'hash verified',
+                expected_sha256: a.expectedSha256,
+                actual_sha256: a.actualSha256,
+              })),
+            },
+          },
+          plan,
+        )
         history.push(verdict)
         return {
           ok: true,
           plan,
           verdict,
+          record,
           authority: 'SessionActor/EvidenceGraph',
         }
       } catch (e: unknown) {

@@ -18,6 +18,7 @@ import {
 } from './session-binding'
 import type { LocalProjectCatalog } from './local-project-catalog'
 import { SCIENCE_STORE_DIR } from './acp-membership'
+import { getTrustedPreviewContext } from './session-identity'
 import { createNotebookService, type NotebookService } from './notebook-service'
 import type { NotebookCellRequest } from './notebook-plan'
 import { createReviewService, type ReviewService } from './review-service'
@@ -67,6 +68,13 @@ export type ListArtifactsFn = (args: {
 export type ScienceIpcDeps = {
   safeHandle: SafeHandleFn
   getLumenBinaryHash: () => string | null
+  /**
+   * The session workspace the ENGINE resolves relative store paths against
+   * (Electron userData in production). Needed to turn a workflow report's
+   * relative artifact entries into absolute preview paths. Absent, execution
+   * still works — the run's artifacts are simply not seeded for preview.
+   */
+  workspaceRoot?: string
   /**
    * Invoke one science method on the engine.
    *
@@ -411,7 +419,58 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
 
   safeHandle(ipcMain, 'notebook:execute-cell', async (_event, payload: unknown) => {
     const req = normalizeCellRequest(payload)
-    return notebook.execute(req)
+    const out = await notebook.execute(req)
+
+    // Register the run's committed artifacts for preview and review.
+    //
+    // This is the seeding that `artifact_list` was supposed to provide and
+    // structurally cannot (Go MCP tool; this bridge speaks Rust ACP) — which
+    // left the preview store permanently empty, the Evidence tab inert, and
+    // every review submission fail-closed on a store miss. The workflow report
+    // carries the same facts from a better source: the engine's own commit
+    // records, hashed by the executor rather than trusted from the cell.
+    //
+    // Artifact ids are the content hashes themselves. Content addressing means
+    // a re-run that produces identical output re-seeds the same id — no
+    // duplicates, and the id a user quotes in a review IS the hash the review
+    // verifies.
+    const bound = getTrustedPreviewContext()
+    const result = (out as { ok?: boolean; result?: Record<string, unknown> })?.result
+    let artifactsSeeded = 0
+    if ((out as { ok?: boolean })?.ok && bound && deps.workspaceRoot && result && previewStore.put) {
+      const runId = typeof result.runId === 'string' ? result.runId : ''
+      const commits = Array.isArray(result.commits)
+        ? (result.commits as {
+            stepId?: string
+            committedByAttempt?: string
+            outputManifest?: Record<string, string>
+          }[])
+        : []
+      for (const commit of commits) {
+        if (!runId || !commit.stepId || !commit.committedByAttempt) continue
+        for (const [rel, sha256] of Object.entries(commit.outputManifest ?? {})) {
+          if (!/^[0-9a-f]{64}$/.test(sha256)) continue
+          previewStore.put!(sha256, {
+            // Mirrors the executor's per-attempt layout:
+            // <workspace>/<store>/workflow-outputs/<run>/<step>/<attempt>/<rel>
+            path: path.join(
+              deps.workspaceRoot,
+              SCIENCE_STORE_DIR,
+              'workflow-outputs',
+              runId,
+              commit.stepId,
+              commit.committedByAttempt,
+              rel,
+            ),
+            sha256,
+            ownerId: bound.ownerId,
+            projectId: bound.projectId,
+          })
+          artifactsSeeded += 1
+        }
+      }
+    }
+    return { ...(out as Record<string, unknown>), artifactsSeeded }
   })
 
   safeHandle(ipcMain, 'notebook:history', async () => ({

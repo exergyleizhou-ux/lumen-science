@@ -18,6 +18,15 @@ import {
   getTrustedPreviewContext,
 } from '../src/main/files/session-identity.js'
 
+// Real fixture file: the resolver reads the bytes.
+import osFix from 'node:os'
+import fsFix from 'node:fs'
+import pathFix from 'node:path'
+const LIST_FIXTURE = pathFix.join(fsFix.mkdtempSync(pathFix.join(osFix.tmpdir(), 'list-fixture-')), 'from-list.json')
+fsFix.writeFileSync(LIST_FIXTURE, '{"from": "list"}\n')
+const LIST_SHA = '4f10580de4828369a65aea0b62757eaae3e887f5b1c215696585ed53e59b3773'
+
+
 let failures = 0
 function test(name: string, fn: () => void | Promise<void>) {
   return Promise.resolve()
@@ -80,8 +89,8 @@ async function run() {
     listArtifacts: async () => [
       {
         artifact_id: 'from-list',
-        path: '/data/from-list.json',
-        sha256: 'fl',
+        path: LIST_FIXTURE,
+        sha256: LIST_SHA,
       },
     ],
   })
@@ -180,11 +189,11 @@ async function run() {
   const preview = handlers.get('files:preview-by-artifact')!
   const prev = await preview({}, {
     artifactId: 'from-list',
-    expectedSha256: 'fl',
+    expectedSha256: LIST_SHA,
   })
   await test('preview after open', () => {
     ok(prev.access.ok, JSON.stringify(prev))
-    strictEqual(prev.path, '/data/from-list.json')
+    strictEqual(prev.path, LIST_FIXTURE)
   })
 
   // OS banned channels still banned

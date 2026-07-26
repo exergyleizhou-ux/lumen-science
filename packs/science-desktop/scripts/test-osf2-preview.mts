@@ -32,6 +32,22 @@ import {
 } from '../src/main/files/session-identity.js'
 import { loadArtifactPreview } from '../src/main/files/preview-service.js'
 
+import os from 'node:os'
+import { createHash as createHashFix } from 'node:crypto'
+import fsSync from 'node:fs'
+import pathMod from 'node:path'
+
+// Real files, because the resolver now reads the BYTES: a record whose file
+// does not exist or whose content drifted from its digest must fail closed,
+// and these fixtures passed for months precisely because nothing ever looked.
+const FIXTURE_DIR = fsSync.mkdtempSync(pathMod.join(os.tmpdir(), 'preview-fixture-'))
+const A1_PATH = pathMod.join(FIXTURE_DIR, 'a1.csv')
+const A2_PATH = pathMod.join(FIXTURE_DIR, 'a2.json')
+fsSync.writeFileSync(A1_PATH, 'a1,csv,fixture\n')
+fsSync.writeFileSync(A2_PATH, '{"a2": "fixture"}\n')
+const A1_SHA = '9b4aca952a616872cadde825ea698de8184542ce3be9d93a280dd2a4dc42eab7'
+const A2_SHA = '5595adc2610db1d3874d2e2a3aeb2b574cef9553a3b5976f7cdff014908dd6d2'
+
 class MockStore implements PreviewFileStore {
   private records = new Map<
     string,
@@ -40,14 +56,14 @@ class MockStore implements PreviewFileStore {
 
   constructor() {
     this.records.set('a1', {
-      path: '/store/proj1/a1.csv',
-      sha256: 'abc123def',
+      path: A1_PATH,
+      sha256: A1_SHA,
       ownerId: 'o1',
       projectId: 'p1',
     })
     this.records.set('a2', {
-      path: '/store/proj2/a2.json',
-      sha256: 'xyz789',
+      path: A2_PATH,
+      sha256: A2_SHA,
       ownerId: 'o2',
       projectId: 'p2',
     })
@@ -108,13 +124,13 @@ async function runTests() {
   // Client cannot self-attest into another owner's artifact.
 
   const okResolve = await resolvePreview(
-    { artifactId: 'a1', expectedSha256: 'abc123def', mimeType: 'text/csv' },
+    { artifactId: 'a1', expectedSha256: A1_SHA, mimeType: 'text/csv' },
     store,
     { ownerId: 'o1', projectId: 'p1' },
   )
   await test('resolve: trusted owner+project + hash match', () => {
     ok(okResolve.access.ok)
-    strictEqual(okResolve.path, '/store/proj1/a1.csv')
+    strictEqual(okResolve.path, A1_PATH)
     strictEqual(okResolve.mimeType, 'text/csv')
   })
 
@@ -176,12 +192,12 @@ async function runTests() {
   // ── Product path: loadArtifactPreview ──────────────────────────
   setTrustedPreviewContext({ ownerId: 'o1', projectId: 'p1' })
   const product = await loadArtifactPreview(
-    { artifactId: 'a1', expectedSha256: 'abc123def', mimeType: 'text/csv' },
+    { artifactId: 'a1', expectedSha256: A1_SHA, mimeType: 'text/csv' },
     { store },
   )
   await test('product: loadArtifactPreview ok with trusted session', () => {
     ok(product.access.ok, `expected ok got ${JSON.stringify(product)}`)
-    strictEqual(product.path, '/store/proj1/a1.csv')
+    strictEqual(product.path, A1_PATH)
   })
 
   clearTrustedPreviewContext()
@@ -232,6 +248,45 @@ async function runTests() {
   await test('policy: allows files:preview-by-artifact', () => {
     ok(policySrc.includes("'files:preview-by-artifact'"))
   })
+
+  // ── the bytes must match their record ────────────────────────────
+  // The resolver re-hashes the file. Without this, a record CLAIMING a digest was
+  // enough: every fixture in this pack pointed at /store/... paths that never
+  // existed, and every preview test passed. An artifact that has been modified,
+  // truncated or deleted since it was recorded must fail closed HERE, where the
+  // reason is still available, not later in whatever consumed it.
+  {
+    const tamperDir = fsSync.mkdtempSync(pathMod.join(os.tmpdir(), 'preview-tamper-'))
+    const tamperPath = pathMod.join(tamperDir, 'drifted.csv')
+    fsSync.writeFileSync(tamperPath, 'original\n')
+    const recordedSha = createHashFix('sha256').update('original\n').digest('hex')
+
+    const driftStore: PreviewFileStore = {
+      async resolveById() {
+        return { path: tamperPath, sha256: recordedSha, ownerId: 'o1', projectId: 'p1' }
+      },
+    }
+    const trusted = { ownerId: 'o1', projectId: 'p1' }
+
+    const before = await resolvePreview({ artifactId: 'x' }, driftStore, trusted)
+    await test('an intact artifact resolves', () => {
+      ok(before.access.ok, JSON.stringify(before))
+    })
+
+    fsSync.writeFileSync(tamperPath, 'tampered\n')
+    const after = await resolvePreview({ artifactId: 'x' }, driftStore, trusted)
+    await test('an artifact modified since recording fails closed', () => {
+      ok(!after.access.ok)
+      ok((after.access.reason ?? '').includes('do not match their record'), after.access.reason)
+    })
+
+    fsSync.rmSync(tamperPath)
+    const gone = await resolvePreview({ artifactId: 'x' }, driftStore, trusted)
+    await test('a deleted artifact is not previewable', () => {
+      ok(!gone.access.ok)
+      ok((gone.access.reason ?? '').includes('unreadable'), gone.access.reason)
+    })
+  }
 
   console.log(`\n${failures === 0 ? 'ALL TESTS PASSED' : `${failures} TESTS FAILED`}`)
   process.exit(failures > 0 ? 1 : 0)

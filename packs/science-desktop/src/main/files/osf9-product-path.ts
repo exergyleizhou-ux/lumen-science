@@ -10,6 +10,10 @@
  * notebook execute, banned OS IPC symbols still unregistered.
  */
 
+import { createHash } from 'node:crypto'
+import fs from 'node:fs'
+import os from 'node:os'
+import nodePath from 'node:path'
 import { LocalProjectCatalog } from './local-project-catalog'
 import { AcpPreviewStore } from './acp-preview-store'
 import { createOfflineCatalogMembershipAsserter } from './hybrid-membership'
@@ -75,26 +79,20 @@ export async function runOsf9ProductPath(opts?: {
   )
   push('bind-session', bind.ok === true, bind.ok ? project.id : (bind as { reason?: string }).reason)
 
-  // Seed registered artifacts (never raw path open)
+  // Real files under a temp root: the preview resolver reads the BYTES and
+  // re-hashes them, so a fixture asserting a digest for a path that does not
+  // exist is exactly the lie this product must not tell about its evidence.
+  const fixtureRoot = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'osf9-fixture-'))
+  const writeFixture = (name: string, body: string): { path: string; sha256: string } => {
+    const full = nodePath.join(fixtureRoot, name)
+    fs.mkdirSync(nodePath.dirname(full), { recursive: true })
+    fs.writeFileSync(full, body)
+    return { path: full, sha256: createHash('sha256').update(body).digest('hex') }
+  }
   const arts = [
-    {
-      id: 'art-lit-1',
-      path: '/fixture/lit/pubmed.json',
-      sha256: 'aa11bb22cc33dd44ee55ff6677889900aabbccdd',
-      label: 'literature',
-    },
-    {
-      id: 'art-db-1',
-      path: '/fixture/db/uniprot.fa',
-      sha256: '11223344556677889900aabbccddeeff00112233',
-      label: 'uniprot_protein',
-    },
-    {
-      id: 'art-nb-1',
-      path: '/fixture/nb/out.csv',
-      sha256: 'ffeeddccbbaa0099887766554433221100ffeedd',
-      label: 'notebook_output',
-    },
+    { id: 'art-lit-1', ...writeFixture('lit/pubmed.json', '{"pmid": "fixture"}\n'), label: 'literature' },
+    { id: 'art-db-1', ...writeFixture('db/uniprot.fa', '>fixture\nMKV\n'), label: 'uniprot_protein' },
+    { id: 'art-nb-1', ...writeFixture('nb/out.csv', 'col\n1\n'), label: 'notebook_output' },
   ]
   for (const a of arts) {
     store.put(a.id, {

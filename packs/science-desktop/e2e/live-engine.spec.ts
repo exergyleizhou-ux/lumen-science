@@ -246,3 +246,42 @@ test('a notebook cell actually runs in the engine after approval', async () => {
   // empty array too, since '[]' contains '['. Assert the empty list itself.
   expect(report).toContain('"refusedSteps": []')
 })
+
+test('the run\'s artifacts are previewable and reviewable — the evidence chain holds', async () => {
+  // End of the chain the product exists for: a cell ran in the engine, the
+  // engine committed hashed outputs, and now (a) the Evidence tab resolves one
+  // of those hashes to a real local file and (b) a review of those exact bytes
+  // is recorded under actor authority. Before this branch, the store could
+  // never be seeded (artifact_list is a Go MCP tool this bridge cannot call),
+  // so both halves were structurally dead while every unit suite was green.
+  const report = (await page.locator('#panel-notebook pre').textContent()) ?? ''
+  // The manifest maps relative path → content hash; stdout.txt always exists
+  // for a cell that printed.
+  const sha = /"stdout\.txt":\s*"([0-9a-f]{64})"/.exec(report)?.[1]
+  expect(sha, 'the run report must carry a hashed stdout artifact').toBeTruthy()
+
+  // (a) Preview by content hash.
+  await page.getByRole('tab', { name: 'Evidence', exact: true }).click()
+  await page.locator('#panel-evidence').waitFor({ timeout: 10_000 })
+  await page.getByLabel('Artifact id to preview').fill(sha!)
+  await page.getByRole('button', { name: 'Preview', exact: true }).click()
+  await expect
+    .poll(async () => page.locator('#panel-evidence pre').textContent(), { timeout: 15_000 })
+    .toContain('ok path=')
+  const meta = (await page.locator('#panel-evidence pre').textContent()) ?? ''
+  // The record's hash is the id itself — content addressing, visibly.
+  expect(meta).toContain(sha!)
+
+  // (b) Review those bytes.
+  await page.getByRole('tab', { name: 'Review', exact: true }).click()
+  await page.locator('#panel-review').waitFor({ timeout: 10_000 })
+  await page.locator('#panel-review textarea').fill(`${sha}:${sha}`)
+  await page.getByRole('button', { name: /submit review/i }).click()
+  await expect
+    .poll(async () => page.locator('#panel-review pre').textContent(), { timeout: 30_000 })
+    .toContain('"ok": true')
+  const review = (await page.locator('#panel-review pre').textContent()) ?? ''
+  expect(review).toContain('"outcome": "pass"')
+  // The engine's record came back — this was not a local projection alone.
+  expect(review).toContain('SessionActor')
+})

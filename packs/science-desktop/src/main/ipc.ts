@@ -138,6 +138,10 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
     callScienceTool: acpCall,
     listScienceTools,
     previewStore: wiredStore,
+    // The engine resolves relative store paths against its session cwd, which
+    // the bridge pins to userData. Passing the same root here is what lets a
+    // workflow report's relative artifact entries become absolute local paths.
+    workspaceRoot: app.getPath('userData'),
     // ACP is the sole authority. The local catalog is a display cache and can
     // no longer grant membership — see files/hybrid-membership.ts.
     assertMembership: createAcpAuthoritativeMembershipAsserter({

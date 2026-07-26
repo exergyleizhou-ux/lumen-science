@@ -25,6 +25,8 @@ export type ReviewRequest = {
   rubricVersion?: string
   projectId?: string
   runId?: string
+  /** Claim this review supports/contradicts, when the reviewer names one. */
+  claimId?: string
 }
 
 export type ReviewPlan = {
