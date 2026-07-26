@@ -40,11 +40,9 @@ Usage:
   lumen-science artifact verify --project P --run R --path REL --sha256 HEX
   lumen-science pipeline offline --project P --run R FILE
       Offline loop: register FASTA → seqbench → derived artifacts → integrity review
-  lumen-science project create --owner O --title T --question Q [--store DIR]
-  lumen-science project list [--store DIR]
-  lumen-science project get --id ID [--store DIR]
-  lumen-science claim propose --project ID --owner O --by WHO --statement S [--store DIR]
-      V2 ResearchProject path (toward Science 5.0 / WP-2)
+  lumen-science project evidence trace|compare|consistency --project ID [--claim CID] [--store DIR]
+  lumen-science project migrate --run RID --owner O --title T --question Q [--store DIR]
+  lumen-science workflow validate|dry-run --project ID [--spec-file WF.json] [--store DIR]
 
 Notes:
   brief talks to PubMed/ChEMBL (live). seq/artifact/pipeline offline are default-safe.
@@ -78,6 +76,8 @@ func main() {
 		err = runProject(os.Args[2:])
 	case "claim":
 		err = runClaim(os.Args[2:])
+	case "workflow":
+		err = runWorkflow(os.Args[2:])
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 		return
@@ -632,7 +632,7 @@ func defaultProjectStore(explicit string) (string, error) {
 
 func runProject(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("project requires subcommand: create|list|get")
+		return fmt.Errorf("project requires subcommand: create|list|get|evidence|migrate")
 	}
 	switch args[0] {
 	case "create":
@@ -696,9 +696,112 @@ func runProject(args []string) error {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		return enc.Encode(p)
+	case "evidence":
+		return runProjectEvidence(args[1:])
+	case "migrate":
+		flags := flag.NewFlagSet("project migrate", flag.ContinueOnError)
+		flags.SetOutput(os.Stderr)
+		runID := flags.String("run", "", "v1 run id")
+		owner := flags.String("owner", "", "owner id")
+		title := flags.String("title", "", "project title")
+		question := flags.String("question", "", "research question")
+		storePath := flags.String("store", "", "store root")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		root, err := defaultProjectStore(*storePath)
+		if err != nil {
+			return err
+		}
+		out := map[string]any{
+			"source_run_id": *runID,
+			"owner_id": *owner,
+			"title": *title,
+			"question": *question,
+			"store_root": root,
+			"status": "migration_dry_run_cli",
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(out)
 	default:
 		return fmt.Errorf("unknown project subcommand %q", args[0])
 	}
+}
+
+func runProjectEvidence(args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("evidence requires: trace|compare|consistency")
+	}
+	flags := flag.NewFlagSet("project evidence "+args[0], flag.ContinueOnError)
+	flags.SetOutput(os.Stderr)
+	projectID := flags.String("project", "", "project id")
+	claimID := flags.String("claim", "", "claim id")
+	claimA := flags.String("claim-a", "", "claim A for compare")
+	claimB := flags.String("claim-b", "", "claim B for compare")
+	storePath := flags.String("store", "", "store root")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	root, err := defaultProjectStore(*storePath)
+	if err != nil {
+		return err
+	}
+	store := projectstore.New(root)
+	p, err := store.Get(*projectID)
+	if err != nil {
+		return err
+	}
+	_ = p
+	out := map[string]any{
+		"command": "project evidence " + args[0],
+		"project_id": *projectID,
+		"claim_id": *claimID,
+		"claim_a": *claimA,
+		"claim_b": *claimB,
+		"store_root": root,
+		"status": "cli_preview",
+		"rust_path": "queries_store.rs for full trace/compare/consistency",
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(out)
+}
+
+func runWorkflow(args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("workflow requires: validate|dry-run")
+	}
+	flags := flag.NewFlagSet("workflow "+args[0], flag.ContinueOnError)
+	flags.SetOutput(os.Stderr)
+	projectID := flags.String("project", "", "project id")
+	storePath := flags.String("store", "", "store root")
+	specFile := flags.String("spec-file", "", "workflow spec JSON")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	root, err := defaultProjectStore(*storePath)
+	if err != nil {
+		return err
+	}
+	out := map[string]any{
+		"command": "workflow " + args[0],
+		"project_id": *projectID,
+		"spec_file": *specFile,
+		"store_root": root,
+		"status": "cli_preview",
+		"rust_path": "workflows_store.rs for full validate/dry-run",
+	}
+	if *specFile != "" {
+		data, err := os.ReadFile(*specFile)
+		if err != nil {
+			return err
+		}
+		out["spec_raw"] = string(data)
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(out)
 }
 
 func runClaim(args []string) error {

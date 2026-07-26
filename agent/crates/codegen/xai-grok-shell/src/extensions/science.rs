@@ -120,6 +120,20 @@ pub async fn handle(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
         "x.ai/science/project_transition" => handle_project_transition(agent, args).await,
         "x.ai/science/claim_propose" => handle_claim_propose(agent, args).await,
         "x.ai/science/evidence_attach" => handle_evidence_attach(agent, args).await,
+        // WP-3 evidence queries
+        "x.ai/science/evidence_trace" => handle_evidence_trace(agent, args).await,
+        "x.ai/science/evidence_compare" => handle_evidence_compare(agent, args).await,
+        "x.ai/science/evidence_consistency" => handle_evidence_consistency(agent, args).await,
+        "x.ai/science/evidence_reproduction" => handle_evidence_reproduction(agent, args).await,
+        "x.ai/science/project_migrate" => handle_project_migrate(agent, args).await,
+        // WP-4/5/6/7/8 preview
+        "x.ai/science/workflow_validate" => handle_workflow_validate(agent, args).await,
+        "x.ai/science/workflow_dry_run" => handle_workflow_dry_run(agent, args).await,
+        "x.ai/science/kernel_admission" => handle_kernel_admission(agent, args).await,
+        "x.ai/science/multimodal_index" => handle_multimodal_index(agent, args).await,
+        "x.ai/science/review_record" => handle_review_record(agent, args).await,
+        "x.ai/science/collaboration_invite" => handle_collaboration_invite(agent, args).await,
+        "x.ai/science/remote_compute_plan" => handle_remote_compute_plan(agent, args).await,
         _ => Err(acp::Error::method_not_found()),
     }
 }
@@ -758,4 +772,176 @@ async fn handle_run_csv(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
         .await
         .map_err(internal)?;
     to_raw_response(&result)
+}
+
+// ── WP-3 evidence query handlers ─────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EvidenceTraceParams { session_id: String, store_root: PathBuf, project_id: String, claim_id: String }
+
+async fn handle_evidence_trace(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: EvidenceTraceParams = parse_params(args)?;
+    let session_id = acp::SessionId::new(params.session_id);
+    let handle = agent.get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let store_root = canonical_dir_within(params.store_root, &workspace)?;
+    let store = xai_grok_science::project::ProjectStore::new(store_root);
+    let trace = store.trace_evidence(
+        &xai_grok_science::project::ProjectId(params.project_id), &params.claim_id,
+    ).map_err(internal)?;
+    to_raw_response(&trace)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EvidenceCompareParams { session_id: String, store_root: PathBuf, project_id: String, claim_a: String, claim_b: String }
+
+async fn handle_evidence_compare(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: EvidenceCompareParams = parse_params(args)?;
+    let session_id = acp::SessionId::new(params.session_id);
+    let handle = agent.get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let store_root = canonical_dir_within(params.store_root, &workspace)?;
+    let store = xai_grok_science::project::ProjectStore::new(store_root);
+    let cmp = store.compare_claims(
+        &xai_grok_science::project::ProjectId(params.project_id), &params.claim_a, &params.claim_b,
+    ).map_err(internal)?;
+    to_raw_response(&cmp)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EvidenceConsistencyParams { session_id: String, store_root: PathBuf, project_id: String }
+
+async fn handle_evidence_consistency(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: EvidenceConsistencyParams = parse_params(args)?;
+    let session_id = acp::SessionId::new(params.session_id);
+    let handle = agent.get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let store_root = canonical_dir_within(params.store_root, &workspace)?;
+    let store = xai_grok_science::project::ProjectStore::new(store_root);
+    let report = store.check_consistency(
+        &xai_grok_science::project::ProjectId(params.project_id),
+    ).map_err(internal)?;
+    to_raw_response(&report)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EvidenceReproductionParams { session_id: String, store_root: PathBuf, project_id: String, claim_id: String }
+
+async fn handle_evidence_reproduction(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: EvidenceReproductionParams = parse_params(args)?;
+    let session_id = acp::SessionId::new(params.session_id);
+    let handle = agent.get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let store_root = canonical_dir_within(params.store_root, &workspace)?;
+    let store = xai_grok_science::project::ProjectStore::new(store_root);
+    let status = store.reproduction_status(
+        &xai_grok_science::project::ProjectId(params.project_id), &params.claim_id,
+    ).map_err(internal)?;
+    to_raw_response(&status)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ProjectMigrateParams { session_id: String, store_root: PathBuf, run_id: String, owner_id: String, title: String, question: String }
+
+async fn handle_project_migrate(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: ProjectMigrateParams = parse_params(args)?;
+    let session_id = acp::SessionId::new(params.session_id);
+    let handle = agent.get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let store_root = canonical_dir_within(params.store_root, &workspace)?;
+    let store = xai_grok_science::project::ProjectStore::new(store_root);
+    let result = store.migrate_v1_to_v2(params.run_id, params.owner_id, params.title, params.question).map_err(internal)?;
+    to_raw_response(&result)
+}
+
+// ── WP-4/5/6/7/8 preview handlers ────────────────────────────────
+
+async fn store_handler<T: serde::Serialize>(agent: &MvpAgent, session_id: &str, store_root: PathBuf, f: impl FnOnce(&xai_grok_science::project::ProjectStore) -> Result<T, xai_grok_science::ScienceError>) -> ExtResult {
+    let sid = acp::SessionId::new(session_id.to_string());
+    let handle = agent.get_session_handle(&sid)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let sr = canonical_dir_within(store_root, &workspace)?;
+    let store = xai_grok_science::project::ProjectStore::new(sr);
+    let result = f(&store).map_err(internal)?;
+    to_raw_response(&result)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct WorkflowGenParams { session_id: String, store_root: PathBuf, #[serde(default)] project_id: String, #[serde(rename = "workflowSpec")] spec: serde_json::Value }
+
+async fn handle_workflow_validate(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: WorkflowGenParams = parse_params(args)?;
+    let spec: xai_grok_science::workflow::WorkflowSpec = serde_json::from_value(params.spec).map_err(internal)?;
+    store_handler(agent, &params.session_id, params.store_root, move |s| s.workflow_validate(&spec)).await
+}
+
+async fn handle_workflow_dry_run(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: WorkflowGenParams = parse_params(args)?;
+    let spec: xai_grok_science::workflow::WorkflowSpec = serde_json::from_value(params.spec).map_err(internal)?;
+    store_handler(agent, &params.session_id, params.store_root, move |s| s.workflow_dry_run(&spec)).await
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct KernelAdmParams2 { session_id: String, store_root: PathBuf, kernel_id: String, #[serde(default = "_python_kind")] kind: String, exec_hash: String, lock_hash: String }
+fn _python_kind() -> String { "python".into() }
+
+async fn handle_kernel_admission(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: KernelAdmParams2 = parse_params(args)?;
+    let kind = match params.kind.as_str() { "r" | "R" => xai_grok_science::workflow::KernelKind::R, "julia" => xai_grok_science::workflow::KernelKind::Julia, _ => xai_grok_science::workflow::KernelKind::Python };
+    store_handler(agent, &params.session_id, params.store_root, move |s| s.check_kernel_admission(params.kernel_id, kind, params.exec_hash, params.lock_hash)).await
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ProjRParams { session_id: String, store_root: PathBuf, project_id: String }
+
+async fn handle_multimodal_index(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: ProjRParams = parse_params(args)?;
+    store_handler(agent, &params.session_id, params.store_root, move |s| s.multimodal_index(&xai_grok_science::project::ProjectId(params.project_id))).await
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReviewRecParams2 { session_id: String, store_root: PathBuf, project_id: String, reviewer_id: String, verdict: String, #[serde(default)] claim_id: Option<String> }
+
+async fn handle_review_record(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: ReviewRecParams2 = parse_params(args)?;
+    store_handler(agent, &params.session_id, params.store_root, move |s| s.create_review_record(
+        &xai_grok_science::project::ProjectId(params.project_id), params.reviewer_id, params.verdict, params.claim_id,
+    )).await
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CollabInvParams2 { session_id: String, store_root: PathBuf, project_id: String, owner_id: String, invitee: String }
+
+async fn handle_collaboration_invite(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: CollabInvParams2 = parse_params(args)?;
+    store_handler(agent, &params.session_id, params.store_root, move |s| s.collaboration_invite(
+        &xai_grok_science::project::ProjectId(params.project_id), &params.owner_id, params.invitee,
+    )).await
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RcpParams { session_id: String, store_root: PathBuf, project_id: String, hostname: String }
+
+async fn handle_remote_compute_plan(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: RcpParams = parse_params(args)?;
+    store_handler(agent, &params.session_id, params.store_root, move |s| s.remote_compute_plan(
+        &xai_grok_science::project::ProjectId(params.project_id), params.hostname,
+    )).await
 }

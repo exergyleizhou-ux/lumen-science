@@ -4,7 +4,6 @@ use crate::collaboration::{ReviewStatus, ReviewPackage, ReviewerVerdict};
 use crate::features::ScienceFeature;
 use crate::multimodal::{FormatCategory, ParserAdmission, ParserRegistry, RendererAdmission, RendererType, RendererNetworkPolicy, AdmissionStatus};
 use crate::remote::{ClusterIdentity, JobStatus, RemoteJob, ResourceRequest, SchedulerKind};
-use crate::remote_compute::{SchedulerBackend, SchedulerConfig, HpcJob, HpcResources, JobStatus as RcJobStatus};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
