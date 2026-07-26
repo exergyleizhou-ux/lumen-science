@@ -155,10 +155,19 @@ jobs:
         working-directory: packs/science
         env:
           SOURCE_DATE_EPOCH: ${{ steps.sde.outputs.epoch }}
-          # Pinned because it is recorded in the binary's build info and changes
-          # the output. v1.0.1 was built with CGO_ENABLED=1 only because that is
-          # the host default, never as a decision.
-          CGO_ENABLED: '1'
+          # Pinned to 0, and 0 is the only value that works here.
+          #
+          # v1.0.1's binaries record CGO_ENABLED=1, but that was the runner's
+          # host default applied to a NATIVE build, never a decision. This job
+          # cross-compiles to five targets: with cgo on, `make release` invokes
+          # the x86 host assembler on arm64 sources and dies with "no such
+          # instruction: stp x29,x30". Pinning 1 for "fidelity to v1.0.1" broke
+          # the release build outright; the dry run caught it.
+          #
+          # The pack has no `import "C"` anywhere, so cgo buys nothing, and 0
+          # gives statically linked binaries with no libc dependency — which is
+          # also the more reproducible choice.
+          CGO_ENABLED: '0'
         run: make release VERSION="${{ needs.preflight.outputs.version }}"
 
       - name: Write publish manifest
