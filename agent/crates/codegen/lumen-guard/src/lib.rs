@@ -11,9 +11,9 @@ mod bash;
 mod hidden;
 mod writepath;
 
-pub use bash::check_bash;
+pub use bash::{check_bash, check_bash_strict};
 pub use hidden::{contains_hidden_chars, strip_hidden_chars};
-pub use writepath::check_write_path;
+pub use writepath::{check_write_path, check_write_path_strict};
 
 /// Check whether the `LUMEN_UNSAFE` env var is set (allows bypassing all guards).
 /// Shared by all guard modules to avoid duplication.

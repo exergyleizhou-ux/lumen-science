@@ -93,7 +93,11 @@ pub fn run_step(root: &Path, step: &Step, timeout_secs: u64) -> Result<StepResul
         ));
     }
 
-    let ok = status.success() && !timed_out;
+    // pytest exits 5 when no tests were collected. On the automatic
+    // writer-triggered path that is the common case for projects without a
+    // test suite yet and must not read as a verification failure.
+    let pytest_no_tests = step.command.ends_with("pytest") && status.code() == Some(5);
+    let ok = (status.success() || pytest_no_tests) && !timed_out;
     let mut diagnostics = if ok {
         vec![]
     } else {

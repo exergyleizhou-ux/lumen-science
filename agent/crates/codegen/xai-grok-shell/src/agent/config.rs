@@ -537,6 +537,20 @@ impl EndpointsConfig {
         format!("{}/models", base)
     }
 }
+
+/// Hard override for every inference endpoint, including Lumen BYOK models
+/// whose base URL is embedded in `default_models.json`.
+///
+/// Purpose-built for hermetic test harnesses and local proxies: a BYOK entry
+/// would otherwise ignore the mock/proxy endpoint and reach the real provider.
+/// Unset in normal use, so production BYOK routing is unchanged.
+pub fn inference_base_url_override() -> Option<String> {
+    std::env::var("LUMEN_INFERENCE_BASE_URL")
+        .ok()
+        .map(|v| v.trim().to_owned())
+        .filter(|v| !v.is_empty())
+}
+
 impl Default for EndpointsConfig {
     fn default() -> Self {
         Self {
@@ -3421,8 +3435,16 @@ fn default_models(endpoints: &EndpointsConfig) -> IndexMap<String, ModelEntryCon
                 .unwrap_or_else(|| NonZeroU64::new(200_000).expect("200000 is non-zero"));
             // Lumen BYOK defaults (e.g. deepseek-v4-pro): honor embedded base_url/env_key
             // instead of routing through the xAI cli-chat-proxy.
+            //
+            // `LUMEN_INFERENCE_BASE_URL`, when set, overrides even the embedded
+            // BYOK endpoint. Without it a hermetic test harness cannot contain a
+            // BYOK default: the upstream e2e fixtures inject their mock through
+            // GROK_XAI_API_BASE_URL, which this branch bypasses, so leader/R0
+            // runs sent real prompts to api.deepseek.com (observed 2026-07-26 —
+            // the R0 gate failed on a live 401 while a mock server sat idle).
             let (base_url, api_base_url, env_key) = if let Some(ref byok_url) = m.base_url {
-                let url = byok_url.trim().to_owned();
+                let url = inference_base_url_override()
+                    .unwrap_or_else(|| byok_url.trim().to_owned());
                 let api = if m.byok || m.env_key.is_some() {
                     None
                 } else {
@@ -5086,6 +5108,50 @@ impl ModelSwitchIncompatibleAgentError {
 }
 #[cfg(test)]
 mod tests {
+    /// A hermetic harness (or a local proxy) must be able to contain even a
+    /// BYOK default whose endpoint is embedded in default_models.json. Without
+    /// LUMEN_INFERENCE_BASE_URL the deepseek-first default reached the real
+    /// api.deepseek.com from inside e2e fixtures.
+    #[test]
+    #[serial_test::serial]
+    fn lumen_inference_base_url_overrides_embedded_byok_endpoint() {
+        use super::{EndpointsConfig, default_models};
+        let endpoints = EndpointsConfig::default();
+
+        let plain = default_models(&endpoints);
+        let byok = plain
+            .get("deepseek-v4-pro")
+            .expect("deepseek-v4-pro is the shipped default");
+        assert!(
+            byok.base_url.contains("api.deepseek.com"),
+            "expected the embedded BYOK endpoint, got {}",
+            byok.base_url
+        );
+
+        // SAFETY: #[serial] — no other thread touches the environment here.
+        unsafe { std::env::set_var("LUMEN_INFERENCE_BASE_URL", "http://127.0.0.1:9/v1") };
+        let contained = default_models(&EndpointsConfig::default());
+        let overridden = contained
+            .get("deepseek-v4-pro")
+            .expect("deepseek-v4-pro is the shipped default");
+        assert_eq!(
+            overridden.base_url, "http://127.0.0.1:9/v1",
+            "BYOK endpoint must honor LUMEN_INFERENCE_BASE_URL"
+        );
+        // SAFETY: see above.
+        unsafe { std::env::remove_var("LUMEN_INFERENCE_BASE_URL") };
+
+        let restored = default_models(&EndpointsConfig::default());
+        assert!(
+            restored
+                .get("deepseek-v4-pro")
+                .expect("default")
+                .base_url
+                .contains("api.deepseek.com"),
+            "override must not leak past its scope"
+        );
+    }
+
     use super::*;
     use serial_test::serial;
     use xai_grok_test_support::EnvGuard;
