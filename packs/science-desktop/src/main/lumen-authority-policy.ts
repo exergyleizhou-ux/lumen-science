@@ -32,6 +32,16 @@ const ALLOWED_CHANNELS = new Set<string>([
   // main process issued, so a reply to an unknown id is discarded rather than
   // resolving something else.
   'permission:respond',
+
+  // Absent-capability status queries. The absorbed renderer calls these on
+  // mount; each fronts a subsystem Lumen deliberately did not absorb, and each
+  // answers with the truthful "nothing here" rather than a fabricated ready
+  // state. Without them the invokes rejected and React never rendered — the
+  // window opened blank. See main/absent-capability-ipc.ts.
+  'notebook-env:status',
+  'sessions:load-all',
+  'storage:get-info',
+  'notifications:take-pending-open-session',
   // Tray & notifications
   'tray:update',
   'notification:show',

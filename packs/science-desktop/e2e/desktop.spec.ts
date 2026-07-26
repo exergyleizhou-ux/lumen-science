@@ -41,22 +41,49 @@ test.beforeAll(async () => {
     },
   })
   page = await app.firstWindow()
-  await page.waitForLoadState('domcontentloaded')
+  await page.waitForLoadState('load')
+  // Wait for the CONDITION, not a fixed sleep: domcontentloaded fires before
+  // React mounts, and a sleep long enough today is a flake on a loaded runner.
+  // If the app never renders this throws with a clear timeout, which is the
+  // failure worth reporting — it is exactly the bug this suite found.
+  await page.waitForFunction(
+    () => (document.getElementById('root')?.childElementCount ?? 0) > 0,
+    undefined,
+    { timeout: 30_000 },
+  )
 })
 
 test.afterAll(async () => {
   await app?.close()
 })
 
-test('the app opens a window and renders the real renderer', async () => {
-  // Not the pack-index.html branding shell: that one has no #root and says
-  // "Pack proof shell". Asserting on its ABSENCE is the point — `npm run dist`
-  // shipped it for months and every test stayed green.
+test('the app opens a window and actually renders something', async () => {
+  // Asserting the branding shell's ABSENCE is not enough: a BLANK page passes
+  // that too, and did. The app mounted #root and rendered zero children because
+  // four unregistered IPC channels rejected into unhandled page errors. So
+  // assert on what is THERE.
   const html = await page.content()
   expect(html).not.toContain('Pack proof shell')
 
+  const rendered = await page.evaluate(() => ({
+    rootChildren: document.getElementById('root')?.childElementCount ?? -1,
+    textLength: document.body.innerText.trim().length,
+  }))
+  expect(rendered.rootChildren).toBeGreaterThan(0)
+  expect(rendered.textLength).toBeGreaterThan(0)
+
   const title = await page.title()
   expect(title.length).toBeGreaterThan(0)
+})
+
+test('the renderer mounts without an unhandled page error', async () => {
+  // The regression that hid for months: a rejected invoke escapes as a page
+  // error and React stops rendering. Every unit suite stayed green throughout.
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await page.reload({ waitUntil: 'load' })
+  await page.waitForTimeout(2500)
+  expect(errors).toEqual([])
 })
 
 test('the preload exposes the lumen surface, and nothing more', async () => {

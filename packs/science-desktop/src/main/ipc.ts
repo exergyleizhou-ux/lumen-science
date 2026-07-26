@@ -39,6 +39,7 @@ import {
 } from './lumen-acp-bridge'
 import { getAllowedChannels } from './lumen-authority-policy'
 import { registerPermissionIpc } from './permission-ipc'
+import { registerAbsentCapabilityIpc } from './absent-capability-ipc'
 import {
   buildTaskNotificationShow
 } from './notifications/electron-wiring'
@@ -101,6 +102,13 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
   registerSettingsIpcHandlers({
     service: settingsService,
   })
+
+  // ── Absent capabilities ──────────────────────────────────────
+  // The absorbed renderer queries four Open Science subsystems on mount. They
+  // are intentionally absent here, and an unregistered channel rejects into an
+  // unhandled page error that stops React rendering entirely. These answer
+  // honestly that there is nothing, which lets the UI mount and tell the truth.
+  registerAbsentCapabilityIpc(ipcMain, { safeHandle })
 
   // ── Permission prompts ───────────────────────────────────────
   // Until this was wired the engine's session/request_permission got -32601 and
