@@ -138,11 +138,29 @@ def check_artifacts(root: Path, report: Report) -> dict[str, str]:
         report.ok(f"artifact bytes match their recorded digest ({len(known)} re-hashed)")
 
     if absent:
-        # Not a failure: a dossier may reference artifacts too large to ship.
-        # But it bounds what was actually checked, so it must be said.
+        # A dossier may legitimately reference artifacts too large to ship, so
+        # some absences are fine. But they bound what was actually checked, and
+        # that bound has to be stated or a pass reads as covering more than it did.
         report.cannot(
             f"{len(absent)} artifact(s) are referenced but their bytes are not in the "
             f"package, so their digests could not be recomputed: {', '.join(absent[:5])}"
+        )
+
+    if entries and not known:
+        # NONE of them shipped. This is the difference between a partial check
+        # and no check, and it must fail rather than pass with a footnote.
+        #
+        # A package like this asserts digests that nothing in it can
+        # substantiate: a reader re-hashing "the artifacts" would find no
+        # artifacts. Reporting that as PASS with a note in the unchecked
+        # section is precisely the hollow verification this tool exists to
+        # prevent — the reader sees a green verdict and reasonably concludes
+        # the bytes were confirmed.
+        report.fail(
+            "the package contains artifact bytes to verify",
+            f"{len(entries)} artifact(s) are listed and NONE are present, so no digest "
+            "in this dossier was substantiated. Export the artifact bytes under "
+            "artifacts/<sha256>, or the manifest is a claim about files nobody can check.",
         )
     return known
 

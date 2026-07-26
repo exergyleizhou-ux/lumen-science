@@ -200,6 +200,38 @@ def main() -> int:
                 f"verdict={result['verdict']} failed={failed_checks}",
             )
 
+        # A package that lists artifacts and ships none of their bytes has
+        # substantiated nothing, and must FAIL rather than pass with a footnote.
+        # This is the shape packs/science-desktop/src/main/files/dossier-package.ts
+        # emits today: six JSON/MD files, no artifact bytes. Without this case
+        # the verifier printed PASS on it.
+        reset()
+        for blob in (work / "artifacts").iterdir():
+            if blob.name != "manifest.json":
+                blob.unlink()
+        result = verify(work)
+        failed_checks = [f["check"] for f in result.get("failed", [])]
+        check(
+            "detects: a package that ships no artifact bytes at all",
+            result["verdict"] == "fail"
+            and "the package contains artifact bytes to verify" in failed_checks,
+            f"verdict={result['verdict']} failed={failed_checks}",
+        )
+
+        # But a PARTIAL shipment still passes: some artifacts are legitimately
+        # too large to ship, and failing those would push exporters toward
+        # shipping nothing.
+        reset()
+        blobs = sorted(b for b in (work / "artifacts").iterdir() if b.name != "manifest.json")
+        blobs[0].unlink()
+        result = verify(work)
+        check(
+            "a partially-shipped package still passes, with the gap listed",
+            result["verdict"] == "pass"
+            and any("not in the package" in u for u in result.get("unverifiable", [])),
+            str(result.get("failed") or result.get("unverifiable")),
+        )
+
         # The fixture must still be good, or the cases above proved nothing.
         reset()
         check("fixture is restorable to a passing state", verify(work)["verdict"] == "pass")

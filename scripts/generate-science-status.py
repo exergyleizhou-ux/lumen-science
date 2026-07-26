@@ -453,6 +453,20 @@ def collect_authority() -> dict[str, Any]:
         },
         "knownAuthorityGaps": [
             {
+                "id": "EV-1",
+                "summary": (
+                    "The desktop dossier exporter writes artifacts/manifest.json but "
+                    "no artifact BYTES, so an exported dossier substantiates none of "
+                    "the digests it lists"
+                ),
+                "path": "packs/science-desktop/src/main/files/dossier-package.ts:112",
+                "note": (
+                    "verify-dossier.py now FAILS such a package rather than passing "
+                    "it with a footnote; a partially-shipped package still passes with "
+                    "the gap listed."
+                ),
+            },
+            {
                 "id": "AUTH-7",
                 "summary": (
                     "artifact_list, notebook_execute and start_review are Go MCP tools, "
