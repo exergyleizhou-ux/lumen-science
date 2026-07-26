@@ -234,6 +234,53 @@ jobs:
           done
           ls -1 ./*.spdx.json | wc -l
 
+      # Rehearse the signing contract with a THROWAWAY key.
+      #
+      # The real signing step lives in the publish job, behind the protected
+      # environment, and publish is skipped on a dry run — so a dry run proved
+      # everything except the one thing it was added to prove.
+      #
+      # Signing cannot simply move here: this job runs `make release`, a
+      # tag-controlled repository script. Handing it the production key would
+      # discard the isolation the core release chain maintains deliberately
+      # (release.yml:295 — "no tag-controlled repository script executes in the
+      # environment-gated job that receives the private signing key").
+      #
+      # So exercise the mechanism with a key generated and discarded in-job,
+      # mirroring release.yml:260. It proves the assets are signable and that a
+      # signature verifies against its public key, without the production
+      # secret ever entering this job.
+      - name: Rehearse signing with an ephemeral key
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/minisign-0.12-linux.tar.gz"
+          curl --fail --location --proto '=https' --tlsv1.2 --output "$archive" \
+            https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12-linux.tar.gz
+          printf '%s  %s\n' \
+            '9a599b48ba6eb7b1e80f12f36b94ceca7c00b7a5173c95c3efc88d9822957e73' \
+            "$archive" | sha256sum --check --strict
+          tar -xzf "$archive" -C "$RUNNER_TEMP" minisign-linux/x86_64/minisign
+          install -m 755 "$RUNNER_TEMP/minisign-linux/x86_64/minisign" "$RUNNER_TEMP/minisign"
+
+          "$RUNNER_TEMP/minisign" -G -W -p "$RUNNER_TEMP/eph.pub" -s "$RUNNER_TEMP/eph.key"
+          cd packs/science/dist/science-release
+          signed=0
+          for asset in *.tar.gz *.zip SHA256SUMS MANIFEST.json *.spdx.json; do
+            [ -f "$asset" ] || continue
+            "$RUNNER_TEMP/minisign" -S -s "$RUNNER_TEMP/eph.key" -m "$asset" \
+              -t "lumen-science rehearsal ${GITHUB_SHA}"
+            # Verify against the public half, which is what a user does.
+            "$RUNNER_TEMP/minisign" -V -p "$RUNNER_TEMP/eph.pub" -m "$asset" >/dev/null
+            signed=$((signed + 1))
+          done
+          [ "$signed" -gt 0 ] || { echo "FAIL: nothing was signed"; exit 1; }
+          echo "rehearsed sign+verify over ${signed} asset(s)"
+          # Ephemeral signatures must not ship.
+          rm -f ./*.minisig
+          # Fail loudly if any survived, rather than uploading a signature made
+          # by a key that no longer exists.
+          ! ls ./*.minisig >/dev/null 2>&1
+
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v4
         with:
