@@ -1717,6 +1717,15 @@ mod tests {
     /// but load returns None for each.
     #[test]
     fn discovery_with_no_settings_files() {
+        // Guard $HOME like the sibling tests: the candidate list includes the
+        // GLOBAL ~/.claude/settings.json, so on any machine that actually uses
+        // Claude Code this test read the developer's real settings and failed
+        // — a permanent red that had nothing to do with the code under test.
+        // "No settings files anywhere" must be a state the test constructs,
+        // not one it hopes the host machine is in.
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let home = tempfile::tempdir().unwrap();
+        let _home_guard = EnvVarGuard::set("HOME", home.path());
         let tmp = tempfile::tempdir().unwrap();
         let cwd = tmp.path();
 

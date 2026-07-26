@@ -14,8 +14,10 @@ on:
       - 'scripts/test-science-status.py'
       - 'docs/science/status/current.json'
       - 'docs/science/fusion-sources.lock.json'
-      - 'agent/crates/codegen/xai-grok-science/**'
-      - 'agent/crates/codegen/xai-grok-shell/src/extensions/science.rs'
+      # agent/**: same reasoning as the pull_request trigger below — core
+      # changes reach main through merges, and the record on main should carry
+      # the same evidence the PR gate demanded.
+      - 'agent/**'
       - 'VERSION'
       - 'packs/science/VERSION'
   pull_request:
@@ -24,8 +26,15 @@ on:
       - 'packs/science/**'
       - 'scripts/**'
       - 'docs/science/**'
-      - 'agent/crates/codegen/xai-grok-science/**'
-      - 'agent/crates/codegen/xai-grok-shell/src/extensions/science.rs'
+      # agent/** (not just the science crate): three of main's four REQUIRED
+      # status contexts live in this workflow, and required checks that never
+      # fire never report — so a PR touching only core crates (exactly what a
+      # core-security sync is) was unmergeable by construction. PR #12 had to
+      # be unblocked by manual workflow_dispatch; this makes the next one
+      # merge like any other PR. Core changes genuinely can break the science
+      # crate — one cargo workspace — so running these jobs on them is not
+      # merely ritual.
+      - 'agent/**'
       - 'packs/science/VERSION'
   workflow_dispatch:
 
