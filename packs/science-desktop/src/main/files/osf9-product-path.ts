@@ -131,7 +131,11 @@ export async function runOsf9ProductPath(opts?: {
   push('notebook-plan', !('ok' in nbPlan), JSON.stringify(nbPlan).slice(0, 80))
 
   const nb = createNotebookService({
-    acpCall: async () => ({ OK: true, Stdout: 'ok\n' }),
+    // The service now speaks the engine's real contract: workflow_execute
+    // with a snake_case run report. A fixture answering the old shape would
+    // pass a service that cannot talk to any engine.
+    acpCall: async () => ({ state: 'succeeded', refusedSteps: [] }),
+    resolveInterpreter: async () => ({ ok: true, interpreterPath: '/usr/bin/python3' }),
   })
   clearTrustedPreviewContext()
   const nbDenied = await nb.execute({ language: 'python', code: 'print(1)\n' })
