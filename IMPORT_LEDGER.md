@@ -75,6 +75,15 @@ The following Open Science subsystems have execution authority REMOVED:
 | src/main/office-preview/ | packs/science-desktop/src/main/office-preview/ | Planned | DOCX/XLSX/PPTX isolated renderer (follow-on) |
 | src/renderer/.../previews/ | packs/science-desktop/src/renderer/ | Planned | Multi-tab preview UI (follow-on) |
 
+### Batch 6 note (OSF-6 Remote Compute) — 2026-07-26
+
+| Destination | Modified? | Notes |
+|-------------|-----------|-------|
+| packs/science-desktop/src/main/files/compute-plan.ts | Yes (Lumen) | dry-run plan; generic shell denied; canSchedule always false on desktop |
+| packs/science-desktop/src/main/files/compute-service.ts | Yes (Lumen) | plan/submitPlan via ACP; executeLive hard-denied |
+| packs/science-desktop/src/main/compute/ssh-runner.ts | Stub | EXECUTION AUTHORITY REMOVED |
+| packs/science-desktop/src/main/compute/scp-runner.ts | Stub | EXECUTION AUTHORITY REMOVED |
+
 ### Batch 4 note (OSF-4 Reviewer + Dossier) — 2026-07-26
 
 | Destination | Modified? | Notes |

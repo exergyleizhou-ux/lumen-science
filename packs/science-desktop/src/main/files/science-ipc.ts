@@ -23,6 +23,8 @@ import { createReviewService, type ReviewService } from './review-service'
 import type { ReviewRequest } from './review-plan'
 import { createSkillService, type SkillService } from './skill-service'
 import type { SkillImportRequest, SkillAdmitRequest } from './skill-plan'
+import { createComputeService, type ComputeService } from './compute-service'
+import type { ComputePlanRequest } from './compute-plan'
 import path from 'node:path'
 
 /** Minimal surface — works with Electron IpcMain or a test double. */
@@ -63,6 +65,8 @@ export type ScienceIpcDeps = {
   skillService?: SkillService
   /** Override path to Lumen skills registry.json */
   skillsRegistryPath?: string
+  /** Optional inject compute service (tests). */
+  computeService?: ComputeService
 }
 
 const DEFAULT_ACP_BASE = 'http://127.0.0.1:17000'
@@ -366,6 +370,38 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     const p = (payload ?? {}) as { skillIds?: string[] }
     return skills.bulkAdmit(p.skillIds ?? [])
   })
+
+  // ── OSF-6 Remote Compute (dry-run plan only) ──────────────────
+  const compute =
+    deps.computeService ??
+    createComputeService({
+      acpCall: async (toolName, args) => {
+        const raw = await acpFetch('/tools/call', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: toolName, arguments: args }),
+        })
+        return raw
+      },
+    })
+
+  safeHandle(ipcMain, 'compute:plan', async (_event, payload: unknown) => {
+    return compute.plan((payload ?? {}) as ComputePlanRequest)
+  })
+
+  safeHandle(ipcMain, 'compute:submit-plan', async (_event, payload: unknown) => {
+    return compute.submitPlan((payload ?? {}) as ComputePlanRequest)
+  })
+
+  safeHandle(ipcMain, 'compute:execute-live', async (_event, payload: unknown) => {
+    const p = (payload ?? {}) as { planId?: string }
+    return compute.executeLive(p.planId ?? '')
+  })
+
+  safeHandle(ipcMain, 'compute:history', async () => ({
+    plans: compute.history(),
+    authority: 'dry-run-only',
+  }))
 }
 
 function normalizeCellRequest(payload: unknown): NotebookCellRequest {

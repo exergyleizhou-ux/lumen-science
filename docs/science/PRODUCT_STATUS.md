@@ -65,6 +65,7 @@ Absorb **UI / preview / notebook UX / release engineering**.
 | Reviewer TS orchestrator | **Stub only** | Live path: ACP `start_review` |
 | Dossier gold path | Fixture-driven Q→P→E→R→R | Projection end-to-end |
 | OSF-5 Skills admission | Quarantine import; single admit | Bulk auto-approve denied; registry 10/17 |
+| OSF-6 Remote Compute | Dry-run plan only | No desktop SSH/SCP; live execute denied |
 | OS `projects:*` / `artifacts:*` / TS compute | **Banned** | Not registered in greenfield `ipc.ts` |
 | UI project catalog | Electron UI state only | Local catalog + membership hybrid |
 | Go science pack | CLI/MCP compatibility | Not product authority |

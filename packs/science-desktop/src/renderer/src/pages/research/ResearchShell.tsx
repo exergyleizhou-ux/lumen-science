@@ -17,7 +17,15 @@ type UiProject = {
   defaultRunId: string
 }
 
-type TabId = 'question' | 'plan' | 'notebook' | 'evidence' | 'result' | 'review' | 'skills'
+type TabId =
+  | 'question'
+  | 'plan'
+  | 'notebook'
+  | 'evidence'
+  | 'result'
+  | 'review'
+  | 'skills'
+  | 'compute'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'question', label: 'Question' },
@@ -27,6 +35,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'result', label: 'Result' },
   { id: 'review', label: 'Review' },
   { id: 'skills', label: 'Skills' },
+  { id: 'compute', label: 'Compute' },
 ]
 
 export const ResearchShell = (): React.JSX.Element => {
@@ -194,6 +203,27 @@ export const ResearchShell = (): React.JSX.Element => {
         2,
       ),
     )
+  }
+
+  const [computeHost, setComputeHost] = useState('hpc.example.com')
+  const [computeOut, setComputeOut] = useState('')
+  const computePlan = async (): Promise<void> => {
+    if (!lumen) return
+    setComputeOut(
+      JSON.stringify(
+        await lumen.computePlan({
+          hostname: computeHost,
+          targetKind: 'ssh_fixture',
+          command: 'lumen-science pipeline offline ...',
+        }),
+        null,
+        2,
+      ),
+    )
+  }
+  const computeLiveDeny = async (): Promise<void> => {
+    if (!lumen) return
+    setComputeOut(JSON.stringify(await lumen.computeExecuteLive({ planId: 'x' }), null, 2))
   }
 
   return (
@@ -367,6 +397,32 @@ export const ResearchShell = (): React.JSX.Element => {
                     ResearchResult claims must cite evidence nodes. Export package
                     deferred to 3.0 product path.
                   </p>
+                </section>
+              )}
+
+              {tab === 'compute' && (
+                <section style={styles.panel}>
+                  <h2 style={styles.h2}>Remote Compute</h2>
+                  <p style={styles.muted}>
+                    Dry-run plan only (LocalProcess → SSH fixture → authorized). Desktop never
+                    runs SystemSshRunner/SCP. Live schedule via SessionActor ToolAdapter + plan
+                    hash permission. Generic shell denied.
+                  </p>
+                  <input
+                    style={styles.input}
+                    value={computeHost}
+                    onChange={(e) => setComputeHost(e.target.value)}
+                    placeholder="hostname"
+                  />
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                    <button type="button" style={styles.btn} onClick={() => void computePlan()}>
+                      Plan (dry-run)
+                    </button>
+                    <button type="button" style={styles.btn} onClick={() => void computeLiveDeny()}>
+                      Try live execute (must deny)
+                    </button>
+                  </div>
+                  {computeOut && <pre style={styles.pre}>{computeOut}</pre>}
                 </section>
               )}
 

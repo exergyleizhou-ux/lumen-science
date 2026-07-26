@@ -76,6 +76,11 @@ const ALLOWED_CHANNELS = new Set<string>([
   'skills:reject',
   'skills:quarantine-list',
   'skills:bulk-admit',
+  // OSF-6 Remote Compute — dry-run plan only; no desktop SSH/SCP
+  'compute:plan',
+  'compute:submit-plan',
+  'compute:execute-live',
+  'compute:history',
 ])
 
 /**

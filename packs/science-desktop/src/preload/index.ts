@@ -671,6 +671,28 @@ type OpenScienceAPI = {
     skillsReject: (request: { skillId: string; reason?: string }) => Promise<unknown>
     skillsQuarantineList: () => Promise<unknown>
     skillsBulkAdmit: (request: { skillIds: string[] }) => Promise<unknown>
+    /** OSF-6 Compute — dry-run plan; live execute always denied on desktop */
+    computePlan: (request: {
+      hostname: string
+      targetKind?: 'local_process' | 'ssh_fixture' | 'ssh_authorized' | 'slurm_fixture'
+      command?: string
+      nodes?: number
+      cpus?: number
+      memoryGb?: number
+      gpuCount?: number
+      walltimeSecs?: number
+      requestLive?: boolean
+      operatorAuthorized?: boolean
+    }) => Promise<unknown>
+    computeSubmitPlan: (request: {
+      hostname: string
+      targetKind?: 'local_process' | 'ssh_fixture' | 'ssh_authorized' | 'slurm_fixture'
+      command?: string
+      requestLive?: boolean
+      operatorAuthorized?: boolean
+    }) => Promise<unknown>
+    computeExecuteLive: (request: { planId: string }) => Promise<unknown>
+    computeHistory: () => Promise<unknown>
   }
   window: {
     // Closes the focused window (the Cmd+W / Ctrl+W fallback when no preview panel is open).
@@ -1264,6 +1286,14 @@ const api: OpenScienceAPI = {
       ipcRenderer.invoke('skills:quarantine-list') as Promise<unknown>,
     skillsBulkAdmit: (request) =>
       ipcRenderer.invoke('skills:bulk-admit', request) as Promise<unknown>,
+    computePlan: (request) =>
+      ipcRenderer.invoke('compute:plan', request) as Promise<unknown>,
+    computeSubmitPlan: (request) =>
+      ipcRenderer.invoke('compute:submit-plan', request) as Promise<unknown>,
+    computeExecuteLive: (request) =>
+      ipcRenderer.invoke('compute:execute-live', request) as Promise<unknown>,
+    computeHistory: () =>
+      ipcRenderer.invoke('compute:history') as Promise<unknown>,
   },
 }
 
