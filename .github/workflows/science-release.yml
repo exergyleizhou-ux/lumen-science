@@ -87,7 +87,12 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
         with:
-          go-version: '1.23'
+          # EXACT patch version, not '1.23'. A minor-version pin resolves to the
+          # newest patch at build time, so rebuilding the same commit months
+          # later silently uses a different compiler and produces different
+          # bytes. Verified: v1.0.1 was built with go1.23.12 while a local
+          # rebuild on go1.23.4 produced a different digest.
+          go-version: '1.23.12'
 
       - name: Go tests
         working-directory: packs/science
@@ -124,7 +129,12 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
         with:
-          go-version: '1.23'
+          # EXACT patch version, not '1.23'. A minor-version pin resolves to the
+          # newest patch at build time, so rebuilding the same commit months
+          # later silently uses a different compiler and produces different
+          # bytes. Verified: v1.0.1 was built with go1.23.12 while a local
+          # rebuild on go1.23.4 produced a different digest.
+          go-version: '1.23.12'
 
       # SOURCE_DATE_EPOCH must be the source commit's timestamp, not the build
       # clock — otherwise every rebuild of the same commit differs and the
@@ -141,6 +151,10 @@ jobs:
         working-directory: packs/science
         env:
           SOURCE_DATE_EPOCH: ${{ steps.sde.outputs.epoch }}
+          # Pinned because it is recorded in the binary's build info and changes
+          # the output. v1.0.1 was built with CGO_ENABLED=1 only because that is
+          # the host default, never as a decision.
+          CGO_ENABLED: '1'
         run: make release VERSION="${{ needs.preflight.outputs.version }}"
 
       - name: Write publish manifest
