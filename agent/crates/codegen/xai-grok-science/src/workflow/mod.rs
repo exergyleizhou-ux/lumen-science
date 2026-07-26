@@ -2,6 +2,7 @@
 //! Seam contracts: LS5-15, LS5-16, LS5-17, LS5-18, LS5-19, LS5-20, LS5-21.
 
 pub mod admission;
+pub mod executor;
 pub mod kernel;
 pub mod package;
 
@@ -10,6 +11,12 @@ mod e2e_tests;
 
 pub use admission::{
     KernelAdmissionRequest, KernelPolicy, RejectionReason, default_resource_cap, probe_kernel,
+};
+pub use executor::{
+    ArtifactCommit, AttemptState, Clock, ErrorClass, ExecutionPolicy, KernelInvocation,
+    ManualClock, RefusedStep, StepAttempt, StepFailure, StepOperation, StepOutput, StepPlan,
+    StepRunner, SystemClock, UnboundStepRunner, WorkflowExecutionRequest, WorkflowExecutor,
+    WorkflowRecoveryReport, WorkflowRunRecord, WorkflowRunReport, WorkflowState,
 };
 pub use kernel::{
     AdmissionStatus, KernelAdmission, KernelKind, KernelManifest, ReproductionAttempt,
@@ -25,7 +32,7 @@ use super::project::model::ProjectId;
 // ── WorkflowSpec (LS5-15) ──────────────────────────────────────────
 
 /// Step types allowed in a workflow. No arbitrary shell steps.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum StepKind {
     ConnectorFetch,
     ArtifactTransform,
@@ -152,6 +159,49 @@ impl WorkflowSpec {
         Ok(())
     }
 
+    /// Step ids in a deterministic dependency-respecting order.
+    ///
+    /// Kahn's algorithm with a lexicographic tie-break, so two runs of the
+    /// same spec visit steps in the same order and the attempt log of one run
+    /// can be compared against another's. Fails on a duplicate step id, a
+    /// dangling reference, or a cycle — a workflow that cannot be ordered
+    /// cannot be executed.
+    pub fn topological_order(&self) -> Result<Vec<String>, String> {
+        self.validate_references()?;
+        let mut pending: BTreeMap<&str, std::collections::BTreeSet<&str>> = BTreeMap::new();
+        for step in &self.steps {
+            if pending
+                .insert(
+                    step.step_id.as_str(),
+                    step.inputs.iter().map(String::as_str).collect(),
+                )
+                .is_some()
+            {
+                return Err(format!("duplicate step id: {}", step.step_id));
+            }
+        }
+
+        let mut order = Vec::with_capacity(self.steps.len());
+        while !pending.is_empty() {
+            // BTreeMap iteration is sorted, so the first ready step is always
+            // the lexicographically smallest one.
+            let Some(ready) = pending
+                .iter()
+                .find(|(_, inputs)| inputs.is_empty())
+                .map(|(id, _)| *id)
+            else {
+                let stuck: Vec<&str> = pending.keys().copied().collect();
+                return Err(format!("cycle detected among steps: {}", stuck.join(", ")));
+            };
+            pending.remove(ready);
+            for inputs in pending.values_mut() {
+                inputs.remove(ready);
+            }
+            order.push(ready.to_string());
+        }
+        Ok(order)
+    }
+
     /// Verify all input references point to existing steps.
     pub fn validate_references(&self) -> Result<(), String> {
         let ids: Vec<&str> = self.steps.iter().map(|s| s.step_id.as_str()).collect();
@@ -185,17 +235,37 @@ pub struct ReuseKey {
 
 impl ReuseKey {
     /// Compute a deterministic reuse key hash.
+    ///
+    /// DEFECT FIXED (LS5-K1): this used to hash only the input hashes, the
+    /// implementation version and the environment hash — it ignored
+    /// `parameters`, `policy_version`, `connector_version` and
+    /// `renderer_build_id`, all of which [`ReuseKey::matches`] does compare.
+    /// Two steps differing only in their parameters therefore produced the
+    /// same key, and anything using this hash as a cache or commit address
+    /// would have served one step's artifact for another's. Every field is
+    /// now covered, length-prefixed so no two field boundaries can collide.
     pub fn compute_hash(&self) -> String {
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
+        let mut feed = |bytes: &[u8]| {
+            hasher.update(bytes.len().to_le_bytes());
+            hasher.update(bytes);
+        };
+        feed(b"reuse-key-v2");
         for (k, v) in &self.input_artifact_hashes {
-            hasher.update(k.as_bytes());
-            hasher.update(v.as_bytes());
+            feed(k.as_bytes());
+            feed(v.as_bytes());
         }
-        hasher.update(self.step_implementation_version.as_bytes());
-        hasher.update(self.compute_environment_hash.as_bytes());
-        let result = hasher.finalize();
-        format!("{:x}", result)
+        feed(self.step_implementation_version.as_bytes());
+        for (k, v) in &self.parameters {
+            feed(k.as_bytes());
+            feed(v.as_bytes());
+        }
+        feed(self.compute_environment_hash.as_bytes());
+        feed(self.policy_version.as_bytes());
+        feed(self.connector_version.as_deref().unwrap_or("").as_bytes());
+        feed(self.renderer_build_id.as_deref().unwrap_or("").as_bytes());
+        format!("{:x}", hasher.finalize())
     }
 
     /// Check if a cached result can be reused. Must verify:

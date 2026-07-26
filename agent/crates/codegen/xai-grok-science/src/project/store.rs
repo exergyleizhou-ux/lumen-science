@@ -35,7 +35,7 @@ const TEMP_PREFIX: &str = ".project-";
 /// per-instance mutex would serialise nothing. Keying by root makes every
 /// writer in this process queue behind the same guard, which is what keeps a
 /// read-modify-write of `graph.json` from losing a concurrent update.
-fn write_lock_for(root: &Path) -> Arc<Mutex<()>> {
+pub(crate) fn write_lock_for(root: &Path) -> Arc<Mutex<()>> {
     static LOCKS: OnceLock<Mutex<HashMap<PathBuf, Arc<Mutex<()>>>>> = OnceLock::new();
     // Canonicalise so two spellings of one root share a lock; fall back to an
     // absolute path while the root does not exist yet.
@@ -165,7 +165,7 @@ impl ProjectStore {
     /// - temp file removed on any failure, so a failed write leaves no litter.
     ///
     /// Callers must already hold the write guard.
-    fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
+    pub(crate) fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
         let parent = path
             .parent()
             .ok_or_else(|| ScienceError::Invalid("record path has no parent".into()))?;
@@ -193,9 +193,15 @@ impl ProjectStore {
         Ok(())
     }
 
-    fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T> {
+    pub(crate) fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T> {
         let bytes = fs::read(path)?;
         Ok(serde_json::from_slice(&bytes)?)
+    }
+
+    /// The temp-file prefix used by [`ProjectStore::write_json`], so other
+    /// stores rooted here sweep the same litter after an interrupted write.
+    pub(crate) const fn temp_prefix() -> &'static str {
+        TEMP_PREFIX
     }
 
     // ── Unlocked record writers ───────────────────────────────────
