@@ -458,8 +458,10 @@ export const ResearchShell = (): React.JSX.Element => {
                 >
                   <h2 className={cx.h2}>Plan</h2>
                   <p className={cx.muted}>
-                    Steps are validated and dry-run by the engine before anything
-                    runs. This window never executes a workflow itself.
+                    An outline of the intended route, written here — <strong>not</strong>
+                    validated by the engine. Nothing on this tab has been checked
+                    against anything; the Notebook tab is where a step actually runs,
+                    and only the engine runs it.
                   </p>
                   <pre className={cx.pre}>
                     {question
@@ -558,9 +560,9 @@ export const ResearchShell = (): React.JSX.Element => {
                 >
                   <h2 className={cx.h2}>Connectors</h2>
                   <p className={cx.muted}>
-                    A read-only catalog of the 42 data sources this build knows about
-                    (40 implemented, 2 declined). All fetching is done by the engine —
-                    this window never contacts a source directly.
+                    A read-only catalog of the data sources this build knows about. All
+                    fetching is done by the engine — ask this window to fetch one and it
+                    will tell you it has no way to.
                   </p>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button type="button" className={cx.btn} onClick={() => void connectorsList()}>
@@ -571,7 +573,7 @@ export const ResearchShell = (): React.JSX.Element => {
                       className={cx.btnQuiet}
                       onClick={() => void connectorsFetchDeny()}
                     >
-                      Check: a direct fetch is refused
+                      Ask this window to fetch
                     </button>
                   </div>
                   {connOut && <pre className={cx.pre}>{connOut}</pre>}
@@ -603,7 +605,7 @@ export const ResearchShell = (): React.JSX.Element => {
                       Plan (dry-run)
                     </button>
                     <button type="button" className={cx.btnQuiet} onClick={() => void computeLiveDeny()}>
-                      Check: a live run is refused
+                      Ask this window to run it live
                     </button>
                   </div>
                   {computeOut && <pre className={cx.pre}>{computeOut}</pre>}
@@ -621,14 +623,15 @@ export const ResearchShell = (): React.JSX.Element => {
                   <p className={cx.muted}>
                     Imported skills arrive quarantined and stay pending until someone
                     admits them file by file — <strong>nothing is approved in bulk</strong>,
-                    and that includes anything asking for a GPU.
+                    and that includes anything asking for a GPU. Ask this window to admit
+                    them all at once and it will refuse.
                   </p>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button type="button" className={cx.btn} onClick={() => void skillsList()}>
                       List inventory
                     </button>
                     <button type="button" className={cx.btnQuiet} onClick={() => void skillsBulkDeny()}>
-                      Check: bulk admit is refused
+                      Ask this window to admit all
                     </button>
                   </div>
                   {skillsOut && <pre className={cx.pre}>{skillsOut}</pre>}

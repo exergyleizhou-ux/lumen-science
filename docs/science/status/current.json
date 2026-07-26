@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "generator": "scripts/generate-science-status.py",
   "doc": "Machine-generated product status. Derived from the source tree and git only. Prose documents must point here rather than restate status. Regenerate with: python3 scripts/generate-science-status.py",
-  "sourceCommit": "039a8bf7050b392bdfc7bc578d2f2ca9330b9dc0",
-  "sourceCommitEpoch": 1785080771,
-  "sourceCommitIso": "2026-07-26T23:46:11+08:00",
+  "sourceCommit": "6e104642e7e782586cd69b562b60adea67c73ed7",
+  "sourceCommitEpoch": 1785082595,
+  "sourceCommitIso": "2026-07-27T00:16:35+08:00",
   "gateVocabulary": {
     "states": [
       "pass",
@@ -140,7 +140,7 @@
         "present": true,
         "continueOnError": 0,
         "usesClobber": false,
-        "actionRefs": 2,
+        "actionRefs": 5,
         "unpinnedActionRefs": [
           "actions/checkout@v4",
           "actions/setup-node@v4"
@@ -152,7 +152,7 @@
         "usesVerifyTag": false,
         "sourceDateEpochFromCommit": false,
         "sourceDateEpochFromWallClock": false,
-        "lineCount": 88
+        "lineCount": 131
       },
       "science-ci.yml": {
         "present": true,
@@ -285,7 +285,7 @@
         "artifact_resolve",
         "compute_plan",
         "project_assert_membership",
-        "start_review",
+        "review_record",
         "workflow_execute"
       ],
       "toolNamesUnservedByEitherEngine": [
