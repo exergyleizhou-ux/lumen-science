@@ -91,6 +91,26 @@ becomes current — so a broken build never replaces a working install.
 this: it stats a source checkout and will report health on a machine with no
 install at all.
 
+### Verified against the real release
+
+Exercised end to end against the published `v1.0.1`, not fixtures:
+
+| Case | Result |
+|---|---|
+| Clean install of `v1.0.1` | digest ok, manifest binding ok (commit `4f75d7a29153`), smoke ok — reports `lumen-science 1.0.1` |
+| Archive tampered (+4 bytes) | **rejected** at the digest check, before extraction |
+| Archive tampered **and** `SHA256SUMS` rewritten to match | **rejected** by the manifest binding check |
+| Either failure | nothing installed; no partial version directory left behind |
+
+The second and third rows are the point of having two layers. An attacker who
+can replace a release asset can usually replace the checksum file beside it, so
+`SHA256SUMS` alone proves only internal consistency. The manifest carries the
+digest independently, alongside the tag and commit.
+
+`verify` also correctly warned when another `lumen-science` earlier on `PATH`
+shadowed the install — a state that otherwise looks healthy while the user runs
+a different binary entirely.
+
 ---
 
 ## Incidents
