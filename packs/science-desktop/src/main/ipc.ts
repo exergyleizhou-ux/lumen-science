@@ -33,7 +33,7 @@ import {
   safeHandle,
   getLumenBinaryHash,
   acpCall,
-  acpToolsFetch
+  listScienceTools
 } from './lumen-acp-bridge'
 import { getAllowedChannels } from './lumen-authority-policy'
 import {
@@ -108,10 +108,10 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
   registerScienceIpcHandlers(ipcMain, {
     safeHandle,
     getLumenBinaryHash,
-    // Injected so science-ipc.ts never reaches its defaultAcpFetch, which still
-    // POSTs at http://127.0.0.1:17000 — a port no engine has ever listened on.
-    // acpToolsFetch translates the /tools/* shape onto the real ACP stdio call.
-    acpFetch: acpToolsFetch,
+    // The real transport: an ACP extension-method call over stdio. No HTTP
+    // shape, no fake Request, no loopback port.
+    callScienceTool: acpCall,
+    listScienceTools,
     previewStore: wiredStore,
     // ACP is the sole authority. The local catalog is a display cache and can
     // no longer grant membership — see files/hybrid-membership.ts.

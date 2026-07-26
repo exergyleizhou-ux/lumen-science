@@ -11,8 +11,8 @@
   "summary": {
     "adopted-verbatim": 980,
     "adopted-modified": 47,
-    "lumen-original": 38,
-    "totalShipped": 1065,
+    "lumen-original": 41,
+    "totalShipped": 1068,
     "upstreamSourceFiles": 1027,
     "upstreamFilesNotAdopted": 0
   },
@@ -317,6 +317,22 @@
       "localSha256": "d2443fa47bbe01f8058b9b01bd37b9aa206aa8d4be183c343bfd81a61c582619",
       "modified": false,
       "noticeRequired": true
+    },
+    "packs/science-desktop/src/main/acp-session-manager.ts": {
+      "origin": "lumen-original",
+      "upstreamPath": null,
+      "upstreamSha256": null,
+      "localSha256": "c822e8ea129847b99550a542a86979e3684c88f4ab82cc5840d7d533ff22dcfa",
+      "modified": null,
+      "noticeRequired": false
+    },
+    "packs/science-desktop/src/main/acp-stdio-transport.ts": {
+      "origin": "lumen-original",
+      "upstreamPath": null,
+      "upstreamSha256": null,
+      "localSha256": "b1ff8c191f5f5009ade0125160ce6d07d69e77bc7830ae3ff81aa902cf28d4e4",
+      "modified": null,
+      "noticeRequired": false
     },
     "packs/science-desktop/src/main/activity-groups/mcp-server.test.ts": {
       "origin": "adopted-verbatim",
@@ -1874,7 +1890,7 @@
       "origin": "lumen-original",
       "upstreamPath": null,
       "upstreamSha256": null,
-      "localSha256": "d086d1a2b3ebe0d069b373b5842e438653e7878fa8d5e87b804b0949a967dc5a",
+      "localSha256": "4cd1debeb0be67ebcea77fa50a1db6acbcd6d5a41cdda44a7a11f9ab56738025",
       "modified": null,
       "noticeRequired": false
     },
@@ -1930,7 +1946,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/index.ts",
       "upstreamSha256": "38a6e301427ed6fcbb85a6560b87dd8ad2c547a4e494fdf5978105f41543492f",
-      "localSha256": "8357b69e907a94bfeb26389ad4203bd5331d9e8490e58180e48679f91d4e9a5c",
+      "localSha256": "13f3efe4376e609de69ef0112c2453142d12ee059a42ae36a05ce2b238fe3758",
       "modified": true,
       "noticeRequired": true
     },
@@ -1946,7 +1962,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/ipc.ts",
       "upstreamSha256": "2532a17b9fac115335a74c7fabd9072b9dd2e3701389c567f28710e29f2b123f",
-      "localSha256": "69e2e9532db8447a7b2cd82e7ece1feab009af3558c6e84a4a8830cee70e966f",
+      "localSha256": "2aedd9acf570008f4df29b87e705dff90592b02b0d8597155c018510f06faae3",
       "modified": true,
       "noticeRequired": true
     },
@@ -2018,7 +2034,7 @@
       "origin": "lumen-original",
       "upstreamPath": null,
       "upstreamSha256": null,
-      "localSha256": "679aef7e60c2b704f71a262cf1cde358118cb9fa3221a713a4afd3e3551c9566",
+      "localSha256": "d36baa0f7e251a9f0ffb3d307928a578b2cd30eb543e6c626c9ceb3f7ee74f50",
       "modified": null,
       "noticeRequired": false
     },
@@ -2027,6 +2043,14 @@
       "upstreamPath": null,
       "upstreamSha256": null,
       "localSha256": "230fb1294e094133a36311f1f872d5f60f4caac832936cadad944bc2aad6a0c6",
+      "modified": null,
+      "noticeRequired": false
+    },
+    "packs/science-desktop/src/main/lumen-process-manager.ts": {
+      "origin": "lumen-original",
+      "upstreamPath": null,
+      "upstreamSha256": null,
+      "localSha256": "d0f2eb1d75a78e7ec6c496fb38ae02b97d905029061a348725429a4d5abc4c79",
       "modified": null,
       "noticeRequired": false
     },

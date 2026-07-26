@@ -366,7 +366,20 @@ def collect_authority() -> dict[str, Any]:
     These are the claims most likely to rot, because several documents assert
     "SessionActor-gated" for paths that are not.
     """
-    bridge = read_text("packs/science-desktop/src/main/lumen-acp-bridge.ts") or ""
+    # The transport was extracted out of the bridge in LS5-D2-01, so inspecting
+    # the bridge alone now under-reports it. Read the whole transport surface:
+    # a detector scoped to one file quietly becomes wrong the moment the code is
+    # refactored, which is the drift this file exists to catch.
+    bridge = "\n".join(
+        read_text(f"packs/science-desktop/src/main/{name}") or ""
+        for name in (
+            "lumen-acp-bridge.ts",
+            "lumen-process-manager.ts",
+            "acp-stdio-transport.ts",
+            "acp-session-manager.ts",
+            "science-method-registry.ts",
+        )
+    )
     science_ext = (
         read_text("agent/crates/codegen/xai-grok-shell/src/extensions/science.rs") or ""
     )
@@ -414,12 +427,25 @@ def collect_authority() -> dict[str, Any]:
             },
         },
         "desktopBridge": {
-            "path": "packs/science-desktop/src/main/lumen-acp-bridge.ts",
-            "spawnsSubcommand": "serve --interface loopback --port 17000"
-            if "'serve', '--interface'" in bridge
-            else None,
-            "speaksStdioAcp": "initialize" in bridge and "jsonrpc" in bridge.lower(),
-            "speaksHttp": "/tools/call" in bridge,
+            "path": "packs/science-desktop/src/main/{lumen-acp-bridge,lumen-process-manager,acp-stdio-transport,acp-session-manager}.ts",
+            "spawnsSubcommand": "agent stdio"
+            if "'agent', 'stdio'" in bridge or '"agent", "stdio"' in bridge
+            else (
+                "serve --interface loopback --port 17000"
+                if "'serve', '--interface'" in bridge
+                else None
+            ),
+            "speaksStdioAcp": "jsonrpc" in bridge.lower()
+            and "session/new" in bridge
+            and "initialize" in bridge,
+            # Extension methods travel with a leading underscore: the ACP schema
+            # routes to ext_method only via strip_prefix('_'). Recorded because
+            # the Rust dispatch table lists the UNprefixed names, so a reader
+            # comparing the two would otherwise conclude the client is wrong.
+            "usesExtMethodUnderscorePrefix": "_x.ai/science/" in bridge
+            or "`_${" in bridge
+            or "'_' +" in bridge,
+            "speaksHttp": "fetch(" in bridge and "127.0.0.1" in bridge,
             "toolNamesSent": sorted(desktop_tools),
             "toolNamesUnservedByEitherEngine": sorted(
                 desktop_tools - go_tools - {m.split("/")[-1] for m in acp_methods}
@@ -427,14 +453,23 @@ def collect_authority() -> dict[str, Any]:
         },
         "knownAuthorityGaps": [
             {
-                "id": "AUTH-1",
-                "summary": "Desktop bridge speaks HTTP to a subcommand and port no engine implements",
-                "path": "packs/science-desktop/src/main/lumen-acp-bridge.ts:58",
+                "id": "AUTH-7",
+                "summary": (
+                    "artifact_list, notebook_execute and start_review are Go MCP tools, "
+                    "not Rust ACP methods; their desktop call sites fail explicitly "
+                    "pending a Go MCP client"
+                ),
+                "path": "packs/science-desktop/src/main/science-method-registry.ts",
             },
             {
-                "id": "AUTH-2",
-                "summary": "Local catalog fallback authorizes membership when ACP is unavailable or denies",
-                "path": "packs/science-desktop/src/main/files/hybrid-membership.ts:11",
+                "id": "AUTH-8",
+                "summary": (
+                    "Desktop has no permission UI, so any mutation requiring approval "
+                    "is refused. The seam is left open and unused deliberately: "
+                    "auto-approving in main would grant execution authority with no "
+                    "user in the loop"
+                ),
+                "path": "packs/science-desktop/src/main/lumen-acp-bridge.ts",
             },
             {
                 "id": "AUTH-3",
@@ -531,12 +566,30 @@ EVIDENCE_LEVELS = {
         "rationale": "Contract structs only; DeviceCommand/HardwareInLoop/RealDevice gates Disabled.",
     },
     "desktop": {
-        "level": "E1",
+        "level": "E4",
         "rationale": (
-            "Authority policy is real and unit-tested, but the shipped `dist` target "
-            "is a branding shell, the bridge cannot reach any engine, and no headed "
-            "Electron E2E exists."
+            "The desktop now reaches the engine: spawn -> initialize -> authenticate "
+            "-> session/new -> x.ai/science/project_create through the SessionActor -> "
+            "read back, proven against a rebuilt binary over real stdio ACP. "
+            "`npm run dist:full` packages the real renderer rather than the former "
+            "branding shell. Not E6: there is still no headed Electron E2E, and no "
+            "permission UI, so approval-requiring mutations are refused."
         ),
+        "builtBinaryProof": {
+            "test": "packs/science-desktop/scripts/test-acp-live-handshake.mts",
+            "binarySha256": (
+                "8f7103db274e77270723cf704bdc260722360272449338d925cf3152df76aeb7"
+            ),
+            "runCommand": (
+                "LUMEN_BINARY=$PWD/agent/target/debug/lumen "
+                "npx tsx scripts/test-acp-live-handshake.mts"
+            ),
+            "result": "ALL LIVE HANDSHAKE TESTS PASSED",
+            "note": (
+                "Skips with exit 0 when no binary is present, so CI without one "
+                "reports skipped rather than passed."
+            ),
+        },
     },
 }
 

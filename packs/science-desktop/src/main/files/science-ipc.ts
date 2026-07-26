@@ -59,7 +59,17 @@ export type ListArtifactsFn = (args: {
 export type ScienceIpcDeps = {
   safeHandle: SafeHandleFn
   getLumenBinaryHash: () => string | null
-  acpFetch?: (path: string, init?: RequestInit) => Promise<unknown>
+  /**
+   * Invoke one science method on the engine.
+   *
+   * Was `acpFetch(path, init)` — an HTTP shape kept from when this file POSTed
+   * to a loopback port that no engine ever served. The transport is ACP over
+   * stdio; modelling it as a fetch forced every call site to build a fake
+   * Request and forced the bridge to expose a fake router to receive it.
+   */
+  callScienceTool?: (toolName: string, args: Record<string, unknown>) => Promise<unknown>
+  /** Names the engine can serve, for `acp:list-tools`. */
+  listScienceTools?: () => Promise<unknown>
   previewStore: PreviewFileStore
   assertMembership?: MembershipAsserter
   listArtifacts?: ListArtifactsFn
@@ -81,15 +91,16 @@ export type ScienceIpcDeps = {
   connectorLockPath?: string
 }
 
-const DEFAULT_ACP_BASE = 'http://127.0.0.1:17000'
-
-async function defaultAcpFetch(path: string, init?: RequestInit): Promise<unknown> {
-  const resp = await fetch(`${DEFAULT_ACP_BASE}${path}`, init)
-  return resp.json()
+// No default transport. There is no fallback engine to reach, and the previous
+// default silently pointed every unwired caller at a loopback port nothing
+// serves — which is how this pack shipped for so long looking connected.
+const noTransport = async (): Promise<never> => {
+  throw new Error('no science engine transport wired: callScienceTool was not provided')
 }
 
 export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIpcDeps): void {
-  const acpFetch = deps.acpFetch ?? defaultAcpFetch
+  const callTool = deps.callScienceTool ?? noTransport
+  const listTools = deps.listScienceTools ?? noTransport
   const { safeHandle, getLumenBinaryHash, previewStore } = deps
   const defaultOwner = deps.defaultOwnerId ?? 'local-user'
 
@@ -97,25 +108,22 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     deps.notebookService ??
     createNotebookService({
       acpCall: async (toolName, args) => {
-        const raw = await acpFetch('/tools/call', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: toolName, arguments: args }),
-        })
+        const raw = await callTool(toolName, args)
         return raw
       },
     })
 
   safeHandle(ipcMain, 'acp:call', async (_event, toolName: unknown, args: unknown) => {
+    // The renderer supplies this name. Under the old `acpFetch` signature it was
+    // JSON.stringify'd into a request body, so a non-string reached the wire as
+    // whatever it serialised to. The typed transport surfaced that; validate it
+    // here rather than casting the check away. The method registry still has the
+    // final say on WHICH names are permitted — this only establishes it is a name.
+    if (typeof toolName !== 'string' || toolName.length === 0) {
+      return { _lumenError: true, message: 'acp:call requires a non-empty tool name' }
+    }
     try {
-      return await acpFetch('/tools/call', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: toolName,
-          arguments: (args as Record<string, unknown>) ?? {},
-        }),
-      })
+      return await callTool(toolName, (args as Record<string, unknown>) ?? {})
     } catch (e: unknown) {
       return { _lumenError: true, message: (e as Error).message || String(e) }
     }
@@ -123,7 +131,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
 
   safeHandle(ipcMain, 'acp:list-tools', async () => {
     try {
-      return await acpFetch('/tools/list')
+      return await listTools()
     } catch {
       return { tools: [], _lumenUnavailable: true }
     }
@@ -318,11 +326,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     deps.reviewService ??
     createReviewService({
       acpCall: async (toolName, args) => {
-        const raw = await acpFetch('/tools/call', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: toolName, arguments: args }),
-        })
+        const raw = await callTool(toolName, args)
         return raw
       },
       previewStore,
@@ -388,11 +392,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     deps.computeService ??
     createComputeService({
       acpCall: async (toolName, args) => {
-        const raw = await acpFetch('/tools/call', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: toolName, arguments: args }),
-        })
+        const raw = await callTool(toolName, args)
         return raw
       },
     })

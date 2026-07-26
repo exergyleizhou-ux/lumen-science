@@ -166,41 +166,23 @@ export async function acpCall(
 }
 
 /**
- * Adapter for consumers written against the old `/tools/*` HTTP shape.
+ * The science methods this engine can serve.
  *
- * files/science-ipc.ts takes an injected `acpFetch(path, init)` and otherwise
- * falls back to POSTing at 127.0.0.1:17000 — the same fiction this file just
- * removed. Passing this from ipc.ts keeps that default unreachable until that
- * module's own signature is reworked.
+ * Replaces `acpToolsFetch`, an adapter that accepted a fake `/tools/call`
+ * Request and unpacked it back into a method name and arguments. That shim
+ * existed only because science-ipc.ts modelled the transport as HTTP; with that
+ * signature reworked to a typed call, nothing needs to build or parse a fake
+ * Request, and the last place the desktop pretended to speak HTTP is gone.
  */
-export async function acpToolsFetch(path: string, init?: RequestInit): Promise<unknown> {
-  if (path === '/tools/list') {
-    return {
-      tools: listScienceMethods().map((m) => ({
-        name: m.name,
-        method: m.qualified,
-        transport: 'acp-stdio',
-      })),
-      authority: 'rust-acp-extension-methods',
-    }
+export async function listScienceTools(): Promise<unknown> {
+  return {
+    tools: listScienceMethods().map((m) => ({
+      name: m.name,
+      method: m.qualified,
+      transport: 'acp-stdio',
+    })),
+    authority: 'rust-acp-extension-methods',
   }
-  if (path !== '/tools/call') {
-    throw new Error(`unsupported ACP path '${path}' — only /tools/call and /tools/list exist`)
-  }
-  const body = typeof init?.body === 'string' ? init.body : '{}'
-  let parsed: { name?: unknown; arguments?: unknown }
-  try {
-    parsed = JSON.parse(body) as { name?: unknown; arguments?: unknown }
-  } catch (error: unknown) {
-    throw new Error(
-      `ACP tool call body is not JSON: ${error instanceof Error ? error.message : String(error)}`,
-    )
-  }
-  const args =
-    parsed.arguments && typeof parsed.arguments === 'object'
-      ? (parsed.arguments as Record<string, unknown>)
-      : {}
-  return acpCall(String(parsed.name ?? ''), args)
 }
 
 // ── Wire into Electron IPC ───────────────────────────────────────
