@@ -238,6 +238,51 @@ impl EvidenceGraph {
                 }
         }
 
+        // Every edge must cite a canonical artifact digest. Graphs written
+        // before digests were canonicalised surface here instead of passing
+        // silently.
+        for edge in &self.edges {
+            if let Err(error) =
+                super::evidence_graph::validate_sha256_hex(&edge.supporting_artifact_sha256)
+            {
+                violations.push(Violation {
+                    kind: ViolationKind::MissingArtifactCitation,
+                    detail: format!("edge {:?} -> {:?}: {error}", edge.source, edge.target),
+                });
+            }
+        }
+        for node in self.nodes.values() {
+            if let Some(sha) = &node.artifact_sha256
+                && let Err(error) = super::evidence_graph::validate_sha256_hex(sha)
+            {
+                violations.push(Violation {
+                    kind: ViolationKind::MissingArtifactCitation,
+                    detail: format!("node {:?}: {error}", node.node_id),
+                });
+            }
+        }
+
+        // Derivation cycles (circular support/derivation chains).
+        if let Some(node) = self.find_derivation_cycle() {
+            violations.push(Violation {
+                kind: ViolationKind::CycleDetected,
+                detail: format!("derivation cycle through node {node:?}"),
+            });
+        }
+
+        // Cross-project nodes.
+        for node in self.nodes.values() {
+            if node.project_id != self.project_id {
+                violations.push(Violation {
+                    kind: ViolationKind::CrossProjectEdge,
+                    detail: format!(
+                        "node {:?} belongs to project {:?}",
+                        node.node_id, node.project_id
+                    ),
+                });
+            }
+        }
+
         // Check for superseded artifacts used as current
         for edge in &self.edges {
             if edge.relation == EdgeKind::Supersedes {
@@ -272,6 +317,11 @@ mod tests {
     use chrono::Utc;
     use std::collections::BTreeMap;
 
+    /// A canonical 64-lowercase-hex digest for fixtures.
+    fn digest(seed: char) -> String {
+        std::iter::repeat_n(seed, 64).collect()
+    }
+
     fn build_test_graph() -> EvidenceGraph {
         let proj = ProjectId("test".into());
         let mut g = EvidenceGraph::new(proj.clone());
@@ -282,7 +332,7 @@ mod tests {
             kind: NodeKind::SourceArtifact,
             project_id: proj.clone(),
             label: "Source".into(),
-            artifact_sha256: Some("sha256:src".into()),
+            artifact_sha256: Some(digest('a')),
             run_id: Some("r1".into()),
             created_by: "test".into(),
             created_at: now,
@@ -308,7 +358,7 @@ mod tests {
             actor: "test".into(),
             timestamp: now,
             run_id: "r1".into(),
-            supporting_artifact_sha256: "sha256:src".into(),
+            supporting_artifact_sha256: digest('a'),
             confidence_kind: "high".into(),
         });
 
@@ -341,10 +391,52 @@ mod tests {
             actor: "test".into(),
             timestamp: Utc::now(),
             run_id: "r1".into(),
-            supporting_artifact_sha256: "sha256:x".into(),
+            supporting_artifact_sha256: digest('b'),
             confidence_kind: "low".into(),
         });
         let report = g.check_consistency();
         assert!(!report.is_consistent);
+    }
+
+    #[test]
+    fn consistency_detects_derivation_cycle() {
+        let mut g = build_test_graph();
+        // src -Supports-> claim already exists; close the loop.
+        g.edges.push(EvidenceEdge {
+            source: NodeId("claim".into()),
+            target: NodeId("src".into()),
+            relation: EdgeKind::DerivedFrom,
+            actor: "test".into(),
+            timestamp: Utc::now(),
+            run_id: "r1".into(),
+            supporting_artifact_sha256: digest('a'),
+            confidence_kind: "high".into(),
+        });
+        let report = g.check_consistency();
+        assert!(!report.is_consistent);
+        assert!(
+            report
+                .violations
+                .iter()
+                .any(|v| v.kind == ViolationKind::CycleDetected),
+            "{:?}",
+            report.violations
+        );
+    }
+
+    #[test]
+    fn consistency_detects_legacy_non_canonical_digest() {
+        let mut g = build_test_graph();
+        g.edges[0].supporting_artifact_sha256 = "a".repeat(16);
+        let report = g.check_consistency();
+        assert!(!report.is_consistent);
+        assert!(
+            report
+                .violations
+                .iter()
+                .any(|v| v.kind == ViolationKind::MissingArtifactCitation),
+            "{:?}",
+            report.violations
+        );
     }
 }

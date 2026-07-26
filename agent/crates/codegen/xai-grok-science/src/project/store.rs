@@ -3,18 +3,19 @@
 //! Layout under `root/projects/{project_id}/`:
 //!   project.json
 //!   graph.json
+//!   artifacts.json
 //!   claims/{claim_id}.json
 //!
 //! Records only — SessionActor remains sole execution authority.
 
 use super::claim::{Claim, ClaimStatus};
 use super::evidence_graph::{
-    EdgeKind, EvidenceEdge, EvidenceGraph, EvidenceNode, NodeId, NodeKind,
+    EdgeKind, EvidenceEdge, EvidenceGraph, EvidenceNode, NodeId, NodeKind, validate_sha256_hex,
 };
 use super::model::{OwnerId, ProjectId, ProjectStatus, ResearchProject};
 use crate::features::{FeatureGates, ScienceFeature};
 use crate::{Result, ScienceError};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -22,6 +23,21 @@ use std::{
     path::{Path, PathBuf},
 };
 use uuid::Uuid;
+
+/// An artifact digest that has been registered against a project.
+///
+/// `attach_evidence` refuses to cite a digest that is not registered here:
+/// an evidence graph must never point at an artifact nobody produced.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RegisteredArtifact {
+    pub project_id: ProjectId,
+    /// Canonical digest: exactly 64 lowercase hex characters.
+    pub sha256: String,
+    pub label: String,
+    pub run_id: Option<String>,
+    pub registered_by: String,
+    pub registered_at: DateTime<Utc>,
+}
 
 #[derive(Debug, Clone)]
 pub struct ProjectStore {
@@ -133,10 +149,136 @@ impl ProjectStore {
         Self::read_json(&path)
     }
 
+    /// Persist a graph. Fails closed if the graph violates its structural
+    /// invariants (dangling endpoint, self-edge, derivation cycle, or a
+    /// non-canonical artifact digest), so a corrupt or legacy graph can never
+    /// be written back under a new mutation.
     pub fn save_graph(&self, graph: &EvidenceGraph) -> Result<()> {
         self.gates.require(ScienceFeature::EvidenceGraph)?;
+        graph
+            .validate_integrity()
+            .map_err(|error| ScienceError::Invalid(format!("evidence graph invalid: {error}")))?;
         let dir = self.ensure_dir(&graph.project_id)?;
         Self::write_json(&dir.join("graph.json"), graph)
+    }
+
+    // ── Artifact registry ─────────────────────────────────────────
+
+    fn artifacts_path(&self, project_id: &ProjectId) -> PathBuf {
+        self.project_dir(project_id).join("artifacts.json")
+    }
+
+    /// All artifact digests registered against a project, keyed by digest.
+    pub fn list_artifacts(
+        &self,
+        project_id: &ProjectId,
+    ) -> Result<BTreeMap<String, RegisteredArtifact>> {
+        let path = self.artifacts_path(project_id);
+        if !path.is_file() {
+            return Ok(BTreeMap::new());
+        }
+        Self::read_json(&path)
+    }
+
+    /// Register an artifact digest against a project so evidence may cite it.
+    ///
+    /// Idempotent: re-registering the same digest for the same project returns
+    /// the existing record rather than duplicating it.
+    pub fn register_artifact(
+        &self,
+        project_id: &ProjectId,
+        owner_id: &str,
+        artifact_sha256: impl Into<String>,
+        label: impl Into<String>,
+        run_id: Option<String>,
+    ) -> Result<RegisteredArtifact> {
+        self.gates.require(ScienceFeature::EvidenceGraph)?;
+        let project = self.load_project(project_id)?;
+        if project.owner_id.0 != owner_id {
+            return Err(ScienceError::Ownership);
+        }
+        let sha = artifact_sha256.into();
+        validate_sha256_hex(&sha).map_err(ScienceError::Invalid)?;
+        let mut registry = self.list_artifacts(project_id)?;
+        if let Some(existing) = registry.get(&sha) {
+            if existing.project_id != *project_id {
+                return Err(ScienceError::Invalid(format!(
+                    "registered artifact {sha} is bound to project {}, not {}",
+                    existing.project_id.0, project_id.0
+                )));
+            }
+            return Ok(existing.clone());
+        }
+        let record = RegisteredArtifact {
+            project_id: project_id.clone(),
+            sha256: sha.clone(),
+            label: label.into(),
+            run_id,
+            registered_by: owner_id.to_string(),
+            registered_at: Utc::now(),
+        };
+        registry.insert(sha, record.clone());
+        self.ensure_dir(project_id)?;
+        Self::write_json(&self.artifacts_path(project_id), &registry)?;
+        Ok(record)
+    }
+
+    /// The first other project that has registered this digest, if any.
+    /// Used only to turn "unknown artifact" into a precise cross-project error.
+    fn locate_artifact_elsewhere(
+        &self,
+        sha: &str,
+        exclude: &ProjectId,
+    ) -> Result<Option<ProjectId>> {
+        let root = self.root.join("projects");
+        if !root.is_dir() {
+            return Ok(None);
+        }
+        for entry in fs::read_dir(root)? {
+            let entry = entry?;
+            let path = entry.path().join("artifacts.json");
+            if !path.is_file() {
+                continue;
+            }
+            let registry: BTreeMap<String, RegisteredArtifact> = match Self::read_json(&path) {
+                Ok(registry) => registry,
+                // A damaged sibling registry must not mask the real error.
+                Err(_) => continue,
+            };
+            if let Some(record) = registry.get(sha)
+                && record.project_id != *exclude
+            {
+                return Ok(Some(record.project_id.clone()));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Resolve a digest to its registration in this project, failing closed
+    /// with a precise reason when it is unknown or owned by another project.
+    fn require_registered_artifact(
+        &self,
+        project_id: &ProjectId,
+        sha: &str,
+    ) -> Result<RegisteredArtifact> {
+        let registry = self.list_artifacts(project_id)?;
+        match registry.get(sha) {
+            Some(record) if record.project_id == *project_id => Ok(record.clone()),
+            Some(record) => Err(ScienceError::Invalid(format!(
+                "artifact {sha} is registered to project {}, not {}",
+                record.project_id.0, project_id.0
+            ))),
+            None => match self.locate_artifact_elsewhere(sha, project_id)? {
+                Some(other) => Err(ScienceError::Invalid(format!(
+                    "artifact {sha} is registered to project {}, not {} — evidence may not cross projects",
+                    other.0, project_id.0
+                ))),
+                None => Err(ScienceError::Invalid(format!(
+                    "artifact {sha} is not registered in project {}; register it before citing it as evidence",
+                    project_id.0
+                ))),
+            },
+        }
     }
 
     pub fn transition_project(
@@ -234,8 +376,21 @@ impl ProjectStore {
         Ok(out)
     }
 
+    /// The evidence-graph node id for an artifact digest.
+    ///
+    /// The identity uses the **full** digest. A truncated identity would make
+    /// two distinct artifacts that happen to share a prefix collapse onto one
+    /// evidence node, silently re-pointing every citation of one at the other.
+    pub fn artifact_node_id(sha256: &str) -> NodeId {
+        NodeId(format!("art-{sha256}"))
+    }
+
     /// Attach a SourceArtifact node and Supports edge to a claim.
-    /// Requires non-empty artifact_sha256 (fail closed).
+    ///
+    /// Fail closed on: a non-canonical digest (must be exactly 64 lowercase
+    /// hex), a digest that is not registered in this project, a digest
+    /// registered to a different project, and any graph mutation that would
+    /// leave a dangling endpoint, self-edge, or derivation cycle.
     pub fn attach_evidence(
         &self,
         project_id: &ProjectId,
@@ -252,19 +407,39 @@ impl ProjectStore {
             return Err(ScienceError::Ownership);
         }
         let sha = artifact_sha256.into();
-        if sha.len() < 16 || !sha.chars().all(|c| c.is_ascii_hexdigit()) {
-            return Err(ScienceError::Invalid(
-                "artifact_sha256 must be hex (min 16 chars)".into(),
-            ));
-        }
+        validate_sha256_hex(&sha).map_err(ScienceError::Invalid)?;
+        let registered = self.require_registered_artifact(project_id, &sha)?;
         let mut claim = self.load_claim(project_id, claim_id)?;
+        if claim.project_id != *project_id {
+            return Err(ScienceError::Invalid(format!(
+                "claim {claim_id} belongs to project {}, not {}",
+                claim.project_id.0, project_id.0
+            )));
+        }
         let claim_node = claim
             .evidence_node_id
             .clone()
             .ok_or_else(|| ScienceError::Invalid("claim missing evidence node".into()))?;
 
         let mut graph = self.load_graph(project_id)?;
-        let art_node_id = NodeId(format!("art-{}", &sha[..16]));
+        if !graph.nodes.contains_key(&claim_node) {
+            return Err(ScienceError::Invalid(format!(
+                "claim node {} is not in the evidence graph; run recover_project first",
+                claim_node.0
+            )));
+        }
+        let art_node_id = Self::artifact_node_id(&sha);
+        // A graph written before digests were canonical identifies the same
+        // artifact under a truncated node id. Refuse rather than silently
+        // creating a second node for one artifact.
+        if let Some(stale) = graph.nodes.values().find(|node| {
+            node.artifact_sha256.as_deref() == Some(sha.as_str()) && node.node_id != art_node_id
+        }) {
+            return Err(ScienceError::Invalid(format!(
+                "artifact {sha} already appears as legacy node {}; migrate the graph to full-digest node ids",
+                stale.node_id.0
+            )));
+        }
         if !graph.nodes.contains_key(&art_node_id) {
             let art_node = EvidenceNode {
                 node_id: art_node_id.clone(),
@@ -272,7 +447,7 @@ impl ProjectStore {
                 project_id: project_id.clone(),
                 label: label.into(),
                 artifact_sha256: Some(sha.clone()),
-                run_id: run_id.clone(),
+                run_id: run_id.clone().or_else(|| registered.run_id.clone()),
                 created_by: owner_id.to_string(),
                 created_at: Utc::now(),
                 metadata: BTreeMap::new(),
@@ -356,6 +531,16 @@ mod tests {
         assert_eq!(claim.status, ClaimStatus::Proposed);
 
         let sha = "a".repeat(64);
+        // Evidence may only cite a registered artifact, so register it first.
+        store
+            .register_artifact(
+                &p.project_id,
+                "owner-1",
+                sha.clone(),
+                "seq analysis",
+                Some("run-1".into()),
+            )
+            .unwrap();
         let (claim2, graph) = store
             .attach_evidence(
                 &p.project_id,

@@ -113,12 +113,16 @@ impl Claim {
     }
 
     /// Attach evidence to this claim via a Supports edge.
+    ///
+    /// The digest must be canonical (64 lowercase hex); a truncated or
+    /// differently-cased digest is not an artifact identity.
     pub fn build_support_edge(
         &self,
         target_node: NodeId,
         run_id: &str,
         artifact_sha256: &str,
     ) -> Result<EvidenceEdge, String> {
+        super::evidence_graph::validate_sha256_hex(artifact_sha256)?;
         let source = self
             .evidence_node_id
             .clone()

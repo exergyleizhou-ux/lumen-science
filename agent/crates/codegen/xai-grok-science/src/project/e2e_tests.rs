@@ -53,12 +53,19 @@ fn e2e_project_lifecycle() {
     assert_eq!(project.hypotheses.len(), 1);
 }
 
+/// A canonical 64-lowercase-hex digest for fixtures.
+fn digest(seed: char) -> String {
+    std::iter::repeat_n(seed, 64).collect()
+}
+
 /// LS5-14: Evidence graph construction and trace for a claim.
 #[test]
 fn e2e_evidence_graph_for_claim() {
     let proj = ProjectId("e2e-graph".into());
     let mut graph = EvidenceGraph::new(proj.clone());
     let now = Utc::now();
+    let pubmed_sha = digest('a');
+    let derived_sha = digest('b');
 
     // Build nodes
     graph.add_node(EvidenceNode {
@@ -66,7 +73,7 @@ fn e2e_evidence_graph_for_claim() {
         kind: NodeKind::SourceArtifact,
         project_id: proj.clone(),
         label: "PubMed Search Results".into(),
-        artifact_sha256: Some("sha256:pubmed-results".into()),
+        artifact_sha256: Some(pubmed_sha.clone()),
         run_id: Some("run-001".into()),
         created_by: "researcher".into(),
         created_at: now,
@@ -78,7 +85,7 @@ fn e2e_evidence_graph_for_claim() {
         kind: NodeKind::DerivedArtifact,
         project_id: proj.clone(),
         label: "Analyzed Data".into(),
-        artifact_sha256: Some("sha256:derived".into()),
+        artifact_sha256: Some(derived_sha.clone()),
         run_id: Some("run-001".into()),
         created_by: "researcher".into(),
         created_at: now,
@@ -117,7 +124,7 @@ fn e2e_evidence_graph_for_claim() {
         actor: "researcher".into(),
         timestamp: now,
         run_id: "run-001".into(),
-        supporting_artifact_sha256: "sha256:pubmed-results".into(),
+        supporting_artifact_sha256: pubmed_sha.clone(),
         confidence_kind: "high".into(),
     }).unwrap();
 
@@ -128,7 +135,7 @@ fn e2e_evidence_graph_for_claim() {
         actor: "researcher".into(),
         timestamp: now,
         run_id: "run-001".into(),
-        supporting_artifact_sha256: "sha256:pubmed-results".into(),
+        supporting_artifact_sha256: pubmed_sha.clone(),
         confidence_kind: "high".into(),
     }).unwrap();
 
@@ -139,7 +146,7 @@ fn e2e_evidence_graph_for_claim() {
         actor: "reviewer-1".into(),
         timestamp: now,
         run_id: "run-001".into(),
-        supporting_artifact_sha256: "sha256:pubmed-results".into(),
+        supporting_artifact_sha256: pubmed_sha.clone(),
         confidence_kind: "high".into(),
     }).unwrap();
 

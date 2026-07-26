@@ -122,6 +122,10 @@ mod tests {
             .propose_claim(&p.project_id, "o", "EcoRI cuts", "sci")
             .unwrap();
         let sha = "a".repeat(64);
+        // Evidence may only cite a registered artifact.
+        store
+            .register_artifact(&p.project_id, "o", sha.clone(), "seq", Some("r1".into()))
+            .unwrap();
         store
             .attach_evidence(&p.project_id, "o", &claim.claim_id, sha, "seq", Some("r1".into()))
             .unwrap();
@@ -132,6 +136,9 @@ mod tests {
 
         let claim2 = store
             .propose_claim(&p.project_id, "o", "NotI also", "sci")
+            .unwrap();
+        store
+            .register_artifact(&p.project_id, "o", "b".repeat(64), "seq2", Some("r2".into()))
             .unwrap();
         store
             .attach_evidence(
