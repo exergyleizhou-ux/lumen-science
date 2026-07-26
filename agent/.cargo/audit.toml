@@ -1,0 +1,26 @@
+# cargo-audit policy for the agent workspace.
+#
+# Every entry here is a REAL advisory we cannot fix from this repository,
+# with the reason stated. An unexplained ignore is how a real vulnerability
+# hides inside a green check; deleting an entry must be preferred the moment
+# its parent dependency ships a fix.
+
+[advisories]
+ignore = [
+    # rsa 0.9.x Marvin timing side-channel. No fixed release exists (the
+    # advisory itself says so since 2023). Transitive only:
+    # jsonwebtoken -> gcloud-auth -> gcloud-storage -> xai-file-utils.
+    # The vulnerable path is RSA decryption timing; this workspace uses the
+    # chain for Google service-account JWT SIGNING, not decryption of
+    # attacker-supplied ciphertext.
+    "RUSTSEC-2023-0071",
+
+    # quick-xml < 0.41 parser advisories. Fix requires 0.38/0.39 -> 0.41,
+    # a semver-major only our transitive parents can take:
+    # plist -> syntect (markdown highlighting) and pdf_oxide (pdf text
+    # extraction). Neither ships a 0.41-based release yet. The XML these
+    # paths parse comes from local files being previewed, not from the
+    # network. Re-check on every parent update.
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+]

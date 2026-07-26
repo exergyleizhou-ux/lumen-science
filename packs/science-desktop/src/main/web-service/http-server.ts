@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { readFile, stat } from 'node:fs/promises'
 import { extname, resolve, sep } from 'node:path'
@@ -133,10 +134,17 @@ const taskError = (response: ServerResponse, error: unknown): void => {
     })
     return
   }
+  // The DETAIL stays on the server. This is an HTTP surface, not the desktop's
+  // own window: an internal Error's message routinely carries absolute paths
+  // and module internals, which is reconnaissance for anyone who can reach the
+  // port (CodeQL js/stack-trace-exposure). The correlation id ties the generic
+  // client answer to the full server-side log line.
+  const correlationId = randomUUID()
+  console.error(`[web-service] internal error ${correlationId}:`, error)
   json(response, 500, {
     error: {
       code: 'internal_error',
-      message: error instanceof Error ? error.message : 'Internal server error'
+      message: `Internal server error (ref ${correlationId})`
     }
   })
 }
@@ -393,8 +401,10 @@ const startWebHttpServer = async (options: WebServerOptions): Promise<RunningWeb
 
       response.writeHead(404).end()
     } catch (error) {
+      const correlationId = randomUUID()
+      console.error(`[web-service] internal error ${correlationId}:`, error)
       json(response, 500, {
-        error: error instanceof Error ? error.message : 'Internal server error'
+        error: `Internal server error (ref ${correlationId})`
       })
     }
   })

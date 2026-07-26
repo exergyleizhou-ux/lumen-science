@@ -77,7 +77,19 @@ def check_freshness(committed: dict[str, Any]) -> None:
 
     # Gate results come from CI evidence that is not present locally, so compare
     # only the source-derived surface. Those gates are covered by check 2.
-    volatile = {"ci", "desktop"}
+    #
+    # The commit-identity stamps are volatile too, and structurally so: the
+    # committed file necessarily names the HEAD at generation time, and the
+    # commit that records it creates a NEW head. Comparing them meant no commit
+    # that changed anything else could ever be fresh — this gate was red on
+    # every CI run of the branch while passing locally before each commit,
+    # which is the exact split a freshness check exists to prevent. What
+    # freshness MEANS is that the derived content matches a regeneration at
+    # the current tree; the stamp records provenance and is checked for
+    # internal consistency below (the named commit must exist and its
+    # committer time must match the recorded epoch), not for equality with a
+    # head it cannot know.
+    volatile = {"ci", "desktop", "sourceCommit", "sourceCommitEpoch", "sourceCommitIso"}
     drifted = [
         key
         for key in set(committed) | set(regenerated)
@@ -92,6 +104,36 @@ def check_freshness(committed: dict[str, Any]) -> None:
         )
         return
     ok("freshness", f"matches tree at {committed.get('sourceCommit', '?')[:12]}")
+
+
+def check_stamp_consistency(committed: dict[str, Any]) -> None:
+    """The provenance stamp must describe a real commit, truthfully."""
+    global checks_run
+    checks_run += 1
+    stamp = str(committed.get("sourceCommit", ""))
+    if not stamp or len(stamp) < 12:
+        fail("stamp", "sourceCommit is missing or too short to identify a commit")
+        return
+    result = subprocess.run(
+        ["git", "show", "-s", "--format=%ct", stamp],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        fail("stamp", f"sourceCommit {stamp[:12]} does not name a commit in this repository")
+        return
+    actual_epoch = int(result.stdout.strip())
+    claimed = committed.get("sourceCommitEpoch")
+    if claimed != actual_epoch:
+        fail(
+            "stamp",
+            f"sourceCommitEpoch {claimed} does not match commit {stamp[:12]}'s "
+            f"committer time {actual_epoch} — the stamp lies about when it was derived",
+        )
+        return
+    ok("stamp", f"provenance stamp names real commit {stamp[:12]}")
 
 
 # ── 2. honesty ───────────────────────────────────────────────────────────
@@ -252,6 +294,7 @@ def main() -> int:
         print("  skip  freshness (--skip-freshness)")
     else:
         check_freshness(committed)
+        check_stamp_consistency(committed)
     check_honesty(committed)
     check_contradictions(committed)
 

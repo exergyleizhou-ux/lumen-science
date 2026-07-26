@@ -36,7 +36,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4  # stable
 
       - name: Install cargo-audit
-        run: cargo install cargo-audit --locked --version ^0.21
+        # ^0.22: 0.21 cannot parse newer advisory-db entries (RUSTSEC-2026-0109
+        # broke it), so the job failed on the DATABASE, not on our
+        # dependencies — a permanently red check that says nothing.
+        run: cargo install cargo-audit --locked --version ^0.22
 
       - name: Audit Cargo.lock
         working-directory: agent
@@ -53,7 +56,11 @@ jobs:
 
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
         with:
-          go-version: '1.23'
+          # 1.25: stdlib advisories are cleared by the TOOLCHAIN that builds
+          # the code, and the newest fixes land in go1.25.8 — a 1.23 line here
+          # reports reachable stdlib vulnerabilities no dependency change can
+          # remove.
+          go-version: '1.25'
 
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
@@ -62,7 +69,17 @@ jobs:
         working-directory: packs/science
         # govulncheck reports only vulnerabilities actually reachable from this
         # module's call graph, so a finding here is real rather than advisory.
-        run: govulncheck ./...
+        #
+        # Scoped to the SAME package set science-ci's Go test job builds. The
+        # rest of the pack is Go-era residue importing the archived Go lumen
+        # repo (58 files reference lumen/internal/*) and does not compile as
+        # this module — ./... therefore died loading packages and the job was
+        # red on every run while scanning nothing. Named here, not hidden:
+        # those directories are unscanned because they are unbuildable.
+        run: |
+          govulncheck ./mcp ./mcp/artifacts/... ./mcp/notebook/... ./mcp/reviewer/... \
+            ./mcp/http_bridge/... ./standalone/internal/seqbench/... \
+            ./standalone/internal/pipeline/... ./standalone/internal/projectstore/...
 
   npm-audit:
     name: npm audit + licenses

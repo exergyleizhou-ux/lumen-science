@@ -124,16 +124,35 @@ def test_freshness_detects_stale() -> None:
     original = real.read_bytes()
     try:
         stale = json.loads(original.decode("utf-8"))
+        # A fabricated provenance stamp is refused by the STAMP check, not by
+        # freshness: the stamp fields are structurally exempt from the content
+        # comparison (the committed file cannot name the commit that records
+        # it), so the guard against a lying stamp is the consistency check.
         stale["sourceCommit"] = "0" * 40
         real.write_text(json.dumps(stale, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         proc = run_verifier(ROOT)
         combined = proc.stdout + proc.stderr
         if proc.returncode == 0:
-            results.append(("freshness detects a stale commit", False, "verifier passed a stale file"))
-        elif "stale" not in combined:
-            results.append(("freshness detects a stale commit", False, "failed for the wrong reason"))
+            results.append(("a fabricated provenance stamp is refused", False, "verifier passed a fake stamp"))
+        elif "does not name a commit" not in combined:
+            results.append(("a fabricated provenance stamp is refused", False, "failed for the wrong reason"))
         else:
-            results.append(("freshness detects a stale commit", True, ""))
+            results.append(("a fabricated provenance stamp is refused", True, ""))
+
+        # And CONTENT freshness: a derived field that no longer matches a
+        # regeneration at the current tree is stale — this is what freshness
+        # means now that the stamp fields are exempt.
+        drifted = json.loads(original.decode("utf-8"))
+        drifted["release"]["pipeline"]["targets"] = ["tampered-target"]
+        real.write_text(json.dumps(drifted, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        proc = run_verifier(ROOT)
+        combined = proc.stdout + proc.stderr
+        if proc.returncode == 0:
+            results.append(("freshness detects drifted derived content", False, "verifier passed a stale file"))
+        elif "stale" not in combined:
+            results.append(("freshness detects drifted derived content", False, "failed for the wrong reason"))
+        else:
+            results.append(("freshness detects drifted derived content", True, ""))
     finally:
         real.write_bytes(original)
 
