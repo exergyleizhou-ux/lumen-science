@@ -73,7 +73,7 @@
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.3.0",
     "electron": "^41.7.1",
-    "electron-builder": "^26.15.3",
+    "electron-builder": "^25.1.8",
     "electron-vite": "2.3.0",
     "esbuild": "^0.25.12",
     "eslint": "^9.0.0",
