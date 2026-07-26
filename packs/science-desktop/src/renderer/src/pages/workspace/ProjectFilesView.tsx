@@ -292,7 +292,10 @@ const useProjectFilePreviews = (
 const useInfiniteLoad = (
   enabled: boolean,
   loadMore: () => void | Promise<void>
-): React.RefObject<HTMLDivElement | null> => {
+  // RefObject<HTMLDivElement>, not RefObject<HTMLDivElement | null>: under this pack's React 18
+  // typings `useRef<T>(null)` returns RefObject<T> (whose `.current` is already `T | null`), and
+  // only React 19 widens the parameter itself. The `| null` form is what a JSX `ref` prop rejects.
+): React.RefObject<HTMLDivElement> => {
   const sentinelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {

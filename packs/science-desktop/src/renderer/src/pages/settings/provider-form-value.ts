@@ -2,6 +2,7 @@ import {
   claudeIsolatedProviderIdentity,
   codexSubscriptionProviderIdentity,
   type AgentFrameworkId,
+  type ManagedAgentFrameworkId,
   type ChatApiEndpoint,
   type ProviderType
 } from '../../../../shared/settings'
@@ -63,11 +64,14 @@ export const defaultProviderKindKey = (
     case 'opencode':
       return 'official:deepseek'
     default: {
-      // The never assignment keeps the switch exhaustive at compile time. Persisted state could
-      // still hold a stale value outside the union; this runs during render, so degrade to the
+      // Exhaustiveness is asserted over the MANAGED ids only: if a fourth runtime with a real
+      // vendor is ever added, it lands here and this assignment fails, forcing a deliberate choice.
+      // The `*-stubbed` ids are different — they legitimately have no official vendor — so they are
+      // excluded from the assertion rather than pretending to be unreachable. Persisted state could
+      // also hold a stale value outside the union; this runs during render, so degrade to the
       // Claude Code vendor instead of throwing.
-      const exhaustive: never = frameworkId
-      void exhaustive
+      const stubbedOrUnknown: Exclude<AgentFrameworkId, ManagedAgentFrameworkId> = frameworkId
+      void stubbedOrUnknown
       return 'official:anthropic'
     }
   }

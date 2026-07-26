@@ -51,6 +51,15 @@ const LinkSafetyModal = ({
     }
   }, [isOpen])
 
+  // `inert` is applied imperatively rather than as a JSX prop. React 18 (this pack's pinned version)
+  // has no `inert` in its attribute table, so it strips the boolean and logs "Received `false` for a
+  // non-boolean attribute" — meaning the closed panel stayed hit-testable and the prop did nothing.
+  // React 19 supports it natively; toggleAttribute is correct under both, so this can go back to a
+  // JSX prop whenever the pack moves. BEHAVIOUR CHANGE: the closed panel is now genuinely inert.
+  useEffect(() => {
+    panelRef.current?.toggleAttribute('inert', !isOpen)
+  }, [isOpen, isMounted])
+
   useEffect(() => {
     const panel = panelRef.current
 
@@ -119,7 +128,6 @@ const LinkSafetyModal = ({
           )}
           data-state={isOpen ? 'open' : 'closed'}
           data-streamdown="link-safety-panel"
-          inert={!isOpen}
           ref={panelRef}
           aria-label="Open external link?"
           aria-hidden={!isOpen}

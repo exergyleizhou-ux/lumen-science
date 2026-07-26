@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { selectAnyInstalling, useSettingsStore } from '@/stores/settings-store'
 import type {
   AgentFrameworkId,
+  ManagedAgentFrameworkId,
   ClaudeInstallResult,
   ClaudeInstallSource,
   ClaudeInstallSourceInfo
@@ -19,7 +20,8 @@ import type {
 import {
   getClaudeInstallSources,
   getCodexInstallSources,
-  getOpencodeInstallSources
+  getOpencodeInstallSources,
+  isManagedAgentFrameworkId
 } from '../../../../shared/settings'
 import { AgentFrameworkCard } from './AgentFrameworkCard'
 import { ModelFrameworkCompatibilityAlert } from './ModelFrameworkCompatibilityAlert'
@@ -241,14 +243,20 @@ const AgentPanel = ({
       return
     }
 
-    const readyByFramework: Record<AgentFrameworkId, boolean> = {
+    // Keyed by ManagedAgentFrameworkId: preflight only reports readiness for runtimes that have a
+    // binary to detect. A `*-stubbed` id has none, so it is never "already ready" and never a
+    // candidate to auto-select — both lookups below narrow first and fail closed.
+    const readyByFramework: Record<ManagedAgentFrameworkId, boolean> = {
       'claude-code': preflight.claudeReady,
       opencode: preflight.opencodeReady,
       codex: preflight.codexReady
     }
-    if (readyByFramework[agentFrameworkId]) return
+    if (isManagedAgentFrameworkId(agentFrameworkId) && readyByFramework[agentFrameworkId]) return
 
-    const installedFramework = agentFrameworks.find((framework) => readyByFramework[framework.id])
+    const installedFramework = agentFrameworks.find(
+      (framework) =>
+        isManagedAgentFrameworkId(framework.id) && readyByFramework[framework.id]
+    )
     if (!installedFramework) return
 
     onboardingAutoSelectAttempted.current = true
