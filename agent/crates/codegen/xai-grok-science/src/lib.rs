@@ -539,14 +539,46 @@ fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
         .ok_or_else(|| ScienceError::Invalid("path has no parent".into()))?;
     fs::create_dir_all(parent)?;
     let temp = parent.join(format!(".science-{}.tmp", Uuid::new_v4()));
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temp)?;
-    file.write_all(bytes)?;
-    file.sync_all()?;
-    fs::rename(&temp, path)?;
+    let staged = (|| -> Result<()> {
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        Ok(())
+    })();
+    if let Err(error) = staged {
+        let _ = fs::remove_file(&temp);
+        return Err(error);
+    }
+    if let Err(error) = fs::rename(&temp, path) {
+        let _ = fs::remove_file(&temp);
+        return Err(error.into());
+    }
+    sync_dir(parent);
     Ok(())
+}
+
+/// Best-effort fsync of a directory, so the rename that published a record is
+/// itself durable and not just the bytes it points at.
+///
+/// Best-effort by design: not every platform or filesystem lets a directory be
+/// opened and synced (Windows cannot at all), and a crash between the rename
+/// and the directory flush still leaves the *previous* complete record on
+/// disk, never a torn one. Failing the write there would trade a real
+/// durability gain for a spurious hard error.
+pub(crate) fn sync_dir(dir: &Path) {
+    #[cfg(unix)]
+    {
+        if let Ok(handle) = fs::File::open(dir) {
+            let _ = handle.sync_all();
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = dir;
+    }
 }
 fn append_json<T: Serialize + DeserializeOwned>(path: &Path, value: T) -> Result<()> {
     let mut items: Vec<T> = read_json(path)?;
