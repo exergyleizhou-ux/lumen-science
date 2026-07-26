@@ -15,8 +15,8 @@ echo "=== generate-sbom ==="
 if ! cargo metadata --format-version 1 >"$META" 2>/dev/null; then
   cargo metadata --format-version 1 --no-deps >"$META"
 fi
-if [[ -f "$ROOT/packs/science/standalone/go.mod" ]]; then
-  (cd "$ROOT/packs/science/standalone" && go list -m -json all >"$GO_META")
+if [[ -f "$ROOT/packs/science/go.mod" ]]; then
+  (cd "$ROOT/packs/science" && go list -m -json all >"$GO_META")
 fi
 
 python3 - "$ROOT" "$OUT" "$META" "$GO_META" <<'PY'
@@ -137,7 +137,7 @@ for module in go_modules:
 file_hashes = {}
 for rel in [
     "NOTICE", "LEGAL.md", "agent/LICENSE", "agent/THIRD-PARTY-NOTICES",
-    "SOURCE_LOCK.json", "packs/science/standalone/go.mod",
+    "SOURCE_LOCK.json", "packs/science/go.mod",
 ]:
     p = root / rel
     if p.is_file():
