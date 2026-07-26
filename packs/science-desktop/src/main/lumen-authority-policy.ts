@@ -75,6 +75,9 @@ const ALLOWED_CHANNELS = new Set<string>([
   'files:delete-ui-project',
   // LS5-K28 Question refinement — actor-gated engine mutation, never local state
   'files:update-question',
+  // LS5-K30 Export to a user-chosen path. Writes only where a human picked in
+  // the OS save dialog — the renderer never names a destination.
+  'files:save-export',
   // OSF-3 Notebook — plan/dry-run/export local; execute only via ACP
   'notebook:plan-cell',
   'notebook:dry-run-cell',

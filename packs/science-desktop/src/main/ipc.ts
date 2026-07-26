@@ -24,7 +24,7 @@
  * See: third_party/open-science/NOTICE
  */
 
-import { app, BrowserWindow, ipcMain, Notification } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Notification } from 'electron'
 import type { AppIconPreview, AppIconVariant } from '../shared/settings'
 import { BackendShutdownCoordinator } from './lifecycle-shutdown'
 import { createLogger } from './logger'
@@ -60,7 +60,8 @@ import { createAcpAuthoritativeMembershipAsserter } from './files/hybrid-members
 import { getDefaultLocalProjectCatalog } from './files/local-project-catalog'
 import { resolveStorageRoot } from './storage-root'
 import { runtimeRoot } from './notebook/runtime-paths'
-import { join } from 'node:path'
+import { writeFile } from 'node:fs/promises'
+import { basename, join } from 'node:path'
 
 type IpcRegistrationOptions = {
   mainEntryPath: string
@@ -129,6 +130,44 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
   const wiredStore = new AcpPreviewStore(acpTool)
   const catalogPath = join(app.getPath('userData'), 'lumen-ui-projects.json')
   const projectCatalog = getDefaultLocalProjectCatalog(catalogPath)
+
+  /**
+   * Write an export to a path the USER chooses.
+   *
+   * "Export .ipynb" and "Export dossier" produced a JSON dump in an output
+   * pane and wrote nothing anywhere — a notebook you cannot get out of the app
+   * is not an export, and the button said otherwise.
+   *
+   * The renderer supplies contents and a suggested filename; it never supplies
+   * a destination. The path comes from the OS save dialog, so a compromised
+   * renderer cannot pick where bytes land, and nothing is written unless a
+   * human confirmed this exact file.
+   */
+  safeHandle(ipcMain, 'files:save-export', async (event, payload: unknown) => {
+    const p = (payload ?? {}) as { suggestedName?: string; contents?: string }
+    if (typeof p.contents !== 'string' || p.contents.length === 0) {
+      return { ok: false, reason: 'there is nothing to export yet' }
+    }
+    // basename() so a suggested name can never carry a directory out of the
+    // dialog's starting point.
+    const suggested = basename(p.suggestedName || 'export.json')
+    const sender = (event as { sender?: Electron.WebContents })?.sender
+    const win = sender ? BrowserWindow.fromWebContents(sender) : null
+    const result = win
+      ? await dialog.showSaveDialog(win, { defaultPath: suggested })
+      : await dialog.showSaveDialog({ defaultPath: suggested })
+    if (result.canceled || !result.filePath) {
+      // Not an error: choosing not to save is a normal outcome, and reporting
+      // it as a failure trains people to ignore the message.
+      return { ok: false, canceled: true }
+    }
+    try {
+      await writeFile(result.filePath, p.contents, 'utf-8')
+      return { ok: true, path: result.filePath, bytes: Buffer.byteLength(p.contents) }
+    } catch (e: unknown) {
+      return { ok: false, reason: (e as Error).message || String(e) }
+    }
+  })
 
   registerScienceIpcHandlers(ipcMain, {
     safeHandle,

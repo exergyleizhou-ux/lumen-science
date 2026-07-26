@@ -640,6 +640,7 @@ type OpenScienceAPI = {
     }) => Promise<unknown>
     deleteUiProject: (request: { projectId: string }) => Promise<unknown>
     updateQuestion: (request: { researchQuestion: string }) => Promise<unknown>
+    saveExport: (request: { suggestedName: string; contents: string }) => Promise<unknown>
     /** OSF-3 Notebook — plan/dry-run/export; execute via Lumen ACP only */
     notebookPlanCell: (request: {
       language?: 'python' | 'r'
@@ -1317,6 +1318,8 @@ const api: OpenScienceAPI = {
       ipcRenderer.invoke('files:delete-ui-project', request) as Promise<unknown>,
     updateQuestion: (request) =>
       ipcRenderer.invoke('files:update-question', request) as Promise<unknown>,
+    saveExport: (request) =>
+      ipcRenderer.invoke('files:save-export', request) as Promise<unknown>,
     notebookPlanCell: (request) =>
       ipcRenderer.invoke('notebook:plan-cell', request) as Promise<unknown>,
     notebookDryRunCell: (request) =>

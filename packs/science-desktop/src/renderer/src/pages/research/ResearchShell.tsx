@@ -237,11 +237,40 @@ export const ResearchShell = (): React.JSX.Element => {
     setNbOut(JSON.stringify(res, null, 2))
   }
 
-  const notebookExport = async (): Promise<void> => {
+  /**
+   * Turn an export projection into a file the user actually has.
+   *
+   * These buttons used to print JSON into the output pane and write nothing —
+   * a notebook you cannot get out of the app is not an export.
+   */
+  const saveExport = async (
+    build: () => Promise<unknown>,
+    suggestedName: string,
+    report: (text: string) => void,
+  ): Promise<void> => {
     if (!lumen) return
-    const res = await lumen.notebookExportIpynb()
-    setNbOut(JSON.stringify(res, null, 2))
+    const projection = (await build()) as { ok?: boolean; reason?: string }
+    if (projection && projection.ok === false) {
+      report(projection.reason ?? 'there is nothing to export yet')
+      return
+    }
+    const saved = (await lumen.saveExport({
+      suggestedName,
+      contents: JSON.stringify(projection, null, 2),
+    })) as { ok?: boolean; canceled?: boolean; path?: string; reason?: string }
+    if (saved.canceled) {
+      report('Export cancelled — nothing was written.')
+      return
+    }
+    report(saved.ok ? `Saved to ${saved.path}` : (saved.reason ?? 'export failed'))
   }
+
+  const notebookExport = async (): Promise<void> =>
+    saveExport(
+      () => lumen!.notebookExportIpynb(),
+      `notebook-${active?.id.slice(0, 8) ?? 'export'}.ipynb`,
+      setNbOut,
+    )
 
   const [reviewArtifacts, setReviewArtifacts] = useState('art-1:abc\nart-2:xyz')
   const [reviewOut, setReviewOut] = useState('')
@@ -271,11 +300,12 @@ export const ResearchShell = (): React.JSX.Element => {
     const res = await lumen.reviewSubmit({ artifacts })
     setReviewOut(JSON.stringify(res, null, 2))
   }
-  const reviewExport = async (): Promise<void> => {
-    if (!lumen) return
-    const res = await lumen.reviewExportDossier()
-    setReviewOut(JSON.stringify(res, null, 2))
-  }
+  const reviewExport = async (): Promise<void> =>
+    saveExport(
+      () => lumen!.reviewExportDossier(),
+      `dossier-${active?.id.slice(0, 8) ?? 'export'}.json`,
+      setReviewOut,
+    )
 
   const [skillsOut, setSkillsOut] = useState('')
   const skillsList = async (): Promise<void> => {

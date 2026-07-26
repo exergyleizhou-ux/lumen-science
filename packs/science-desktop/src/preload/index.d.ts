@@ -591,6 +591,7 @@ interface OpenScienceAPI {
     }): Promise<unknown>
     deleteUiProject(request: { projectId: string }): Promise<unknown>
     updateQuestion(request: { researchQuestion: string }): Promise<unknown>
+    saveExport(request: { suggestedName: string; contents: string }): Promise<unknown>
     notebookPlanCell(request: {
       language?: 'python' | 'r'
       code: string
