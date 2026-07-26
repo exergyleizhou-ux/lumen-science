@@ -1,0 +1,353 @@
+import {
+  spawn,
+  type ChildProcessWithoutNullStreams,
+  type SpawnOptionsWithoutStdio
+} from 'node:child_process'
+import { join } from 'node:path'
+import type { SessionModeState } from '@agentclientprotocol/sdk'
+
+import {
+  PermissionProfileUnavailableError,
+  type PermissionProfileApplication
+} from '../acp/permission-profile-controller'
+import type { PermissionProfileId } from '../../shared/permission-profiles'
+import { augmentedPathEnv } from '../settings/shell-path'
+import type { ReasoningEffort } from '../../shared/settings'
+import type {
+  AgentFramework,
+  AgentAuthentication,
+  AgentProviderConfiguration,
+  AgentModelConfig,
+  AgentSpawnInput,
+  ModelConfigContext,
+  SessionSetup,
+  SessionSetupContext
+} from './types'
+import { isCodexSubscriptionProvider } from '../../shared/settings'
+
+const CODEX_PROVIDER_ID = 'open-science'
+// Catalog model used only for Codex's local metadata; the Responses bridge rewrites it to the selected
+// upstream provider model, so it never appears in the provider UI and does not decide which model
+// answers. It MUST be a classic tool-mode entry (tool_mode unset), not a `code_mode_only` model like
+// the gpt-5.6-* family: code-mode models advertise no function tools and instead drive an
+// OpenAI-hosted code-execution host that a custom Chat Completions gateway cannot provide, so Codex
+// sends zero tools and the agent can only chat. gpt-5.4 advertises the `shell_command` function tool
+// and accepts a 1M context override, while the bridge forwards those tools to Chat Completions.
+// (apply_patch is still a freeform tool the bridge
+// filters, so file edits route through shell rather than the dedicated patch tool.)
+export const CODEX_BRIDGE_MODEL = 'gpt-5.4'
+const CODEX_EFFECTIVE_CONTEXT_WINDOW_PERCENT = 95
+const CODEX_MODE_IDS = {
+  ask: 'read-only',
+  auto: 'agent',
+  full: 'agent-full-access'
+} as const satisfies Record<PermissionProfileId, string>
+
+const CODEX_ENV_KEYS = [
+  'CODEX_API_KEY',
+  'OPENAI_API_KEY',
+  'CODEX_CONFIG',
+  'CODEX_HOME',
+  'CODEX_PATH',
+  'DEFAULT_AUTH_REQUEST',
+  'HOME',
+  'MODEL_PROVIDER',
+  'NO_BROWSER',
+  'USERPROFILE'
+] as const
+
+type SpawnProcess = (
+  command: string,
+  args: readonly string[],
+  options: SpawnOptionsWithoutStdio & { stdio: 'pipe' }
+) => ChildProcessWithoutNullStreams
+
+type CodexFrameworkDeps = {
+  execPath?: string
+  platform?: NodeJS.Platform
+  sourceEnv?: NodeJS.ProcessEnv
+  spawnProcess?: SpawnProcess
+}
+
+export const codexStorageDir = (storageRoot: string): string => join(storageRoot, 'codex')
+export const codexSubscriptionStorageDir = (storageRoot: string): string =>
+  join(storageRoot, 'codex-subscription')
+
+const isolatedCodexHomeEnv = (
+  codexHome: string,
+  platform: NodeJS.Platform
+): NodeJS.ProcessEnv => ({
+  // Codex discovers user-installed Skills under $HOME/.agents/skills in addition to
+  // $CODEX_HOME/skills. Point both roots at the app-owned profile so a session cannot inherit the
+  // desktop user's Skills. USERPROFILE is the native home source on Windows; HOME is retained there
+  // as well for child tools that use the Unix-compatible variable.
+  HOME: codexHome,
+  ...(platform === 'win32' ? { USERPROFILE: codexHome } : {}),
+  CODEX_HOME: codexHome
+})
+
+const normalizeResponsesBaseUrl = (value: string | undefined): string | undefined => {
+  const normalized = value
+    ?.trim()
+    .replace(/\/+$/, '')
+    .replace(/\/responses$/i, '')
+  if (!normalized) return undefined
+
+  // Codex posts to `{base_url}/responses`, so a bare origin (e.g. the official
+  // `https://api.openai.com`) would target `.../responses` and miss the `/v1` version segment.
+  // Append `/v1` only when the input carries no path at all; gateways that already include `/v1`
+  // or a custom path are left untouched.
+  try {
+    const { pathname } = new URL(normalized)
+    if (pathname === '' || pathname === '/') return `${normalized}/v1`
+  } catch {
+    // Non-URL inputs pass through unchanged.
+  }
+
+  return normalized
+}
+
+// Codex config takes low|medium|high|xhigh; the app's top level 'max' maps onto 'xhigh'.
+// 'default' is filtered upstream (never reaches here), but stay defensive and omit it too.
+const codexReasoningEffortFor = (effort: ReasoningEffort | undefined): string | undefined =>
+  effort === 'max'
+    ? 'xhigh'
+    : effort === 'low' || effort === 'medium' || effort === 'high'
+      ? effort
+      : undefined
+
+// Just the model + reasoning-effort fields a Codex config can carry, with no provider plumbing.
+// The bridge path layers the open-science custom provider on top of this; the codex-isolated path
+// uses it on its own so codex-acp can drive the ChatGPT subscription with the user's selected
+// model from session start (issue #277).
+const buildCodexModelOptions = (input: {
+  model?: string
+  reasoningEffort?: ReasoningEffort
+}): Record<string, unknown> => {
+  const codexEffort = codexReasoningEffortFor(input.reasoningEffort)
+  return {
+    ...(input.model ? { model: input.model } : {}),
+    ...(codexEffort ? { model_reasoning_effort: codexEffort } : {})
+  }
+}
+
+const buildCodexConfig = (provider: {
+  baseUrl?: string
+  model?: string
+  contextWindow?: number
+  key?: string
+  reasoningEffort?: ReasoningEffort
+}): Record<string, unknown> => {
+  const baseUrl = normalizeResponsesBaseUrl(provider.baseUrl)
+  const contextWindow =
+    provider.contextWindow && provider.contextWindow > 0 ? provider.contextWindow : undefined
+
+  return {
+    ...buildCodexModelOptions(provider),
+    ...(contextWindow
+      ? {
+          model_context_window: contextWindow,
+          model_auto_compact_token_limit: Math.floor(
+            (contextWindow * CODEX_EFFECTIVE_CONTEXT_WINDOW_PERCENT) / 100
+          )
+        }
+      : {}),
+    model_provider: CODEX_PROVIDER_ID,
+    model_providers: {
+      [CODEX_PROVIDER_ID]: {
+        name: 'Open Science',
+        wire_api: 'responses',
+        ...(baseUrl ? { base_url: baseUrl } : {}),
+        ...(provider.key ? { requires_openai_auth: true } : {})
+      }
+    }
+    // Tool-search configuration is intentionally left at Codex defaults. The Chat bridge exposes its
+    // app-owned tools through explicit namespaced aliases and does not depend on deferred tool_search.
+  }
+}
+
+const buildSpawnEnvironment = (
+  input: AgentSpawnInput,
+  sourceEnv: NodeJS.ProcessEnv = process.env
+): NodeJS.ProcessEnv => {
+  const env = augmentedPathEnv(sourceEnv)
+
+  for (const key of CODEX_ENV_KEYS) delete env[key]
+
+  return {
+    ...env,
+    ...input.env,
+    ELECTRON_RUN_AS_NODE: '1'
+  }
+}
+
+const mapCodexPermissionProfile = (
+  profile: PermissionProfileId,
+  modes: SessionModeState | null | undefined
+): PermissionProfileApplication => {
+  const availableModeIds = modes?.availableModes.map((mode) => mode.id) ?? []
+  const modeId = CODEX_MODE_IDS[profile]
+  const available = availableModeIds.includes(modeId)
+  const conservativeModeId = CODEX_MODE_IDS.ask
+  const conservativeModeAvailable = availableModeIds.includes(conservativeModeId)
+  const fullAccessAvailable = availableModeIds.includes(CODEX_MODE_IDS.full)
+
+  // Ask is the safety baseline: without read-only the selected posture cannot be enforced. Full is
+  // likewise explicit privilege. Auto may still use the app's conservative review fallback.
+  if (
+    ((profile === 'ask' || profile === 'full') && !available) ||
+    (profile === 'auto' && !available && !conservativeModeAvailable)
+  ) {
+    throw new PermissionProfileUnavailableError(profile)
+  }
+
+  const appliedModeId =
+    profile === 'auto' && !available ? conservativeModeId : available ? modeId : undefined
+
+  return {
+    modeId: appliedModeId,
+    state: {
+      selectedProfile: profile,
+      effectiveProfile: profile,
+      currentModeId: appliedModeId ?? modes?.currentModeId,
+      availableModeIds,
+      ...(profile === 'auto'
+        ? { autoReviewStrategy: available ? ('native' as const) : ('conservative' as const) }
+        : {}),
+      fullAccessAvailable,
+      ...(!available
+        ? { message: `The Codex runtime does not advertise its ${modeId} permission mode.` }
+        : {})
+    }
+  }
+}
+
+export const createCodexFramework = ({
+  execPath = process.execPath,
+  platform = process.platform,
+  sourceEnv = process.env,
+  spawnProcess = spawn as SpawnProcess
+}: CodexFrameworkDeps = {}): AgentFramework => ({
+  id: 'codex',
+  displayName: 'Codex',
+  supportsSkills: true,
+  acceptsStdioMcp: true,
+  // codex-acp advertises a thought_level effort option and honors set_config_option on live sessions
+  // (verified live: a session accepted effort 'high' over ACP). If a future adapter stops
+  // advertising it, the runtime's no-applied-session guard falls back to a reconnect so the baked
+  // model_reasoning_effort config takes over.
+  supportsLiveEffortChange: true,
+  supportedApiTypes: ['responses'],
+
+  spawn(input: AgentSpawnInput): ChildProcessWithoutNullStreams {
+    const isJavaScript = /\.[cm]?js$/i.test(input.executablePath)
+    const needsShell = platform === 'win32' && /\.(cmd|bat)$/i.test(input.executablePath)
+    const command = isJavaScript
+      ? execPath
+      : needsShell
+        ? `"${input.executablePath}"`
+        : input.executablePath
+    const args = isJavaScript ? [input.executablePath, ...input.args] : input.args
+
+    return spawnProcess(command, args, {
+      env: buildSpawnEnvironment(input, sourceEnv),
+      stdio: 'pipe',
+      windowsHide: true,
+      shell: needsShell
+    })
+  },
+
+  prepareModelConfig(provider, ctx: ModelConfigContext): AgentModelConfig {
+    if (isCodexSubscriptionProvider(provider.type)) {
+      // Every Open Science subscription session uses the same app-owned home. `codex-shared` is
+      // accepted only as a legacy Provider discriminator; it must never select the user's global
+      // Codex profile at runtime. Seed the model before session creation to avoid the slow late
+      // session/set_config_option switch (issue #277).
+      const modelOptions = buildCodexModelOptions({
+        model: provider.model,
+        reasoningEffort: ctx.reasoningEffort
+      })
+      const codexConfigJson =
+        Object.keys(modelOptions).length > 0 ? JSON.stringify(modelOptions) : undefined
+      const codexHome = codexSubscriptionStorageDir(ctx.storageRoot)
+      return {
+        env: {
+          ...isolatedCodexHomeEnv(codexHome, platform),
+          ...(codexConfigJson ? { CODEX_CONFIG: codexConfigJson } : {})
+        }
+      }
+    }
+
+    const bridge = ctx.responsesBridge
+    const useBridge =
+      bridge !== undefined && !(provider.apiEndpoints?.includes('responses') ?? false)
+    const codexModel = useBridge ? CODEX_BRIDGE_MODEL : provider.model
+    // Native Responses is driven directly. A dual-endpoint vendor keeps its Anthropic route in
+    // `baseUrl` and its OpenAI/Responses `/v1` root in `openaiBaseUrl`, so post to the latter; a
+    // Responses-only provider (e.g. OpenAI) carries its base in `baseUrl`. When bridging, the local
+    // bridge URL wins.
+    const responsesBaseUrl = useBridge
+      ? bridge.baseUrl
+      : (provider.openaiBaseUrl ?? provider.baseUrl)
+    const authentication: AgentAuthentication | undefined =
+      provider.key && !useBridge
+        ? {
+            methodId: 'api-key',
+            _meta: { 'api-key': { apiKey: provider.key } }
+          }
+        : undefined
+
+    const codexHome = codexStorageDir(ctx.storageRoot)
+    return {
+      env: {
+        ...isolatedCodexHomeEnv(codexHome, platform),
+        CODEX_CONFIG: JSON.stringify(
+          buildCodexConfig({
+            ...provider,
+            model: codexModel,
+            // Bind ACP usage to the selected upstream model for both native Responses and the bridge;
+            // the latter deliberately uses a local catalog model only for tool metadata.
+            contextWindow: provider.contextWindow,
+            baseUrl: responsesBaseUrl,
+            key: useBridge ? undefined : provider.key,
+            reasoningEffort: ctx.reasoningEffort
+          })
+        ),
+        MODEL_PROVIDER: CODEX_PROVIDER_ID,
+        NO_BROWSER: '1'
+      },
+      configFiles: [
+        {
+          path: join(codexStorageDir(ctx.storageRoot), 'config.toml'),
+          content: 'cli_auth_credentials_store = "ephemeral"\n',
+          mode: 0o600
+        }
+      ],
+      ...(authentication ? { authentication } : {}),
+      ...(useBridge
+        ? {
+            providerConfiguration: {
+              providerId: 'custom-gateway',
+              apiType: 'openai',
+              baseUrl: bridge.baseUrl,
+              headers: { authorization: `Bearer ${bridge.token}` }
+            } satisfies AgentProviderConfiguration
+          }
+        : {}),
+      ...(useBridge ? { sessionModel: CODEX_BRIDGE_MODEL } : {})
+    }
+  },
+
+  buildSessionSetup(ctx: SessionSetupContext): SessionSetup {
+    return {
+      promptPrefix:
+        ctx.systemPromptAppends.length > 0 ? ctx.systemPromptAppends.join('\n\n') : undefined
+    }
+  },
+
+  mapPermissionProfile: mapCodexPermissionProfile
+})
+
+export const codexFramework = createCodexFramework()
+
+export { buildCodexConfig, mapCodexPermissionProfile, normalizeResponsesBaseUrl }

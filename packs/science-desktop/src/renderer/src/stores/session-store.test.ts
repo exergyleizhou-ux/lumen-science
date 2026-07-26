@@ -1,0 +1,1803 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import type { ArtifactFile } from '../../../shared/artifacts'
+import {
+  INTERRUPTED_SESSION_ERROR,
+  SESSION_MANIFEST_VERSION,
+  type PersistedChatSession
+} from '../../../shared/session-persistence'
+import type { UploadedAttachment } from '../../../shared/uploads'
+import {
+  createInitialSessionState,
+  toPersistedSession,
+  useSessionStore,
+  type ChatMessage,
+  type ChatSession,
+  type ToolActivity
+} from './session-store'
+
+const createArtifactFile = (overrides: Partial<ArtifactFile> = {}): ArtifactFile => ({
+  id: 'artifact-session-1:run-1:result.txt',
+  projectName: 'default-project',
+  sessionId: 'artifact-session-1',
+  runId: 'run-1',
+  name: 'result.txt',
+  path: '/Users/example/.open-science/artifacts/default-project/artifact-session-1/.pending/run-1/result.txt',
+  fileUrl:
+    'file:///Users/example/.open-science/artifacts/default-project/artifact-session-1/.pending/run-1/result.txt',
+  size: 2,
+  mtimeMs: 1710000000000,
+  ...overrides
+})
+
+const createUploadAttachment = (
+  overrides: Partial<UploadedAttachment> = {}
+): UploadedAttachment => ({
+  id: 'upload-1',
+  sessionId: '.pending',
+  name: 'first.png',
+  originalName: 'first.png',
+  path: '/Users/example/.open-science/uploads/default-project/.pending/first.png',
+  mimeType: 'image/png',
+  size: 1234,
+  ...overrides
+})
+
+describe('session store', () => {
+  // Reset time and state so each store assertion starts from the same baseline.
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-04T08:00:00.000Z'))
+    useSessionStore.setState(createInitialSessionState())
+  })
+
+  it('starts empty so New can stay outside store state', () => {
+    expect(useSessionStore.getState().sessions).toEqual([])
+    expect(useSessionStore.getState().selectedSessionId).toBeUndefined()
+  })
+
+  it('uses the provided session id when the first user message creates a session', () => {
+    const result = useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Help me inspect this notebook',
+      cwd: '/workspace/project'
+    })
+
+    expect(result?.sessionId).toBe('transport-session-1')
+    expect(useSessionStore.getState().selectedSessionId).toBe('transport-session-1')
+    expect(useSessionStore.getState().sessions).toEqual([
+      expect.objectContaining({
+        id: 'transport-session-1',
+        cwd: '/workspace/project',
+        title: 'Help me inspect this notebook',
+        status: 'running',
+        activeRun: {
+          promptMessageId: result?.messageId,
+          startedAt: Date.now()
+        },
+        messages: [
+          expect.objectContaining({
+            id: result?.messageId,
+            role: 'user',
+            content: 'Help me inspect this notebook',
+            status: 'complete'
+          })
+        ]
+      })
+    ])
+  })
+
+  it('creates a pending first message before a runtime session id exists', () => {
+    const result = useSessionStore.getState().appendPendingUserMessage({
+      content: 'Help me inspect this notebook',
+      cwd: '/workspace/project'
+    })
+
+    expect(result?.sessionId).toMatch(/^pending-session-/)
+    expect(useSessionStore.getState().selectedSessionId).toBe(result?.sessionId)
+    expect(useSessionStore.getState().sessions).toEqual([
+      expect.objectContaining({
+        id: result?.sessionId,
+        isPending: true,
+        cwd: '/workspace/project',
+        title: 'Help me inspect this notebook',
+        status: 'running',
+        activeRun: {
+          promptMessageId: result?.messageId,
+          startedAt: Date.now()
+        },
+        messages: [
+          expect.objectContaining({
+            id: result?.messageId,
+            role: 'user',
+            content: 'Help me inspect this notebook',
+            status: 'complete'
+          })
+        ]
+      })
+    ])
+  })
+
+  it('stores uploaded attachments on user messages in insertion order', () => {
+    const firstUpload = createUploadAttachment({ id: 'upload-1', name: 'first.png' })
+    const secondUpload = createUploadAttachment({
+      id: 'upload-2',
+      name: 'second.png',
+      originalName: 'second.png',
+      path: '/Users/example/.open-science/uploads/default-project/.pending/second.png'
+    })
+
+    const result = useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Describe these',
+      cwd: '/workspace/project',
+      attachments: [firstUpload, secondUpload]
+    })
+
+    expect(useSessionStore.getState().sessions[0].messages[0]).toMatchObject({
+      id: result?.messageId,
+      role: 'user',
+      content: 'Describe these',
+      uploads: [
+        expect.objectContaining({ id: 'upload-1', name: 'first.png' }),
+        expect.objectContaining({ id: 'upload-2', name: 'second.png' })
+      ]
+    })
+  })
+
+  it('allows an attachments-only user message and replaces uploads after session binding', () => {
+    const pendingUpload = createUploadAttachment()
+    const finalizedUpload = createUploadAttachment({
+      sessionId: 'transport-session-1',
+      path: '/Users/example/.open-science/uploads/default-project/transport-session-1/first.png'
+    })
+    const pending = useSessionStore.getState().appendPendingUserMessage({
+      content: '',
+      cwd: '/workspace/project',
+      attachments: [pendingUpload]
+    })
+
+    useSessionStore.getState().bindPendingSession({
+      pendingSessionId: pending?.sessionId ?? '',
+      sessionId: 'transport-session-1',
+      cwd: '/workspace/project'
+    })
+    useSessionStore.getState().replaceMessageUploads({
+      sessionId: 'transport-session-1',
+      messageId: pending?.messageId ?? '',
+      uploads: [finalizedUpload]
+    })
+
+    const finalizedSession = useSessionStore.getState().sessions[0]
+    useSessionStore.getState().replaceMessageUploads({
+      sessionId: 'transport-session-1',
+      messageId: pending?.messageId ?? '',
+      uploads: [finalizedUpload]
+    })
+
+    expect(useSessionStore.getState().sessions[0]).toMatchObject({
+      id: 'transport-session-1',
+      title: 'Attached first.png',
+      messages: [
+        expect.objectContaining({
+          id: pending?.messageId,
+          content: '',
+          uploads: [
+            expect.objectContaining({
+              id: 'upload-1',
+              sessionId: 'transport-session-1',
+              path: finalizedUpload.path
+            })
+          ]
+        })
+      ]
+    })
+    expect(finalizedSession.filesRevision).toBe(1)
+    expect(useSessionStore.getState().sessions[0]).toBe(finalizedSession)
+  })
+
+  it('increments the file revision when removing a message with finalized uploads', () => {
+    const pending = useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Analyze',
+      attachments: [createUploadAttachment()]
+    })
+    const finalizedUpload = createUploadAttachment({
+      sessionId: 'transport-session-1',
+      path: '/Users/example/.open-science/uploads/default-project/transport-session-1/first.png'
+    })
+    useSessionStore.getState().replaceMessageUploads({
+      sessionId: 'transport-session-1',
+      messageId: pending?.messageId ?? '',
+      uploads: [finalizedUpload]
+    })
+
+    useSessionStore.getState().removeMessage('transport-session-1', pending?.messageId ?? '')
+
+    expect(useSessionStore.getState().sessions[0].filesRevision).toBe(2)
+  })
+
+  it('binds a pending session to the runtime session id without rewriting the prompt', () => {
+    const pending = useSessionStore.getState().appendPendingUserMessage({
+      content: 'Help me inspect this notebook',
+      cwd: '/workspace/project'
+    })
+
+    const bound = useSessionStore.getState().bindPendingSession({
+      pendingSessionId: pending?.sessionId ?? '',
+      sessionId: 'transport-session-1',
+      cwd: '/workspace/project',
+      agentFrameworkId: 'codex',
+      agentBackendId: 'codex:codex-shared'
+    })
+
+    expect(bound).toEqual({
+      sessionId: 'transport-session-1',
+      messageId: pending?.messageId
+    })
+    expect(useSessionStore.getState().selectedSessionId).toBe('transport-session-1')
+    expect(useSessionStore.getState().sessions).toEqual([
+      expect.objectContaining({
+        id: 'transport-session-1',
+        isPending: false,
+        cwd: '/workspace/project',
+        agentFrameworkId: 'codex',
+        agentBackendId: 'codex:codex-shared',
+        status: 'running',
+        activeRun: {
+          promptMessageId: pending?.messageId,
+          startedAt: Date.now()
+        },
+        messages: [
+          expect.objectContaining({
+            id: pending?.messageId,
+            content: 'Help me inspect this notebook'
+          })
+        ]
+      })
+    ])
+  })
+
+  it('appends follow-up user messages to the same session and restarts the run', () => {
+    const first = useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Start a pathway analysis'
+    })
+
+    const second = useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Add enrichment notes'
+    })
+
+    const session = useSessionStore.getState().sessions[0]
+
+    expect(first?.sessionId).toBe('transport-session-1')
+    expect(second?.sessionId).toBe('transport-session-1')
+    expect(useSessionStore.getState().sessions).toHaveLength(1)
+    expect(session.status).toBe('running')
+    expect(session.activeRun).toEqual({
+      promptMessageId: second?.messageId,
+      startedAt: Date.now()
+    })
+    expect(session.messages.map((message) => message.content)).toEqual([
+      'Start a pathway analysis',
+      'Add enrichment notes'
+    ])
+  })
+
+  it('persists the model selected when each run starts', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'First run',
+      agentModel: 'model-a'
+    })
+    useSessionStore.getState().finishRun('transport-session-1')
+
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Second run',
+      agentModel: 'model-b'
+    })
+
+    const session = useSessionStore.getState().sessions[0]
+    expect(session.agentModel).toBe('model-b')
+    expect(toPersistedSession(session).agentModel).toBe('model-b')
+  })
+
+  it('merges streamed agent chunks by stream id and completes them when the run stops', () => {
+    const result = useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Summarize the dataset'
+    })
+
+    const firstChunk = useSessionStore.getState().appendAgentMessageChunk({
+      sessionId: 'transport-session-1',
+      streamId: 'assistant-message-1',
+      eventId: 'event-1',
+      content: 'Summary'
+    })
+
+    const secondChunk = useSessionStore.getState().appendAgentMessageChunk({
+      sessionId: 'transport-session-1',
+      streamId: 'assistant-message-1',
+      eventId: 'event-2',
+      content: ' complete'
+    })
+
+    useSessionStore.getState().finishRun('transport-session-1')
+
+    const session = useSessionStore.getState().sessions[0]
+    const agentMessage = session.messages[1]
+
+    expect(secondChunk?.messageId).toBe(firstChunk?.messageId)
+    expect(agentMessage).toMatchObject({
+      id: firstChunk?.messageId,
+      role: 'agent',
+      content: 'Summary complete',
+      streamId: 'assistant-message-1',
+      responseToMessageId: result?.messageId,
+      eventIds: ['event-1', 'event-2'],
+      status: 'complete'
+    })
+    expect(session.status).toBe('idle')
+    expect(session.activeRun).toBeUndefined()
+  })
+
+  it('merges image-only and text chunks into the same agent message', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Draw the result'
+    })
+
+    const imageChunk = useSessionStore.getState().appendAgentMessageChunk({
+      sessionId: 'transport-session-1',
+      streamId: 'assistant-message-1',
+      eventId: 'event-image',
+      image: { mimeType: 'image/png', data: 'AQID', byteLength: 3 }
+    })
+    const textChunk = useSessionStore.getState().appendAgentMessageChunk({
+      sessionId: 'transport-session-1',
+      streamId: 'assistant-message-1',
+      eventId: 'event-text',
+      content: 'Generated chart'
+    })
+
+    expect(textChunk?.messageId).toBe(imageChunk?.messageId)
+    expect(useSessionStore.getState().sessions[0].messages[1]).toMatchObject({
+      content: 'Generated chart',
+      eventIds: ['event-image', 'event-text'],
+      images: [{ id: 'event-image', mimeType: 'image/png', data: 'AQID', byteLength: 3 }]
+    })
+  })
+
+  it('keeps live agent messages within the persisted image count boundary', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Draw variants'
+    })
+
+    for (let index = 0; index < 6; index += 1) {
+      useSessionStore.getState().appendAgentMessageChunk({
+        sessionId: 'transport-session-1',
+        streamId: 'assistant-message-1',
+        eventId: `event-image-${index}`,
+        image: { mimeType: 'image/png', data: 'AQID', byteLength: 3 }
+      })
+    }
+
+    expect(useSessionStore.getState().sessions[0].messages[1].images).toHaveLength(4)
+    expect(useSessionStore.getState().sessions[0].messages[1].eventIds).toHaveLength(6)
+  })
+
+  it('ignores duplicate streamed event ids for the same agent message', () => {
+    const result = useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Summarize the dataset'
+    })
+
+    useSessionStore.getState().appendAgentMessageChunk({
+      sessionId: 'transport-session-1',
+      streamId: 'assistant-message-1',
+      eventId: 'event-1',
+      content: 'Summary'
+    })
+    useSessionStore.getState().appendAgentMessageChunk({
+      sessionId: 'transport-session-1',
+      streamId: 'assistant-message-1',
+      eventId: 'event-1',
+      content: 'Summary'
+    })
+
+    expect(useSessionStore.getState().sessions[0].messages[1]).toMatchObject({
+      content: 'Summary',
+      responseToMessageId: result?.messageId,
+      eventIds: ['event-1']
+    })
+  })
+
+  it('keeps session state unchanged when a duplicate streamed event arrives after finish', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Summarize the dataset'
+    })
+    useSessionStore.getState().appendAgentMessageChunk({
+      sessionId: 'transport-session-1',
+      streamId: 'assistant-message-1',
+      eventId: 'event-1',
+      content: 'Summary'
+    })
+    useSessionStore.getState().finishRun('transport-session-1')
+
+    const finishedSession = useSessionStore.getState().sessions[0]
+
+    useSessionStore.getState().appendAgentMessageChunk({
+      sessionId: 'transport-session-1',
+      streamId: 'assistant-message-1',
+      eventId: 'event-1',
+      content: 'Summary'
+    })
+
+    expect(useSessionStore.getState().sessions[0]).toEqual(finishedSession)
+  })
+
+  it('marks the active run and streaming agent message as failed', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Read the files'
+    })
+    useSessionStore.getState().appendAgentMessageChunk({
+      sessionId: 'transport-session-1',
+      streamId: 'assistant-message-1',
+      eventId: 'event-1',
+      content: 'I started'
+    })
+
+    useSessionStore.getState().failRun('transport-session-1', 'Permission denied')
+
+    const session = useSessionStore.getState().sessions[0]
+
+    expect(session.status).toBe('error')
+    expect(session.error).toBe('Permission denied')
+    expect(session.activeRun).toBeUndefined()
+    expect(session.messages[1]).toMatchObject({
+      content: 'I started',
+      status: 'error'
+    })
+  })
+
+  it('derives errorReportable from the message when no explicit flag is passed', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Read the files'
+    })
+
+    // An opaque/internal failure with no crafted-message match stays reportable.
+    useSessionStore.getState().failRun('transport-session-1', 'Agent session could not be created.')
+    expect(useSessionStore.getState().sessions[0].errorReportable).toBe(true)
+
+    // An app-crafted reminder is recognized by its exact text and is not reportable.
+    useSessionStore
+      .getState()
+      .failRun('transport-session-1', 'Session workspace is missing; start a new conversation.')
+    expect(useSessionStore.getState().sessions[0].errorReportable).toBe(false)
+  })
+
+  it('honors an explicit reportable flag (the runtime tags a model-provider failure)', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Read the files'
+    })
+
+    // A model-provider failure: opaque text that WOULD derive reportable=true, but the ACP layer
+    // structurally tagged it non-reportable, and the explicit flag wins.
+    useSessionStore.getState().failRun('transport-session-1', 'Invalid API key', {
+      reportable: false
+    })
+    expect(useSessionStore.getState().sessions[0].errorReportable).toBe(false)
+  })
+
+  it('clears errorReportable when a new run starts, so a later error cannot inherit it', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'first turn'
+    })
+    // A model-provider failure hides the report button.
+    useSessionStore.getState().failRun('transport-session-1', 'Invalid API key', {
+      reportable: false
+    })
+    expect(useSessionStore.getState().sessions[0].errorReportable).toBe(false)
+
+    // A new turn clears the prior error + flag.
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'second turn'
+    })
+    expect(useSessionStore.getState().sessions[0].errorReportable).toBeUndefined()
+
+    // A later ACP-layer failure with no explicit flag derives reportable=true — it never inherits the
+    // earlier provider error's false.
+    useSessionStore.getState().failRun('transport-session-1', 'Agent cancellation failed')
+    expect(useSessionStore.getState().sessions[0].errorReportable).toBe(true)
+  })
+
+  it('records an artifact finalization error as reportable (an app-layer failure)', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Create a report'
+    })
+    // Simulate a prior provider error's flag lingering, then an artifact error overwriting it.
+    useSessionStore.getState().failRun('transport-session-1', 'Invalid API key', {
+      reportable: false
+    })
+    useSessionStore.getState().recordArtifactError('transport-session-1', 'disk full')
+
+    const session = useSessionStore.getState().sessions[0]
+    expect(session.error).toContain('disk full')
+    expect(session.errorReportable).toBe(true)
+  })
+
+  it('keeps artifact finalization errors visible when the run later stops', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Create a report'
+    })
+    useSessionStore.getState().appendAgentMessageChunk({
+      sessionId: 'transport-session-1',
+      streamId: 'assistant-message-1',
+      eventId: 'event-1',
+      content: 'Created it'
+    })
+
+    useSessionStore.getState().recordArtifactError('transport-session-1', 'move failed')
+    useSessionStore.getState().finishRun('transport-session-1')
+
+    const session = useSessionStore.getState().sessions[0]
+
+    expect(session.status).toBe('error')
+    expect(session.error).toBe('Generated file finalization failed: move failed')
+    expect(session.activeRun).toBeUndefined()
+    expect(session.messages[1].status).toBe('complete')
+  })
+
+  it('tracks permission waiting without losing the active run', () => {
+    const result = useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Edit the file'
+    })
+
+    useSessionStore.getState().setPermissionPending('transport-session-1')
+    expect(useSessionStore.getState().sessions[0]).toMatchObject({
+      status: 'waiting-permission',
+      activeRun: {
+        promptMessageId: result?.messageId,
+        startedAt: Date.now()
+      }
+    })
+
+    useSessionStore.getState().clearPermissionPending('transport-session-1')
+    expect(useSessionStore.getState().sessions[0].status).toBe('running')
+  })
+
+  it('upserts transient tool activities without duplicating repeated events', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Search the literature'
+    })
+
+    useSessionStore.getState().upsertToolActivity({
+      sessionId: 'transport-session-1',
+      toolCallId: 'tool-web-1',
+      eventId: 'event-1',
+      toolKind: 'fetch',
+      providerToolName: 'WebSearch',
+      title: '"open science repositories"',
+      status: 'pending'
+    })
+    useSessionStore.getState().upsertToolActivity({
+      sessionId: 'transport-session-1',
+      toolCallId: 'tool-web-1',
+      eventId: 'event-2',
+      status: 'completed'
+    })
+    useSessionStore.getState().upsertToolActivity({
+      sessionId: 'transport-session-1',
+      toolCallId: 'tool-web-1',
+      eventId: 'event-2',
+      status: 'completed'
+    })
+
+    expect(useSessionStore.getState().sessions[0].activities).toEqual([
+      expect.objectContaining({
+        id: 'tool-web-1',
+        kind: 'tool',
+        toolKind: 'fetch',
+        providerToolName: 'WebSearch',
+        title: '"open science repositories"',
+        status: 'completed',
+        eventIds: ['event-1', 'event-2']
+      })
+    ])
+  })
+
+  it('assigns real tool activities to the declared activity group and persists the group', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Inspect and update the app'
+    })
+
+    useSessionStore
+      .getState()
+      .beginActivityGroup(
+        'transport-session-1',
+        'group-call-1',
+        'Inspect the current implementation'
+      )
+    useSessionStore.getState().upsertToolActivity({
+      sessionId: 'transport-session-1',
+      toolCallId: 'tool-read-1',
+      eventId: 'event-read-1',
+      toolKind: 'read',
+      status: 'completed'
+    })
+    useSessionStore
+      .getState()
+      .beginActivityGroup('transport-session-1', 'group-call-2', 'Apply the focused change')
+    useSessionStore.getState().upsertToolActivity({
+      sessionId: 'transport-session-1',
+      toolCallId: 'tool-edit-1',
+      eventId: 'event-edit-1',
+      toolKind: 'edit',
+      status: 'completed'
+    })
+    useSessionStore.getState().completeActivityGroup('transport-session-1')
+
+    const session = useSessionStore.getState().sessions[0]
+    expect(session.activities).toEqual([
+      expect.objectContaining({ id: 'tool-read-1', activityGroupId: 'group-call-1' }),
+      expect.objectContaining({ id: 'tool-edit-1', activityGroupId: 'group-call-2' })
+    ])
+    expect(session.activityGroups).toEqual([
+      expect.objectContaining({
+        id: 'group-call-1',
+        title: 'Inspect the current implementation',
+        activityIds: ['tool-read-1'],
+        completedAt: expect.any(Number)
+      }),
+      expect.objectContaining({
+        id: 'group-call-2',
+        title: 'Apply the focused change',
+        activityIds: ['tool-edit-1'],
+        completedAt: expect.any(Number)
+      })
+    ])
+    expect(toPersistedSession(session).activityGroups).toEqual(session.activityGroups)
+  })
+
+  it('does not notify the store when no started activity group can be completed', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Answer without tools'
+    })
+    const before = useSessionStore.getState()
+    const listener = vi.fn()
+    const unsubscribe = useSessionStore.subscribe(listener)
+
+    useSessionStore.getState().completeActivityGroup('transport-session-1')
+
+    expect(useSessionStore.getState()).toBe(before)
+    expect(listener).not.toHaveBeenCalled()
+    unsubscribe()
+  })
+
+  it('preserves tool activity content and locations across updates', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Search the literature'
+    })
+
+    useSessionStore.getState().upsertToolActivity({
+      sessionId: 'transport-session-1',
+      toolCallId: 'tool-web-1',
+      eventId: 'event-1',
+      toolKind: 'fetch',
+      providerToolName: 'WebSearch',
+      title: '"open science repositories"',
+      status: 'pending',
+      toolContent: [
+        {
+          type: 'content',
+          content: {
+            type: 'text',
+            text: 'Searching web'
+          }
+        }
+      ],
+      toolLocations: [
+        {
+          path: 'https://example.com'
+        }
+      ]
+    })
+    useSessionStore.getState().upsertToolActivity({
+      sessionId: 'transport-session-1',
+      toolCallId: 'tool-web-1',
+      eventId: 'event-2',
+      providerToolName: 'WebSearch',
+      status: 'completed'
+    })
+
+    expect(useSessionStore.getState().sessions[0].activities?.[0]).toMatchObject({
+      providerToolName: 'WebSearch',
+      toolContent: [
+        {
+          type: 'content',
+          content: {
+            type: 'text',
+            text: 'Searching web'
+          }
+        }
+      ],
+      toolLocations: [
+        {
+          path: 'https://example.com'
+        }
+      ],
+      status: 'completed'
+    })
+  })
+
+  it('merges raw input, raw output, and terminal metadata across tool updates', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Run the tests'
+    })
+
+    // The initial tool_call carries arguments; later updates stream output and exit metadata.
+    useSessionStore.getState().upsertToolActivity({
+      sessionId: 'transport-session-1',
+      toolCallId: 'tool-bash-1',
+      eventId: 'event-1',
+      toolKind: 'execute',
+      providerToolName: 'Bash',
+      title: 'npm test',
+      status: 'pending',
+      rawInput: { command: 'npm test' }
+    })
+    useSessionStore.getState().upsertToolActivity({
+      sessionId: 'transport-session-1',
+      toolCallId: 'tool-bash-1',
+      eventId: 'event-2',
+      terminalOutput: 'All tests passed',
+      terminalExitCode: 0
+    })
+    useSessionStore.getState().upsertToolActivity({
+      sessionId: 'transport-session-1',
+      toolCallId: 'tool-bash-1',
+      eventId: 'event-3',
+      status: 'completed',
+      rawOutput: { stdout: 'All tests passed' }
+    })
+
+    expect(useSessionStore.getState().sessions[0].activities?.[0]).toMatchObject({
+      rawInput: { command: 'npm test' },
+      rawOutput: { stdout: 'All tests passed' },
+      terminalOutput: 'All tests passed',
+      terminalExitCode: 0,
+      status: 'completed'
+    })
+  })
+
+  it('keeps missing web activity titles empty so the UI can render only the web verb', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Search the literature'
+    })
+
+    useSessionStore.getState().upsertToolActivity({
+      sessionId: 'transport-session-1',
+      toolCallId: 'tool-web-1',
+      eventId: 'event-1',
+      toolKind: 'search',
+      status: 'pending'
+    })
+
+    expect(useSessionStore.getState().sessions[0].activities?.[0]).toMatchObject({
+      title: ''
+    })
+  })
+
+  it('does not revive finished sessions or regress terminal tool activity statuses', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Search the literature'
+    })
+    useSessionStore.getState().upsertToolActivity({
+      sessionId: 'transport-session-1',
+      toolCallId: 'tool-web-1',
+      eventId: 'event-1',
+      toolKind: 'fetch',
+      title: '"open science repositories"',
+      status: 'completed'
+    })
+    useSessionStore.getState().finishRun('transport-session-1')
+
+    useSessionStore.getState().upsertToolActivity({
+      sessionId: 'transport-session-1',
+      toolCallId: 'tool-web-1',
+      eventId: 'event-2',
+      status: 'pending'
+    })
+
+    expect(useSessionStore.getState().sessions[0]).toMatchObject({
+      status: 'idle',
+      activities: [
+        expect.objectContaining({
+          status: 'completed',
+          eventIds: ['event-1', 'event-2']
+        })
+      ]
+    })
+  })
+
+  it('ignores stale new tool activities after a run has finished or failed', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Search the literature'
+    })
+    useSessionStore.getState().finishRun('transport-session-1')
+
+    useSessionStore.getState().upsertToolActivity({
+      sessionId: 'transport-session-1',
+      toolCallId: 'stale-tool-after-finish',
+      eventId: 'event-1',
+      toolKind: 'fetch',
+      status: 'pending'
+    })
+
+    expect(useSessionStore.getState().sessions[0]).toMatchObject({
+      status: 'idle',
+      activities: undefined
+    })
+
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Try again'
+    })
+    useSessionStore.getState().failRun('transport-session-1', 'Network failed')
+
+    useSessionStore.getState().upsertToolActivity({
+      sessionId: 'transport-session-1',
+      toolCallId: 'stale-tool-after-error',
+      eventId: 'event-2',
+      toolKind: 'search',
+      status: 'in_progress'
+    })
+
+    expect(useSessionStore.getState().sessions[0]).toMatchObject({
+      status: 'error',
+      activities: undefined
+    })
+  })
+
+  it('persists a bounded projection of tool activities in session snapshots', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Save this',
+      cwd: '/workspace/project'
+    })
+    useSessionStore.getState().upsertToolActivity({
+      sessionId: 'transport-session-1',
+      toolCallId: 'tool-web-1',
+      eventId: 'event-1',
+      toolKind: 'fetch',
+      title: '"open science repositories"',
+      status: 'pending'
+    })
+
+    const persistedSession = toPersistedSession(useSessionStore.getState().sessions[0])
+
+    expect(persistedSession.activities).toEqual([
+      expect.objectContaining({
+        id: 'tool-web-1',
+        kind: 'tool',
+        title: '"open science repositories"',
+        status: 'pending',
+        toolKind: 'fetch'
+      })
+    ])
+  })
+
+  it('drops oversized raw payloads from persisted activities but keeps the row', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Save a big file'
+    })
+    useSessionStore.getState().upsertToolActivity({
+      sessionId: 'transport-session-1',
+      toolCallId: 'tool-save-1',
+      eventId: 'event-1',
+      toolKind: 'other',
+      providerToolName: 'write_artifact_file',
+      title: 'Write artifact file',
+      status: 'completed',
+      // A base64 file payload far exceeds the raw-input cap and must not be persisted.
+      toolContent: undefined
+    })
+    // Inject an oversized rawInput directly on the stored activity to exercise the cap.
+    const bigActivity = useSessionStore
+      .getState()
+      .sessions[0].activities?.find((activity) => activity.id === 'tool-save-1')
+
+    expect(bigActivity).toBeDefined()
+
+    useSessionStore.setState((state) => ({
+      sessions: state.sessions.map((session) =>
+        session.id === 'transport-session-1'
+          ? {
+              ...session,
+              activities: session.activities?.map((activity) =>
+                activity.id === 'tool-save-1'
+                  ? { ...activity, rawInput: { filename: 'big.png', content: 'A'.repeat(50_000) } }
+                  : activity
+              )
+            }
+          : session
+      )
+    }))
+
+    const persistedActivity = toPersistedSession(useSessionStore.getState().sessions[0])
+      .activities?.[0]
+
+    expect(persistedActivity?.id).toBe('tool-save-1')
+    expect(persistedActivity?.rawInput).toBeUndefined()
+  })
+
+  it('restores persisted tool activities when hydrating sessions', () => {
+    useSessionStore.getState().hydrateSessions(
+      [
+        {
+          id: 'restored-session',
+          projectId: 'default',
+          title: 'Restored',
+          cwd: '/workspace',
+          status: 'idle',
+          messages: [
+            {
+              id: 'message-1',
+              role: 'user',
+              content: 'run it',
+              status: 'complete',
+              eventIds: [],
+              createdAt: 1,
+              updatedAt: 1
+            }
+          ],
+          activities: [
+            {
+              id: 'activity-1',
+              kind: 'tool',
+              title: 'ls -la',
+              status: 'completed',
+              sortIndex: 2,
+              eventIds: ['event-1'],
+              providerToolName: 'Bash',
+              toolKind: 'execute',
+              createdAt: 2,
+              updatedAt: 2
+            }
+          ],
+          createdAt: 1,
+          updatedAt: 2
+        }
+      ],
+      { version: SESSION_MANIFEST_VERSION, lastSessionId: 'restored-session' }
+    )
+
+    expect(useSessionStore.getState().sessions[0].activities).toEqual([
+      expect.objectContaining({
+        id: 'activity-1',
+        kind: 'tool',
+        title: 'ls -la',
+        status: 'completed',
+        providerToolName: 'Bash',
+        toolKind: 'execute'
+      })
+    ])
+  })
+
+  // Note: normalizing interrupted (open) activities to "failed" now happens at the repository load
+  // boundary (sanitizeSession), covered by the session-persistence repository round-trip test.
+
+  it('ignores streamed agent chunks for missing sessions', () => {
+    const result = useSessionStore.getState().appendAgentMessageChunk({
+      sessionId: 'missing-session',
+      streamId: 'assistant-message-1',
+      eventId: 'event-1',
+      content: 'stale'
+    })
+
+    expect(result).toBeUndefined()
+    expect(useSessionStore.getState().sessions).toEqual([])
+  })
+
+  it('renames and deletes sessions while keeping selection valid', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'First session'
+    })
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-2',
+      content: 'Second session'
+    })
+
+    useSessionStore.getState().renameSession('transport-session-1', 'Renamed session')
+    useSessionStore.getState().deleteSession('transport-session-2')
+
+    expect(useSessionStore.getState().sessions).toHaveLength(1)
+    expect(useSessionStore.getState().sessions[0].title).toBe('Renamed session')
+    expect(useSessionStore.getState().selectedSessionId).toBe('transport-session-1')
+  })
+
+  it('toggles the pinned flag without disturbing updatedAt, and persists it', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'pin-session',
+      content: 'Pin me'
+    })
+    const originalUpdatedAt = useSessionStore.getState().sessions[0].updatedAt
+
+    useSessionStore.getState().togglePinned('pin-session')
+    const pinned = useSessionStore.getState().sessions[0]
+    expect(pinned.pinned).toBe(true)
+    // Pinning is an organizational action, so it must not bump the "last active" timestamp.
+    expect(pinned.updatedAt).toBe(originalUpdatedAt)
+    expect(toPersistedSession(pinned).pinned).toBe(true)
+
+    useSessionStore.getState().togglePinned('pin-session')
+    expect(useSessionStore.getState().sessions[0].pinned).toBe(false)
+    expect(toPersistedSession(useSessionStore.getState().sessions[0]).pinned).toBe(false)
+  })
+
+  it("keeps selection within the deleted session's project", () => {
+    useSessionStore
+      .getState()
+      .appendUserMessage({ sessionId: 'a-1', content: 'A one', projectId: 'project-a' })
+    useSessionStore
+      .getState()
+      .appendUserMessage({ sessionId: 'a-2', content: 'A two', projectId: 'project-a' })
+    useSessionStore
+      .getState()
+      .appendUserMessage({ sessionId: 'b-1', content: 'B one', projectId: 'project-b' })
+
+    // Select and delete a session in project A while project B holds the globally newest session.
+    useSessionStore.getState().selectSession('a-2')
+    useSessionStore.getState().deleteSession('a-2')
+
+    // Selection falls back to the remaining project-a session, never to project-b's newer 'b-1'.
+    expect(useSessionStore.getState().selectedSessionId).toBe('a-1')
+  })
+
+  it('removes all sessions for a deleted project and repairs selection', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'keep-1',
+      content: 'Keep',
+      projectId: 'project-keep'
+    })
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'drop-1',
+      content: 'Drop one',
+      projectId: 'project-drop'
+    })
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'drop-2',
+      content: 'Drop two',
+      projectId: 'project-drop'
+    })
+    // Selection is currently on a session that belongs to the project being removed.
+    expect(useSessionStore.getState().selectedSessionId).toBe('drop-2')
+
+    useSessionStore.getState().removeSessionsForProject('project-drop')
+
+    expect(useSessionStore.getState().sessions.map((session) => session.id)).toEqual(['keep-1'])
+    expect(useSessionStore.getState().selectedSessionId).toBe('keep-1')
+  })
+
+  it('clears selection without deleting sessions', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Keep this session'
+    })
+
+    useSessionStore.getState().clearSelection()
+
+    expect(useSessionStore.getState().sessions).toHaveLength(1)
+    expect(useSessionStore.getState().selectedSessionId).toBeUndefined()
+  })
+
+  it('attaches generated artifacts to the current agent message', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Create a report'
+    })
+    const agentChunk = useSessionStore.getState().appendAgentMessageChunk({
+      sessionId: 'transport-session-1',
+      streamId: 'assistant-message-1',
+      eventId: 'event-1',
+      content: 'Done'
+    })
+
+    const attached = useSessionStore.getState().attachRunArtifacts({
+      sessionId: 'transport-session-1',
+      runId: 'run-1',
+      eventId: 'artifact-event-1',
+      artifacts: [createArtifactFile()]
+    })
+
+    const session = useSessionStore.getState().sessions[0]
+    const agentMessage = session.messages[1]
+
+    expect(attached?.messageId).toBe(agentChunk?.messageId)
+    expect(agentMessage.artifactIds).toEqual(['artifact-session-1:run-1:result.txt'])
+    expect(agentMessage.content).toBe('Done')
+    expect(session.artifacts).toEqual([
+      expect.objectContaining({
+        id: 'artifact-session-1:run-1:result.txt',
+        kind: 'managed-file',
+        path: expect.stringContaining('/.pending/run-1/result.txt'),
+        fileUrl: expect.stringContaining('file:///')
+      })
+    ])
+  })
+
+  it('creates a file-only agent message when a run emits artifacts without text', () => {
+    const userMessage = useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Create an image'
+    })
+
+    const attached = useSessionStore.getState().attachRunArtifacts({
+      sessionId: 'transport-session-1',
+      runId: 'run-1',
+      eventId: 'artifact-event-1',
+      artifacts: [createArtifactFile({ name: 'image.png', mimeType: 'image/png' })]
+    })
+
+    useSessionStore.getState().finishRun('transport-session-1')
+
+    const message = useSessionStore.getState().sessions[0].messages[1]
+
+    expect(attached?.messageId).toBe(message.id)
+    expect(message).toMatchObject({
+      role: 'agent',
+      content: '',
+      status: 'complete',
+      streamId: 'run-1',
+      responseToMessageId: userMessage?.messageId,
+      artifactIds: ['artifact-session-1:run-1:result.txt']
+    })
+  })
+
+  it('replaces pending artifact metadata with finalized message files', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Create a report'
+    })
+    const attached = useSessionStore.getState().attachRunArtifacts({
+      sessionId: 'transport-session-1',
+      runId: 'run-1',
+      eventId: 'artifact-event-1',
+      artifacts: [createArtifactFile()]
+    })
+
+    const finalizedArtifacts = [
+      createArtifactFile({
+        id: 'transport-session-1:message-1:result.txt',
+        sessionId: 'transport-session-1',
+        messageId: 'message-1',
+        runId: undefined,
+        path: '/Users/example/.open-science/artifacts/default-project/transport-session-1/message-1/result.txt',
+        fileUrl:
+          'file:///Users/example/.open-science/artifacts/default-project/transport-session-1/message-1/result.txt'
+      })
+    ]
+    useSessionStore.getState().replaceMessageArtifacts({
+      sessionId: 'transport-session-1',
+      messageId: attached?.messageId ?? '',
+      artifacts: finalizedArtifacts
+    })
+
+    const session = useSessionStore.getState().sessions[0]
+    const message = session.messages[1]
+
+    expect(message.artifactIds).toEqual(['transport-session-1:message-1:result.txt'])
+    expect(session.artifacts?.map((artifact) => artifact.id)).toEqual([
+      'transport-session-1:message-1:result.txt'
+    ])
+    expect(session.filesRevision).toBe(1)
+
+    useSessionStore.getState().replaceMessageArtifacts({
+      sessionId: 'transport-session-1',
+      messageId: attached?.messageId ?? '',
+      artifacts: finalizedArtifacts
+    })
+    expect(useSessionStore.getState().sessions[0]).toBe(session)
+  })
+
+  it('replaces pending artifact metadata with an empty finalized artifact list', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Create a report'
+    })
+    const attached = useSessionStore.getState().attachRunArtifacts({
+      sessionId: 'transport-session-1',
+      runId: 'run-1',
+      eventId: 'artifact-event-1',
+      artifacts: [createArtifactFile()]
+    })
+
+    useSessionStore.getState().replaceMessageArtifacts({
+      sessionId: 'transport-session-1',
+      messageId: attached?.messageId ?? '',
+      artifacts: []
+    })
+
+    const session = useSessionStore.getState().sessions[0]
+    const message = session.messages[1]
+
+    expect(message.artifactIds).toEqual([])
+    expect(session.artifacts).toEqual([])
+  })
+
+  it('returns the existing message when an artifact event is replayed after finish', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Create a report'
+    })
+    const agentChunk = useSessionStore.getState().appendAgentMessageChunk({
+      sessionId: 'transport-session-1',
+      streamId: 'assistant-message-1',
+      eventId: 'event-1',
+      content: 'Done'
+    })
+    const firstAttached = useSessionStore.getState().attachRunArtifacts({
+      sessionId: 'transport-session-1',
+      runId: 'run-1',
+      eventId: 'artifact-event-1',
+      artifacts: [createArtifactFile()]
+    })
+
+    expect(firstAttached).toEqual(agentChunk)
+    useSessionStore.getState().finishRun('transport-session-1')
+    const finishedSession = useSessionStore.getState().sessions[0]
+
+    const replayed = useSessionStore.getState().attachRunArtifacts({
+      sessionId: 'transport-session-1',
+      runId: 'run-1',
+      eventId: 'artifact-event-1',
+      artifacts: [createArtifactFile()]
+    })
+
+    expect(replayed).toEqual(firstAttached)
+    expect(useSessionStore.getState().sessions[0]).toEqual(finishedSession)
+    expect(useSessionStore.getState().sessions[0].messages).toHaveLength(2)
+  })
+
+  it('hydrates persisted sessions and repairs missing selections', () => {
+    useSessionStore.getState().hydrateSessions(
+      [
+        {
+          id: 'transport-session-1',
+          projectId: 'default',
+          title: 'Persisted session',
+          cwd: '/workspace/project',
+          status: 'idle',
+          messages: [
+            {
+              id: 'message-1',
+              role: 'user',
+              content: 'Persisted prompt',
+              status: 'complete',
+              eventIds: [],
+              uploads: [
+                {
+                  id: 'upload-1',
+                  sessionId: 'transport-session-1',
+                  name: 'notes.txt',
+                  originalName: 'notes.txt',
+                  path: '/Users/example/.open-science/uploads/default-project/transport-session-1/notes.txt',
+                  mimeType: 'text/plain',
+                  size: 10
+                }
+              ],
+              createdAt: Date.now(),
+              updatedAt: Date.now()
+            }
+          ],
+          artifacts: [
+            {
+              id: 'artifact-1',
+              kind: 'workspace-file',
+              path: '/workspace/project/report.md',
+              name: 'report.md'
+            }
+          ],
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        }
+      ],
+      { version: SESSION_MANIFEST_VERSION, lastSessionId: 'missing-session' }
+    )
+
+    expect(useSessionStore.getState().selectedSessionId).toBe('transport-session-1')
+    expect(useSessionStore.getState().sessions[0]).toMatchObject({
+      id: 'transport-session-1',
+      cwd: '/workspace/project',
+      artifacts: [
+        {
+          id: 'artifact-1',
+          path: '/workspace/project/report.md'
+        }
+      ],
+      messages: [
+        {
+          content: 'Persisted prompt',
+          uploads: [
+            {
+              id: 'upload-1',
+              path: '/Users/example/.open-science/uploads/default-project/transport-session-1/notes.txt'
+            }
+          ]
+        }
+      ]
+    })
+  })
+
+  it('serializes a session into the per-session persistence shape', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Save this',
+      cwd: '/workspace/project',
+      projectId: 'project-a'
+    })
+
+    const persisted = toPersistedSession(useSessionStore.getState().sessions[0])
+
+    expect(persisted).toMatchObject({
+      id: 'transport-session-1',
+      projectId: 'project-a',
+      cwd: '/workspace/project',
+      messages: [
+        {
+          content: 'Save this'
+        }
+      ]
+    })
+    expect(persisted).not.toHaveProperty('isPending')
+  })
+
+  it('stores and persists the conversation approval profile', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Run this',
+      cwd: '/workspace/project',
+      projectId: 'project-a',
+      permissionProfile: 'auto'
+    })
+
+    expect(useSessionStore.getState().sessions[0].permissionProfile).toBe('auto')
+
+    useSessionStore.getState().setPermissionProfile('transport-session-1', 'full')
+
+    expect(toPersistedSession(useSessionStore.getState().sessions[0]).permissionProfile).toBe(
+      'full'
+    )
+  })
+
+  it('marks unbound pending sessions so persistence can skip them', () => {
+    useSessionStore.getState().appendPendingUserMessage({
+      content: 'Save after ACP creates the session',
+      cwd: '/workspace/project'
+    })
+
+    // The persistence bridge relies on isPending to keep unbound sessions off disk.
+    expect(useSessionStore.getState().sessions[0].isPending).toBe(true)
+  })
+
+  it('stamps a new session with the provided project id', () => {
+    useSessionStore.getState().appendUserMessage({
+      sessionId: 'transport-session-1',
+      content: 'Scope me',
+      cwd: '/workspace/project',
+      projectId: 'project-abc'
+    })
+
+    expect(useSessionStore.getState().sessions[0].projectId).toBe('project-abc')
+    expect(toPersistedSession(useSessionStore.getState().sessions[0]).projectId).toBe('project-abc')
+  })
+
+  it('persists a bound pending session with the runtime session id only', () => {
+    const pending = useSessionStore.getState().appendPendingUserMessage({
+      content: 'Save after ACP creates the session',
+      cwd: '/workspace/project',
+      projectId: 'project-abc'
+    })
+
+    useSessionStore.getState().bindPendingSession({
+      pendingSessionId: pending?.sessionId ?? '',
+      sessionId: 'transport-session-1',
+      cwd: '/workspace/project'
+    })
+
+    const boundSession = useSessionStore.getState().sessions[0]
+
+    expect(boundSession.isPending).toBe(false)
+
+    const persisted = toPersistedSession(boundSession)
+
+    expect(persisted).toMatchObject({
+      id: 'transport-session-1',
+      projectId: 'project-abc',
+      cwd: '/workspace/project',
+      messages: [
+        {
+          id: pending?.messageId,
+          content: 'Save after ACP creates the session'
+        }
+      ]
+    })
+    expect(persisted).not.toHaveProperty('isPending')
+  })
+
+  describe('fix loop active flag', () => {
+    it('setFixLoopActive sets the flag per session', () => {
+      useSessionStore.getState().appendUserMessage({
+        sessionId: 'session-a',
+        content: 'Start'
+      })
+      useSessionStore.getState().appendUserMessage({
+        sessionId: 'session-b',
+        content: 'Other session'
+      })
+
+      useSessionStore.getState().setFixLoopActive('session-a', true)
+
+      const sessions = useSessionStore.getState().sessions
+      const sessionA = sessions.find((s) => s.id === 'session-a')
+      const sessionB = sessions.find((s) => s.id === 'session-b')
+
+      expect(sessionA?.fixLoopActive).toBe(true)
+      expect(sessionB?.fixLoopActive).toBeUndefined()
+    })
+
+    it('setFixLoopActive clears the flag when set to false', () => {
+      useSessionStore.getState().appendUserMessage({
+        sessionId: 'session-a',
+        content: 'Start'
+      })
+      useSessionStore.getState().setFixLoopActive('session-a', true)
+      useSessionStore.getState().setFixLoopActive('session-a', false)
+
+      const session = useSessionStore.getState().sessions.find((s) => s.id === 'session-a')
+      expect(session?.fixLoopActive).toBe(false)
+    })
+
+    it('canSendMessage is blocked while fixLoopActive is true', () => {
+      useSessionStore.getState().appendUserMessage({
+        sessionId: 'session-a',
+        content: 'Start'
+      })
+      useSessionStore.getState().finishRun('session-a')
+      useSessionStore.getState().setFixLoopActive('session-a', true)
+
+      const session = useSessionStore.getState().sessions.find((s) => s.id === 'session-a')
+      // fixLoopActive blocks send; canSendMessage is computed externally but depends on this flag
+      expect(session?.fixLoopActive).toBe(true)
+    })
+
+    it('fixLoopActive is cleared after the loop ends (false)', () => {
+      useSessionStore.getState().appendUserMessage({
+        sessionId: 'session-a',
+        content: 'Start'
+      })
+      useSessionStore.getState().setFixLoopActive('session-a', true)
+      useSessionStore.getState().setFixLoopActive('session-a', false)
+
+      const session = useSessionStore.getState().sessions.find((s) => s.id === 'session-a')
+      expect(session?.fixLoopActive).toBe(false)
+    })
+
+    it('fixLoopActive flag does not affect other sessions', () => {
+      useSessionStore.getState().appendUserMessage({
+        sessionId: 'session-a',
+        content: 'Session A'
+      })
+      useSessionStore.getState().appendUserMessage({
+        sessionId: 'session-b',
+        content: 'Session B'
+      })
+      useSessionStore.getState().finishRun('session-a')
+      useSessionStore.getState().finishRun('session-b')
+
+      useSessionStore.getState().setFixLoopActive('session-a', true)
+
+      const sessionA = useSessionStore.getState().sessions.find((s) => s.id === 'session-a')
+      const sessionB = useSessionStore.getState().sessions.find((s) => s.id === 'session-b')
+
+      expect(sessionA?.fixLoopActive).toBe(true)
+      expect(sessionB?.fixLoopActive).toBeUndefined()
+    })
+  })
+
+  describe('interrupted session resume', () => {
+    const hydrateInterrupted = (overrides: Partial<PersistedChatSession> = {}): void => {
+      useSessionStore.getState().hydrateSessions(
+        [
+          {
+            id: 'resumable-session',
+            projectId: 'default',
+            title: 'Interrupted',
+            cwd: '/workspace',
+            status: 'error',
+            error: INTERRUPTED_SESSION_ERROR,
+            messages: [],
+            createdAt: 1,
+            updatedAt: 2,
+            ...overrides
+          }
+        ],
+        { version: SESSION_MANIFEST_VERSION, lastSessionId: 'resumable-session' }
+      )
+    }
+
+    it('flags a restored interrupted session so the UI can offer resume', () => {
+      hydrateInterrupted()
+
+      expect(useSessionStore.getState().sessions[0].interrupted).toBe(true)
+    })
+
+    it('leaves the flag unset when the error is not the interrupted marker', () => {
+      hydrateInterrupted({ error: 'Something else failed' })
+
+      expect(useSessionStore.getState().sessions[0].interrupted).toBeUndefined()
+    })
+
+    it('never persists the transient interrupted flag', () => {
+      hydrateInterrupted()
+
+      const persisted = toPersistedSession(useSessionStore.getState().sessions[0])
+
+      expect(persisted).not.toHaveProperty('interrupted')
+    })
+
+    it('markResumed clears the interrupted state so the composer is usable', () => {
+      hydrateInterrupted()
+
+      useSessionStore.getState().markResumed('resumable-session', 'codex', 'codex:codex-isolated')
+      const session = useSessionStore.getState().sessions[0]
+
+      expect(session.interrupted).toBeUndefined()
+      expect(session.error).toBeUndefined()
+      expect(session.status).toBe('idle')
+      expect(session.agentFrameworkId).toBe('codex')
+      expect(session.agentBackendId).toBe('codex:codex-isolated')
+      expect(toPersistedSession(session).agentFrameworkId).toBe('codex')
+      expect(toPersistedSession(session).agentBackendId).toBe('codex:codex-isolated')
+    })
+
+    it('markDisconnected flags a live drop and settles the half-streamed reply, keeping the user turn', () => {
+      useSessionStore.getState().appendUserMessage({
+        sessionId: 'transport-session-1',
+        content: 'Read the files',
+        cwd: '/workspace/project'
+      })
+      useSessionStore.getState().appendAgentMessageChunk({
+        sessionId: 'transport-session-1',
+        streamId: 'assistant-message-1',
+        eventId: 'event-1',
+        content: 'I started'
+      })
+
+      useSessionStore.getState().markDisconnected('transport-session-1')
+
+      const session = useSessionStore.getState().sessions[0]
+
+      expect(session.status).toBe('error')
+      expect(session.interrupted).toBe(true)
+      expect(session.error).toBe('Connection lost — Resume to reconnect and continue.')
+      expect(session.activeRun).toBeUndefined()
+      // The user prompt is preserved so Resume can continue it; the streamed reply is failed off.
+      expect(session.messages[0]).toMatchObject({ role: 'user', content: 'Read the files' })
+      expect(session.messages[1]).toMatchObject({ content: 'I started', status: 'error' })
+    })
+
+    it('markDisconnected preserves a specific reason in the Resume banner', () => {
+      useSessionStore.getState().appendUserMessage({
+        sessionId: 'transport-session-1',
+        content: 'Read the files',
+        cwd: '/workspace/project'
+      })
+
+      useSessionStore.getState().markDisconnected('transport-session-1', 'Connection timeout')
+
+      const session = useSessionStore.getState().sessions[0]
+
+      expect(session.status).toBe('error')
+      expect(session.interrupted).toBe(true)
+      // The specific cause is kept while retaining the Resume affordance.
+      expect(session.error).toBe('Connection timeout — Resume to reconnect and continue.')
+    })
+
+    it('markDisconnected falls back to a generic message for a blank reason', () => {
+      useSessionStore.getState().appendUserMessage({
+        sessionId: 'transport-session-1',
+        content: 'Read the files',
+        cwd: '/workspace/project'
+      })
+
+      useSessionStore.getState().markDisconnected('transport-session-1', '   ')
+
+      const session = useSessionStore.getState().sessions[0]
+
+      expect(session.error).toBe('Connection lost — Resume to reconnect and continue.')
+    })
+  })
+})
+
+describe('truncateSessionFromMessage', () => {
+  const baseTime = 1710000000000
+
+  const createMessage = (
+    id: string,
+    role: 'user' | 'agent',
+    createdAt: number,
+    overrides: Partial<ChatMessage> = {}
+  ): ChatMessage => ({
+    id,
+    role,
+    content: `${id} content`,
+    status: 'complete' as const,
+    eventIds: [],
+    createdAt,
+    updatedAt: createdAt,
+    ...overrides
+  })
+
+  const createActivity = (id: string, createdAt: number): ToolActivity => ({
+    id,
+    kind: 'tool' as const,
+    title: `activity ${id}`,
+    status: 'completed' as const,
+    eventIds: [`${id}-event`],
+    sortIndex: createdAt,
+    createdAt,
+    updatedAt: createdAt
+  })
+
+  const seedSession = (overrides: Partial<ChatSession> = {}): void => {
+    useSessionStore.setState({
+      ...createInitialSessionState(),
+      sessions: [
+        {
+          id: 'session-1',
+          projectId: 'default-project',
+          title: 'session-1',
+          cwd: '/workspace/project',
+          status: 'idle' as const,
+          messages: [
+            createMessage('user-1', 'user', baseTime),
+            createMessage('agent-1', 'agent', baseTime + 100),
+            createMessage('user-2', 'user', baseTime + 200),
+            createMessage('agent-2', 'agent', baseTime + 300)
+          ],
+          createdAt: baseTime,
+          updatedAt: baseTime + 300,
+          ...overrides
+        }
+      ],
+      selectedSessionId: 'session-1'
+    })
+  }
+
+  beforeEach(() => {
+    useSessionStore.setState(createInitialSessionState())
+  })
+
+  it('drops the cut message and every later turn, clearing run and banner state', () => {
+    seedSession({
+      status: 'error',
+      error: 'previous failure',
+      activeRun: { promptMessageId: 'user-2', startedAt: baseTime + 200 },
+      interrupted: true
+    })
+
+    useSessionStore.getState().truncateSessionFromMessage('session-1', 'user-2')
+
+    const session = useSessionStore.getState().sessions[0]
+    expect(session.messages.map((message) => message.id)).toEqual(['user-1', 'agent-1'])
+    expect(session.status).toBe('idle')
+    expect(session.activeRun).toBeUndefined()
+    expect(session.error).toBeUndefined()
+    expect(session.interrupted).toBeUndefined()
+  })
+
+  it('cuts later activities by creation time and keeps earlier ones', () => {
+    seedSession({
+      activities: [
+        createActivity('act-1', baseTime + 150),
+        createActivity('act-2', baseTime + 250),
+        createActivity('act-3', baseTime + 350)
+      ]
+    })
+
+    useSessionStore.getState().truncateSessionFromMessage('session-1', 'user-2')
+
+    expect(
+      useSessionStore.getState().sessions[0].activities?.map((activity) => activity.id)
+    ).toEqual(['act-1'])
+  })
+
+  it('prunes activity group references when edited resend removes their activities', () => {
+    seedSession({
+      activities: [
+        { ...createActivity('act-1', baseTime + 150), activityGroupId: 'group-1' },
+        { ...createActivity('act-2', baseTime + 250), activityGroupId: 'group-1' },
+        { ...createActivity('act-3', baseTime + 350), activityGroupId: 'group-2' }
+      ],
+      activityGroups: [
+        {
+          id: 'group-1',
+          title: 'First group',
+          sortIndex: 1,
+          activityIds: ['act-1', 'act-2'],
+          createdAt: baseTime + 140,
+          updatedAt: baseTime + 250,
+          completedAt: baseTime + 260
+        },
+        {
+          id: 'group-2',
+          title: 'Second group',
+          sortIndex: 2,
+          activityIds: ['act-3'],
+          createdAt: baseTime + 340,
+          updatedAt: baseTime + 350,
+          completedAt: baseTime + 360
+        }
+      ]
+    })
+
+    useSessionStore.getState().truncateSessionFromMessage('session-1', 'user-2')
+
+    expect(useSessionStore.getState().sessions[0].activityGroups).toEqual([
+      expect.objectContaining({ id: 'group-1', activityIds: ['act-1'] })
+    ])
+  })
+
+  it('advances filesRevision only when removed messages carry file references', () => {
+    seedSession({
+      filesRevision: 3,
+      messages: [
+        createMessage('user-1', 'user', baseTime),
+        createMessage('agent-1', 'agent', baseTime + 100),
+        createMessage('user-2', 'user', baseTime + 200, {
+          uploads: [createUploadAttachment()]
+        })
+      ]
+    })
+
+    useSessionStore.getState().truncateSessionFromMessage('session-1', 'user-2')
+    expect(useSessionStore.getState().sessions[0].filesRevision).toBe(4)
+
+    seedSession({ filesRevision: 3 })
+    useSessionStore.getState().truncateSessionFromMessage('session-1', 'user-2')
+    expect(useSessionStore.getState().sessions[0].filesRevision).toBe(3)
+  })
+
+  it('ignores unknown session or message ids', () => {
+    seedSession()
+    const before = useSessionStore.getState().sessions[0]
+
+    useSessionStore.getState().truncateSessionFromMessage('session-unknown', 'user-2')
+    useSessionStore.getState().truncateSessionFromMessage('session-1', 'message-unknown')
+
+    expect(useSessionStore.getState().sessions[0]).toBe(before)
+  })
+})

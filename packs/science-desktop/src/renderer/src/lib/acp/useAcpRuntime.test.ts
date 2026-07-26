@@ -1,0 +1,374 @@
+// @vitest-environment jsdom
+import type { AcpPermissionResponse, AcpStateSnapshot } from '../../../../shared/acp'
+import { act, createElement } from 'react'
+import { createRoot } from 'react-dom/client'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { useAcpRuntime } from './useAcpRuntime'
+
+// React's act() refuses to run unless the environment opts in to act-aware scheduling.
+;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+type AcpRuntimeApi = ReturnType<typeof useAcpRuntime>
+type OnStateListener = (snapshot: AcpStateSnapshot) => void
+
+// Minimal renderHook so we can exercise the real hook without pulling in @testing-library/react,
+// which the repo does not depend on. A null-rendering harness captures each render's return value.
+const renderHook = <Value>(
+  hook: () => Value
+): { result: { current: Value }; unmount: () => void } => {
+  const container = document.createElement('div')
+  const root = createRoot(container)
+  const result = { current: undefined as unknown as Value }
+
+  const HookHarness = (): null => {
+    result.current = hook()
+    return null
+  }
+
+  act(() => {
+    root.render(createElement(HookHarness))
+  })
+
+  return {
+    result,
+    unmount: () =>
+      act(() => {
+        root.unmount()
+      })
+  }
+}
+
+const createSnapshot = (overrides: Partial<AcpStateSnapshot> = {}): AcpStateSnapshot => ({
+  status: 'connected',
+  cwd: '/workspace/project',
+  sessionIds: [],
+  events: [],
+  pendingPermissions: [],
+  permissionProfiles: {},
+  permissionGrants: {},
+  contextUsageBySession: {},
+  promptInFlight: false,
+  promptInFlightSessionIds: [],
+  ...overrides
+})
+
+const createDeferred = <Value>(): {
+  promise: Promise<Value>
+  resolve: (value: Value) => void
+  reject: (reason: unknown) => void
+} => {
+  let resolve!: (value: Value) => void
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<Value>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, resolve, reject }
+}
+
+// Captures the applySnapshot listener the hook registers so tests can push broadcasts through it.
+let capturedStateListener: OnStateListener | undefined
+let removeStateListener: ReturnType<typeof vi.fn>
+let acpApi: {
+  getState: ReturnType<typeof vi.fn>
+  onState: ReturnType<typeof vi.fn>
+  connect: ReturnType<typeof vi.fn>
+  disconnect: ReturnType<typeof vi.fn>
+  createSession: ReturnType<typeof vi.fn>
+  resumeSession: ReturnType<typeof vi.fn>
+  deleteSession: ReturnType<typeof vi.fn>
+  cancel: ReturnType<typeof vi.fn>
+  sendPrompt: ReturnType<typeof vi.fn>
+  respondToPermission: ReturnType<typeof vi.fn>
+}
+
+// Lets the initial effect (getState + onState subscription) settle before assertions.
+const mountRuntime = async (): Promise<{
+  result: { current: AcpRuntimeApi }
+  unmount: () => void
+}> => {
+  const rendered = renderHook(() => useAcpRuntime())
+  await act(async () => {
+    await Promise.resolve()
+  })
+
+  return rendered
+}
+
+beforeEach(() => {
+  capturedStateListener = undefined
+  removeStateListener = vi.fn()
+  acpApi = {
+    getState: vi.fn().mockResolvedValue(createSnapshot({ status: 'idle' })),
+    onState: vi.fn((listener: OnStateListener) => {
+      capturedStateListener = listener
+      return removeStateListener
+    }),
+    connect: vi.fn().mockResolvedValue(createSnapshot()),
+    disconnect: vi.fn().mockResolvedValue(createSnapshot({ status: 'idle' })),
+    createSession: vi.fn().mockResolvedValue({ sessionId: 'session-1' }),
+    resumeSession: vi.fn().mockResolvedValue({ sessionId: 'session-1' }),
+    deleteSession: vi.fn().mockResolvedValue(createSnapshot()),
+    cancel: vi.fn().mockResolvedValue(createSnapshot()),
+    sendPrompt: vi.fn().mockResolvedValue(createSnapshot()),
+    respondToPermission: vi.fn().mockResolvedValue(createSnapshot())
+  }
+
+  vi.stubGlobal('window', { api: { acp: acpApi } })
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.clearAllMocks()
+})
+
+describe('useAcpRuntime respondToPermission', () => {
+  it('builds a cancelled response with an undefined optionId when none is chosen', async () => {
+    const { result } = await mountRuntime()
+
+    await act(async () => {
+      await result.current.respondToPermission('request-1')
+    })
+
+    expect(acpApi.respondToPermission).toHaveBeenCalledTimes(1)
+    const [payload] = acpApi.respondToPermission.mock.calls[0] as [AcpPermissionResponse]
+    expect(payload).toEqual({
+      requestId: 'request-1',
+      optionId: undefined,
+      cancelled: true
+    })
+    // The undefined optionId key must be present, not merely absent.
+    expect('optionId' in payload).toBe(true)
+  })
+
+  it('forwards the chosen option and marks the response as not cancelled', async () => {
+    const { result } = await mountRuntime()
+
+    await act(async () => {
+      await result.current.respondToPermission('request-1', 'allow-once')
+    })
+
+    expect(acpApi.respondToPermission).toHaveBeenCalledWith({
+      requestId: 'request-1',
+      optionId: 'allow-once',
+      cancelled: false
+    })
+  })
+})
+
+describe('useAcpRuntime snapshot action failures', () => {
+  it('swallows a rejecting snapshot action, records the error, and clears the pending flag', async () => {
+    acpApi.connect.mockRejectedValueOnce(new Error('connect failed'))
+    const { result } = await mountRuntime()
+
+    let returned: AcpStateSnapshot | undefined = createSnapshot()
+    await act(async () => {
+      returned = await result.current.connect('/workspace/project')
+    })
+
+    // runSnapshotAction returns undefined on failure instead of rethrowing.
+    expect(returned).toBeUndefined()
+    expect(result.current.actionError).toBe('connect failed')
+    expect(result.current.isConnecting).toBe(false)
+  })
+
+  it('normalizes non-Error rejections into UI-safe text', async () => {
+    acpApi.cancel.mockRejectedValueOnce('raw failure string')
+    const { result } = await mountRuntime()
+
+    await act(async () => {
+      await result.current.cancel('session-1')
+    })
+
+    expect(result.current.actionError).toBe('raw failure string')
+  })
+})
+
+describe('useAcpRuntime value action failures', () => {
+  it('rethrows a rejecting value action without recording it in actionError', async () => {
+    const failure = new Error('createSession failed')
+    acpApi.createSession.mockRejectedValueOnce(failure)
+    const { result } = await mountRuntime()
+
+    let thrown: unknown
+    await act(async () => {
+      await result.current.createSession('/workspace/project').catch((error: unknown) => {
+        thrown = error
+      })
+    })
+
+    expect(thrown).toBe(failure)
+    // runValueAction now records the error in actionError while rethrowing.
+    expect(result.current.actionError).toBe('createSession failed')
+    expect(result.current.isConnecting).toBe(false)
+  })
+
+  it('sendPrompt rethrows IPC rejection without recording it in actionError', async () => {
+    const failure = new Error('Connection timeout')
+    acpApi.sendPrompt.mockRejectedValueOnce(failure)
+    const { result } = await mountRuntime()
+
+    let thrown: unknown
+    await act(async () => {
+      await result.current.sendPrompt('session-1', 'test prompt').catch((error: unknown) => {
+        thrown = error
+      })
+    })
+
+    // sendPrompt must rethrow the actual IPC error for callers to handle.
+    expect(thrown).toBe(failure)
+    // sendPrompt does NOT set actionError; the error is only rethrown.
+    expect(result.current.actionError).toBeNull()
+  })
+
+  it('sendPrompt syncs snapshot state on success', async () => {
+    const snapshot = createSnapshot({ cwd: '/new/workspace' })
+    acpApi.sendPrompt.mockResolvedValueOnce(snapshot)
+    const { result } = await mountRuntime()
+
+    await act(async () => {
+      await result.current.sendPrompt('session-1', 'test prompt')
+    })
+
+    // sendPrompt must call setState to sync the snapshot before returning.
+    expect(result.current.state.cwd).toBe('/new/workspace')
+  })
+})
+
+describe('useAcpRuntime payload construction', () => {
+  it('forwards the previous framework id into the resume payload for a framework switch', async () => {
+    const { result } = await mountRuntime()
+
+    await act(async () => {
+      await result.current.resumeSession(
+        'session-1',
+        '/workspace/project',
+        'Project',
+        'ask',
+        'opencode'
+      )
+    })
+
+    expect(acpApi.resumeSession).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      cwd: '/workspace/project',
+      projectName: 'Project',
+      permissionProfile: 'ask',
+      previousFrameworkId: 'opencode'
+    })
+  })
+
+  it('includes history preamble/attachments/images and resume fallback when a prompt replays context', async () => {
+    const { result } = await mountRuntime()
+
+    const attachment = { id: 'up-1', name: 'a.txt', mimeType: 'text/plain', size: 1 }
+    const image = { mimeType: 'image/png', data: 'aGVsbG8=' }
+    const resumeFallback = { historyPreamble: 'fallback transcript' }
+
+    await act(async () => {
+      await result.current.sendPrompt(
+        'session-1',
+        'continue',
+        undefined,
+        undefined,
+        undefined,
+        'prior transcript',
+        [attachment] as never,
+        [image] as never,
+        resumeFallback as never
+      )
+    })
+
+    const [payload] = acpApi.sendPrompt.mock.calls[0] as [Record<string, unknown>]
+    expect(payload).toMatchObject({
+      sessionId: 'session-1',
+      text: 'continue',
+      historyPreamble: 'prior transcript',
+      historyAttachments: [attachment],
+      historyImages: [image],
+      resumeFallback
+    })
+  })
+
+  it('omits the history/resume fields entirely when they are absent or empty', async () => {
+    const { result } = await mountRuntime()
+
+    await act(async () => {
+      await result.current.sendPrompt(
+        'session-1',
+        'hello',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        [],
+        []
+      )
+    })
+
+    const [payload] = acpApi.sendPrompt.mock.calls[0] as [Record<string, unknown>]
+    expect(payload).toEqual({ sessionId: 'session-1', text: 'hello', attachments: undefined })
+    for (const field of [
+      'historyPreamble',
+      'historyAttachments',
+      'historyImages',
+      'resumeFallback'
+    ]) {
+      expect(field in payload).toBe(false)
+    }
+  })
+})
+
+describe('useAcpRuntime state subscription', () => {
+  it('subscribes on mount, applies pushed snapshots, and unsubscribes on unmount', async () => {
+    const { result, unmount } = await mountRuntime()
+
+    expect(acpApi.onState).toHaveBeenCalledTimes(1)
+    expect(capturedStateListener).toBeTypeOf('function')
+
+    const pushed = createSnapshot({
+      status: 'connected',
+      cwd: '/pushed/cwd',
+      sessionIds: ['session-9']
+    })
+
+    act(() => {
+      capturedStateListener?.(pushed)
+    })
+
+    expect(result.current.state).toEqual(pushed)
+    expect(removeStateListener).not.toHaveBeenCalled()
+
+    unmount()
+
+    expect(removeStateListener).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('useAcpRuntime pending lifecycle', () => {
+  it('raises the connecting flag while an action is in flight and lowers it once it resolves', async () => {
+    const deferred = createDeferred<AcpStateSnapshot>()
+    acpApi.connect.mockReturnValueOnce(deferred.promise)
+    const { result } = await mountRuntime()
+
+    expect(result.current.isConnecting).toBe(false)
+
+    let inFlight: Promise<AcpStateSnapshot | undefined> | undefined
+    await act(async () => {
+      inFlight = result.current.connect('/workspace/project')
+    })
+
+    // Pending flag is raised synchronously before the IPC promise settles.
+    expect(result.current.isConnecting).toBe(true)
+
+    await act(async () => {
+      deferred.resolve(createSnapshot({ cwd: '/connected' }))
+      await inFlight
+    })
+
+    expect(result.current.isConnecting).toBe(false)
+    expect(result.current.state.cwd).toBe('/connected')
+  })
+})

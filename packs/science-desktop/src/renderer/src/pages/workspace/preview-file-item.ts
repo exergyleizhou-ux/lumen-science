@@ -1,0 +1,103 @@
+import type { PreviewFileItem, PreviewFileSource } from '@/stores/preview-workbench-store'
+import type { ChatSession } from '@/stores/session-store'
+import type { MessagePart } from '../../../../shared/session-persistence'
+import { getUploadedAttachmentName } from '../../../../shared/uploads'
+
+import { getArtifactName } from './artifact-preview-utils'
+import { getPreviewFormatForFile } from './preview-support'
+
+export type MessageArtifact = NonNullable<ChatSession['artifacts']>[number]
+export type MessageUploadAttachment = NonNullable<
+  ChatSession['messages'][number]['uploads']
+>[number]
+type ArtifactMentionPart = Extract<MessagePart, { type: 'artifact' }>
+
+// Builds the common preview workbench file item for generated artifacts and user uploads.
+export const createPreviewFileItem = ({
+  id,
+  sessionId,
+  path,
+  name,
+  mimeType,
+  source,
+  size,
+  mtimeMs
+}: {
+  id: string
+  sessionId: string
+  path: string
+  name: string
+  mimeType?: string
+  source?: PreviewFileSource
+  size?: number
+  mtimeMs?: number
+}): PreviewFileItem => {
+  const item: PreviewFileItem = {
+    id,
+    sessionId,
+    title: name,
+    type: 'file',
+    path,
+    name,
+    format: getPreviewFormatForFile({ name, mimeType })
+  }
+
+  // Only uploads need an explicit source because artifacts are the historical default.
+  if (source) item.source = source
+  if (mimeType) item.mimeType = mimeType
+  if (typeof size === 'number') item.size = size
+  if (typeof mtimeMs === 'number') item.mtimeMs = mtimeMs
+
+  return item
+}
+
+// Converts app-managed generated files into preview tabs and ignores unmanaged artifacts.
+export const createPreviewFileItemFromArtifact = (
+  artifact: MessageArtifact,
+  sessionId: string
+): PreviewFileItem | undefined => {
+  if (artifact.kind !== 'managed-file') return undefined
+
+  const artifactName = getArtifactName(artifact)
+
+  return createPreviewFileItem({
+    id: artifact.id,
+    sessionId,
+    path: artifact.path,
+    name: artifactName,
+    mimeType: artifact.mimeType,
+    size: artifact.size,
+    mtimeMs: artifact.mtimeMs
+  })
+}
+
+// Converts a sent user upload into the same preview shape used by message attachment clicks.
+export const createPreviewFileItemFromUpload = (
+  attachment: MessageUploadAttachment,
+  sessionId: string
+): PreviewFileItem => {
+  const attachmentName = getUploadedAttachmentName(attachment)
+
+  return createPreviewFileItem({
+    id: `upload:${attachment.id}`,
+    sessionId,
+    source: 'upload',
+    path: attachment.path,
+    name: attachmentName,
+    mimeType: attachment.mimeType,
+    size: attachment.size
+  })
+}
+
+// Converts a sent-message artifact mention into the same preview shape used by its source panel.
+export const createPreviewFileItemFromMention = (
+  part: ArtifactMentionPart,
+  sessionId: string
+): PreviewFileItem =>
+  createPreviewFileItem({
+    id: part.id,
+    sessionId,
+    path: part.path,
+    name: part.name,
+    source: part.source === 'upload' ? 'upload' : undefined
+  })

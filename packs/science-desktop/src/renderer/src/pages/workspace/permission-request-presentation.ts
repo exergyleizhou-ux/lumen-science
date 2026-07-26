@@ -1,0 +1,288 @@
+import type { AcpPermissionRequest } from '../../../../shared/acp'
+
+import {
+  matchNotebookControlTool,
+  resolveNotebookLanguage,
+  resolveNotebookRunToolName
+} from './notebook-tool-names'
+
+type NotebookRuntime = 'python' | 'r' | 'js' | 'bash'
+
+type PermissionPresentation = {
+  actionTitle: string
+  categoryLabel: string
+  description: string
+  actionDetail?: string
+  hideToolIdentity?: boolean
+  notebookRuntime?: NotebookRuntime
+}
+
+type RequestInput = Record<string, unknown>
+
+const getRequestInput = (request: AcpPermissionRequest): RequestInput | undefined => {
+  const raw = request.rawInput
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+
+  const record = raw as RequestInput
+  const nested = record.arguments
+  return nested && typeof nested === 'object' && !Array.isArray(nested)
+    ? (nested as RequestInput)
+    : record
+}
+
+const getCode = (input: RequestInput | undefined): string | undefined => {
+  for (const key of ['code', 'command', 'script']) {
+    const value = input?.[key]
+    if (typeof value === 'string' && value.trim()) return value
+  }
+  return undefined
+}
+
+const toNotebookRuntime = (language: string): NotebookRuntime => {
+  if (language === 'r') return 'r'
+  if (language === 'javascript') return 'js'
+  if (language === 'bash') return 'bash'
+  return 'python'
+}
+
+const notebookExecutionPresentation = (runtime: NotebookRuntime): PermissionPresentation => {
+  switch (runtime) {
+    case 'r':
+      return {
+        actionTitle: 'Run R code?',
+        categoryLabel: 'R execution',
+        description: 'Runs code in the current R notebook environment.',
+        notebookRuntime: runtime
+      }
+    case 'js':
+      return {
+        actionTitle: 'Run JS code?',
+        categoryLabel: 'JS REPL',
+        description: 'Runs code in the current JavaScript REPL.',
+        notebookRuntime: runtime
+      }
+    case 'bash':
+      return {
+        actionTitle: 'Run notebook command?',
+        categoryLabel: 'Notebook shell',
+        description: 'Runs a shell command in the current notebook session.',
+        notebookRuntime: runtime
+      }
+    default:
+      return {
+        actionTitle: 'Run Python code?',
+        categoryLabel: 'Python execution',
+        description: 'Runs code in the current Python notebook environment.',
+        notebookRuntime: runtime
+      }
+  }
+}
+
+const notebookControlPresentation = (tool: string): PermissionPresentation => {
+  switch (tool) {
+    case 'notebook_restart':
+      return {
+        actionTitle: 'Restart notebook?',
+        categoryLabel: 'Notebook control',
+        description:
+          'Restarts the current notebook environment. Running processes and unsaved runtime state may be lost.'
+      }
+    case 'notebook_shutdown':
+      return {
+        actionTitle: 'Shut down notebook?',
+        categoryLabel: 'Notebook control',
+        description: 'Stops the current notebook environment and its running processes.'
+      }
+    case 'notebook_state':
+      return {
+        actionTitle: 'View notebook state?',
+        categoryLabel: 'Notebook control',
+        description: 'Reads the current notebook environment and runtime state.'
+      }
+    case 'list_notebook_runtimes':
+      return {
+        actionTitle: 'View notebook runtimes?',
+        categoryLabel: 'Notebook control',
+        description: 'Lists the notebook runtimes available to this conversation.'
+      }
+    case 'notebook_bind_runtime':
+    case 'notebook_switch_runtime':
+      return {
+        actionTitle: 'Change notebook runtime?',
+        categoryLabel: 'Notebook control',
+        description: 'Changes the runtime used by the current notebook session.'
+      }
+    case 'manage_packages':
+      return {
+        actionTitle: 'Manage notebook packages?',
+        categoryLabel: 'Notebook control',
+        description: 'Changes packages available in the current notebook environment.'
+      }
+    case 'manage_environments':
+      return {
+        actionTitle: 'Manage notebook environments?',
+        categoryLabel: 'Notebook control',
+        description: 'Changes notebook environment configuration.'
+      }
+    default:
+      return {
+        actionTitle: 'Use notebook controls?',
+        categoryLabel: 'Notebook control',
+        description: 'Changes or reads the current notebook environment.'
+      }
+  }
+}
+
+const providerToolName = (request: AcpPermissionRequest): string | undefined =>
+  request.providerToolName?.trim() || undefined
+
+// MCP origin is broker-classified. Do not infer it from provider titles here: dotted and sanitized
+// spellings are ambiguous without the configured-server context available to the broker.
+const isMcpPermissionRequest = (request: AcpPermissionRequest): boolean => request.isMcp === true
+
+const ARTIFACT_SERVER_SEGMENT = 'open-science-artifacts'
+const ARTIFACT_WRITE_TOOL = 'write_artifact_file'
+
+const isArtifactWriteToolName = (toolName: string | undefined): boolean => {
+  const name = toolName?.trim().toLowerCase() ?? ''
+  if (!name) return false
+
+  const segments = name.split(/__|\.|\//u)
+  if (segments.length >= 2) {
+    const tool = segments[segments.length - 1]
+    const server = segments[segments.length - 2].replace(/_/gu, '-')
+    if (server === ARTIFACT_SERVER_SEGMENT && tool === ARTIFACT_WRITE_TOOL) return true
+  }
+
+  return (
+    name === `${ARTIFACT_SERVER_SEGMENT}_${ARTIFACT_WRITE_TOOL}` ||
+    name === `open_science_artifacts_${ARTIFACT_WRITE_TOOL}`
+  )
+}
+
+const isArtifactWriteRequest = (request: AcpPermissionRequest): boolean =>
+  isMcpPermissionRequest(request) && isArtifactWriteToolName(request.mcpIdentity)
+
+const humanizeMcpName = (name: string | undefined): string | undefined => {
+  const normalized = name?.trim().replace(/^mcp(?:__|\.)/iu, '') ?? ''
+  if (!normalized || /^(?:run )?(?:mcp )?(?:tool|tool request|tool call)$/iu.test(normalized)) {
+    return undefined
+  }
+
+  const segments = normalized
+    .split(/__|\.|\//u)
+    .filter(Boolean)
+    .map((segment) =>
+      segment
+        .split(/[-_]/u)
+        .filter(Boolean)
+        .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
+        .join(' ')
+    )
+    .filter(Boolean)
+
+  return segments.length > 0 ? segments.join(' / ') : undefined
+}
+
+// The broker resolves a stable `server/tool` identity before the request reaches the renderer.
+// Keep it in the impact tip so a human-readable provider title cannot obscure the granted tool.
+const humanizeMcpIdentity = (identity: string | undefined): string | undefined =>
+  humanizeMcpName(identity)
+
+// A broker-classified MCP request can lack a stable grant identity (for example, a server-only
+// request). Keep that approval distinguishable without trusting the name for a privileged category.
+const humanizeUnresolvedMcp = (request: AcpPermissionRequest): string | undefined =>
+  humanizeMcpName(providerToolName(request) ?? request.title)
+
+const isNetworkTool = (request: AcpPermissionRequest): boolean => {
+  const name = providerToolName(request)?.toLowerCase()
+  return request.toolKind === 'fetch' || name === 'webfetch' || name === 'websearch'
+}
+
+const describePermissionRequest = (request: AcpPermissionRequest): PermissionPresentation => {
+  const isMcp = isMcpPermissionRequest(request)
+  const notebookToolName = isMcp ? resolveNotebookRunToolName(request.mcpIdentity) : undefined
+  if (notebookToolName) {
+    const input = getRequestInput(request)
+    const language = resolveNotebookLanguage(notebookToolName, input, getCode(input))
+    return { ...notebookExecutionPresentation(toNotebookRuntime(language)), hideToolIdentity: true }
+  }
+
+  const controlTool = isMcp ? matchNotebookControlTool(request.mcpIdentity) : undefined
+  if (controlTool) return { ...notebookControlPresentation(controlTool), hideToolIdentity: true }
+
+  if (isArtifactWriteRequest(request)) {
+    return {
+      actionTitle: 'Save as artifact?',
+      categoryLabel: 'Artifact save',
+      description: 'Saves a file as an artifact for this conversation.'
+    }
+  }
+
+  // MCP metadata describes the provider's tool, not a trusted local capability. Only the
+  // explicitly modeled notebook tools above receive a more specific native classification.
+  if (isMcpPermissionRequest(request)) {
+    const actionDetail = humanizeMcpIdentity(request.mcpIdentity) ?? humanizeUnresolvedMcp(request)
+    return {
+      actionTitle: actionDetail ? `Use ${actionDetail}?` : 'Use external service?',
+      categoryLabel: 'External service',
+      description: 'Uses an MCP service configured for this conversation.',
+      actionDetail
+    }
+  }
+
+  if (isNetworkTool(request)) {
+    return {
+      actionTitle: 'Access network resource?',
+      categoryLabel: 'Network access',
+      description: 'Sends a request to an external network resource.'
+    }
+  }
+
+  switch (request.toolKind) {
+    case 'read':
+    case 'search':
+      return {
+        actionTitle: 'Read files?',
+        categoryLabel: 'File access',
+        description: 'Reads or searches the listed files.'
+      }
+    case 'edit':
+      return {
+        actionTitle: 'Edit files?',
+        categoryLabel: 'File change',
+        description: 'Changes the listed files.'
+      }
+    case 'delete':
+      return {
+        actionTitle: 'Delete files?',
+        categoryLabel: 'File change',
+        description: 'Deletes the listed files.'
+      }
+    case 'move':
+      return {
+        actionTitle: 'Move files?',
+        categoryLabel: 'File change',
+        description: 'Moves the listed files.'
+      }
+    default:
+      break
+  }
+
+  if (request.providerToolName === 'Bash' || request.toolKind === 'execute') {
+    return {
+      actionTitle: 'Run command?',
+      categoryLabel: 'Command execution',
+      description: 'Runs a command on this computer.'
+    }
+  }
+
+  return {
+    actionTitle: 'Allow tool access?',
+    categoryLabel: 'Tool access',
+    description: 'Allows this tool to run with the details shown below.'
+  }
+}
+
+export { describePermissionRequest, isArtifactWriteRequest, isMcpPermissionRequest }
+export type { NotebookRuntime, PermissionPresentation }

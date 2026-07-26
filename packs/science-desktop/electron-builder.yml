@@ -1,0 +1,154 @@
+appId: com.aipoch.open-science
+productName: Open Science
+copyright: Copyright © 2026 AIPOCH
+directories:
+  buildResources: build
+# Apply a valid deep ad-hoc signature on macOS (no Developer ID available). Without this,
+# electron-builder ships an incompletely-signed bundle that Gatekeeper flags as "damaged"
+# on downloaded/quarantined copies, so the app won't launch on other machines. See the hook.
+afterPack: build/adhoc-sign.cjs
+files:
+  - '!**/.vscode/*'
+  # Agent/AI tooling state lives in the project (.claude holds git worktrees — full nested repo
+  # copies, easily >1GB — plus memory/logs; .codex is similar). electron-builder sweeps in everything
+  # under the project root by default, so without this it bundles all of that into app.asar, bloating
+  # the app to multiple GB AND leaking local agent state into the shipped bundle.
+  - '!.claude{,/**/*}'
+  - '!.codex{,/**/*}'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!packages/open-science{,/**/*}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  # Prisma is shipped via extraResources (see below), not inside the asar. Exclude it here so that at
+  # runtime `require('@prisma/client')` resolves the real copy in Contents/Resources/node_modules
+  # (app.asar's parent dir) instead of a broken in-asar copy that can't find its generated `.prisma`
+  # client — which otherwise crashes the main process at startup with
+  # "Cannot find module '.prisma/client/default'" (window never opens; dock icon bounces and quits).
+  - '!node_modules/@prisma/client{,/**/*}'
+  - '!node_modules/.prisma{,/**/*}'
+  # The bundled Claude native binary (~220MB) is never executed: the app spawns the ACP agent with
+  # CLAUDE_CODE_EXECUTABLE pointing at the user's system-installed claude, and claude-agent-acp only
+  # resolves this optional platform package when that env var is unset. Excluding it drops ~220MB.
+  # Wildcard every platform variant (darwin-arm64/-x64, linux-*, win32-*) so the exclusion holds no
+  # matter which OS the release job builds on — npm only installs the one matching the build host.
+  - '!node_modules/@anthropic-ai/claude-agent-sdk-*{,/**/*}'
+  # pdfjs-dist ships several redundant copies. The main process only loads `legacy/build` (text
+  # extraction) and needs `cmaps`/`standard_fonts` for CJK/CID PDFs; the renderer bundles its own
+  # copy via Vite. Drop the modern build, viewer, image decoders, TS types, and source maps
+  # (~16MB) so the packaged app carries only what runs.
+  - '!node_modules/pdfjs-dist/build{,/**/*}'
+  - '!node_modules/pdfjs-dist/web{,/**/*}'
+  - '!node_modules/pdfjs-dist/image_decoders{,/**/*}'
+  - '!node_modules/pdfjs-dist/types{,/**/*}'
+  - '!node_modules/pdfjs-dist/**/*.map'
+asarUnpack:
+  - resources/**
+  # The ACP agent runs as a spawned child process, so its entry must live outside the asar.
+  - node_modules/@agentclientprotocol/claude-agent-acp/**
+# The Prisma generated client (`node_modules/.prisma`) is produced by `prisma generate` and is NOT a
+# declared dependency, so electron-builder's node_modules collector never bundles it into the asar.
+# It also loads a native query engine (.dylib.node) by path, which can't run from inside an asar. Ship
+# the client + generated code as plain files under Contents/Resources/node_modules; Node's normal
+# directory walk from app.asar finds them there. (@prisma/client v6 has zero runtime deps, so the
+# client + .prisma pair is self-contained.)
+# The micromamba binary is added per-platform below (mac/win/linux extraResources), not here, so
+# the two extraResources lists don't collide.
+extraResources:
+  - from: node_modules/.prisma
+    to: node_modules/.prisma
+  - from: node_modules/@prisma/client
+    to: node_modules/@prisma/client
+  # Ship the `open-science` CLI as plain files (not in the asar) so the installed command-line launcher
+  # can run it with the app's own Electron in Node mode. Only the runtime .mjs files; tests are excluded.
+  - from: cli
+    to: cli
+    filter:
+      - '**/*.mjs'
+  - from: packages/open-science
+    to: packages/open-science
+    filter:
+      - '*.mjs'
+      - '*.d.ts'
+      - 'LICENSE'
+      - 'package.json'
+# Windows: an NSIS installer. The build is unsigned (no Authenticode certificate), so SmartScreen
+# shows a bypassable "unknown publisher" prompt — the same trade-off as the unsigned macOS build. The
+# afterPack ad-hoc-sign hook is a no-op off macOS (it returns early), so it is safe on this target.
+win:
+  executableName: open-science
+  artifactName: aipoch-${name}-${version}-win-${arch}.${ext}
+  # nsis = the installer; zip = a portable, no-install build. Offer both, mirroring mac (dmg + zip).
+  target:
+    - nsis
+    - zip
+  extraResources:
+    # Staged per-arch micromamba binary, copied to the resources root (Task 2's resolveMicromamba
+    # looks for it there via process.resourcesPath).
+    - from: resources/bin/win/${arch}/micromamba.exe
+      to: micromamba.exe
+    - from: build/windows-runtime-cache-uninstall.ps1
+      to: windows-runtime-cache-uninstall.ps1
+nsis:
+  artifactName: aipoch-${name}-${version}-win-${arch}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  include: build/installer.nsh
+mac:
+  artifactName: aipoch-${name}-${version}-mac-${arch}.${ext}
+  # Minimum macOS to run the app (written to Info.plist LSMinimumSystemVersion). macOS 12 (Monterey)
+  # and up; below this the OS refuses to launch. Independent of the CI build runner's macOS version.
+  minimumSystemVersion: '12.0.0'
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    CFBundleName: Open Science
+    CFBundleDisplayName: Open Science
+    NSCameraUsageDescription: Application requests access to the device's camera.
+    NSMicrophoneUsageDescription: Application requests access to the device's microphone.
+    NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+    NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+  notarize: false
+  extraResources:
+    # Ship the ad-hoc-signed micromamba mach-O at Contents/Resources/micromamba, where
+    # resolveMicromamba() finds it via process.resourcesPath. Envs materialize in ~/.open-science
+    # (never in the signed .app), so only this one binary needs signing (spec §10).
+    - from: resources/bin/mac/${arch}/micromamba
+      to: micromamba
+dmg:
+  artifactName: aipoch-${name}-${version}-mac-${arch}.${ext}
+linux:
+  # snap is intentionally omitted: building it on a stock GitHub runner needs snapcraft + LXD and
+  # is flaky in CI. AppImage (portable, runs anywhere) + deb (Debian/Ubuntu) cover the common cases.
+  target:
+    - AppImage
+    - deb
+  maintainer: aipoch
+  category: Utility
+  extraResources:
+    # Staged per-arch micromamba binary, copied to the resources root (Task 2's resolveMicromamba
+    # looks for it there via process.resourcesPath).
+    - from: resources/bin/linux/${arch}/micromamba
+      to: micromamba
+appImage:
+  artifactName: aipoch-${name}-${version}-linux-${arch}.${ext}
+deb:
+  artifactName: aipoch-${name}_${version}_${arch}.${ext}
+npmRebuild: false
+# electron-updater feed. Win/Linux/macOS auto-update reads app-update.yml (generated from this block)
+# and fetches its feed from <url>. Win/Linux use the default `latest` channel (latest.yml /
+# latest-linux.yml). macOS builds override the channel to the arch at build time (see build.yml), so
+# each arch polls its own `${arch}-mac.yml` — arm64 and x64 build on separate runners and would
+# otherwise collide on one latest-mac.yml. Mac in-place update needs a Developer ID signature (now
+# configured) and the feed is regenerated post-staple in notarize-mac.yml. The GitHub Release remains
+# the human-facing download source, populated by release.yml — electron-builder runs with --publish
+# never, so this block only shapes app-update.yml + the feed files, it does not upload anything.
+publish:
+  provider: generic
+  url: https://statics.aipoch.com/open-science/app/stable
+  channel: latest
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/

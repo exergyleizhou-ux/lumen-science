@@ -1,0 +1,462 @@
+import { randomUUID } from 'node:crypto'
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+
+import type {
+  AppendNotebookCodeCellRequest,
+  BeginNotebookCodeCellRequest,
+  ExecuteNotebookCodeRequest,
+  FinishNotebookCodeCellRequest,
+  RunNotebookCellRequest
+} from '../../shared/notebook'
+import type { NotebookRpcConnection } from './mcp-server'
+import type { NotebookRuntimeService } from './runtime-service'
+
+type NotebookLocalRpcServerOptions = {
+  token?: string
+  host?: string
+  connectorService?: {
+    call(
+      server: string,
+      method: string,
+      args: Record<string, unknown>,
+      context?: { sessionId?: string }
+    ): Promise<unknown>
+  }
+  computeService?: {
+    callCommand(
+      providerId: string,
+      cmd: string,
+      intent: string,
+      loginShell?: boolean,
+      timeoutSeconds?: number,
+      context?: { sessionId: string; projectId: string }
+    ): Promise<unknown>
+    list(): Promise<unknown>
+    getDetails(providerId: string): Promise<unknown>
+    appendDetails(providerId: string, args: { text: string; author: string }): Promise<void>
+    replaceDetails(
+      providerId: string,
+      args: { text: string; oldText: string; author: string }
+    ): Promise<void>
+    download(
+      providerId: string,
+      remotePath: string,
+      dest: { kind: 'session-cache' },
+      context?: { sessionId: string; projectId: string }
+    ): Promise<unknown>
+    submitJob(
+      providerId: string,
+      intent: string,
+      command: string,
+      options: {
+        environment?: string
+        resourceRequest?: string
+        inputs?: unknown[]
+        outputManifest?: string
+        harvestConfig?: string
+        timeoutSeconds?: number
+        workspaceCwd?: string
+      },
+      context: { sessionId: string; projectId: string }
+    ): Promise<unknown>
+    getJobStatus(jobId: string): Promise<unknown>
+    getJobResult(jobId: string): Promise<unknown>
+    // Returns the provider ids of compute hosts enabled for the given session (issue 06).
+    getEnabledComputeHosts(sessionId: string): string[]
+    // Session-level concurrency control (Phase 3c, issue 05).
+    setSessionConcurrencyLimit(sessionId: string, limit: number): Promise<void>
+    getSessionConcurrencyStatus(sessionId: string): Promise<{
+      session_limit: number | null
+      active_count: number
+      queued_count: number
+      provider_ceilings: Record<string, number>
+    }>
+  }
+}
+
+type NotebookRpcPayload = {
+  method?: unknown
+  params?: unknown
+}
+
+// Narrows parsed JSON into a plain object before dispatching RPC params.
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+// Reads the full HTTP request body and parses it as the notebook RPC payload.
+const readJsonBody = async (request: IncomingMessage): Promise<NotebookRpcPayload> => {
+  const chunks: Buffer[] = []
+
+  for await (const chunk of request) {
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
+  }
+
+  return JSON.parse(Buffer.concat(chunks).toString('utf8')) as NotebookRpcPayload
+}
+
+// Writes one JSON response with an explicit HTTP status code.
+const writeJson = (response: ServerResponse, statusCode: number, payload: unknown): void => {
+  response.writeHead(statusCode, { 'content-type': 'application/json' })
+  response.end(`${JSON.stringify(payload)}\n`)
+}
+
+// Ensures every runtime command carries the session routing fields the service needs.
+const assertSessionParams = (params: Record<string, unknown>): void => {
+  if (typeof params.sessionId !== 'string' || typeof params.workspaceCwd !== 'string') {
+    throw new Error('Notebook RPC params must include sessionId and workspaceCwd.')
+  }
+}
+
+// Hosts an app-local authenticated HTTP bridge between MCP stdio tools and the runtime service.
+class NotebookLocalRpcServer {
+  private readonly token: string
+  private readonly host: string
+  private readonly connectorService: NotebookLocalRpcServerOptions['connectorService']
+  private readonly computeService: NotebookLocalRpcServerOptions['computeService']
+  private server: Server | undefined
+  private startPromise: Promise<NotebookRpcConnection> | undefined
+  private readonly sessionAliases = new Map<string, string>()
+
+  constructor(
+    private readonly service: NotebookRuntimeService,
+    options: NotebookLocalRpcServerOptions = {}
+  ) {
+    this.token = options.token ?? randomUUID()
+    this.host = options.host ?? '127.0.0.1'
+    this.connectorService = options.connectorService
+    this.computeService = options.computeService
+  }
+
+  // Starts the server once on an ephemeral port and returns the connection details for MCP env.
+  async ensureStarted(): Promise<NotebookRpcConnection> {
+    if (this.startPromise) {
+      return this.startPromise
+    }
+
+    const server = createServer((request, response) => {
+      void this.handleRequest(request, response)
+    })
+    this.server = server
+    this.startPromise = new Promise((resolve, reject) => {
+      server.once('error', reject)
+      server.listen(0, this.host, () => {
+        const address = server.address()
+
+        if (typeof address !== 'object' || address === null) {
+          reject(new Error('Notebook RPC server did not return a TCP address.'))
+          return
+        }
+
+        resolve({
+          endpoint: `http://${address.address}:${address.port}`,
+          token: this.token
+        })
+      })
+    })
+
+    return this.startPromise
+  }
+
+  // Stops the local HTTP server without touching notebook history or runtime state.
+  async close(): Promise<void> {
+    const server = this.server
+
+    this.server = undefined
+    this.startPromise = undefined
+
+    if (!server) return
+
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) reject(error)
+        else resolve()
+      })
+    })
+  }
+
+  // Remembers the final ACP session id for notebook aliases created before session start.
+  registerSessionAlias(aliasSessionId: string, sessionId: string): void {
+    this.sessionAliases.set(aliasSessionId, sessionId)
+  }
+
+  // Authenticates one HTTP request, dispatches it, and serializes either result or error.
+  private async handleRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    if (request.method !== 'POST') {
+      writeJson(response, 405, { error: 'Notebook RPC only accepts POST requests.' })
+      return
+    }
+
+    if (request.headers.authorization !== `Bearer ${this.token}`) {
+      writeJson(response, 401, { error: 'Invalid notebook RPC token.' })
+      return
+    }
+
+    try {
+      const payload = await readJsonBody(request)
+      const method = typeof payload.method === 'string' ? payload.method : ''
+      const params = isRecord(payload.params) ? payload.params : {}
+      // Resolve pre-session aliases before the runtime service looks up persistent state.
+      const result = await this.dispatch(method, this.resolveSessionAlias(params))
+
+      writeJson(response, 200, { result })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+
+      writeJson(response, 500, { error: message })
+    }
+  }
+
+  // Maps the narrow RPC method names to strongly-typed runtime service calls.
+  private async dispatch(method: string, params: Record<string, unknown>): Promise<unknown> {
+    // mcpCall carries no runtime routing fields, so it bypasses assertSessionParams below. It does
+    // forward the caller's session id (already alias-resolved above) as call context so a local tool
+    // handler can attribute side effects to the session that invoked it.
+    if (method === 'mcpCall') {
+      if (!this.connectorService) throw new Error('Connector service is not configured.')
+      const server = typeof params.server === 'string' ? params.server : ''
+      const toolMethod = typeof params.method === 'string' ? params.method : ''
+      const args = isRecord(params.args) ? params.args : {}
+      const sessionId = typeof params.sessionId === 'string' ? params.sessionId : undefined
+      return this.connectorService.call(server, toolMethod, args, { sessionId })
+    }
+
+    // computeCall routes compute API operations to ComputeService (design.md §2). The `op` field
+    // allows future ops (list, details) to be added without breaking the contract (design.md §5).
+    // Not session-scoped — like mcpCall it bypasses the session routing below.
+    if (method === 'computeCall') {
+      if (!this.computeService) throw new Error('Compute service is not configured.')
+      const op = typeof params.op === 'string' ? params.op : ''
+      if (op === 'call_command') {
+        const providerId = typeof params.provider_id === 'string' ? params.provider_id : ''
+        const cmd = typeof params.cmd === 'string' ? params.cmd : ''
+        const intent = typeof params.intent === 'string' ? params.intent : ''
+        const loginShell = typeof params.login_shell === 'boolean' ? params.login_shell : true
+        const timeoutSeconds =
+          typeof params.timeout_seconds === 'number' ? params.timeout_seconds : undefined
+        // Optional session/project context for grant-scope approval memory (issue 05).
+        // When absent, callCommand falls back to the legacy 'once'-only behaviour.
+        const sessionId = typeof params.session_id === 'string' ? params.session_id : undefined
+        const projectId = typeof params.project_id === 'string' ? params.project_id : undefined
+        const context = sessionId && projectId ? { sessionId, projectId } : undefined
+        try {
+          return await this.computeService.callCommand(
+            providerId,
+            cmd,
+            intent,
+            loginShell,
+            timeoutSeconds,
+            context
+          )
+        } catch (err) {
+          // Re-throw compute call errors as structured error objects so the Python shim can
+          // distinguish them from unexpected failures.
+          if (err instanceof Error && 'computeCallError' in err) {
+            throw new Error(
+              JSON.stringify((err as Error & { computeCallError: unknown }).computeCallError)
+            )
+          }
+          throw err
+        }
+      }
+
+      // op='list' — returns all registered compute hosts for agent discovery (design.md §5).
+      if (op === 'list') {
+        return this.computeService.list()
+      }
+
+      // op='details' — agent-facing read/append/replace for host knowledge docs (design.md §5).
+      // All writes set author='agent' so the repository records detailsUpdatedBy correctly.
+      if (op === 'details') {
+        const providerId = typeof params.provider_id === 'string' ? params.provider_id : ''
+        const mode = typeof params.mode === 'string' ? params.mode : 'read'
+        if (mode === 'read') {
+          return this.computeService.getDetails(providerId)
+        }
+        if (mode === 'append') {
+          const text = typeof params.text === 'string' ? params.text : ''
+          await this.computeService.appendDetails(providerId, { text, author: 'agent' })
+          return { ok: true }
+        }
+        if (mode === 'replace') {
+          const text = typeof params.text === 'string' ? params.text : ''
+          const oldText = typeof params.old_text === 'string' ? params.old_text : ''
+          await this.computeService.replaceDetails(providerId, { text, oldText, author: 'agent' })
+          return { ok: true }
+        }
+        throw new Error(`Unknown details mode: ${mode}`)
+      }
+
+      // op='download' — agent-initiated file download to session-cache (design.md §5).
+      // Approval gate fires inside ComputeService.download() before scp starts.
+      if (op === 'download') {
+        const providerId = typeof params.provider_id === 'string' ? params.provider_id : ''
+        const remotePath = typeof params.remote_path === 'string' ? params.remote_path : ''
+        // Optional session/project context for grant-scope approval memory (matching call_command).
+        const sessionId = typeof params.session_id === 'string' ? params.session_id : undefined
+        const projectId = typeof params.project_id === 'string' ? params.project_id : undefined
+        const context = sessionId && projectId ? { sessionId, projectId } : undefined
+        return this.computeService.download(
+          providerId,
+          remotePath,
+          { kind: 'session-cache' },
+          context
+        )
+      }
+
+      // op='submit_job' — non-blocking job submission (design.md §3a).
+      // Approval fires inside ComputeService.submitJob() before any DB write or SSH.
+      if (op === 'submit_job') {
+        const providerId = typeof params.provider_id === 'string' ? params.provider_id : ''
+        const intent = typeof params.intent === 'string' ? params.intent : ''
+        const command = typeof params.command === 'string' ? params.command : ''
+        const sessionId = typeof params.session_id === 'string' ? params.session_id : ''
+        const projectId = typeof params.project_id === 'string' ? params.project_id : ''
+        const options = {
+          environment: typeof params.environment === 'string' ? params.environment : undefined,
+          resourceRequest: isRecord(params.resources)
+            ? JSON.stringify(params.resources)
+            : undefined,
+          inputs: Array.isArray(params.inputs) ? (params.inputs as unknown[]) : undefined,
+          outputManifest: Array.isArray(params.outputs)
+            ? JSON.stringify(params.outputs)
+            : undefined,
+          harvestConfig: isRecord(params.harvest) ? JSON.stringify(params.harvest) : undefined,
+          timeoutSeconds:
+            typeof params.timeout_seconds === 'number' ? params.timeout_seconds : undefined,
+          workspaceCwd: typeof params.workspace_cwd === 'string' ? params.workspace_cwd : undefined
+        }
+        try {
+          return await this.computeService.submitJob(providerId, intent, command, options, {
+            sessionId,
+            projectId
+          })
+        } catch (err) {
+          // Re-throw compute call errors as structured error objects so the JS shim can parse them.
+          if (err instanceof Error && 'computeCallError' in err) {
+            throw new Error(
+              JSON.stringify((err as Error & { computeCallError: unknown }).computeCallError)
+            )
+          }
+          throw err
+        }
+      }
+
+      // op='job_status' — non-blocking read from DB (no SSH) (design.md §3a).
+      if (op === 'job_status') {
+        const jobId = typeof params.job_id === 'string' ? params.job_id : ''
+        return this.computeService.getJobStatus(jobId)
+      }
+
+      // op='job_result' — full JobResult (spec §11.4, design §9). Non-blocking query: reads DB
+      // row + scans the local harvest directory. No SSH, no harvest trigger (issue 04).
+      if (op === 'job_result') {
+        const jobId = typeof params.job_id === 'string' ? params.job_id : ''
+        return this.computeService.getJobResult(jobId)
+      }
+
+      // op='list_compute' — returns session-enabled hosts (design.md §15.1, issue 06).
+      // Differs from op='list' (all registered hosts): this returns only hosts the user enabled for
+      // this conversation via the ComputeHostSelector. Session id comes from COMPUTE_SESSION_ID in
+      // the repl spawn env (same passthrough used by submit_job / call_command).
+      if (op === 'list_compute') {
+        const sessionId = typeof params.session_id === 'string' ? params.session_id : ''
+        return this.computeService.getEnabledComputeHosts(sessionId)
+      }
+
+      // op='set_concurrency_limit' — set session-level concurrency limit (Phase 3c, issue 05).
+      // Limits the number of non-terminal jobs across all providers in this session. Jobs exceeding
+      // the limit enter 'queued' state and auto-dispatch when slots free up.
+      if (op === 'set_concurrency_limit') {
+        const sessionId = typeof params.session_id === 'string' ? params.session_id : ''
+        const limit = typeof params.limit === 'number' ? params.limit : 0
+        return this.computeService.setSessionConcurrencyLimit(sessionId, limit)
+      }
+
+      // op='concurrency_status' — query session concurrency status (Phase 3c, issue 05).
+      // Returns session_limit (user-set or null), active_count (non-terminal jobs in session),
+      // queued_count (queued jobs in session), and provider_ceilings (per-provider hard limits).
+      if (op === 'concurrency_status') {
+        const sessionId = typeof params.session_id === 'string' ? params.session_id : ''
+        return this.computeService.getSessionConcurrencyStatus(sessionId)
+      }
+
+      throw new Error(`Unknown computeCall op: ${op}`)
+    }
+
+    assertSessionParams(params)
+
+    const handlers: Record<string, (request: Record<string, unknown>) => Promise<unknown>> = {
+      beginCodeCell: (request) =>
+        this.service.beginCodeCell(request as unknown as BeginNotebookCodeCellRequest),
+      appendCodeCell: (request) =>
+        this.service.appendCodeCell(request as unknown as AppendNotebookCodeCellRequest),
+      finishCodeCell: (request) =>
+        this.service.finishCodeCell(request as unknown as FinishNotebookCodeCellRequest),
+      runCell: (request) => this.service.runCell(request as unknown as RunNotebookCellRequest),
+      execute: (request) => this.service.execute(request as unknown as ExecuteNotebookCodeRequest),
+      executeControl: (request) =>
+        this.service.executeControl(
+          request as unknown as Parameters<NotebookRuntimeService['executeControl']>[0]
+        ),
+      executeShell: (request) =>
+        this.service.executeShell(
+          request as unknown as Parameters<NotebookRuntimeService['executeShell']>[0]
+        ),
+      state: (request) =>
+        this.service.state(request as Parameters<NotebookRuntimeService['state']>[0]),
+      restart: (request) =>
+        this.service.restart(request as Parameters<NotebookRuntimeService['restart']>[0]),
+      shutdown: (request) =>
+        this.service.shutdown(request as Parameters<NotebookRuntimeService['shutdown']>[0]),
+      managePackages: (request) =>
+        this.service.managePackages(
+          request as unknown as Parameters<NotebookRuntimeService['managePackages']>[0]
+        ),
+      manageEnvironments: (request) =>
+        this.service.manageEnvironments(
+          request as unknown as Parameters<NotebookRuntimeService['manageEnvironments']>[0]
+        ),
+      listRuntimes: (request) =>
+        this.service.listRuntimes(request as Parameters<NotebookRuntimeService['listRuntimes']>[0]),
+      bindRuntime: (request) =>
+        this.service.bindRuntime(
+          request as unknown as Parameters<NotebookRuntimeService['bindRuntime']>[0]
+        ),
+      switchRuntime: (request) =>
+        this.service.switchRuntime(
+          request as unknown as Parameters<NotebookRuntimeService['switchRuntime']>[0]
+        )
+    }
+
+    const handler = handlers[method]
+
+    if (!handler) {
+      throw new Error(`Unknown notebook RPC method: ${method}`)
+    }
+
+    return handler(params)
+  }
+
+  // Rewrites the temporary notebook session id to the final ACP session id when needed.
+  private resolveSessionAlias(params: Record<string, unknown>): Record<string, unknown> {
+    const sessionId = params.sessionId
+
+    if (typeof sessionId !== 'string') {
+      return params
+    }
+
+    const resolvedSessionId = this.sessionAliases.get(sessionId)
+
+    if (!resolvedSessionId) {
+      return params
+    }
+
+    return {
+      ...params,
+      sessionId: resolvedSessionId
+    }
+  }
+}
+
+export { NotebookLocalRpcServer }
+export type { NotebookLocalRpcServerOptions }

@@ -1,0 +1,107 @@
+import type { ChildProcessWithoutNullStreams } from 'node:child_process'
+import type { SessionModeState } from '@agentclientprotocol/sdk'
+
+import { spawnClaudeAgentAcp } from '../acp/agent-process'
+import {
+  resolvePermissionProfileApplication,
+  type PermissionProfileApplication
+} from '../acp/permission-profile-controller'
+import type { PermissionProfileId } from '../../shared/permission-profiles'
+import { buildProviderEnv, type ResolvedProvider } from '../settings/provider-env'
+import type {
+  AgentFramework,
+  AgentModelConfig,
+  AgentSpawnInput,
+  ModelConfigContext,
+  SessionSetup,
+  SessionSetupContext
+} from './types'
+
+// Claude exposes ACP-provided MCP tools as mcp__<server>__<tool>; shared prompts stay framework-neutral.
+const CLAUDE_MCP_TOOL_NAMES = [
+  ['begin_activity_group', 'mcp__open-science-activity__begin_activity_group'],
+  ['write_artifact_file', 'mcp__open-science-artifacts__write_artifact_file'],
+  ['notebook_execute', 'mcp__open-science-notebook__notebook_execute'],
+  ['repl_execute', 'mcp__open-science-notebook__repl_execute'],
+  ['bash_execute', 'mcp__open-science-notebook__bash_execute'],
+  ['notebook_state', 'mcp__open-science-notebook__notebook_state'],
+  ['list_notebook_runtimes', 'mcp__open-science-notebook__list_notebook_runtimes'],
+  ['notebook_bind_runtime', 'mcp__open-science-notebook__notebook_bind_runtime'],
+  ['notebook_switch_runtime', 'mcp__open-science-notebook__notebook_switch_runtime'],
+  ['notebook_restart', 'mcp__open-science-notebook__notebook_restart'],
+  ['notebook_shutdown', 'mcp__open-science-notebook__notebook_shutdown'],
+  ['manage_packages', 'mcp__open-science-notebook__manage_packages'],
+  ['manage_environments', 'mcp__open-science-notebook__manage_environments']
+] as const
+
+const renderClaudeMcpToolNames = (append: string): string =>
+  CLAUDE_MCP_TOOL_NAMES.reduce(
+    (rendered, [toolName, callableName]) =>
+      rendered.replace(new RegExp(`\\b${toolName}\\b`, 'g'), callableName),
+    append
+  )
+
+// Claude Code adapter. A faithful extraction of behavior currently inline in AcpRuntime /
+// agent-process / provider-env — moving the runtime onto AgentFramework must not change it.
+export const claudeCodeFramework: AgentFramework = {
+  id: 'claude-code',
+  displayName: 'Claude Code',
+  supportsSkills: true,
+  // Claude launches stdio MCP servers directly — the app's artifact/notebook tooling relies on this.
+  acceptsStdioMcp: true,
+  // The adapter advertises an `effort` select (category thought_level) and applies changes to live
+  // sessions via applyFlagSettings — no respawn needed.
+  supportsLiveEffortChange: true,
+  // Claude Code speaks only Anthropic /v1/messages.
+  supportedApiTypes: ['anthropic'],
+
+  spawn(input: AgentSpawnInput): ChildProcessWithoutNullStreams {
+    // Still routes through the existing spawner; env carries the resolved provider overrides.
+    return spawnClaudeAgentAcp({
+      envOverrides: input.env,
+      executablePath: input.executablePath
+    })
+  },
+
+  prepareModelConfig(provider: ResolvedProvider, ctx: ModelConfigContext): AgentModelConfig {
+    // Anthropic-shaped env (ANTHROPIC_* + CLAUDE_CONFIG_DIR/CLAUDE_CODE_EXECUTABLE).
+    return {
+      env: buildProviderEnv(provider, {
+        storageRoot: ctx.storageRoot,
+        claudeExecutablePath: ctx.executablePath
+      })
+    }
+  },
+
+  buildSessionSetup(ctx: SessionSetupContext): SessionSetup {
+    // settingSources:['user'] excludes workspace settings that could override the active provider.
+    // Shared mode adds app-owned settings/plugins at the SDK flag layer via sessionOptions.
+    const meta: Record<string, unknown> = {
+      claudeCode: {
+        options: { ...ctx.sessionOptions, settingSources: ['user'] }
+      }
+    }
+
+    if (ctx.systemPromptAppends.length > 0) {
+      meta.systemPrompt = {
+        type: 'preset',
+        preset: 'claude_code',
+        append: ctx.systemPromptAppends.map(renderClaudeMcpToolNames).join('\n\n')
+      }
+    }
+
+    const promptPrefix = ctx.turnPromptReminders
+      ?.map(renderClaudeMcpToolNames)
+      .filter(Boolean)
+      .join('\n\n')
+
+    return { meta, ...(promptPrefix ? { promptPrefix } : {}) }
+  },
+
+  mapPermissionProfile(
+    profile: PermissionProfileId,
+    modes: SessionModeState | null | undefined
+  ): PermissionProfileApplication {
+    return resolvePermissionProfileApplication(profile, modes)
+  }
+}

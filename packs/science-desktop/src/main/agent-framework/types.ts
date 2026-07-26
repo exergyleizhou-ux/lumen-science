@@ -1,0 +1,183 @@
+import type { ChildProcessWithoutNullStreams } from 'node:child_process'
+import type { SessionModeState } from '@agentclientprotocol/sdk'
+
+import type { PermissionProfileApplication } from '../acp/permission-profile-controller'
+import type { PermissionProfileId } from '../../shared/permission-profiles'
+import type { AgentFrameworkId, ChatApiEndpoint, ReasoningEffort } from '../../shared/settings'
+import type { ResolvedProvider } from '../settings/provider-env'
+import type {
+  ResponsesBridgeConnection,
+  ResponsesBridgeSkillCandidate,
+  ResponsesBridgeSkillInput
+} from '../settings/responses-bridge'
+
+// The agent frameworks the app can drive over ACP (id union defined in shared settings so the renderer
+// and persisted settings share it). Adding one means implementing AgentFramework.
+export type { AgentFrameworkId }
+
+// A config file the framework needs on disk before spawn (e.g. a generated opencode.json). The
+// runtime writes these and points the framework at them via env/args.
+export type AgentConfigFile = {
+  path: string
+  content: string
+  mode?: number
+}
+
+// Authentication is sent over ACP after initialize. Keeping it out of the child environment avoids
+// Codex copying the key into shell snapshots or its default auth.json file.
+export type AgentAuthentication = {
+  methodId: string
+  _meta?: Record<string, unknown>
+}
+
+export type AgentProviderConfiguration = {
+  providerId: 'custom-gateway'
+  apiType: 'openai'
+  baseUrl: string
+  headers: Record<string, string>
+}
+
+// How the app's provider maps onto a framework's native model configuration. Claude reads env
+// (ANTHROPIC_*); opencode reads a generated config file referenced by OPENCODE_CONFIG. Fields are
+// merged over the spawn base, so an empty result just spawns with inherited defaults.
+export type AgentModelConfig = {
+  env?: Record<string, string>
+  configFiles?: AgentConfigFile[]
+  args?: string[]
+  authentication?: AgentAuthentication
+  providerConfiguration?: AgentProviderConfiguration
+  // Framework-specific model id used for local metadata/configuration. A bridge may keep this
+  // separate from the provider's upstream model id.
+  sessionModel?: string
+}
+
+// Inputs for translating a provider; paths differ per framework (Claude wants its executable + config
+// dir root, opencode wants a location to write its generated config into).
+export type ModelConfigContext = {
+  // App storage root; frameworks derive their config dir/location beneath it.
+  storageRoot: string
+  // Absolute path to the detected framework executable (claude / opencode).
+  executablePath: string
+  responsesBridge?: ResponsesBridgeConnection
+  // Compact connector conventions for frameworks that need host.mcp guidance in their baseline
+  // instructions. Detailed connector schemas live in on-demand `mcp-*` skills. Empty ⇒ omitted.
+  instructions?: string
+  // The user's reasoning-effort preference ('default'/undefined ⇒ don't override; the framework
+  // injects nothing and the agent keeps its own default). Each framework maps the level onto its
+  // native config channel — Codex's model_reasoning_effort, opencode's model options.
+  reasoningEffort?: ReasoningEffort
+}
+
+// System-prompt guidance the runtime wants appended for a session (artifact routing, notebook, skill
+// privacy). The framework decides HOW it is delivered — see SessionSetup.
+export type SessionSetupContext = {
+  systemPromptAppends: string[]
+  // Short, high-priority reminders that must reach each turn when the framework carries the complete
+  // appends only in session metadata. Frameworks whose appends already ride each prompt may omit them.
+  turnPromptReminders?: string[]
+  // Framework-native options resolved with the active backend and applied to every session created
+  // on that connection. Claude uses this to inject app-owned settings/plugins into shared auth mode.
+  sessionOptions?: Record<string, unknown>
+}
+
+// Framework-specific session configuration returned to the runtime. `meta` becomes the ACP `_meta`
+// on session/new and session/resume. `promptPrefix` is prepended to prompt content when the framework
+// cannot carry appends in session meta, or when a session-level append needs a per-turn reminder.
+export type SessionSetup = {
+  meta?: Record<string, unknown>
+  promptPrefix?: string
+}
+
+// Already-resolved spawn inputs: env and args come from prepareModelConfig merged over the base
+// process env; configFiles are written by the runtime before this call.
+export type AgentSpawnInput = {
+  executablePath: string
+  env: Record<string, string>
+  args: string[]
+  debug?: boolean
+}
+
+// One switchable agent backend. The ACP runtime stays generic and delegates only the framework-coupled
+// decisions to this interface. See docs/internal/pluggable-agent-framework-feasibility.md.
+export interface AgentFramework {
+  readonly id: AgentFrameworkId
+  readonly displayName: string
+
+  // Launch the ACP agent subprocess (stdio JSON-RPC), wrapping the per-framework binary + args.
+  spawn(input: AgentSpawnInput): ChildProcessWithoutNullStreams
+
+  // Translate the app's provider into the framework's native model config (env / config files / args).
+  prepareModelConfig(provider: ResolvedProvider, ctx: ModelConfigContext): AgentModelConfig
+
+  // Build the session `_meta` and decide how system-prompt appends are delivered for this framework.
+  buildSessionSetup(ctx: SessionSetupContext): SessionSetup
+
+  // Map an app permission profile onto the modes the agent advertised at session build/resume.
+  mapPermissionProfile(
+    profile: PermissionProfileId,
+    modes: SessionModeState | null | undefined
+  ): PermissionProfileApplication
+
+  // Config-dir-materialized skills (Claude). Absent ⇒ the app hides the skills UI + force-load path.
+  readonly supportsSkills: boolean
+
+  // Whether the framework accepts stdio MCP servers via ACP session mcpServers. opencode advertises
+  // http/sse only, so stdio servers must not be handed to it — the app's artifact/notebook tooling
+  // (currently stdio) is gated off for such frameworks until it is exposed over http/sse.
+  readonly acceptsStdioMcp: boolean
+
+  // Whether a reasoning-effort change can be applied LIVE to open sessions via the ACP thought_level
+  // configOption, without a respawn. True where the adapter advertises that option (verified live:
+  // Claude Code, codex-acp). False where effort only rides the baked spawn config (opencode ignores
+  // the protocol option), so a change must respawn to regenerate it.
+  readonly supportsLiveEffortChange: boolean
+
+  // Chat endpoints this framework can drive. A provider is only selectable when it shares one:
+  // Claude Code speaks Anthropic /v1/messages; opencode speaks both.
+  readonly supportedApiTypes: readonly ChatApiEndpoint[]
+}
+
+// The resolved agent backend for one connect: which framework to drive plus its already-resolved spawn
+// inputs (executable + env + args). Produced by the settings layer at connect time so a framework or
+// provider switch takes effect on reconnect.
+export type ResolvedAgentBackend = {
+  framework: AgentFramework
+  // Stable identity of the framework/provider storage boundary. Two providers can use the same
+  // framework while keeping incompatible session stores (for example Codex shared vs isolated login).
+  backendId?: string
+  executablePath: string
+  env: Record<string, string>
+  args?: string[]
+  // Framework-native session options retained by the runtime and passed through buildSessionSetup.
+  sessionOptions?: Record<string, unknown>
+  // Backend-resolved guidance appended to every session. Connector conventions use this channel for
+  // Claude and Codex; OpenCode keeps the same guidance in its generated instructions config.
+  systemPromptAppends?: string[]
+  // Model to apply per session via the ACP `model` configOption, for frameworks that select the model
+  // over the protocol rather than via env (opencode). Undefined ⇒ the framework's env/config drives it
+  // (Claude uses ANTHROPIC_MODEL). Applied best-effort: skipped when the agent advertises no match.
+  sessionModel?: string
+  // Subscription backends must run the model selected in the UI. When true, a missing/rejected live
+  // model option fails session creation instead of silently using the agent's account default.
+  sessionModelRequired?: boolean
+  // Reasoning-effort level to apply per session via the ACP `thought_level` configOption, resolved
+  // to the closest level the agent advertises. Undefined ⇒ the agent keeps its own default.
+  sessionEffort?: ReasoningEffort
+  // Exact context-window limit for the selected upstream provider model. Framework adapters may
+  // report a fallback or bridge transport model instead, so the runtime treats this as authoritative.
+  contextWindow?: number
+  authentication?: AgentAuthentication
+  providerConfiguration?: AgentProviderConfiguration
+  // A bridged backend owns one reference to its local loopback bridge. Runtime teardown releases it;
+  // reviewer sessions register their Codex prompt_cache_key here so routing never depends on content.
+  responsesBridgeLease?: {
+    selectSkills: (
+      text: string,
+      catalog: ResponsesBridgeSkillCandidate[],
+      signal?: AbortSignal
+    ) => Promise<ResponsesBridgeSkillInput[]>
+    registerReviewerSession: (promptCacheKey: string) => void
+    unregisterReviewerSession: (promptCacheKey: string) => boolean
+    release: () => Promise<void>
+  }
+}

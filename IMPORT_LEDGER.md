@@ -20,9 +20,40 @@ Each entry records: source path, destination, modifications, and dependency chan
 
 ---
 
-## Batch 1: Desktop Shell (OSF-1) — pending
+## Batch 1: Desktop Shell (OSF-1) — 2026-07-26
 
-(TBD)
+### renderer/ (React UI — full copy)
+
+| Source Path | Destination | Modified? | Notes |
+|-------------|-------------|-----------|-------|
+| src/renderer/** | packs/science-desktop/src/renderer/ | Planned | React pages, components, hooks, styles. Execution authority removed at IPC boundary. |
+| src/main/index.ts | packs/science-desktop/src/main/ | Planned | Electron entry; launch adapted to Lumen binary |
+| src/main/windows.ts | packs/science-desktop/src/main/ | Planned | Window management |
+| src/main/tray.ts | packs/science-desktop/src/main/ | Planned | System tray |
+| src/main/update/ | packs/science-desktop/src/main/ | Planned | Auto-updater |
+| src/main/settings/ | packs/science-desktop/src/main/ | Planned | Settings persistence (UI only) |
+| src/preload/** | packs/science-desktop/src/preload/ | Planned | Preload scripts |
+| src/shared/** | packs/science-desktop/src/shared/ | Planned | Shared types |
+| electron-builder.yml | packs/science-desktop/ | Planned | Release packaging |
+| resources/ | packs/science-desktop/resources/ | Planned | App icons, assets |
+
+### New Lumen-only files (not from Open Science)
+
+| File | Purpose |
+|------|---------|
+| packs/science-desktop/src/main/lumen-acp-bridge.ts | ACP bridge replacing agent-framework authority |
+| packs/science-desktop/ARCHITECTURE.md | Authority model and IPC channel policy |
+| packs/science-desktop/package.json | Lumen-adapted package manifest |
+
+### Authority removal summary
+
+The following Open Science subsystems have execution authority REMOVED:
+- src/main/agent-framework/ → execution paths disconnected; Lumen bridge used instead
+- src/main/notebook/ executor → references kept for visual design; actual execution via Rust
+- src/main/reviewer/ executor → same treatment
+- src/main/compute/ SSH runner → same treatment
+- src/main/skills/ approval → admission routed through Lumen DS-43
+- Any persistence of science state → routed to Rust stores
 
 ---
 
