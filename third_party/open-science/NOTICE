@@ -1,0 +1,38 @@
+Lumen Science Desktop
+Copyright 2026 exergyleizhou-ux
+
+This product includes software developed by the AIPOCH Open Science project
+(https://github.com/aipoch/open-science), licensed under the Apache License,
+Version 2.0 (the "License"); you may not use files in third_party/open-science/
+except in compliance with the License.
+
+You may obtain a copy of the License at:
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+=== MODIFICATIONS ===
+
+Files imported from Open Science (commit d8f11e34) are MODIFIED per
+Apache-2.0 §4. Modifications include:
+
+- Rebranding: Lumen Science Desktop namespacing and brand assets
+- Authority removal: all agent-framework execution paths disconnected;
+  Rust Lumen SessionActor wired via ACP bridge
+- Connector catalog: UI reused; Rust adapters remain authoritative
+- Notebook executor: TypeScript executor replaced with Rust KernelAdapter
+- Reviewer: correction proposal routed through SessionActor; verdicts
+  enter EvidenceGraph
+- Persistence: Electron local state limited to UI layout/session/draft;
+  science state owned by Rust ProjectStore/ArtifactRegistry/EvidenceGraph
+
+=== UPSTREAM CREDITS ===
+
+Original work: Open Science v0.7.1 (Apache-2.0)
+Repository: https://github.com/aipoch/open-science
+Copyright applies to the respective contributors of that project.
