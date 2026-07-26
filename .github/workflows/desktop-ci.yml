@@ -62,19 +62,21 @@ jobs:
       - name: Production source graph matches tsconfig exclusions
         run: npx tsx scripts/desktop-source-graph.mts --check
 
-      # LS5-D1-02 IN PROGRESS — this is NOT a passing gate yet.
+      # LS5-D1-02: required. 0 errors on both projects (node + web).
       #
-      # Errors went 1566 -> 65 by excluding the unreachable Open Science code
-      # that the include globs were dragging in (see desktop-source-graph.mts).
-      # Every one of the 65 remaining errors is in code that actually ships, so
-      # they must be fixed rather than excluded. Until they are, this step stays
-      # advisory — but it now reports a real number instead of masking ~1500.
+      # History: 1566 -> 65 by excluding the unreachable Open Science code the
+      # include globs were dragging in (LS5-D1-01), then 65 -> 0 by fixing every
+      # error in code that actually ships. The web project was never counted
+      # before, because `typecheck` runs node && web and node always failed
+      # first; it contributed a further 223.
       #
-      # Do not delete this step and do not raise the tolerance; the exit
-      # criterion is 0 errors, at which point continue-on-error is removed.
-      - name: Typecheck (advisory — 65 known errors in shipped code, tracked)
+      # This gate is only meaningful because of what it is NOT allowed to do:
+      # nothing here may be silenced with `any`, ts-ignore, skipLibCheck, or by
+      # adding a file to a tsconfig `exclude` list. An exclusion is legitimate
+      # only when the source graph proves the file unreachable, which the step
+      # above enforces on every run. Fix the error or fix the graph.
+      - name: Typecheck (node + web, 0 errors required)
         run: npm run typecheck
-        continue-on-error: true
 
       - name: Builder config sanity (no aipoch feed, adhoc-sign exists)
         run: |
