@@ -21,7 +21,8 @@
     "dist:mac": "npx tsx scripts/pack-dir.mts",
     "pack:check": "npm run test:authority",
     "smoke:live": "npx tsx scripts/lumen-live-smoke.mts",
-    "check:release": "npx tsx scripts/osf8-release-check.mts"
+    "check:release": "npx tsx scripts/osf8-release-check.mts",
+    "test:e2e": "electron-vite build && playwright test"
   },
   "dependencies": {
     "@aiden0z/pptx-renderer": "^1.2.4",
@@ -65,6 +66,7 @@
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",
+    "@playwright/test": "^1.62.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^20.14.0",
     "@types/papaparse": "^5.5.2",
