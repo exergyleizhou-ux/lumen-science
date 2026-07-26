@@ -100,16 +100,16 @@ jobs:
       - name: Verify machine-readable status is fresh and honest
         run: python3 scripts/verify-science-status.py
 
-      # A pinned checksum is a security control only if the value is real.
-      # Every non-action digest in a workflow must be attributed in
-      # .github/pinned-digests.txt.
       # The dossier verifier is the product's central claim: a third party can
-      # check a result without trusting us. Its tamper tests run FIRST — a
-      # verifier that cannot detect tampering converts "nobody checked" into
-      # "checked and passed", which is worse than shipping no verifier.
+      # check a result without trusting us. Its tamper tests run before the
+      # other gates — a verifier that cannot detect tampering converts "nobody
+      # checked" into "checked and passed", which is worse than none.
       - name: Dossier verifier detects tampering
         run: python3 scripts/test-verify-dossier.py
 
+      # A pinned checksum is a security control only if the value is real.
+      # Every non-action digest in a workflow must be attributed in
+      # .github/pinned-digests.txt.
       - name: Every pinned digest is attributed
         run: python3 scripts/verify-pinned-digests.py
 
