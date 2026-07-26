@@ -53,6 +53,15 @@ UPSTREAM_PREFIX = "src"
 
 SOURCE_SUFFIXES = {".ts", ".tsx", ".css", ".html"}
 
+# Adoptions outside the desktop tree, where the path does not follow the
+# src/X -> packs/science-desktop/src/X rule. Listed explicitly: an adoption the
+# ledger cannot see is exactly what the ledger exists to prevent, and silence
+# here would look identical to "we wrote it ourselves".
+EXTRA_ADOPTIONS = {
+    "agent/crates/codegen/xai-grok-science/resources/lumen_python_loop.py":
+        "resources/notebook/python_loop.py",
+}
+
 
 class LedgerError(RuntimeError):
     pass
@@ -84,7 +93,13 @@ def upstream_blobs(clone: Path, commit: str) -> dict[str, str]:
         text=True,
         check=True,
     )
-    paths = [p for p in listing.stdout.splitlines() if p.startswith(f"{UPSTREAM_PREFIX}/")]
+    all_paths = listing.stdout.splitlines()
+    # The desktop tree, plus any explicitly-mapped adoption from elsewhere in
+    # the upstream repo (EXTRA_ADOPTIONS). Without the second set the generator
+    # cannot verify those claims and refuses to write the ledger — which is the
+    # correct failure, but only if the paths are actually fetched.
+    wanted = set(EXTRA_ADOPTIONS.values())
+    paths = [p for p in all_paths if p.startswith(f"{UPSTREAM_PREFIX}/") or p in wanted]
 
     blobs: dict[str, str] = {}
     # Batch through cat-file to avoid one process per file.
@@ -150,6 +165,31 @@ def build(clone: Path) -> dict[str, Any]:
         dest_rel = str(path.relative_to(ROOT))
         local_sha = sha256_bytes(path.read_bytes())
         entries[dest_rel] = classify(dest_rel, local_sha, blobs)
+
+    # Explicitly-mapped adoptions from elsewhere in the tree.
+    for dest_rel, upstream_path in sorted(EXTRA_ADOPTIONS.items()):
+        path = ROOT / dest_rel
+        if not path.is_file():
+            raise LedgerError(
+                f"EXTRA_ADOPTIONS names {dest_rel}, which does not exist. "
+                "Remove the entry or restore the file — a ledger that points at "
+                "nothing is worse than no entry."
+            )
+        local_sha = sha256_bytes(path.read_bytes())
+        upstream_sha = blobs.get(upstream_path)
+        if upstream_sha is None:
+            raise LedgerError(
+                f"upstream {upstream_path} not found at the pinned commit; "
+                f"cannot substantiate the adoption claim for {dest_rel}"
+            )
+        entries[dest_rel] = {
+            "origin": "adopted-modified" if upstream_sha != local_sha else "adopted-verbatim",
+            "upstreamPath": upstream_path,
+            "upstreamSha256": upstream_sha,
+            "localSha256": local_sha,
+            "modified": upstream_sha != local_sha,
+            "noticeRequired": True,
+        }
 
     counts = {"adopted-verbatim": 0, "adopted-modified": 0, "lumen-original": 0}
     for entry in entries.values():

@@ -10,15 +10,15 @@
   },
   "summary": {
     "adopted-verbatim": 980,
-    "adopted-modified": 47,
+    "adopted-modified": 48,
     "lumen-original": 41,
-    "totalShipped": 1068,
+    "totalShipped": 1069,
     "upstreamSourceFiles": 1027,
     "upstreamFilesNotAdopted": 0
   },
   "licenseObligations": {
-    "attributionRequiredFor": 1027,
-    "statementOfChangesRequiredFor": 47,
+    "attributionRequiredFor": 1028,
+    "statementOfChangesRequiredFor": 48,
     "note": "Apache-2.0 section 4 requires retaining attribution for adopted files and stating that modified files were changed. Files classified lumen-original carry no upstream obligation."
   },
   "files": {
@@ -8565,6 +8565,14 @@
       "localSha256": "da29499dd3b250843592293097f6fe52be5756b7ea3ae1c9b21bb546ce33dee9",
       "modified": null,
       "noticeRequired": false
+    },
+    "agent/crates/codegen/xai-grok-science/resources/lumen_python_loop.py": {
+      "origin": "adopted-modified",
+      "upstreamPath": "resources/notebook/python_loop.py",
+      "upstreamSha256": "708a4a0f885f7b892334f61792c544331138869cbbb99fbdf0b2d52deabd400b",
+      "localSha256": "afd9c73d2690516c989ecdf98e1c376cebafe7cdb8cbcfea548c854a137acb77",
+      "modified": true,
+      "noticeRequired": true
     }
   }
 }
