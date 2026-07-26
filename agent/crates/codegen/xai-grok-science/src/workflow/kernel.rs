@@ -2,7 +2,6 @@
 //! Seam contracts: LS5-19, LS5-21.
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 
 // ── Kernel (LS5-19) ────────────────────────────────────────────────
 

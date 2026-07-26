@@ -46,14 +46,13 @@ impl WorkflowPackage {
     /// New artifacts (output-only) are allowed — they were produced by the workflow.
     pub fn verify_integrity(&self) -> Result<(), String> {
         for (path, output_hash) in &self.artifacts_manifest.files {
-            if let Some(input_hash) = self.inputs_manifest.files.get(path) {
-                if input_hash != output_hash {
+            if let Some(input_hash) = self.inputs_manifest.files.get(path)
+                && input_hash != output_hash {
                     return Err(format!(
                         "hash mismatch for '{}': input={} output={}",
                         path, input_hash, output_hash
                     ));
                 }
-            }
             // Artifact only in outputs is valid — it was produced by the workflow.
         }
         Ok(())

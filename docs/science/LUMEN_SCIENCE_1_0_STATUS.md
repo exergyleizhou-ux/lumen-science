@@ -53,11 +53,27 @@ cd packs/science && make release
 lumen-science version   # 1.0.0
 ```
 
-## Remaining non-blockers
+## Downloadable install assets (closure)
+
+GitHub Release `v1.0.0` now hosts the multi-platform CLI + MCP binaries and
+archives listed in `SHA256SUMS` (plus SBOM / signing metadata). Verify with:
+
+```bash
+bash scripts/verify-release-assets.sh v1.0.0
+# or after make release:
+RELEASE_DIR=packs/science/dist/science-release bash scripts/verify-release-assets.sh v1.0.0
+```
+
+Still **not** claimed as full DS-58 ultimate matrix: notarization, Authenticode,
+24h soak, previous→1.0 upgrade/rollback, and full live connector matrix remain open.
+
+## Remaining non-blockers / honest gaps
 
 - Optional Apple notarization / Windows Authenticode (org certs)  
 - Remaining GPU/remote skills pending  
 - OpenAlex/S2/arXiv live when keys or rate limits allow  
+- Go `packs/science` **product** scope is standalone/MCP/e2e only; `lab`/`gui`/… still import `lumen/internal` (legacy monorepo) — see `scripts/science-go-module-boundary.sh`  
+
 
 ## Version / tag model (post-1.0.0)
 

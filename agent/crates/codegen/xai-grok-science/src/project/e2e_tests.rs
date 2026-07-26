@@ -15,7 +15,7 @@ use crate::project::evidence_graph::{
     EdgeKind, EvidenceEdge, EvidenceGraph, EvidenceNode, NodeId, NodeKind,
 };
 use crate::project::claim::{Claim, ClaimStatus, Citation, CitationId};
-use crate::project::migration::{HashVerification, V1ToV2Migration, MigrationResult};
+use crate::project::migration::{HashVerification, V1ToV2Migration};
 
 /// LS5-14: Full project lifecycle from Draft to Accepted.
 #[test]

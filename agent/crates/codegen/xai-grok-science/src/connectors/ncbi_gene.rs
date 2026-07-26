@@ -14,7 +14,7 @@ fn parse_esummary(bytes: &[u8]) -> crate::Result<ParsedResponse> {
     let mut records = Vec::with_capacity(uids.len());
     for uid in uids {
         let uid = uid.as_str().ok_or_else(|| ScienceError::Invalid("ncbi-gene: non-string uid".into()))?;
-        let item = r.get(uid).ok_or_else(|| ScienceError::Invalid(format!("ncbi-gene: missing {uid}").into()))?;
+        let item = r.get(uid).ok_or_else(|| ScienceError::Invalid(format!("ncbi-gene: missing {uid}")))?;
         let name = item.get("name").and_then(|n| n.as_str()).or_else(|| item.get("nomenclaturesymbol").and_then(|n| n.as_str())).unwrap_or(uid);
         let desc = item.get("description").and_then(|d| d.as_str()).or_else(|| item.get("nomenclaturename").and_then(|n| n.as_str())).unwrap_or("");
         let org = item.get("organism").and_then(|o| o.get("scientificname")).and_then(|s| s.as_str()).unwrap_or("");

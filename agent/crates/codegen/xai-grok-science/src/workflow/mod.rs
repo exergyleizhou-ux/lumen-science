@@ -122,7 +122,7 @@ impl WorkflowSpec {
         let mut visited: BTreeMap<&str, u8> = BTreeMap::new(); // 0=white, 1=gray, 2=black
         for node in graph.keys() {
             if !visited.contains_key(node) {
-                self.dfs_cycle_check(*node, &graph, &mut visited)?;
+                self.dfs_cycle_check(node, &graph, &mut visited)?;
             }
         }
         Ok(())

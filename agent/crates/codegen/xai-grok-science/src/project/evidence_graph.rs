@@ -11,7 +11,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use super::model::ProjectId;
 
@@ -169,14 +169,13 @@ impl EvidenceGraph {
         if let (Some(src), Some(tgt)) = (
             self.nodes.get(&edge.source),
             self.nodes.get(&edge.target),
-        ) {
-            if matches!(src.kind, NodeKind::Claim)
+        )
+            && matches!(src.kind, NodeKind::Claim)
                 && matches!(tgt.kind, NodeKind::Claim)
                 && src.node_id == tgt.node_id
             {
                 return Err("claims cannot self-reference".to_string());
             }
-        }
         self.edges.push(edge);
         Ok(())
     }

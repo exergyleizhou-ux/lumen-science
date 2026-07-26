@@ -10,15 +10,13 @@
 
 use std::collections::BTreeMap;
 
-use crate::connectors::ConnectorDescriptor;
-use crate::project::model::{OwnerId, ProjectId};
+use crate::project::model::ProjectId;
 use crate::workflow::{
     AcceptanceCondition, AcceptanceRule, CachePolicy, ComputeEnvironment,
     FailAction, NetworkPolicy, ReuseKey, ResourceLimits, StepKind,
     WorkflowSpec, WorkflowStep, WorkflowPackage, InputManifest,
     ArtifactManifest, KernelAdmission, KernelKind, KernelManifest,
-    ResourceCap, AdmissionStatus, ReproductionLevel, ReproductionAttempt,
-    ReproductionResult,
+    ResourceCap, AdmissionStatus, ReproductionLevel,
 };
 
 /// Build a representative 3-step pubmed→notebook→review workflow.

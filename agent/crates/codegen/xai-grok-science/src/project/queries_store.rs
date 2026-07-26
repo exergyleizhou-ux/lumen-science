@@ -1,9 +1,7 @@
 //! WP-3 product path: evidence queries + migration via ProjectStore.
-use super::claim::Claim;
-use super::evidence_graph::{EdgeKind, EvidenceGraph, NodeId, NodeKind};
 use super::model::ProjectId;
 use super::query::{
-    ClaimComparison, ConsistencyReport, EvidenceTrace, ReproductionStatus, Violation, ViolationKind,
+    ClaimComparison, ConsistencyReport, EvidenceTrace, ReproductionStatus,
 };
 use super::store::ProjectStore;
 

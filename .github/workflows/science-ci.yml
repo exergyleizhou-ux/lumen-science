@@ -7,7 +7,11 @@ on:
       - 'packs/science/**'
       - 'scripts/dogfood-science-offline.sh'
       - 'scripts/science-machine-gates.sh'
+      - 'scripts/science-go-module-boundary.sh'
+      - 'scripts/verify-release-assets.sh'
       - 'docs/science/fusion-sources.lock.json'
+      - 'agent/crates/codegen/xai-grok-science/**'
+      - 'agent/crates/codegen/xai-grok-shell/src/extensions/science.rs'
       - 'VERSION'
   pull_request:
     branches: [main]
@@ -15,6 +19,8 @@ on:
       - 'packs/science/**'
       - 'scripts/**'
       - 'docs/science/**'
+      - 'agent/crates/codegen/xai-grok-science/**'
+      - 'agent/crates/codegen/xai-grok-shell/src/extensions/science.rs'
   workflow_dispatch:
 
 concurrency:
@@ -69,6 +75,46 @@ jobs:
       - uses: actions/checkout@v4
       - name: Science machine gates
         run: bash scripts/science-machine-gates.sh
+      - name: Go module boundary (product vs legacy)
+        run: bash scripts/science-go-module-boundary.sh
+
+  rust-science:
+    name: Rust xai-grok-science (test + clippy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: agent
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install protoc
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            agent/target
+          key: ${{ runner.os }}-cargo-science-${{ hashFiles('agent/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-science-
+
+      - name: cargo test -p xai-grok-science --lib
+        run: cargo test -p xai-grok-science --lib --locked -- --test-threads=2
+
+      - name: cargo clippy -p xai-grok-science -D warnings
+        run: cargo clippy -p xai-grok-science --all-targets --locked -- -D warnings
 
   build:
     name: Cross-compile (${{ matrix.target.os }}-${{ matrix.target.arch }})
@@ -146,7 +192,7 @@ jobs:
     name: Release build + SHA256SUMS
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    needs: [test, build, gates]
+    needs: [test, build, gates, rust-science]
     defaults:
       run:
         working-directory: packs/science

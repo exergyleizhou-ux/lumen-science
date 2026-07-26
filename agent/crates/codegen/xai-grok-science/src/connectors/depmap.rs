@@ -2,7 +2,7 @@
 use super::adapter::ProtocolAdapter; use super::fetch::{ParsedResponse, RetrievedRecord}; use crate::ScienceError;
 pub fn catalog_path() -> String { "/portal/api/download/files".to_string() }
 pub fn parse_search(bytes: &[u8]) -> crate::Result<ParsedResponse> {
-    let v: serde_json::Value = serde_json::from_slice(bytes).or_else(|_| Ok::<_, crate::ScienceError>(serde_json::Value::Null)).unwrap_or_default();
+    let v: serde_json::Value = serde_json::from_slice(bytes).or(Ok::<_, crate::ScienceError>(serde_json::Value::Null)).unwrap_or_default();
     if v.is_null() { return Err(ScienceError::Invalid("depmap: non-JSON response (likely anti-bot HTML)".into())); }
     let arr = v.as_array().unwrap_or(&super::EMPTY_JSON_ARRAY);
     let mut recs = Vec::with_capacity(arr.len());

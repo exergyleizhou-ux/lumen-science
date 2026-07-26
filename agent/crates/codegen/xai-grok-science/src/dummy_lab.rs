@@ -246,7 +246,7 @@ mod tests {
         let mut sensor = DummySensor::new("temp-1", SensorKind::Temperature, 20.0, 30.0);
         for _ in 0..100 {
             let value = sensor.read();
-            assert!(value >= 20.0 && value <= 30.0);
+            assert!((20.0..=30.0).contains(&value));
         }
     }
 

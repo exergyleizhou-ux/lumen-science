@@ -388,12 +388,12 @@ fn genetic_code(codon: &str) -> char {
 fn find_orfs(seq: &str, rna: bool, min_aa: usize) -> Vec<Orf> {
     let mut out = Vec::new();
     for frame in 1..=3 {
-        out.extend(orfs_on_strand(seq, frame as i32, min_aa));
+        out.extend(orfs_on_strand(seq, frame, min_aa));
     }
     let rc = reverse_complement(seq, rna);
     for frame in 1..=3 {
-        for mut o in orfs_on_strand(&rc, frame as i32, min_aa) {
-            o.frame = -(frame as i32);
+        for mut o in orfs_on_strand(&rc, frame, min_aa) {
+            o.frame = -frame;
             out.push(o);
         }
     }

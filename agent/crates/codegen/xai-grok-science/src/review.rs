@@ -285,8 +285,7 @@ mod tests {
     fn wrong_project_id_fails() {
         let (_root, store, run_id) = completed_fixture();
         // Evidence pointing to wrong project must fail
-        let bad_project = ProjectId::new("wrong-project");
-        let evidence = store.evidence(&run_id).unwrap();
+                let evidence = store.evidence(&run_id).unwrap();
         assert!(!evidence.is_empty(), "fixture has evidence");
         // Store lookup with wrong project fails
         let bad_store = ScienceStore::new(store.root.join("..").join("alt-store"));

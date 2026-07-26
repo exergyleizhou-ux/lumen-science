@@ -1,33 +1,49 @@
 # Lumen Science 5.0 — Governed Embodied Science
 
 **Target Version**: 5.0  
-**Status**: IN PROGRESS (WP-3～8 product-path Preview, hardware deferred)  
+**Status**: IN PROGRESS — WP-2～8 **software preview / contract** (not product GA)  
 **Prerequisite**: **Lumen Science 1.0.0** formal release — **DONE** (`v1.0.0`)
+
+## Evidence levels (how to read status)
+
+```text
+source     = types + logic in tree
+unit       = cargo/go unit tests green
+CLI        = lumen-science CLI path exercised
+ACP        = SessionActor handler registered (not always built-binary e2e)
+CI         = covered by Lumen Science CI on main
+release    = versioned install asset + checksum on GitHub Release
+live       = live network probe authorized and green
+```
+
+A WP marked **Preview** means at least `source` + `unit` (often CLI/ACP).
+It does **not** mean full Workflow Actor, multi-kernel live execution, signed collab
+packages, live SSH/Slurm, Dummy Lab built-binary e2e, or 5.0 RC.
 
 ## Intermediate Versions
 
-| Version | Deliverable | Status |
-|---------|-------------|--------|
-| 1.0 | Installable offline workbench + release | ✅ **RELEASED** (`v1.0.0`) |
-| 2.0 (WP-2/3) | ResearchProject + EvidenceGraph + Queries | 🔧 **PREVIEW** (store + ACP + CLI + trace/compare/migrate) |
-| 3.0 (WP-4/5) | Workflow DAG + dry-run + kernel admission | 🔧 **PREVIEW** (validate/dry-run + kernels, RealDevice Disabled) |
-| 4.0 (WP-6) | Multimodal index + review | 🔧 **PREVIEW** (parser/renderer index, reviewer records) |
-| 4.0+ (WP-7/8) | Collaboration + remote compute | 🔧 **PREVIEW** (collab records, remote dry-run plan only) |
-| 5.0 (WP-9~15) | Devices / twin / HIL / release canary | ⏸ DEFERRED (hardware) |
+| Version | Deliverable | Status (honest) |
+|---------|-------------|-----------------|
+| 1.0 | Offline workbench + multi-platform assets on Release | ✅ **RELEASED** (`v1.0.0`; binaries + SHA256SUMS) |
+| 2.0 (WP-2/3) | ResearchProject + EvidenceGraph + Queries | 🔧 **PREVIEW** — source/unit/CLI/ACP; not full restart/replay release |
+| 3.0 (WP-4/5) | Workflow DAG + dry-run + kernel admission | 🔧 **PREVIEW** — validate/dry-run models only; no full Workflow Actor |
+| 4.0 (WP-6) | Multimodal index + review | 🔧 **PREVIEW** — index/admission surface; not full pinned parser product chain |
+| 4.0+ (WP-7/8) | Collaboration + remote compute | 🔧 **PREVIEW** — local records + remote **plan/dry-run only** |
+| 5.0 (WP-9~15) | Devices / twin / HIL / release canary | ⏸ DEFERRED (hardware / ops) |
 
 ## Work Packages
 
-| WP | Scope | Status |
-|----|-------|--------|
-| WP-1 | Baseline freeze + 5.0 contract docs | ✅ ACCEPT |
-| WP-2 | ResearchProject + EvidenceGraph product path | ✅ Preview |
-| WP-3 | Evidence queries + trace + compare + consistency + migration | ✅ Preview |
-| WP-4 | Workflow validate + dry-run (allowed steps only) | ✅ Preview |
-| WP-5 | Kernel admission + reproduction status | ✅ Preview |
-| WP-6 | Multimodal index preview | ✅ Preview |
-| WP-7 | Multi-role review + collaboration records | ✅ Preview |
-| WP-8 | Remote compute plan/dry-run (no live HPC) | ✅ Preview |
-| WP-9～15 | Devices / twin / HIL / release canary | ⏸ DEFERRED |
+| WP | Scope | Status | Evidence |
+|----|-------|--------|----------|
+| WP-1 | Baseline freeze + 5.0 contract docs | ✅ ACCEPT | source + docs |
+| WP-2 | ResearchProject + EvidenceGraph product path | 🔧 Preview | source, unit, CLI, ACP |
+| WP-3 | Evidence queries + trace + compare + consistency + migration | 🔧 Preview | source, unit, CLI |
+| WP-4 | Workflow validate + dry-run (allowed steps only) | 🔧 Preview | source, unit, CLI (not full actor) |
+| WP-5 | Kernel admission + reproduction status | 🔧 Preview | source, unit (admission model) |
+| WP-6 | Multimodal index preview | 🔧 Preview | source, unit |
+| WP-7 | Multi-role review + collaboration records | 🔧 Preview | source, unit, CLI records |
+| WP-8 | Remote compute plan/dry-run (no live HPC) | 🔧 Preview | source, unit (plan only) |
+| WP-9～15 | Devices / twin / HIL / release canary | ⏸ DEFERRED | see `DEFERRED.md` |
 
 ## Global Invariants
 

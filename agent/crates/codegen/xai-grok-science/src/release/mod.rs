@@ -145,7 +145,7 @@ mod tests {
 
     #[test]
     fn migration_chain_acceptance() {
-        let steps = vec![
+        let steps = [
             MigrationStep { from_version: "1.0".into(), to_version: "2.0".into(), test_status: MigrationTestStatus::Passed, artifact_hash_preserved: true, rollback_tested: true },
             MigrationStep { from_version: "2.0".into(), to_version: "3.0".into(), test_status: MigrationTestStatus::Passed, artifact_hash_preserved: true, rollback_tested: true },
         ];

@@ -7,6 +7,22 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed — audit P0/P1 closure (installable 1.0 + Rust quality)
+
+- **v1.0.0 Release binaries**: uploaded all 35 SHA256SUMS assets (5 platform
+  archives + CLI + MCP helpers) to GitHub Release; re-signed `SHA256SUMS.asc`
+- **`scripts/verify-release-assets.sh`**: fail-closed check that every checksum
+  entry exists on the Release and (optionally) local hashes match
+- **Rust clippy `-D warnings`**: cleaned `xai-grok-science` (unused imports,
+  EvidenceNode test import, dbsnp/geo formatting, range/vec lints)
+- **Science CI**: `cargo test` + `cargo clippy -D warnings` for
+  `xai-grok-science`; Go module boundary script in gates job
+- **Go module honesty**: product scope = mcp/standalone/e2e/renderers; legacy
+  `lab`/`gui`/… with `lumen/internal` documented, not claimed green
+- **5.0 WP docs**: evidence-level table (source/unit/CLI/ACP/CI/release/live);
+  WP-2～8 marked Preview not “implemented product”
+- **main branch protection**: required checks + no force-push / no delete
+
 ### Fixed — CI after public repo + real runner logs
 
 - **MCP tools/call double-wrap**: handlers returning `ErrorResult` no longer get

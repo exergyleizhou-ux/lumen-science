@@ -6,10 +6,9 @@
 //!
 //! Seam: DS-1R negative-test extension for offline product proof.
 #![cfg(test)]
-use super::adapter::ProtocolAdapter;
 use crate::connectors::registry;
 use crate::connectors::fetch::FetchExchange;
-use crate::connectors::{AuthClass, DataClass, CachePolicy, ConnectorDescriptor, RateLimit, RetryPolicy};
+use crate::connectors::ConnectorDescriptor;
 
 fn dummy_request(desc: &ConnectorDescriptor) -> crate::connectors::ValidatedRequest {
     crate::connectors::ValidatedRequest {
@@ -45,14 +44,10 @@ fn every_active_connector_rejects_empty_truncated_and_garbage() {
             response: b"[]".to_vec(),
         }).collect();
         let r = adapter.parse_responses(&empty_exchanges);
-        match r {
-            Ok(parsed) => {
-                if parsed.total_hits > 100 {
-                    failed.push(format!("{}: unexpected hits from empty data: {}", desc.id, parsed.total_hits));
-                }
+        if let Ok(parsed) = r
+            && parsed.total_hits > 100 {
+                failed.push(format!("{}: unexpected hits from empty data: {}", desc.id, parsed.total_hits));
             }
-            Err(_) => {} // fail-closed = acceptable
-        }
 
         // garbage responses
         let garbage_exchanges: Vec<_> = (0..ex).map(|_| FetchExchange {

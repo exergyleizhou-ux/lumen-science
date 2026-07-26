@@ -1,11 +1,9 @@
 //! WP-6/7/8 preview: multimodal, review/collaboration, remote compute plan.
 use super::store::ProjectStore;
-use crate::collaboration::{ReviewStatus, ReviewPackage, ReviewerVerdict};
+use crate::collaboration::ReviewPackage;
 use crate::features::ScienceFeature;
-use crate::multimodal::{FormatCategory, ParserAdmission, ParserRegistry, RendererAdmission, RendererType, RendererNetworkPolicy, AdmissionStatus};
-use crate::remote::{ClusterIdentity, JobStatus, RemoteJob, ResourceRequest, SchedulerKind};
+use crate::multimodal::{FormatCategory, ParserAdmission, AdmissionStatus};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 
 use crate::project::model::{OwnerId, ProjectId};
 
@@ -143,7 +141,7 @@ impl ProjectStore {
     // ── WP-8: Remote compute plan (dry-run) ───────────────────────
     pub fn remote_compute_plan(
         &self,
-        project_id: &ProjectId,
+        _project_id: &ProjectId,
         cluster_hostname: impl Into<String>,
     ) -> crate::Result<RemoteComputePlan> {
         self.gates()

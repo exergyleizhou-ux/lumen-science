@@ -6,7 +6,6 @@ use crate::workflow::{
     WorkflowSpec,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowDagReport {
@@ -33,7 +32,7 @@ impl ProjectStore {
         self.gates()
             .require(ScienceFeature::WorkflowDag)?;
         let mut errors = vec![];
-        let has_unknown = spec.steps.iter().any(|s| matches!(
+        let has_unknown = spec.steps.iter().any(|s| !matches!(
             s.kind,
             StepKind::ConnectorFetch
                 | StepKind::ArtifactTransform
@@ -42,7 +41,7 @@ impl ProjectStore {
                 | StepKind::Reviewer
                 | StepKind::HumanApproval
                 | StepKind::Export
-        ) == false);
+        ));
         if has_unknown {
             errors.push("workflow contains unsupported StepKind".into());
         }
@@ -64,7 +63,7 @@ impl ProjectStore {
             .require(ScienceFeature::WorkflowDag)?;
         let mut blocked = vec![];
         let mut allowed = vec![];
-        let mut rejected = vec![];
+        let rejected = vec![];
         if let Err(e) = spec.validate_dag() {
             blocked.push(format!("dag invalid: {e}"));
         }

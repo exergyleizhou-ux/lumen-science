@@ -4,8 +4,7 @@
 use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 
-use super::evidence_graph::{EdgeKind, EvidenceEdge, EvidenceGraph, EvidenceNode, NodeId, NodeKind};
-use super::model::ProjectId;
+use super::evidence_graph::{EdgeKind, EvidenceGraph, NodeId, NodeKind};
 
 // ── Query types ────────────────────────────────────────────────────
 
@@ -230,14 +229,13 @@ impl EvidenceGraph {
 
         // Reviewer verdicts must have identity
         for node in self.nodes.values() {
-            if matches!(node.kind, NodeKind::ReviewerVerdict) {
-                if node.created_by.is_empty() {
+            if matches!(node.kind, NodeKind::ReviewerVerdict)
+                && node.created_by.is_empty() {
                     violations.push(Violation {
                         kind: ViolationKind::ReviewerWithoutIdentity,
                         detail: format!("reviewer verdict {:?} has no identity", node.node_id),
                     });
                 }
-            }
         }
 
         // Check for superseded artifacts used as current
@@ -269,7 +267,7 @@ impl EvidenceGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::super::evidence_graph::EvidenceEdge;
+    use super::super::evidence_graph::{EvidenceEdge, EvidenceNode};
     use super::super::model::ProjectId;
     use chrono::Utc;
     use std::collections::BTreeMap;
