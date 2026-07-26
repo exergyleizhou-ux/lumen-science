@@ -42,17 +42,21 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          # 1.23+ avoids macOS 15 dyld "missing LC_UUID" abort on pure-Go tests
+          go-version: '1.23'
 
       - name: Test (unit + seqbench + pipeline)
+        env:
+          # Prefer pure-Go binaries on hosted macOS runners
+          CGO_ENABLED: '0'
         run: |
-          go test ./mcp/artifacts/... ./mcp/notebook/... ./mcp/reviewer/... ./mcp/http_bridge/... \
+          go test ./mcp ./mcp/artifacts/... ./mcp/notebook/... ./mcp/reviewer/... ./mcp/http_bridge/... \
             ./standalone/internal/seqbench/... ./standalone/internal/pipeline/... \
             ./standalone/internal/projectstore/... \
             -count=1 -timeout=60s
 
       - name: Vet
-        run: go vet ./mcp/artifacts/... ./mcp/notebook/... ./mcp/reviewer/... ./mcp/http_bridge/... ./renderers/... ./standalone/...
+        run: go vet ./mcp ./mcp/artifacts/... ./mcp/notebook/... ./mcp/reviewer/... ./mcp/http_bridge/... ./renderers/... ./standalone/...
 
       - name: CLI smoke (seq + pipeline offline)
         run: make smoke
@@ -88,7 +92,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.23'
 
       - name: Build primary CLI + MCP servers
         run: |
@@ -125,7 +129,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.23'
 
       - name: Build MCP binaries
         run: |
@@ -153,7 +157,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.23'
 
       - name: make release
         run: |

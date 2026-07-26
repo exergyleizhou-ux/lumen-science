@@ -104,6 +104,15 @@ func (s *Server) dispatch(ctx context.Context, req jsonrpcRequest) (jsonrpcRespo
 			resp.Result = result
 			return resp, nil
 		}
+		// Handlers may already return TextResult/ErrorResult maps (with "content").
+		// Pass those through so isError is not lost under a second TextResult wrap.
+		if m, ok := data.(map[string]any); ok {
+			if _, hasContent := m["content"]; hasContent {
+				result, _ := json.Marshal(m)
+				resp.Result = result
+				return resp, nil
+			}
+		}
 		result, _ := json.Marshal(TextResult(data))
 		resp.Result = result
 	default:

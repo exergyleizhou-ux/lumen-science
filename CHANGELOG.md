@@ -7,6 +7,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed — CI after public repo + real runner logs
+
+- **MCP tools/call double-wrap**: handlers returning `ErrorResult` no longer get
+  re-wrapped in `TextResult`, so top-level `isError` survives e2e path-traversal checks.
+- **science-ci.yml**: Go 1.23 + `CGO_ENABLED=0` on unit tests (avoids macOS 15
+  dyld `missing LC_UUID` abort on `http_bridge` tests); include `./mcp` in matrix.
+- Repository visibility set to **public** so GitHub-hosted runners allocate (private
+  minutes had left jobs with zero steps).
+
 ### Fixed — WP-2～8 product surface completeness
 
 - **ProjectStore safety**: nil-safe WorkflowValidate/WorkflowDryRun map accessors;
