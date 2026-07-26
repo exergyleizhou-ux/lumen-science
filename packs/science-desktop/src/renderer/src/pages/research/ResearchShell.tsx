@@ -544,10 +544,10 @@ export const ResearchShell = (): React.JSX.Element => {
                     </button>
                     <button
                       type="button"
-                      className={cx.btn}
+                      className={cx.btnQuiet}
                       onClick={() => void connectorsFetchDeny()}
                     >
-                      Try desktop fetch (must deny)
+                      Check: a direct fetch is refused
                     </button>
                   </div>
                   {connOut && <pre className={cx.pre}>{connOut}</pre>}
@@ -578,8 +578,8 @@ export const ResearchShell = (): React.JSX.Element => {
                     <button type="button" className={cx.btn} onClick={() => void computePlan()}>
                       Plan (dry-run)
                     </button>
-                    <button type="button" className={cx.btn} onClick={() => void computeLiveDeny()}>
-                      Try live execute (must deny)
+                    <button type="button" className={cx.btnQuiet} onClick={() => void computeLiveDeny()}>
+                      Check: a live run is refused
                     </button>
                   </div>
                   {computeOut && <pre className={cx.pre}>{computeOut}</pre>}
@@ -595,16 +595,16 @@ export const ResearchShell = (): React.JSX.Element => {
                 >
                   <h2 className={cx.h2}>Skills</h2>
                   <p className={cx.muted}>
-                    Lumen inventory (approved/pending) + quarantine import. DS-43
-                    admission required; <strong>no bulk auto-approve</strong>. GPU skills stay
-                    pending until file-level review.
+                    Imported skills arrive quarantined and stay pending until someone
+                    admits them file by file — <strong>nothing is approved in bulk</strong>,
+                    and that includes anything asking for a GPU.
                   </p>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button type="button" className={cx.btn} onClick={() => void skillsList()}>
                       List inventory
                     </button>
-                    <button type="button" className={cx.btn} onClick={() => void skillsBulkDeny()}>
-                      Try bulk admit (must deny)
+                    <button type="button" className={cx.btnQuiet} onClick={() => void skillsBulkDeny()}>
+                      Check: bulk admit is refused
                     </button>
                   </div>
                   {skillsOut && <pre className={cx.pre}>{skillsOut}</pre>}
@@ -693,6 +693,12 @@ const cx = {
     'flex-1 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
   btn:
     'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50',
+  // A secondary weight for the "prove the boundary holds" controls. They are
+  // worth having — this product's claim is containment, and a claim you can
+  // press a button to check is stronger than one in a doc — but they are not
+  // the action a researcher came to this panel to take.
+  btnQuiet:
+    'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-transparent px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50',
   list: 'flex flex-col gap-1',
   projectBtn:
     'flex w-full flex-col items-start gap-0.5 rounded-md px-3 py-2 text-left transition-colors hover:bg-muted',

@@ -187,6 +187,11 @@ test('the workspace explains itself to a researcher, not to an implementer', asy
     'Electron',
     'extensions/science.rs',
   ]
+  // Internal spec codes are as opaque to a researcher as module names, and they
+  // arrive the same way — someone documents a rule and pastes its identifier.
+  const SPEC_CODE = /\b(DS-\d+|LS5-[A-Z]\d+|OSF\d+)\b/
+  const codeHit = text.match(SPEC_CODE)
+  expect(codeHit?.[0] ?? null, 'an internal spec code is visible in the UI').toBeNull()
   // Case-insensitively: innerText returns text as CSS renders it, and these
   // headings are `uppercase`, so an exact-case match would silently skip any
   // jargon that happens to sit in a heading.
