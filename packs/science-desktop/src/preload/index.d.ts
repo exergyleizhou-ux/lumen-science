@@ -639,6 +639,8 @@ interface OpenScienceAPI {
     }): Promise<unknown>
     computeExecuteLive(request: { planId: string }): Promise<unknown>
     computeHistory(): Promise<unknown>
+    connectorsList(): Promise<unknown>
+    connectorsFetch(request: { connectorId: string }): Promise<unknown>
   }
   window: {
     // Closes the focused window (the Cmd+W / Ctrl+W fallback when no preview panel is open).

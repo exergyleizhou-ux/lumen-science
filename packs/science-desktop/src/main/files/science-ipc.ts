@@ -25,6 +25,10 @@ import { createSkillService, type SkillService } from './skill-service'
 import type { SkillImportRequest, SkillAdmitRequest } from './skill-plan'
 import { createComputeService, type ComputeService } from './compute-service'
 import type { ComputePlanRequest } from './compute-plan'
+import {
+  loadConnectorCatalog,
+  rejectDesktopConnectorFetch,
+} from './connector-catalog'
 import path from 'node:path'
 
 /** Minimal surface — works with Electron IpcMain or a test double. */
@@ -67,6 +71,8 @@ export type ScienceIpcDeps = {
   skillsRegistryPath?: string
   /** Optional inject compute service (tests). */
   computeService?: ComputeService
+  /** Path to docs/science/fusion-sources.lock.json */
+  connectorLockPath?: string
 }
 
 const DEFAULT_ACP_BASE = 'http://127.0.0.1:17000'
@@ -402,6 +408,33 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     plans: compute.history(),
     authority: 'dry-run-only',
   }))
+
+  // ── OSF-7 Connector catalog (read-only) ───────────────────────
+  const lockPath =
+    deps.connectorLockPath ||
+    path.resolve(process.cwd(), '../../docs/science/fusion-sources.lock.json')
+
+  safeHandle(ipcMain, 'connectors:list', async () => {
+    try {
+      const cat = loadConnectorCatalog(lockPath)
+      return {
+        ok: true,
+        ...cat,
+        authority: 'catalog-only',
+        note: 'Fetch only via SessionActor Rust adapters — not desktop',
+      }
+    } catch (e: unknown) {
+      return {
+        ok: false,
+        reason: (e as Error).message || String(e),
+      }
+    }
+  })
+
+  safeHandle(ipcMain, 'connectors:fetch', async (_event, payload: unknown) => {
+    const p = (payload ?? {}) as { connectorId?: string }
+    return rejectDesktopConnectorFetch(p.connectorId || 'unknown')
+  })
 }
 
 function normalizeCellRequest(payload: unknown): NotebookCellRequest {

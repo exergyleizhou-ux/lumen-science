@@ -23,7 +23,7 @@
 | OSF-4 | reviewer UX + verdict proj | packs/science-desktop/src/main/files/review-* | **wired** artifact-bound submit; OS orchestrator stubs remain |
 | OSF-5 | skills import/admit path | packs/science-desktop/src/main/files/skill-* | **wired** quarantine+DS-43; no bulk auto-approve; OS skill modules staged for UI only |
 | OSF-6 | compute UX + plan path | packs/science-desktop/src/main/files/compute-* | **wired** dry-run plan; SSH/SCP runners remain stubs |
-| OSF-7 | connector catalog UX | packs/science-desktop/ | catalog only; Rust adapters stay |
+| OSF-7 | connector catalog UX | packs/science-desktop/src/main/files/connector-catalog.ts | **wired** read-only from fusion-sources.lock; no desktop fetch |
 | OSF-8 | electron-builder.yml + release | packs/science-desktop/ | scaffold present; notarization/certs deferred |
 
 ## Authority boundary (NON-NEGOTIABLE)

@@ -8,9 +8,9 @@
 
 ```text
 PRODUCT:     Lumen Science Desktop (fusion in progress)
-RELEASE:     1.1.0-dev desktop shell + OSF-2 authority path
+RELEASE:     1.1.0-dev desktop shell + OSF-2…7 product spine (not 3.0 GA)
 CORE:        Rust SessionActor is sole science execution authority
-LOCAL:       CLI/connectors offline-strong; desktop product path partial
+LOCAL:       CLI/connectors offline-strong; desktop Lumen IPC spine wired
 EMBODIED:    Deferred (4.0/5.0) — Dummy Lab / HIL / real devices NOT done
 MEDICAL:     Not certified
 ```
@@ -66,6 +66,7 @@ Absorb **UI / preview / notebook UX / release engineering**.
 | Dossier gold path | Fixture-driven Q→P→E→R→R | Projection end-to-end |
 | OSF-5 Skills admission | Quarantine import; single admit | Bulk auto-approve denied; registry 10/17 |
 | OSF-6 Remote Compute | Dry-run plan only | No desktop SSH/SCP; live execute denied |
+| OSF-7 Connector catalog | Read-only lock file | 42/40/2; desktop fetch denied |
 | OS `projects:*` / `artifacts:*` / TS compute | **Banned** | Not registered in greenfield `ipc.ts` |
 | UI project catalog | Electron UI state only | Local catalog + membership hybrid |
 | Go science pack | CLI/MCP compatibility | Not product authority |

@@ -81,6 +81,9 @@ const ALLOWED_CHANNELS = new Set<string>([
   'compute:submit-plan',
   'compute:execute-live',
   'compute:history',
+  // OSF-7 Connector catalog — read-only; no desktop fetch runtime
+  'connectors:list',
+  'connectors:fetch',
 ])
 
 /**

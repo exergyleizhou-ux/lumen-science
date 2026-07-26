@@ -14,7 +14,7 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "lint": "eslint --cache .",
-    "test:authority": "npx tsx scripts/authority-verify.mts && npx tsx scripts/test-ipc-handlers.mts && npx tsx scripts/test-osf2-preview.mts && npx tsx scripts/test-osf2-session-bind.mts && npx tsx scripts/test-register-ipc-mock.mts && npx tsx scripts/test-osf2-ui-projects.mts && npx tsx scripts/test-osf3-notebook.mts && npx tsx scripts/test-osf4-reviewer.mts && npx tsx scripts/test-osf5-skills.mts && npx tsx scripts/test-osf6-compute.mts",
+    "test:authority": "npx tsx scripts/authority-verify.mts && npx tsx scripts/test-ipc-handlers.mts && npx tsx scripts/test-osf2-preview.mts && npx tsx scripts/test-osf2-session-bind.mts && npx tsx scripts/test-register-ipc-mock.mts && npx tsx scripts/test-osf2-ui-projects.mts && npx tsx scripts/test-osf3-notebook.mts && npx tsx scripts/test-osf4-reviewer.mts && npx tsx scripts/test-osf5-skills.mts && npx tsx scripts/test-osf6-compute.mts && npx tsx scripts/test-osf7-connectors.mts",
     "dist": "npm run build && electron-builder --dir",
     "dist:mac": "npm run build && electron-builder --mac dir",
     "pack:check": "npm run test:authority && npm run typecheck"

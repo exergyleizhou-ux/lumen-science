@@ -26,6 +26,7 @@ type TabId =
   | 'review'
   | 'skills'
   | 'compute'
+  | 'connectors'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'question', label: 'Question' },
@@ -36,6 +37,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'review', label: 'Review' },
   { id: 'skills', label: 'Skills' },
   { id: 'compute', label: 'Compute' },
+  { id: 'connectors', label: 'Connectors' },
 ]
 
 export const ResearchShell = (): React.JSX.Element => {
@@ -226,6 +228,18 @@ export const ResearchShell = (): React.JSX.Element => {
     setComputeOut(JSON.stringify(await lumen.computeExecuteLive({ planId: 'x' }), null, 2))
   }
 
+  const [connOut, setConnOut] = useState('')
+  const connectorsList = async (): Promise<void> => {
+    if (!lumen) return
+    setConnOut(JSON.stringify(await lumen.connectorsList(), null, 2))
+  }
+  const connectorsFetchDeny = async (): Promise<void> => {
+    if (!lumen) return
+    setConnOut(
+      JSON.stringify(await lumen.connectorsFetch({ connectorId: 'pubmed' }), null, 2),
+    )
+  }
+
   return (
     <div style={styles.root}>
       <header style={styles.header}>
@@ -397,6 +411,30 @@ export const ResearchShell = (): React.JSX.Element => {
                     ResearchResult claims must cite evidence nodes. Export package
                     deferred to 3.0 product path.
                   </p>
+                </section>
+              )}
+
+              {tab === 'connectors' && (
+                <section style={styles.panel}>
+                  <h2 style={styles.h2}>Connectors</h2>
+                  <p style={styles.muted}>
+                    Read-only catalog from fusion-sources.lock (42 inventory, 40
+                    implemented, 2 rejected). Desktop never fetches — Rust
+                    SessionActor adapters only.
+                  </p>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button type="button" style={styles.btn} onClick={() => void connectorsList()}>
+                      List catalog
+                    </button>
+                    <button
+                      type="button"
+                      style={styles.btn}
+                      onClick={() => void connectorsFetchDeny()}
+                    >
+                      Try desktop fetch (must deny)
+                    </button>
+                  </div>
+                  {connOut && <pre style={styles.pre}>{connOut}</pre>}
                 </section>
               )}
 

@@ -693,6 +693,9 @@ type OpenScienceAPI = {
     }) => Promise<unknown>
     computeExecuteLive: (request: { planId: string }) => Promise<unknown>
     computeHistory: () => Promise<unknown>
+    /** OSF-7 Connector catalog — list only; fetch always denied on desktop */
+    connectorsList: () => Promise<unknown>
+    connectorsFetch: (request: { connectorId: string }) => Promise<unknown>
   }
   window: {
     // Closes the focused window (the Cmd+W / Ctrl+W fallback when no preview panel is open).
@@ -1294,6 +1297,10 @@ const api: OpenScienceAPI = {
       ipcRenderer.invoke('compute:execute-live', request) as Promise<unknown>,
     computeHistory: () =>
       ipcRenderer.invoke('compute:history') as Promise<unknown>,
+    connectorsList: () =>
+      ipcRenderer.invoke('connectors:list') as Promise<unknown>,
+    connectorsFetch: (request) =>
+      ipcRenderer.invoke('connectors:fetch', request) as Promise<unknown>,
   },
 }
 

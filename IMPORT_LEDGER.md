@@ -75,6 +75,12 @@ The following Open Science subsystems have execution authority REMOVED:
 | src/main/office-preview/ | packs/science-desktop/src/main/office-preview/ | Planned | DOCX/XLSX/PPTX isolated renderer (follow-on) |
 | src/renderer/.../previews/ | packs/science-desktop/src/renderer/ | Planned | Multi-tab preview UI (follow-on) |
 
+### Batch 7 note (OSF-7 Connector catalog) — 2026-07-26
+
+| Destination | Modified? | Notes |
+|-------------|-----------|-------|
+| packs/science-desktop/src/main/files/connector-catalog.ts | Yes (Lumen) | read-only fusion-sources.lock; desktop fetch denied |
+
 ### Batch 6 note (OSF-6 Remote Compute) — 2026-07-26
 
 | Destination | Modified? | Notes |
