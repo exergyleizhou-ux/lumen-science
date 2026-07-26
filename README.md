@@ -17,7 +17,15 @@ The earlier **Go** Lumen line that previously occupied GitHub `main` is preserve
 - branch: `archive/go-main` (tip was `dd8d71c`, includes Go v1.x releases)
 - historical tags such as `v1.1.2` remain available for old release assets
 
-Do not treat Go tags as the current shipping line. Current product version is in root `VERSION` (`0.1.220-alpha.4`).
+Do not treat Go tags as the current shipping line.
+
+**Versions (three lines — see `docs/VERSIONING.md`):**
+
+- Lumen Core (pager): `agent/.../xai-grok-pager` crate version (currently `0.1.222`)
+- Lumen Science CLI/MCP: `packs/science/VERSION` (currently `1.0.0`; next clean release `v1.0.1`)
+- Lumen Science Desktop: `packs/science-desktop/package.json` (currently `1.1.0-dev`, **not GA**)
+
+Root `VERSION` remains used by some science install scripts; prefer `packs/science/VERSION` going forward.
 
 ## 快速开始
 

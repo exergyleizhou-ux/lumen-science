@@ -1,0 +1,70 @@
+# Desktop CI — source integrity + authority tests.
+# Does NOT claim electron-builder signed installers or notarization.
+name: Desktop CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packs/science-desktop/**'
+      - 'docs/science/fusion-sources.lock.json'
+      - 'packs/science/skills/registry.json'
+      - 'docs/VERSIONING.md'
+      - '.github/workflows/desktop-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packs/science-desktop/**'
+      - 'docs/science/**'
+      - '.github/workflows/desktop-ci.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  authority:
+    name: Desktop authority suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: packs/science-desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: packs/science-desktop/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            echo "WARN: no package-lock.json — using npm install (non-reproducible)"
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Authority + release honesty + office gate
+        run: npm run test:authority
+
+      - name: Typecheck (best-effort until deps fully pruned)
+        run: npm run typecheck
+        continue-on-error: true
+
+      - name: Builder config sanity (no aipoch feed, adhoc-sign exists)
+        run: |
+          test -f build/adhoc-sign.cjs
+          ! grep -q 'statics.aipoch.com' electron-builder.yml
+          ! grep -q 'executableName: open-science' electron-builder.yml
+          ! grep -q 'artifactName: aipoch-' electron-builder.yml
+          ! grep -q 'from: cli$' electron-builder.yml
+          ! grep -q 'packages/open-science' electron-builder.yml

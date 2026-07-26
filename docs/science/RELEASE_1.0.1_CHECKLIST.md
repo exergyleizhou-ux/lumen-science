@@ -1,6 +1,11 @@
 # 1.0.1 Release checklist (P0 honesty)
 
-Audit finding: `v1.0.0` has SHA256SUMS for ~35 assets but GitHub Release only hosts metadata.
+**Goal:** Clean **Science CLI/MCP** release from a fully green commit with
+workflow-built assets. Do **not** re-decorate `v1.0.0` provenance.
+
+**Status note (2026-07-26):** `v1.0.0` may now list many GitHub assets; the
+remaining gap is **tag → protected CI → builder provenance**, not mere file
+presence. Desktop remains `1.1.0-dev` and is **out of scope** for `v1.0.1`.
 
 **Automation (scaffold only):**
 

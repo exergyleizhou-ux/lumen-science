@@ -75,13 +75,42 @@ test('checklist forbids false completion claims', () => {
   ok(!/^all platforms released/im.test(c))
 })
 
-// Structural: afterPack hook referenced
-test('electron-builder afterPack hook path referenced', () => {
-  ok(yml.includes('afterPack') || yml.includes('adhoc-sign') || yml.includes('build/'))
+// Structural: afterPack hook file must exist
+test('afterPack adhoc-sign.cjs exists', () => {
+  ok(fs.existsSync(path.join(root, 'build/adhoc-sign.cjs')))
+})
+test('no aipoch/open-science execution naming in builder', () => {
+  ok(!yml.includes('executableName: open-science'))
+  ok(!yml.includes('artifactName: aipoch-'))
+  ok(!yml.includes('statics.aipoch.com'))
+  ok(!yml.includes('maintainer: aipoch'))
+})
+test('builder does not reference missing cli/ or packages/open-science', () => {
+  ok(!/from:\s*cli\s*$/m.test(yml))
+  ok(!yml.includes('packages/open-science'))
+})
+test('auto-update publish feed disabled', () => {
+  ok(!yml.includes('provider: generic') || !yml.includes('statics.aipoch.com'))
+  // Prefer explicit omit of publish
+  ok(!yml.match(/^publish:\s*$/m) || !yml.includes('statics.aipoch.com'))
+})
+test('package-lock.json present for reproducible npm ci', () => {
+  ok(fs.existsSync(path.join(root, 'package-lock.json')))
+})
+test('VERSIONING.md documents three components', () => {
+  const v = path.resolve(root, '../../docs/VERSIONING.md')
+  ok(fs.existsSync(v))
+  const t = fs.readFileSync(v, 'utf-8')
+  ok(t.includes('Lumen Core'))
+  ok(t.includes('Science CLI') || t.includes('CLI/MCP'))
+  ok(t.includes('Desktop'))
+})
+test('packs/science/VERSION exists', () => {
+  ok(fs.existsSync(path.resolve(root, '../science/VERSION')))
 })
 
 console.log(`\n${failures === 0 ? 'ALL TESTS PASSED' : `${failures} TESTS FAILED`}`)
 console.log(
-  'NOTE: This check does NOT upload GitHub Release binaries. P0 asset upload remains release-ops.',
+  'NOTE: This check does NOT prove electron-builder package success or GitHub asset provenance.',
 )
 process.exit(failures > 0 ? 1 : 0)

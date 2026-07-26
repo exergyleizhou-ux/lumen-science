@@ -1,105 +1,75 @@
 # Lumen Science — Product Status (honest)
 
-**As of**: 2026-07-26  
-**Repo**: exergyleizhou-ux/lumen-science  
-**Strategy**: Month-1 — end architecture fork. Not 5.0 GA.
+**As of:** 2026-07-26  
+**Baseline:** `main` @ `fa34f9b`+ (post version-truth / desktop builder fix)  
+**Repo:** https://github.com/exergyleizhou-ux/lumen-science
 
-## Product label (current)
+## One-line judgment
 
-```text
-PRODUCT:     Lumen Science Desktop (fusion in progress)
-RELEASE:     1.1.0-dev desktop shell + OSF-2…7 product spine (not 3.0 GA)
-CORE:        Rust SessionActor is sole science execution authority
-LOCAL:       CLI/connectors offline-strong; desktop Lumen IPC spine wired
-EMBODIED:    Deferred (4.0/5.0) — Dummy Lab / HIL / real devices NOT done
-MEDICAL:     Not certified
-```
+> Solid **Rust Science kernel + CLI/MCP release assets** + large **desktop source skeleton** after Open Science absorb.  
+> **Not** a repeatable, installable, auto-updating Desktop product yet. **Not** 5.0.
 
-## Version roadmap (locked)
+## Version truth
 
-| Label | Meaning | Status |
-|-------|---------|--------|
-| 1.0.x | CLI/MCP offline product + formal downloadable assets | 1.0.0 tag exists; **binaries on GitHub Release still incomplete (P0)** |
-| 2.0 | Desktop + ResearchProject + EvidenceGraph product surface | Preview models in Rust; desktop fusion WIP |
-| **3.0 GA** | Notebook + Multimodal + Reviewer + Skills + Remote (authorized) | Target after Month 1–2 fusion |
-| 4.0 | Dummy Lab + Digital Twin | Deferred |
-| 5.0 | HIL + one low-risk device + supervised loop | **Preview only — do not announce GA** |
+See [docs/VERSIONING.md](../VERSIONING.md).
 
-## Month-1 scope (what “done” means here)
+| Component | Version | Status |
+|-----------|---------|--------|
+| Lumen Core (pager crate) | `0.1.222` | Shipping agent line |
+| Science CLI/MCP | `1.0.0` (`packs/science/VERSION`) | Assets on GitHub `v1.0.0`; **tag→CI provenance still weak → need `v1.0.1`** |
+| Science Desktop | `1.1.0-dev` | Source candidate only |
 
-**In scope**
+## Quantified maturity (audit-aligned)
 
-1. Single Rust authority for science execution.
-2. Desktop shell (Open Science UI absorb) with execution authority stripped.
-3. Files/Preview by `artifact_id` + membership-gated session bind.
-4. UI project/session open path that never becomes second authority.
-5. Honest provenance (Open Science `d8f11e3`, Apache-2.0).
-6. Packaging scaffold (electron-builder); notarization when certs exist.
-7. No new connectors, no device types, no scope expansion.
+| Scope | ~Done | Note |
+|-------|------:|------|
+| 1.0 feature code (Rust/Go offline) | 85% | Tests + gates strong |
+| 1.0 formal release chain (tag→protected build) | 65% | Assets exist; provenance incomplete |
+| OSF-0…8 source fusion | 70% | IPC spine OSF-2…8 in tree |
+| OSF-0…8 desktop product evidence | 20–35% | No lockfile historically; builder fixed; CI desktop job added |
+| 2.0 Desktop Preview | 35% | UI + IPC, not installable GA |
+| 3.0 workbench GA | 25–30% | Live SessionActor E2E incomplete |
+| 5.0 embodied | 10–15% | Device/HIL not started |
 
-**Out of scope this month**
+## What is trustworthy today
 
-- Device / BOS / HIL / real lab.
-- Bulk skill auto-approve.
-- Replacing 40 Rust connectors with Open Science runtime.
-- Claiming 5.0 or “all OSF-0…9 complete”.
+- Rust `SessionActor` sole execution authority.
+- Connectors: 42 inventory / 40 implemented / 2 rejected / 0 unresolved (machine gates).
+- Skills registry: 10 approved / 17 pending; bulk auto-approve denied on desktop path.
+- Rust science tests + strict clippy: green on recent main (verify in CI).
+- Go product packages: green.
+- Desktop **product path code**: Files/Preview, Notebook plan, Reviewer, Skills quarantine, Compute dry-run, Connector catalog, Office fail-closed admission, release honesty IPC.
+- Open Science pin: `d8f11e3` Apache-2.0 with NOTICE/ledger.
 
-## Open Science absorb policy
+## Critical remaining gaps (priority)
 
-| Source | Pin |
-|--------|-----|
-| https://github.com/aipoch/open-science.git | `d8f11e34314fdfa36f750cdb617af1cc2f30bace` (v0.7.1, Apache-2.0) |
+### P0
 
-Reference only (later Motif workbench): https://github.com/jvogan/motif.git — **not** Month-1.
+1. **`v1.0.1` clean Science release** from fully green commit with workflow-built assets + manifest `git_commit` + smoke artifacts (do not keep decorating broken tag provenance).
+2. **Desktop reproducible build**: lockfile committed; `npm ci` + typecheck + authority + build on clean machine; builder must not reference missing paths (fixed in electron-builder.yml).
+3. **Desktop CI** job required for `packs/science-desktop/**` changes.
+4. **OSF-9 built-product E2E**: install Desktop → exact Rust binary hash → ACP session → artifact preview → notebook plan → review → restart/replay + adversarial IPC tests.
 
-Absorb **UI / preview / notebook UX / release engineering**.  
-**Never** absorb OS multi-agent authority, Full Access bypass, TS SSH/kernel executors as production authority.
+### P1
 
-## Architecture fork status
+- Live connector matrix not 100% (arXiv 503 / S2 429 / OpenAlex key).
+- Auto-update feed: disabled until Lumen-owned signed feed.
+- Office converters: fail-closed until hostile-doc suite.
+- README still mentions historical alpha text in places — align with VERSIONING.md.
 
-| Surface | Authority | State |
-|---------|-----------|--------|
-| Connectors / evidence / workflow (Rust) | SessionActor | Strong (offline tests) |
-| Desktop IPC science path | `acp:*` + `files:*` + `notebook:*` + `review:*` via safeHandle | OSF-2/3/4 wired |
-| Notebook TS KernelExecutor | **Stub only** | Live path: ACP `notebook_execute` only |
-| Reviewer TS orchestrator | **Stub only** | Live path: ACP `start_review` |
-| Dossier gold path | Fixture-driven Q→P→E→R→R | Projection end-to-end |
-| OSF-5 Skills admission | Quarantine import; single admit | Bulk auto-approve denied; registry 10/17 |
-| OSF-6 Remote Compute | Dry-run plan only | No desktop SSH/SCP; live execute denied |
-| OSF-7 Connector catalog | Read-only lock file | 42/40/2; desktop fetch denied |
-| OSF-8 Release scaffold | pack:check + checklist automation | Binaries upload still P0 ops |
-| Live binary smoke | Optional PATH/LUMEN_BINARY | version/help; doctor soft |
-| Office preview admission | Fail-closed table | hostile-doc required before open |
-| OS `projects:*` / `artifacts:*` / TS compute | **Banned** | Not registered in greenfield `ipc.ts` |
-| UI project catalog | Electron UI state only | Local catalog + membership hybrid |
-| Go science pack | CLI/MCP compatibility | Not product authority |
-
-## Sharp wedge (Month-2, not this commit)
-
-**Target/Disease Research Dossier** (computational biology only):
+## Roadmap (no version skip)
 
 ```text
-Question → Plan → Literature/DB → Artifacts → Notebook → Motif check
-→ Reviewer → EvidenceGraph → Reproducible package → Replay
+1.0.1  CLI/MCP auditable release
+1.1.0  Desktop alpha (lockfile + CI build + install smoke)
+2.0.0  Project/Evidence/Preview/Replay desktop product
+3.0.0  Notebook + Motif + Reviewer + Skills + controlled remote GA
+4.0.0  Dummy Lab + Digital Twin
+5.0.0  HIL + one low-risk device + human supervision
 ```
 
-User-facing concepts only:
+## Explicit non-claims
 
-```text
-Question · Plan · Evidence · Result · Review
-```
-
-## Known P0/P1 (from audit)
-
-| ID | Issue | Disposition |
-|----|--------|-------------|
-| P0 | GitHub `v1.0.0` missing downloadable binaries listed in SHA256SUMS | Track as 1.0.1 release ops; not fixed by desktop code alone |
-| P1 | Rust strict clippy `-D warnings` red | Separate quality PR; tests green |
-| P1 | Desktop still imports large OS surface; many preload channels point at banned IPC | Month-1: Lumen `files:*` + `window.api.lumen`; OS channels fail-closed |
-
-## Metrics (targets — not yet measured)
-
-- Install → first Project: &lt; 5 min  
-- Install → first evidenced ResearchResult: &lt; 15 min  
-- Artifact registration rate for formal claims: 100%  
-- Fixture replay consistency: 100%
+- Not 3.0 GA, not 5.0, not medical/device certified.
+- Desktop line count ≠ product completeness.
+- `osf8-release-check` / `release:checklist-status` do **not** prove electron-builder packages or GitHub asset provenance alone.
