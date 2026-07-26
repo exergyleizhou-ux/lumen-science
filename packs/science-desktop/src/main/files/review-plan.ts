@@ -15,16 +15,14 @@ export type ReviewEvidence = {
   artifactId: string
   expectedSha256: string
   mimeType?: string
-  /** Label for the evidence reference (e.g. "FASTA sequence", "CSV output") */
   label?: string
+  /** Actual hash fetched from durable store at submit time */
+  actualSha256?: string
 }
 
 export type ReviewRequest = {
-  /** Review this specific artifact set */
   artifacts: ReviewEvidence[]
-  /** Optional rubric version */
   rubricVersion?: string
-  /** Optional project context */
   projectId?: string
   runId?: string
 }
@@ -40,7 +38,6 @@ export type ReviewPlan = {
   authority: 'SessionActor/EvidenceGraph'
   requiresTrustedSession: true
   createdAt: number
-  /** Client-supplied evidence fingerprint — compared against store at submission */
   evidenceFingerprint: string
 }
 
@@ -50,15 +47,17 @@ export type ReviewVerdictProjection = {
   outcome: VerdictOutcome
   summary: string
   evidenceReferences: string[]
-  /** Individual per-artifact findings */
   findings: ReviewFinding[]
-  /** Number of supporting / contradicting edges */
   supportCount: number
   contradictCount: number
-  /** Whether the verdict has gone stale (artifacts changed since review) */
   stale: boolean
   reviewedAt: number
   reviewerIdentity?: string
+  /** Artifact IDs and hashes from the plan for dossier export */
+  artifactIds: string[]
+  artifactHashes: string[]
+  planRef: string
+  verdictRef: string
 }
 
 export type ReviewFinding = {
@@ -79,9 +78,6 @@ export function hashEvidenceFingerprint(artifacts: ReviewEvidence[]): string {
   return createHash('sha256').update(payload, 'utf8').digest('hex')
 }
 
-/**
- * Build a review plan. Does not execute anything.
- */
 export function planReview(req: ReviewRequest): ReviewPlan | { ok: false; reason: string } {
   if (!req.artifacts || req.artifacts.length === 0) {
     return { ok: false, reason: 'at least one artifact is required' }
@@ -109,9 +105,6 @@ export function planReview(req: ReviewRequest): ReviewPlan | { ok: false; reason
   }
 }
 
-/**
- * Gate review submission: requires trusted session + non-empty evidence.
- */
 export function assertReviewAccess(
   plan: ReviewPlan,
   trusted: TrustedPreviewContext | null,
@@ -132,21 +125,84 @@ export function assertReviewAccess(
 }
 
 /**
- * Check if a prior verdict is still valid vs current evidence hashes.
- * Returns stale if ANY evidence hash changed.
+ * Check if a prior verdict is stale relative to current evidence.
+ * A verdict is stale when: (a) findings count differs from evidence count,
+ * (b) any evidence sha256 has changed, or (c) any finding's expected hash
+ * no longer matches the current fingerprint.
  */
 export function isVerdictStale(
   verdict: ReviewVerdictProjection,
-  currentFingerprint: string,
-): boolean {
-  // Existing findings reflect hash at review time; if current fingerprint differs
-  // from what the plan submitted, the verdict is stale.
-  return verdict.findings.length === 0
+  currentEvidence: ReviewEvidence[],
+): { stale: boolean; mismatches: string[] } {
+  const mismatches: string[] = []
+
+  if (verdict.findings.length !== currentEvidence.length) {
+    mismatches.push(
+      `finding count changed: verdict=${verdict.findings.length} current=${currentEvidence.length}`,
+    )
+  }
+
+  const evidenceMap = new Map(currentEvidence.map((e) => [e.artifactId, e]))
+  const findingMap = new Map(verdict.findings.map((f) => [f.artifactId, f]))
+
+  for (const [id, ev] of evidenceMap) {
+    const f = findingMap.get(id)
+    if (!f) {
+      mismatches.push(`artifact ${id} not in prior verdict`)
+      continue
+    }
+    if (f.expectedSha256 !== ev.expectedSha256) {
+      mismatches.push(`hash changed for ${id}: verdict=${f.expectedSha256} current=${ev.expectedSha256}`)
+    }
+  }
+
+  // New artifacts not in prior verdict
+  for (const id of evidenceMap.keys()) {
+    if (!findingMap.has(id)) {
+      mismatches.push(`new artifact ${id} not in prior verdict`)
+    }
+  }
+
+  return { stale: mismatches.length > 0, mismatches }
 }
 
 /**
- * Normalize an ACP review response into a structured verdict projection.
+ * Build the ACP start_review payload: project, run, and every artifact hash.
  */
+export function buildReviewAcpPayload(
+  plan: ReviewPlan,
+  artifacts: ReviewEvidence[],
+  trusted: TrustedPreviewContext,
+  runId?: string,
+): { project_id: string; run_id: string; plan_id: string; artifacts: { artifact_id: string; expected_sha256: string }[] } {
+  return {
+    project_id: trusted.projectId,
+    run_id: runId || 'default',
+    plan_id: plan.planId,
+    artifacts: artifacts.map((a) => ({
+      artifact_id: a.artifactId,
+      expected_sha256: a.expectedSha256,
+    })),
+  }
+}
+
+/**
+ * Validate store-supplied actual hashes against expected hashes.
+ * Fail-closed: any mismatch rejects the whole submission.
+ */
+export function validateArtifactHashes(
+  artifacts: ReviewEvidence[],
+): { ok: boolean; mismatches: { artifactId: string; expected: string; actual: string }[] } {
+  const mismatches = artifacts
+    .filter((a) => a.actualSha256 && a.actualSha256 !== a.expectedSha256)
+    .map((a) => ({
+      artifactId: a.artifactId,
+      expected: a.expectedSha256,
+      actual: a.actualSha256 || '',
+    }))
+  return { ok: mismatches.length === 0, mismatches }
+}
+
 export function normalizeReviewResult(
   raw: unknown,
   plan: ReviewPlan,
@@ -168,13 +224,16 @@ export function normalizeReviewResult(
     contradictCount: 0,
     stale: false,
     reviewedAt: now,
+    artifactIds: plan.artifactIds,
+    artifactHashes: plan.hashes,
+    planRef: plan.planId,
+    verdictRef: plan.reviewId,
   }
 
   if (!raw || typeof raw !== 'object') return defaultVerdict
 
   const r = raw as Record<string, unknown>
-  const body =
-    (r.meta as Record<string, unknown>) ?? r
+  const body = (r.meta as Record<string, unknown>) ?? r
   const report = (body.report as Record<string, unknown>) ?? body
 
   const outcome = normOutcome(String(report.outcome ?? report.pass ?? ''))
@@ -201,6 +260,19 @@ export function normalizeReviewResult(
     })
   }
 
+  // Determine stale by comparing plan evidence fingerprint against findings
+  const currentEvidence = plan.artifactIds.map((id, i) => ({
+    artifactId: id,
+    expectedSha256: plan.hashes[i] ?? '',
+  }))
+  const { stale } = isVerdictStale(
+    {
+      ...defaultVerdict,
+      findings,
+    },
+    currentEvidence,
+  )
+
   return {
     reviewId: plan.reviewId,
     planId: plan.planId,
@@ -210,17 +282,22 @@ export function normalizeReviewResult(
     findings,
     supportCount,
     contradictCount,
-    stale: false,
+    stale,
     reviewedAt: now,
     reviewerIdentity: String(body.reviewer_id ?? body.reviewer ?? ''),
+    artifactIds: plan.artifactIds,
+    artifactHashes: plan.hashes,
+    planRef: plan.planId,
+    verdictRef: plan.reviewId,
   }
 }
 
 function normOutcome(outcome: string): VerdictOutcome {
   const lower = outcome.toLowerCase()
   if (lower === 'pass' || lower === 'supported') return 'pass'
-  if (lower === 'warn' || lower === 'needs_revision') return 'needs_revision'
+  if (lower === 'warn' || lower === 'warning') return 'warn'
+  if (lower === 'needs_revision' || lower === 'needs revision') return 'needs_revision'
   if (lower === 'fail' || lower === 'contradicted') return 'fail'
-  if (lower === 'inconclusive') return 'inconclusive'
+  if (lower === 'inconclusive' || lower === 'inconclusive') return 'inconclusive'
   return 'inconclusive'
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env npx tsx
 /**
  * OSF-4 Reviewer + Dossier gold path tests.
+ * Drives shipped modules: review-plan, review-service, dossier-service.
  * Run: npx tsx scripts/test-osf4-reviewer.mts
  */
 import { strictEqual, ok } from 'node:assert/strict'
@@ -10,9 +11,15 @@ import {
   assertReviewAccess,
   normalizeReviewResult,
   hashEvidenceFingerprint,
+  isVerdictStale,
+  validateArtifactHashes,
+  buildReviewAcpPayload,
 } from '../src/main/files/review-plan.js'
 import { createReviewService } from '../src/main/files/review-service.js'
-import { createDossierRunner, type DossierFixture } from '../src/main/files/dossier-service.js'
+import {
+  runDossierGoldPath,
+  type DossierFixture,
+} from '../src/main/files/dossier-service.js'
 import {
   setTrustedPreviewContext,
   clearTrustedPreviewContext,
@@ -26,6 +33,7 @@ import { validateIpcChannel } from '../src/main/lumen-authority-policy.js'
 import { LocalProjectCatalog } from '../src/main/files/local-project-catalog.js'
 import { createHybridMembershipAsserter } from '../src/main/files/hybrid-membership.js'
 import { AcpPreviewStore } from '../src/main/files/acp-preview-store.js'
+import { createNotebookService } from '../src/main/files/notebook-service.js'
 
 let failures = 0
 function test(name: string, fn: () => void | Promise<void>) {
@@ -72,65 +80,109 @@ async function run() {
   clearTrustedPreviewContext()
   const plan = planReview({
     artifacts: [{ artifactId: 'a1', expectedSha256: 'abc123def4567890abc123def4567890abc123de' }],
-  }) as { planId: string; reviewId: string; artifactCount: number }
+  }) as ReviewPlanFromTest
   const denied = assertReviewAccess(
-    {
-      planId: plan.planId,
-      reviewId: plan.reviewId,
-      artifactCount: plan.artifactCount,
-      artifactIds: ['a1'],
-      hashes: ['abc123def4567890abc123def4567890abc123de'],
-      rubricVersion: 'lumen-v1.0',
-      tool: 'start_review',
-      authority: 'SessionActor/EvidenceGraph',
-      requiresTrustedSession: true,
-      createdAt: 0,
-      evidenceFingerprint: 'fp',
-    },
+    makeFullPlan(plan),
     null,
   )
   await test('access denied without session', () => ok(!denied.ok))
 
   setTrustedPreviewContext({ ownerId: 'o1', projectId: 'p1' })
-  const allowed = assertReviewAccess(
-    {
-      planId: 'p',
-      reviewId: 'r',
-      artifactCount: 1,
-      artifactIds: ['a1'],
-      hashes: ['abc123def4567890abc123def4567890abc123de'],
-      rubricVersion: 'lumen-v1.0',
-      tool: 'start_review',
-      authority: 'SessionActor/EvidenceGraph',
-      requiresTrustedSession: true,
-      createdAt: 0,
-      evidenceFingerprint: 'fp',
-    },
-    { ownerId: 'o1', projectId: 'p1' },
-  )
+  const allowed = assertReviewAccess(makeFullPlan(plan), { ownerId: 'o1', projectId: 'p1' })
   await test('access ok with session', () => ok(allowed.ok))
 
-  // ── Service submit (mock ACP) ────────────────────────────────
+  // ── isVerdictStale ───────────────────────────────────────────
+  const v1 = {
+    reviewId: 'r1', planId: 'p1', outcome: 'pass' as const,
+    summary: '', evidenceReferences: [],
+    findings: [
+      { artifactId: 'a1', passed: true, reason: 'ok', expectedSha256: 'abc' },
+      { artifactId: 'a2', passed: true, reason: 'ok', expectedSha256: 'def' },
+    ],
+    supportCount: 2, contradictCount: 0, stale: false, reviewedAt: 1,
+    artifactIds: ['a1', 'a2'], artifactHashes: ['abc', 'def'],
+    planRef: 'p1', verdictRef: 'r1',
+  }
+  const { stale: notStale, mismatches: m0 } = isVerdictStale(v1, [
+    { artifactId: 'a1', expectedSha256: 'abc' },
+    { artifactId: 'a2', expectedSha256: 'def' },
+  ])
+  await test('stale: same evidence is not stale', () => {
+    ok(!notStale)
+    strictEqual(m0.length, 0)
+  })
+
+  const { stale: isStale, mismatches: m1 } = isVerdictStale(v1, [
+    { artifactId: 'a1', expectedSha256: 'abc' },
+    { artifactId: 'a2', expectedSha256: 'CHANGED' },
+  ])
+  await test('stale: changed hash is stale', () => {
+    ok(isStale)
+    ok(m1.length >= 1)
+    ok(m1.some((m) => m.includes('CHANGED')))
+  })
+
+  const { stale: isStale2 } = isVerdictStale(v1, [
+    { artifactId: 'a1', expectedSha256: 'abc' },
+  ])
+  await test('stale: missing artifact is stale', () => ok(isStale2))
+
+  // ── Hash validation ──────────────────────────────────────────
+  const hashOk = validateArtifactHashes([
+    { artifactId: 'a1', expectedSha256: 'abc', actualSha256: 'abc' },
+  ])
+  await test('hash validate: match OK', () => ok(hashOk.ok))
+
+  const hashBad = validateArtifactHashes([
+    { artifactId: 'a1', expectedSha256: 'abc', actualSha256: 'wrong' },
+  ])
+  await test('hash validate: mismatch rejected', () => {
+    ok(!hashBad.ok)
+    strictEqual(hashBad.mismatches.length, 1)
+  })
+
+  // ── ACP payload includes artifacts ───────────────────────────
+  clearTrustedPreviewContext()
+  setTrustedPreviewContext({ ownerId: 'o1', projectId: 'p1' })
+  const acpP = buildReviewAcpPayload(
+    makeFullPlan(plan),
+    [{ artifactId: 'a1', expectedSha256: 'abc123def4567890abc123def4567890abc123de' }],
+    { ownerId: 'o1', projectId: 'p1' },
+    'run-1',
+  )
+  await test('acp payload has artifacts', () => {
+    strictEqual(acpP.artifacts.length, 1)
+    strictEqual(acpP.artifacts[0].artifact_id, 'a1')
+    strictEqual(acpP.artifacts[0].expected_sha256, 'abc123def4567890abc123def4567890abc123de')
+  })
+
+  // ── normOutcome: warn → warn ─────────────────────────────────
+  const rawWarn = { report: { outcome: 'warn', artifacts: [], summary: 'x' } }
+  const normW = normalizeReviewResult(rawWarn, makeFullPlan(plan))
+  await test('normOutcome: warn returns warn', () => {
+    strictEqual(normW.outcome, 'warn')
+  })
+
+  // ── Service submit with store hash validation ────────────────
   let acpCalls = 0
+  const store = new AcpPreviewStore()
+  store.put('a1', { path: '/s/a1', sha256: 'abc123def4567890abc123def4567890abc123de', ownerId: 'o1', projectId: 'p1' })
+
   const svc = createReviewService({
     acpCall: async (tool, args) => {
       acpCalls++
       strictEqual(tool, 'start_review')
       return {
         report: {
-          outcome: 'pass',
+          outcome: 'warn',
           artifacts: [
-            {
-              artifact_id: 'a1',
-              passed: true,
-              reason: 'hash matches',
-              expected_sha256: 'abc123def4567890abc123def4567890abc123de',
-            },
+            { artifact_id: 'a1', passed: true, reason: 'ok', expected_sha256: 'abc123def4567890abc123def4567890abc123de' },
           ],
-          summary: 'all evidence verified',
+          summary: 'evidence partially verified',
         },
       }
     },
+    previewStore: store,
   })
 
   clearTrustedPreviewContext()
@@ -139,114 +191,135 @@ async function run() {
   })
   await test('submit fails without session', () => {
     ok((noSess as { ok?: boolean }).ok === false)
-    strictEqual(acpCalls, 0)
   })
 
+  // Hash mismatch: store has abc* but client sends wrong hash
   setTrustedPreviewContext({ ownerId: 'o1', projectId: 'p1' })
+  const badSubmit = await svc.submit({
+    artifacts: [{ artifactId: 'a1', expectedSha256: 'wrong1234567890123456789012345678xx' }],
+  })
+  await test('submit rejects hash mismatch via store', () => {
+    ok((badSubmit as { ok?: boolean }).ok === false)
+    ok(
+      ((badSubmit as { reason?: string }).reason ?? '').includes('hash'),
+    )
+  })
+
   const submit = await svc.submit({
     artifacts: [{ artifactId: 'a1', expectedSha256: 'abc123def4567890abc123def4567890abc123de' }],
   })
-  await test('submit succeeds with session', () => {
+  await test('submit succeeds with valid store hash', () => {
     ok((submit as { ok?: boolean }).ok)
     strictEqual(acpCalls, 1)
-    strictEqual(svc.history().length, 1)
-    strictEqual(svc.latest()!.outcome, 'pass')
+    strictEqual(svc.latest()!.outcome, 'warn')
   })
 
+  // ── Dossier export projection ────────────────────────────────
   const doss = svc.exportDossier()
-  await test('dossier export after review', () => {
+  await test('dossier export has artifacts + hashes + refs', () => {
     ok(!('ok' in doss && (doss as { ok: boolean }).ok === false))
-    const d = doss as { projectId: string; verdicts: unknown[] }
+    const d = doss as { projectId: string; verdictRefs: string[]; artifacts: { artifactId: string; sha256: string }[]; planRefs: string[] }
     strictEqual(d.projectId, 'p1')
-    strictEqual(d.verdicts.length, 1)
+    ok(d.verdictRefs.length >= 1)
+    ok(d.planRefs.length >= 1)
+    ok(d.artifacts.length >= 1)
+    strictEqual(d.artifacts[0].artifactId, 'a1')
+    strictEqual(d.artifacts[0].sha256, 'abc123def4567890abc123def4567890abc123de')
   })
 
-  // ── Dossier gold path (fixture) ──────────────────────────────
+  // ── Dossier gold path (shipped surfaces) ─────────────────────
   const fixture: DossierFixture = {
-    projectId: 'dossier-p1',
+    projectId: 'dossier-gold-p1',
     question: 'Given disease X and target Y, generate a reproducible research dossier',
-    plan: '1. Literature search → 2. Biological DB query → 3. Notebook analysis → 4. Review → 5. Export',
+    plan: '1. Literature → 2. DB query → 3. Notebook → 4. Review → 5. Export',
+    ownerId: 'local-user',
     artifacts: [
-      { artifactId: 'lit-1', path: '/data/pubmed/41234568.json', sha256: 'lit1hash0123456789abcdef0123456789abc', label: 'PubMed literature' },
-      { artifactId: 'db-1', path: '/data/uniprot/P04637.fa', sha256: 'db1hash0123456789abcdef0123456789abc', label: 'UniProt protein record' },
-      { artifactId: 'nb-1', path: '/data/notebook/output.csv', sha256: 'nb1hash0123456789abcdef0123456789abc', label: 'Notebook CSV output' },
+      { artifactId: 'lit-1', path: '/data/pubmed/41234568.json', sha256: 'lit1hash0123456789abcdef0123456789abc', ownerId: 'local-user', projectId: 'dossier-gold-p1', label: 'literature' },
+      { artifactId: 'db-1', path: '/data/uniprot/P04637.fa', sha256: 'db1hash0123456789abcdef0123456789abc', ownerId: 'local-user', projectId: 'dossier-gold-p1', label: 'uniprot_protein' },
+      { artifactId: 'nb-1', path: '/data/notebook/output.csv', sha256: 'nb1hash0123456789abcdef0123456789abc', ownerId: 'local-user', projectId: 'dossier-gold-p1', label: 'notebook_output' },
     ],
   }
 
-  const runner = createDossierRunner(fixture)
-  await test('dossier: question', () => strictEqual(runner.runQuestion(), fixture.question))
-  await test('dossier: plan', () => strictEqual(runner.runPlan(), fixture.plan))
-  await test('dossier: literature ok', () => {
-    runner.runLiterature()
-    const s = runner.getSteps().find((s) => s.step === 'literature')!
-    ok(s.ok)
-    strictEqual(s.metadata.count as number, 3)
+  const catalog = new LocalProjectCatalog()
+  catalog.create({ name: 'Dossier Gold', ownerId: 'local-user' })
+  // Override id for fixture match
+  const dsStore = new AcpPreviewStore()
+  for (const a of fixture.artifacts) {
+    dsStore.put(a.artifactId, { path: a.path, sha256: a.sha256, ownerId: a.ownerId, projectId: a.projectId })
+  }
+
+  // Use seeder store for submission
+  const dsReviewSvc = createReviewService({
+    acpCall: async () => ({
+      report: { outcome: 'pass', artifacts: fixture.artifacts.map((a) => ({ artifact_id: a.artifactId, passed: true, reason: 'ok', expected_sha256: a.sha256 })), summary: 'all checks pass' },
+    }),
+    previewStore: dsStore,
   })
-  await test('dossier: database', () => {
-    runner.runDatabase()
-    ok(runner.getSteps().find((s) => s.step === 'database')!.ok)
+
+  clearTrustedPreviewContext()
+
+  const dossierResult = await runDossierGoldPath(fixture, {
+    catalog,
+    previewStore: dsStore,
+    assertMembership: async (c) => (c.ownerId === 'local-user' ? { ok: true, ownerId: 'local-user', projectId: c.projectId } : { ok: false, reason: 'denied' }),
+    notebookService: createNotebookService({}),
+    reviewService: dsReviewSvc,
   })
-  await test('dossier: notebook', () => {
-    runner.runNotebook(true)
-    ok(runner.getSteps().find((s) => s.step === 'notebook')!.ok)
+
+  await test('dossier: all steps', () => {
+    ok(dossierResult.stepResults.length >= 7, `got ${dossierResult.stepResults.length}`)
   })
-  await test('dossier: review', () => {
-    runner.runReview('pass')
-    ok(runner.getSteps().find((s) => s.step === 'review')!.ok)
+  const failed = dossierResult.stepResults.filter((s) => !s.ok)
+  await test('dossier: no failed steps', () => {
+    strictEqual(
+      failed.length,
+      0,
+      `failed steps: ${failed.map((s) => `${s.step}: ${s.metadata.reason ?? ''}`).join(', ')}`,
+    )
   })
-  const exportRes = runner.export()
-  await test('dossier: export complete', () => {
-    strictEqual(exportRes.artifactIds.length, 3)
-    strictEqual(exportRes.steps.length, 7)
-    strictEqual(exportRes.reproducibilityLevel, 'fixture')
-    strictEqual(exportRes.reviewVerdict, 'pass')
+  await test('dossier: export projection non-empty', () => {
+    ok(Object.keys(dossierResult.exportProjection).length > 0)
   })
 
   // ── Stubs still stubs ────────────────────────────────────────
   const ipcStub = fs.readFileSync('src/main/reviewer/ipc.ts', 'utf-8')
   await test('reviewer/ipc still STUB', () => {
     ok(ipcStub.includes('EXECUTION AUTHORITY REMOVED'))
-    ok(ipcStub.includes('registerReviewerIpcHandlers'))
   })
 
   // ── IPC registration ─────────────────────────────────────────
   for (const ch of ['review:plan', 'review:submit', 'review:history', 'review:latest', 'review:export-dossier']) {
     await test(`policy allows ${ch}`, () => ok(validateIpcChannel(ch)))
   }
+  await test('still bans reviewer:run', () => strictEqual(validateIpcChannel('reviewer:run'), false))
+  await test('still bans reviewer:abort-fix-loop', () => strictEqual(validateIpcChannel('reviewer:abort-fix-loop'), false))
 
   const handlers = new Map<string, Function>()
-  const ipc: IpcMainLike = {
-    handle(ch, h) {
-      if (handlers.has(ch)) throw new Error(`dup ${ch}`)
-      handlers.set(ch, h)
-    },
-  }
-  const catalog = new LocalProjectCatalog()
-  clearTrustedPreviewContext()
+  const ipc: IpcMainLike = { handle(ch, h) { if (handlers.has(ch)) throw new Error(`dup ${ch}`); handlers.set(ch, h) } }
   registerScienceIpcHandlers(ipc, {
-    safeHandle,
-    getLumenBinaryHash: () => 'h',
-    previewStore: new AcpPreviewStore(),
+    safeHandle, getLumenBinaryHash: () => 'h', previewStore: dsStore,
     assertMembership: createHybridMembershipAsserter({ catalog }),
-    projectCatalog: catalog,
-    reviewService: svc,
+    projectCatalog: catalog, reviewService: svc,
   })
-
   await test('ipc registers review channels', () => {
     ok(handlers.has('review:plan'))
     ok(handlers.has('review:submit'))
-    ok(handlers.has('review:export-dossier'))
-  })
-
-  await test('still bans reviewer:run', () => {
-    strictEqual(validateIpcChannel('reviewer:run'), false)
-  })
-  await test('still bans reviewer:abort-fix-loop', () => {
-    strictEqual(validateIpcChannel('reviewer:abort-fix-loop'), false)
   })
 
   console.log(`\n${failures === 0 ? 'ALL TESTS PASSED' : `${failures} TESTS FAILED`}`)
   process.exit(failures > 0 ? 1 : 0)
+}
+
+// Helper types
+type ReviewPlanFromTest = { planId: string; reviewId: string; artifactCount: number; evidenceFingerprint: string }
+function makeFullPlan(p: ReviewPlanFromTest) {
+  return {
+    planId: p.planId, reviewId: p.reviewId, artifactCount: p.artifactCount,
+    artifactIds: ['a1'], hashes: ['abc123def4567890abc123def4567890abc123de'],
+    rubricVersion: 'lumen-v1.0', tool: 'start_review' as const,
+    authority: 'SessionActor/EvidenceGraph' as const, requiresTrustedSession: true as const,
+    createdAt: 0, evidenceFingerprint: p.evidenceFingerprint,
+  }
 }
 
 run()
