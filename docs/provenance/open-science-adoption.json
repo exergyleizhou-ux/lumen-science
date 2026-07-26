@@ -9,8 +9,8 @@
     "noticeFile": "third_party/open-science/NOTICE"
   },
   "summary": {
-    "adopted-verbatim": 927,
-    "adopted-modified": 103,
+    "adopted-verbatim": 925,
+    "adopted-modified": 105,
     "lumen-original": 52,
     "totalShipped": 1082,
     "upstreamSourceFiles": 1028,
@@ -18,7 +18,7 @@
   },
   "licenseObligations": {
     "attributionRequiredFor": 1030,
-    "statementOfChangesRequiredFor": 103,
+    "statementOfChangesRequiredFor": 105,
     "note": "Apache-2.0 section 4 requires retaining attribution for adopted files and stating that modified files were changed. Files classified lumen-original carry no upstream obligation."
   },
   "files": {
@@ -1055,11 +1055,11 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/main/connectors/descriptors/clinical-trials.ts": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/main/connectors/descriptors/clinical-trials.ts",
       "upstreamSha256": "78ebb3ba3ebc1c143aed726303be07147f3ca4e46b7699b4faf42ffcffdc55ec",
-      "localSha256": "78ebb3ba3ebc1c143aed726303be07147f3ca4e46b7699b4faf42ffcffdc55ec",
-      "modified": false,
+      "localSha256": "2c72cdfb514ceab330b10c99896639839e213d20053d45327a3139708ecc2687",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/main/connectors/descriptors/drug-regulatory.test.ts": {
@@ -2226,7 +2226,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/notebook/bundle-manifest.test.ts",
       "upstreamSha256": "268b82145a263e7f3b1d1cc3ad276634669decc4ead358767cc45e8d3fbbe73f",
-      "localSha256": "3a5a2602f72a9aabf82aba3f38cf2840125850f1df55571af2d5d93ce4cf9b49",
+      "localSha256": "6607017a6043ccde9d1e93dfe50f650e263d132988f27bb0a1a32e8fdcf7ef6c",
       "modified": true,
       "noticeRequired": true
     },
@@ -2266,7 +2266,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/notebook/environment-discovery.test.ts",
       "upstreamSha256": "c129ecb095f367623b0067305bc4e67dcbde921158b7234369762ff555b3357a",
-      "localSha256": "4fa9e1f58c7e29e787e9c92c52795b3ba1feff04072df2b26e0a2f3a23f5e98c",
+      "localSha256": "3b560c03a11e544c2436f0420bf7fd3126e0eaac465c6e86a1454991b704934a",
       "modified": true,
       "noticeRequired": true
     },
@@ -2810,7 +2810,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/notebook/runtime-paths.test.ts",
       "upstreamSha256": "8bb473e1dfe18cbe2d5eb8ba04ec33d33a1d557d7a76111fe8488f4432499251",
-      "localSha256": "e970561d0be5860c21a237641300e7044b922b3520c8b8390bc030e5ba99e535",
+      "localSha256": "559c8c86e4b0f68252914cd115fb2e72806fd921358a5b33a0a1a794979959ac",
       "modified": true,
       "noticeRequired": true
     },
@@ -4370,7 +4370,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/tray.test.ts",
       "upstreamSha256": "6b68fe926960b55d96fcf072d8856d47615c577c71b5f22cb2c56788857d85ab",
-      "localSha256": "341a63117999fad7fd7f8781d6a7ac234f701dec7d420eb65e6c1944c28a3fb1",
+      "localSha256": "2d91a0b3ba957b71eef58457f20c1c6e2042c8db26e40c8ea159d2004ad2bd5f",
       "modified": true,
       "noticeRequired": true
     },
@@ -4386,7 +4386,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/update/create-strategy.test.ts",
       "upstreamSha256": "6fcc7e1b38e56e2ef3a76d6454f5b1f7beec07e7635601efcd18ba414682f4d7",
-      "localSha256": "c3fed21deaa85a075fdb6dce032b850e845a126b1cc361c639c2c71d8db493ee",
+      "localSha256": "8d075bb8932620985c17c22e0fe3215c794834919f0dfe21cb4ad4f1a0bf9478",
       "modified": true,
       "noticeRequired": true
     },
@@ -4426,7 +4426,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/update/electron-updater-strategy.test.ts",
       "upstreamSha256": "637c060923121f2bcb0347efa9e22e8762623efd2ecfcc242b4dead9499d1123",
-      "localSha256": "07294d3571c66d9b982d398ecde05d9836e0c7caa64c201758cc5266806e0ec4",
+      "localSha256": "ee396ccbe8cfee753bc35949410f21fb339e8e91e79ba5ec843d4186a099a7c0",
       "modified": true,
       "noticeRequired": true
     },
@@ -4490,7 +4490,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/update/service.test.ts",
       "upstreamSha256": "c6c0a4a8febb362294e959cc704f65153651dbd5ec362d8694bea4a34c74bf11",
-      "localSha256": "9745c515a609be30237e939d98b53c19d3a9f249805e8d11e6b6dbc5dce25050",
+      "localSha256": "d3149f89d90f9f160d2ef1d31dafcb1f57c1d90e3c18047ddba7b8825899ddea",
       "modified": true,
       "noticeRequired": true
     },
@@ -4591,18 +4591,18 @@
       "noticeRequired": true
     },
     "packs/science-desktop/src/main/web-service/http-server.ts": {
-      "origin": "adopted-verbatim",
+      "origin": "adopted-modified",
       "upstreamPath": "src/main/web-service/http-server.ts",
       "upstreamSha256": "17254f245d799c4c9c990221b7aa4ce6366524417b9269bdc245b8661c0cf276",
-      "localSha256": "17254f245d799c4c9c990221b7aa4ce6366524417b9269bdc245b8661c0cf276",
-      "modified": false,
+      "localSha256": "2ebbd29c9908bdb6b86edbb5179ed8e513ad301ec8c59ca259c7dd276638b569",
+      "modified": true,
       "noticeRequired": true
     },
     "packs/science-desktop/src/main/web-service/index.test.ts": {
       "origin": "adopted-modified",
       "upstreamPath": "src/main/web-service/index.test.ts",
       "upstreamSha256": "b7bd239879d7cf738e0aedb6c54bc520285ee982759465fbd04986c3b0165171",
-      "localSha256": "645aebefdbee0de1997bff45f41a44fbb746d15685ca84b0af2bb7b2288946e4",
+      "localSha256": "319c5f64b086dada8f9532f648c42da3623a5679487aa57cbbd35b68c225d742",
       "modified": true,
       "noticeRequired": true
     },
@@ -4674,7 +4674,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/main/window-close-confirm.test.ts",
       "upstreamSha256": "6cbf4938f2a95871a75aa9a9cf14e8e6b0ff2e9cea31c6c5cb13eca3b3f440f7",
-      "localSha256": "7b02c8f02c9bde5a895f12a69dd454c7a75a87d56dbb376454e2d4d230d5ac1f",
+      "localSha256": "5ed1e7831079834ac2c6419904dec56542f9b0d49830de8557b3eca0a09991c7",
       "modified": true,
       "noticeRequired": true
     },
@@ -5738,7 +5738,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/onboarding/AgentStep.render.test.tsx",
       "upstreamSha256": "b5f23eefcd59a5985fd387c925eee389b4ffe7a933ac64988a25b53a2511d728",
-      "localSha256": "63351e13dc5d2a6c27ea078343b87bd1752fc58fc559e33129025026fb23835e",
+      "localSha256": "f0a6f5aa4fd12a2ac4a745c4c4da64770b02780e78b8fad1603ad3d8b98d4d54",
       "modified": true,
       "noticeRequired": true
     },
@@ -5778,7 +5778,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/onboarding/LocationStep.render.test.tsx",
       "upstreamSha256": "6f65ae56369b26c9f052029b2be35b43c40c4d0ad63fe4d00e2ebd23b3b01a2d",
-      "localSha256": "5b99b6ecbec070868617406d6295f115fda6d407e2c2222ae956aa604f567c8b",
+      "localSha256": "8fcd48f69d3026e1764433fd6267f5a3fd4fd6b3d3d9f582a123ee64372e9196",
       "modified": true,
       "noticeRequired": true
     },
@@ -5810,7 +5810,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/onboarding/OnboardingWizard.render.test.tsx",
       "upstreamSha256": "f91a02410664b3561e1c205ce3bb99b992a7df64d098c28f1f50791fc944b6df",
-      "localSha256": "2c0870f630ddcc6f54e00dfd49e957fcb4b2ac61631b8ab4c144a496f228d874",
+      "localSha256": "53b36d935fd037f3f1c149a280e6b6248427cdb58172d12eb0ccf1b07fdec20a",
       "modified": true,
       "noticeRequired": true
     },
@@ -5826,7 +5826,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/onboarding/ProviderStep.render.test.tsx",
       "upstreamSha256": "0dfdc053d18bb0d4d29f07c29e98f4c64b2edb74fae62a9722a43412aa05cfce",
-      "localSha256": "57552a62927559ab34bb3b7d64ad815604307c043b2edb3e0c8efac657d98e55",
+      "localSha256": "9c7d97fe2b1a754db255f6301234e2c669aeae11d74d83514b7fa1a39dec1da4",
       "modified": true,
       "noticeRequired": true
     },
@@ -5954,7 +5954,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/AppVersionSection.render.test.tsx",
       "upstreamSha256": "89ff6a8430d7017fe5caf99eb0d88807ebe43e3d079276ba9e0b4feab5f04ee1",
-      "localSha256": "b01b761f3fa5dfbca451bab5a26c47df9098ed9382fccaa59638b0d1c0fcc54f",
+      "localSha256": "dbd50750955065131cd2e7cfb62efee9ca97a056f8db5919f93d2c19e099de39",
       "modified": true,
       "noticeRequired": true
     },
@@ -5970,7 +5970,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/ClaudeIsolatedSignInModal.render.test.tsx",
       "upstreamSha256": "b224255b892b2ab33fba01c924c09f21a1014c154e3ada4052bffb158eba8860",
-      "localSha256": "8994de774473ad93b81f45c6dac524263e894041a96f8589acdba8fa264c7643",
+      "localSha256": "5b80ede2986bd482a2f02e0167f69e39af72e03b4cd69f931655a323dd4f8cf5",
       "modified": true,
       "noticeRequired": true
     },
@@ -6162,7 +6162,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/ProviderForm.render.test.tsx",
       "upstreamSha256": "bedc402804778588f0b66ac9f00092dfb91b0402c150624d31a718283cc9994c",
-      "localSha256": "c1269ac49817fc750b3ce8fbb6b61577f066ca489e37c029d7a1bb7d4157a39a",
+      "localSha256": "f97d6963b47b4b490dd0f265e7caa61bdd7e413b22d74621aa748f73a3a1761a",
       "modified": true,
       "noticeRequired": true
     },
@@ -6178,7 +6178,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/ProviderList.render.test.tsx",
       "upstreamSha256": "210bf107e6b7d11edc658c956770115850baf7383e0cf2b667e06a6331ca38d0",
-      "localSha256": "0ec562600cda64c4f7f56893ba58af33c50df44d2f78c6ae0fbfde60641d9761",
+      "localSha256": "a0bbc3672389ed043e7f8150566a46030703ea9c9ee8f1c35250b3ba82714192",
       "modified": true,
       "noticeRequired": true
     },
@@ -6194,7 +6194,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/ProvidersPanel.race.test.tsx",
       "upstreamSha256": "7db70f783a043e5c3a12cefd81f36569430a52cb7336dd6dd93c604073e623a2",
-      "localSha256": "2d918072568e5794690bb260e42a83b0dc5343c2782277b1aaaccbb19255289f",
+      "localSha256": "c0abe482c97525251056dada81fcef9ac4ea16470586d7aabe5ba65576ec1f56",
       "modified": true,
       "noticeRequired": true
     },
@@ -6370,7 +6370,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/settings/StoragePanel.render.test.tsx",
       "upstreamSha256": "cb550b1af9e5ab90c7d4ebb4326877d05497092edc4642c07c16f3ba57bbdc9b",
-      "localSha256": "002c6ec98f4884a6ce57f0692ffc6a94af25857c26ee00f5f9f87f1e7a1c64c2",
+      "localSha256": "0c0fc397f3c57933be3b11e268bcaee169d6b4c3e0481961257b1bfc0fec2d84",
       "modified": true,
       "noticeRequired": true
     },
@@ -7690,7 +7690,7 @@
       "origin": "adopted-modified",
       "upstreamPath": "src/renderer/src/pages/workspace/previews/renderers/PdfPreview.test.tsx",
       "upstreamSha256": "895fb056781179beb880bd7d92a1615fc9094ee21baa5d5f954609046d36d353",
-      "localSha256": "f7d2b7a243c0f9867a70ea683bb962e5f08a093e9c90dc3c5c7932c4cafb856e",
+      "localSha256": "e57ee7a0699b24f3d5bb574aaf5c54af4069bec50e6b99e41e7352a815a6ea06",
       "modified": true,
       "noticeRequired": true
     },

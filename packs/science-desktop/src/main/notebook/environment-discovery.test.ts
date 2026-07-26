@@ -1,3 +1,7 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: Windows fixtures declare platform 'win32' (the pinned-path rule is platform-dependent), and the mixed-platform CRAN fixture now asserts the refusal it used to contradict.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

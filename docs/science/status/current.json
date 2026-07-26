@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "generator": "scripts/generate-science-status.py",
   "doc": "Machine-generated product status. Derived from the source tree and git only. Prose documents must point here rather than restate status. Regenerate with: python3 scripts/generate-science-status.py",
-  "sourceCommit": "2ecc88438282b532a1ffdf5892fc2a4018f2975c",
-  "sourceCommitEpoch": 1785087563,
-  "sourceCommitIso": "2026-07-27T01:39:23+08:00",
+  "sourceCommit": "1a7dc5d90abb2f1ef80a975c6e494ec9b6ce694d",
+  "sourceCommitEpoch": 1785090406,
+  "sourceCommitIso": "2026-07-27T02:26:46+08:00",
   "gateVocabulary": {
     "states": [
       "pass",

@@ -1,3 +1,7 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: Tooltip expectations follow this product's name.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Menu template item shape captured from Menu.buildFromTemplate.

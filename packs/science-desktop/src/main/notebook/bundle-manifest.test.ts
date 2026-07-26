@@ -1,3 +1,7 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: URL fixtures use the Lumen-owned release host; cdn.example is refused by runtime-origin-policy.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { createHash } from 'node:crypto'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'

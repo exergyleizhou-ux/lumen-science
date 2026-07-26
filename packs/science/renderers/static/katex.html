@@ -17,6 +17,6 @@
     const resp=await fetch(`/render/api/raw?project=${params.get('project')||'default'}&run=${params.get('run')||'latest'}&path=${encodeURIComponent(path)}`);
     if(resp.ok)document.getElementById('input').value=await resp.text();
   }
-  function render(){const lines=document.getElementById('input').value.split('\n');let html='';for(const line of lines){const t=line.trim();if(!t)continue;try{if(t.startsWith('$$')&&t.endsWith('$$')){html+=katex.renderToString(t.slice(2,-2),{displayMode:true,throwOnError:false})}else if(t.startsWith('$')&&t.endsWith('$')){html+=katex.renderToString(t.slice(1,-1),{throwOnError:false})}else{html+=katex.renderToString(t,{displayMode:true,throwOnError:false})}}catch(e){html+=`<p style="color:red">${e.message}</p>`}}document.getElementById('output').innerHTML=html}
+  function render(){const lines=document.getElementById('input').value.split('\n');let html='';for(const line of lines){const t=line.trim();if(!t)continue;try{if(t.startsWith('$$')&&t.endsWith('$$')){html+=katex.renderToString(t.slice(2,-2),{displayMode:true,throwOnError:false})}else if(t.startsWith('$')&&t.endsWith('$')){html+=katex.renderToString(t.slice(1,-1),{throwOnError:false})}else{html+=katex.renderToString(t,{displayMode:true,throwOnError:false})}}catch(e){const p=document.createElement('p');p.style.color='red';p.textContent=e.message;html+=p.outerHTML}}document.getElementById('output').innerHTML=html}
   document.getElementById('input').addEventListener('input',render);render();
 })();</script></body></html>

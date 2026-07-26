@@ -23,4 +23,26 @@ ignore = [
     # network. Re-check on every parent update.
     "RUSTSEC-2026-0194",
     "RUSTSEC-2026-0195",
+
+    # ── informational: unmaintained / unsound, all transitive, none with a
+    # fixed release. CI runs --deny warnings, so each needs naming. Re-check
+    # whenever a direct dependency bumps; delete entries the moment a parent
+    # ships a fix.
+    "RUSTSEC-2024-0320",  # yaml-rust unmaintained — via syntect (highlighting)
+    "RUSTSEC-2024-0384",  # instant unmaintained — via backoff timer paths
+    "RUSTSEC-2024-0436",  # paste unmaintained — proc-macro, compile-time only
+    "RUSTSEC-2025-0012",  # backoff unmaintained — retry helper, local use
+    "RUSTSEC-2025-0052",  # async-std unmaintained — via transitive dep, not our runtime (tokio)
+    "RUSTSEC-2025-0057",  # fxhash unmaintained — hash impl, fixed inputs
+    "RUSTSEC-2025-0141",  # bincode 1.x unmaintained — local (de)serialisation only
+    "RUSTSEC-2026-0002",  # lru unsound iterator — we do not hold iterators across mutation
+    "RUSTSEC-2026-0008",  # git2 unsound — local repo operations on user's own checkout
+    "RUSTSEC-2026-0097",  # rand unsound — no fixed release across 0.8/0.9/0.10 lines yet
+    "RUSTSEC-2026-0183",  # git2 unsound — as above
+    "RUSTSEC-2026-0184",  # git2 unsound — as above
+    "RUSTSEC-2026-0186",  # memmap2 unsound — mappings of files we create ourselves
+    "RUSTSEC-2026-0190",  # anyhow Error::downcast_mut unsoundness — no fixed release
+    "RUSTSEC-2026-0192",  # ttf-parser unmaintained — font parsing of bundled fonts
+    "RUSTSEC-2026-0205",  # scc unsound — via transitive concurrent-map use
+    "RUSTSEC-2026-0206",  # rustybuzz unmaintained — text shaping of local UI text
 ]

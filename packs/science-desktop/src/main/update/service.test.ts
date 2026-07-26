@@ -1,3 +1,7 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: Configures a Lumen-owned update feed; the hardened policy refuses to construct a networked strategy without one.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'

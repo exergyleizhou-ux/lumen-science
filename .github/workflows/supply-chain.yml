@@ -79,7 +79,7 @@ jobs:
         run: |
           govulncheck ./mcp ./mcp/artifacts/... ./mcp/notebook/... ./mcp/reviewer/... \
             ./mcp/http_bridge/... ./standalone/internal/seqbench/... \
-            ./standalone/internal/pipeline/... ./standalone/internal/projectstore/...
+            ./standalone/internal/pipeline/... ./standalone/internal/projectstore/... ./renderers/...
 
   npm-audit:
     name: npm audit + licenses

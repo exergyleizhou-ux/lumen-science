@@ -1,3 +1,7 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: quotePhrase escapes backslashes before quotes, so a phrase ending in `\` cannot break out of its quoting into the Essie expression.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import type { ToolContext, ToolDescriptor } from '../types'
 
 // ClinicalTrials.gov API v2. Read-only; the engine paces and retries 429/5xx. Each tool is

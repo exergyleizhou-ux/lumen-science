@@ -1,3 +1,7 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: Internal error detail stays in the server log under a correlation id; HTTP clients receive the id, not module internals or paths.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { readFile, stat } from 'node:fs/promises'
