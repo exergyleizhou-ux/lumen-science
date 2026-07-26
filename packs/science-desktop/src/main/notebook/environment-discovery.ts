@@ -1,3 +1,38 @@
+// Modified from Open Science (Apache-2.0) — statement of changes, §4(b).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f,
+//           src/main/notebook/environment-discovery.ts
+// Per-file digests: docs/provenance/open-science-adoption.json
+//
+// WHAT THIS IS IN LUMEN
+// ---------------------
+// A DRIVEN adapter. It enumerates interpreters that already exist on the
+// machine and reports what it observed. It does not start a kernel, does not
+// choose a runtime, and does not answer whether anything may execute — that is
+// the Rust SessionActor's answer, produced by its own probe
+// (agent/crates/codegen/xai-grok-science/src/workflow/admission.rs). Nothing
+// here is an input to a permission; everything here is an input to a question.
+//
+// WHAT LUMEN CHANGED, and why (LS5-K4)
+// ------------------------------------
+// 1. Unpinned candidates are refused, not returned. Upstream fed
+//    `manualPaths` (a Settings-catalog string the user typed) straight into the
+//    candidate set, so a bare `python3` or a `./python3` could become an
+//    "environment". A bare name is not an identity: it resolves through PATH,
+//    so the same spelling names a different binary in another process, and a
+//    reproducibility record built on one is worthless. `partitionCandidates`
+//    now splits them out and `onUnpinnedCandidate` reports each rejection with
+//    a reason rather than dropping it silently — a discarded candidate the user
+//    explicitly added must be explainable. This mirrors the engine's
+//    `interpreter_path_not_absolute` rejection so the two ends agree.
+// 2. `DiscoveredInterpreter.runnable` is retained (the Settings cards need it)
+//    but is documented at its definition as a READINESS signal for the UI, and
+//    is explicitly not an admission verdict. Lumen never routes it into an
+//    execution decision; see environment/interpreter-identity.ts, which
+//    re-derives facts from disk instead of trusting anything computed here.
+//
+// The enumeration itself — PATH, framework installs, pyenv, conda roots, the
+// Windows launcher, the app's own runtime/envs — is upstream's and is adopted
+// as-is. It is careful, targeted (never a disk walk), and it is mechanics.
 import { execFile } from 'node:child_process'
 import { existsSync, readdirSync, realpathSync } from 'node:fs'
 import { access, readdir } from 'node:fs/promises'
@@ -50,6 +85,58 @@ export type DiscoveryDeps = {
   // App runtime root (<storageRoot>/runtime); used to classify provenance of an interpreter by whether
   // it lives under runtime/envs and whether it is a default (app-managed) vs a named (agent-created) env.
   runtimeRoot: string
+  // LS5-K4. Called once per candidate refused for not being a pinned absolute path. Optional because
+  // most sources cannot produce one; supplied by callers that surface the reason to a user (a manually
+  // added interpreter that vanishes from the list with no explanation is a support ticket).
+  onUnpinnedCandidate?: (candidate: string, reason: string) => void
+}
+
+// LS5-K4. A candidate is usable as an identity only if it names one file on this machine and keeps
+// naming it in another process. PATH-relative and directory-relative spellings do neither: `python3`
+// depends on the caller's PATH, `./python3` on the caller's cwd, and both can be re-pointed by
+// anything that can write a directory earlier in the search order.
+//
+// Windows note: win32.isAbsolute accepts `\foo` (root-relative on the current drive), which is not an
+// identity either, so the drive/UNC form is required explicitly.
+export const isPinnedInterpreterPath = (
+  candidate: string,
+  platform: NodeJS.Platform = process.platform
+): boolean => {
+  if (candidate.trim() !== candidate || candidate.length === 0) return false
+  if (candidate.includes('\0')) return false
+  if (platform === 'win32') {
+    return /^([A-Za-z]:[\\/]|\\\\)/.test(candidate)
+  }
+  return candidate.startsWith('/')
+}
+
+export type CandidatePartition = {
+  pinned: string[]
+  unpinned: { candidate: string; reason: string }[]
+}
+
+// Splits a candidate list into the ones that can carry an identity and the ones that cannot, keeping
+// a reason for each rejection. Exported so the rejection is testable and so a caller can report it
+// rather than discovering an empty list with no explanation.
+export const partitionCandidates = (
+  candidates: readonly string[],
+  platform: NodeJS.Platform = process.platform
+): CandidatePartition => {
+  const pinned: string[] = []
+  const unpinned: { candidate: string; reason: string }[] = []
+  for (const candidate of candidates) {
+    if (isPinnedInterpreterPath(candidate, platform)) {
+      pinned.push(candidate)
+      continue
+    }
+    unpinned.push({
+      candidate,
+      reason:
+        `interpreter '${candidate}' is not an absolute path; a PATH-relative or ` +
+        'cwd-relative interpreter is not a pinned identity and cannot be reproduced'
+    })
+  }
+  return { pinned, unpinned }
 }
 
 const safeRealpath = (p: string): string => {
@@ -186,7 +273,12 @@ export const windowsCondaPrefixForR = (
 // on PATH / in a conda root still surfaces as a card). `manualPaths` is a sync getter over a settings
 // snapshot; a missing/failed lookup contributes nothing.
 export const defaultCandidatePaths =
-  (runtimeRoot: string, manualPaths?: (language: NotebookLanguage) => string[]) =>
+  (
+    runtimeRoot: string,
+    manualPaths?: (language: NotebookLanguage) => string[],
+    // LS5-K4: reports a manually-added interpreter refused for not being absolute.
+    onUnpinnedCandidate?: (candidate: string, reason: string) => void
+  ) =>
   async (language: NotebookLanguage): Promise<string[]> => {
     const names = interpreterNames(language)
     const found = new Set<string>()
@@ -196,8 +288,12 @@ export const defaultCandidatePaths =
     // we must also check the well-known install dirs, framework versions, and conda roots directly, or
     // a user's real R / Python / conda envs go undetected. Each is an existsSync of a specific path.
 
-    // Manually-added interpreters from the Settings catalog.
-    for (const p of manualPaths?.(language) ?? []) found.add(p)
+    // Manually-added interpreters from the Settings catalog. LS5-K4: this is the only user-authored
+    // source, so it is the only one that can contain a bare name; unpinned entries are refused here
+    // with a reason instead of becoming an environment nobody can reproduce.
+    const manual = partitionCandidates(manualPaths?.(language) ?? [])
+    for (const p of manual.pinned) found.add(p)
+    for (const { candidate, reason } of manual.unpinned) onUnpinnedCandidate?.(candidate, reason)
 
     // On PATH (`which -a` / `where`) — the happy path when launched from a shell.
     for (const name of names) for (const p of await whichAll(name)) found.add(p)
@@ -371,9 +467,15 @@ export const discoverInterpreters = async (
   // the number of interpreters (slow with many conda envs), but an unbounded Promise.all over dozens of
   // candidates would fan out too many processes/file descriptors at once. A small worker pool keeps it
   // fast without a spawn storm. Order is preserved (results written back at each candidate's index).
+  //
+  // LS5-K4: the pinned-path rule is re-applied here rather than trusted from `candidatePaths`. Deps
+  // are injectable, so this function must hold the invariant itself: no unpinned path reaches a probe,
+  // and none appears in the result.
   const seen = new Set<string>()
   const unique: { path: string; envId: string }[] = []
-  for (const path of await deps.candidatePaths(language)) {
+  const { pinned, unpinned } = partitionCandidates(await deps.candidatePaths(language))
+  for (const { candidate, reason } of unpinned) deps.onUnpinnedCandidate?.(candidate, reason)
+  for (const path of pinned) {
     const envId = deps.realpath(path)
     if (seen.has(envId)) continue
     seen.add(envId)
@@ -390,6 +492,10 @@ export const discoverInterpreters = async (
     const version = await deps.probeVersion(path, language)
     const provenance = classify(path, deps.runtimeRoot)
     const conda = condaEnvName(path)
+    // LS5-K4: `runnable` below is a UI READINESS signal — "this R has jsonlite", "this is a Python 3"
+    // — and it is deliberately not routed into any execution decision in Lumen. Admission is decided
+    // by the engine's own probe from its own re-derived facts; a boolean computed here would be a
+    // second authority's verdict travelling under the name of an observation.
     let runnable: boolean
     let detail: string | undefined
     if (language === 'python') {
@@ -444,6 +550,8 @@ type DiscoveryExec = (
 type DefaultDiscoveryRuntimeDeps = {
   platform?: NodeJS.Platform
   exec?: DiscoveryExec
+  // LS5-K4: surface for refused unpinned candidates. Defaults to a warning rather than silence.
+  onUnpinnedCandidate?: (candidate: string, reason: string) => void
 }
 
 export const defaultDiscoveryDeps = (
@@ -474,8 +582,16 @@ export const defaultDiscoveryDeps = (
         }
       : { timeout, windowsHide: true }
   }
+  const onUnpinnedCandidate =
+    runtimeDeps.onUnpinnedCandidate ??
+    ((candidate: string, reason: string): void => {
+      console.warn('[environment-discovery] refused unpinned interpreter candidate:', reason, {
+        candidate
+      })
+    })
   return {
-    candidatePaths: defaultCandidatePaths(runtimeRoot, manualPaths),
+    candidatePaths: defaultCandidatePaths(runtimeRoot, manualPaths, onUnpinnedCandidate),
+    onUnpinnedCandidate,
     probeVersion: async (interpreterPath, language) => {
       if (language === 'python') return probeInterpreterVersion(interpreterPath)
       try {
