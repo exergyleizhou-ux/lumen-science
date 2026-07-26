@@ -106,6 +106,32 @@ test('the desk says the engine is offline rather than looking healthy', async ()
   expect(text.toLowerCase()).toContain('engine offline')
 })
 
+test('an engine refusal is readable without losing the technical reason', async () => {
+  // Opening a project with no engine hits the fail-closed path. The banner used
+  // to be a wall of internal text — file paths and method names across the top
+  // of the window — which is honest and unusable.
+  const project = page.locator('aside button').filter({ hasText: /./ }).nth(1)
+  if ((await project.count()) > 0) {
+    await project.click()
+    await page.waitForTimeout(1200)
+  }
+
+  const banner = await page.evaluate(() => {
+    const el = document.querySelector('[role="status"], [role="alert"]')
+    if (!el) return null
+    const paragraphs = [...el.querySelectorAll('p')].map((p) => p.textContent ?? '')
+    return { headline: paragraphs[0] ?? '', detail: paragraphs[1] ?? '' }
+  })
+
+  if (banner) {
+    // A plain sentence leads.
+    expect(banner.headline.length).toBeGreaterThan(10)
+    expect(banner.headline).not.toContain('.ts')
+    // And the original reason is still there, not swapped out for it.
+    expect(banner.detail.length).toBeGreaterThan(banner.headline.length)
+  }
+})
+
 test('the design system is actually applied, not just referenced', async () => {
   // Tailwind was silently OFF for the whole app. electron.vite.config.ts
   // require()d @tailwindcss/vite, which is ESM-only, so it always threw

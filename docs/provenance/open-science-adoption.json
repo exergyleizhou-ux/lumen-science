@@ -11,8 +11,8 @@
   "summary": {
     "adopted-verbatim": 946,
     "adopted-modified": 82,
-    "lumen-original": 50,
-    "totalShipped": 1078,
+    "lumen-original": 51,
+    "totalShipped": 1079,
     "upstreamSourceFiles": 1027,
     "upstreamFilesNotAdopted": 0
   },
@@ -5866,7 +5866,15 @@
       "origin": "lumen-original",
       "upstreamPath": null,
       "upstreamSha256": null,
-      "localSha256": "834c25132a98cfa2a2adaf24b3964d0d6bedc7abde77589914d947238bb2104b",
+      "localSha256": "463e2da199ba8594971feb7d472f8e340fefbbd59a1ec3d3ab3c67c8485b7a7e",
+      "modified": null,
+      "noticeRequired": false
+    },
+    "packs/science-desktop/src/renderer/src/pages/research/describe-error.ts": {
+      "origin": "lumen-original",
+      "upstreamPath": null,
+      "upstreamSha256": null,
+      "localSha256": "b63bf7531c5139d7ad400e6c0e793bb00210954dcc2f3de4123990e4412bbecc",
       "modified": null,
       "noticeRequired": false
     },

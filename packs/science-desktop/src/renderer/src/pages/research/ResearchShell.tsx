@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { PermissionPrompt } from '@/components/PermissionPrompt'
+import { describeError } from './describe-error'
 
 type UiProject = {
   id: string
@@ -273,7 +274,22 @@ export const ResearchShell = (): React.JSX.Element => {
         </div>
       </header>
 
-      {error && <div className={cx.error}>{error}</div>}
+      {error &&
+        (() => {
+          const described = describeError(error)
+          return (
+            <div
+              className={described.expected ? cx.notice : cx.error}
+              role={described.expected ? 'status' : 'alert'}
+            >
+              <p className={cx.noticeHeadline}>{described.headline}</p>
+              {/* The original text, verbatim and never truncated. Shortening an
+                  engine error is how a product ends up saying "something went
+                  wrong" while the cause sits in a log nobody reads. */}
+              <p className={cx.noticeDetail}>{described.detail}</p>
+            </div>
+          )
+        })()}
       {status && <div className={cx.status}>{status}</div>}
 
       <div className={cx.body}>
@@ -289,7 +305,15 @@ export const ResearchShell = (): React.JSX.Element => {
                 if (e.key === 'Enter') void createProject()
               }}
             />
-            <button type="button" className={cx.btn} onClick={() => void createProject()}>
+            <button
+              type="button"
+              className={cx.btn}
+              // createProject() returns early on an empty name, so the button
+              // did nothing and said nothing. A dead control teaches people the
+              // app is broken; disabling it states the requirement instead.
+              disabled={!name.trim()}
+              onClick={() => void createProject()}
+            >
               Create
             </button>
           </div>
@@ -304,27 +328,42 @@ export const ResearchShell = (): React.JSX.Element => {
                   aria-current={active?.id === p.id ? 'true' : undefined}
                   onClick={() => void openProject(p)}
                 >
-                  {p.name}
+                  <span className={cx.projectName}>{p.name}</span>
+                  {/* Two projects may share a name; the id is what identifies
+                      one to the engine, so show enough of it to tell them
+                      apart without dominating the row. */}
+                  <span className={cx.projectId}>{p.id.slice(0, 8)}</span>
                 </button>
               </li>
             ))}
             {projects.length === 0 && (
-              <li className={cx.muted}>No projects yet — create one to start.</li>
+              <li className={cx.sidebarEmpty}>No projects yet.</li>
             )}
           </ul>
-          <p className={cx.muted}>
-            UI catalog only. Science state stays in Rust SessionActor.
+          <p className={cx.sidebarNote}>
+            This list is a UI catalog. Project state lives in the Rust
+            SessionActor, not here.
           </p>
         </aside>
 
         <main className={cx.main}>
           {!active ? (
             <div className={cx.empty}>
-              <h2>Open a project</h2>
-              <p>
-                Membership is asserted before bind. Preview loads by{' '}
-                <code>artifact_id</code>, never by arbitrary path.
-              </p>
+              <div className={cx.emptyInner}>
+                <h2 className={cx.emptyTitle}>No project open</h2>
+                <p className={cx.emptyBody}>
+                  Create one on the left, or pick an existing project to open its
+                  question, evidence and results.
+                </p>
+                {/* The invariant belongs here, but quieter than the
+                    instruction: a first-time reader needs to know what to DO
+                    before they need to know what is guaranteed. */}
+                <p className={cx.emptyNote}>
+                  Membership is asserted before bind. Previews load by{' '}
+                  <code className={cx.code}>artifact_id</code>, never by an
+                  arbitrary path.
+                </p>
+              </div>
             </div>
           ) : (
             <>
@@ -558,15 +597,19 @@ export const ResearchShell = (): React.JSX.Element => {
  * rest of the app, and a theme change reaches it without touching this file.
  */
 const cx = {
-  root: 'min-h-screen bg-background text-foreground',
+  // h-screen + overflow-hidden, not min-h-screen: the panes scroll, the shell
+  // does not. The previous min-h-[calc(100vh-5.5rem)] body hardcoded a guess at
+  // the header height, so a status line pushed the sidebar's own footnote below
+  // the fold where nobody could read it.
+  root: 'flex h-screen flex-col overflow-hidden bg-background text-foreground',
   header:
-    'flex items-start justify-between gap-4 border-b border-border px-6 py-5',
+    'flex shrink-0 items-start justify-between gap-4 border-b border-border px-6 py-5',
   title: 'text-xl font-semibold tracking-tight',
   sub: 'mt-1 text-sm text-muted-foreground',
   meta: 'font-mono text-xs text-muted-foreground',
-  body: 'flex min-h-[calc(100vh-5.5rem)]',
-  aside: 'w-72 shrink-0 border-r border-border p-4',
-  main: 'min-w-0 flex-1 p-6',
+  body: 'flex min-h-0 flex-1',
+  aside: 'flex w-72 shrink-0 flex-col overflow-y-auto border-r border-border p-4',
+  main: 'flex min-w-0 flex-1 flex-col overflow-y-auto p-6',
   h2: 'mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground',
   row: 'mb-3 flex gap-2',
   input:
@@ -575,11 +618,11 @@ const cx = {
     'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50',
   list: 'flex flex-col gap-1',
   projectBtn:
-    'w-full truncate rounded-md px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted',
+    'flex w-full flex-col items-start gap-0.5 rounded-md px-3 py-2 text-left transition-colors hover:bg-muted',
   // Selection is carried by background AND weight, not colour alone: a
   // colour-only cue disappears for anyone who cannot separate those hues.
   projectBtnActive:
-    'w-full truncate rounded-md bg-muted px-3 py-2 text-left text-sm font-medium text-foreground',
+    'flex w-full flex-col items-start gap-0.5 rounded-md bg-muted px-3 py-2 text-left',
   muted: 'text-sm text-muted-foreground',
   tabs: 'mb-4 flex gap-1 border-b border-border',
   tab:
@@ -592,10 +635,30 @@ const cx = {
   // Long output must scroll inside its panel rather than widening the page.
   pre:
     'max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-mono text-xs text-foreground',
-  empty: 'py-6 text-center text-sm text-muted-foreground',
+  // Anchored rather than floated at the top: an empty screen with one line
+  // pinned under the header reads as a page that failed to load.
+  empty: 'flex flex-1 items-center justify-center p-6',
+  emptyInner: 'max-w-md text-center',
+  emptyTitle: 'text-base font-medium text-foreground',
+  emptyBody: 'mt-2 text-sm text-muted-foreground',
+  emptyNote: 'mt-4 border-t border-border pt-4 text-xs text-muted-foreground',
+  code: 'rounded bg-muted px-1 py-0.5 font-mono text-[0.9em]',
+  sidebarEmpty: 'px-3 py-2 text-sm text-muted-foreground',
+  projectName: 'w-full truncate text-sm text-foreground',
+  projectId: 'font-mono text-[11px] text-muted-foreground',
+  // mt-auto pins this to the bottom of the flex column, so it stops reading as
+  // the next item in the project list.
+  sidebarNote: 'mt-auto border-t border-border pt-3 text-xs text-muted-foreground',
   error:
-    'mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive',
-  status: 'font-mono text-xs text-muted-foreground',
+    'shrink-0 border-b border-destructive/40 bg-destructive/10 px-6 py-3 text-destructive',
+  // A refusal by design is not a fault. Showing both in the same alarmed red
+  // teaches people to ignore the colour, so an expected refusal gets a neutral
+  // notice and only the unrecognised failure gets the alarm.
+  notice: 'shrink-0 border-b border-border bg-muted/50 px-6 py-3 text-foreground',
+  noticeHeadline: 'text-sm font-medium',
+  noticeDetail: 'mt-1 font-mono text-xs leading-relaxed text-muted-foreground',
+  status:
+    'shrink-0 border-b border-border bg-muted/40 px-6 py-2 font-mono text-xs text-muted-foreground',
   // Engine identity reads as a status pill rather than stray monospace: it is
   // the single most load-bearing fact on this screen — every claim the desk
   // makes is only as good as the binary that produced it.
