@@ -49,8 +49,8 @@ export type DossierExportProjection = {
 
 export function createReviewService(opts: {
   acpCall?: AcpReviewCall
-  /** Store for hash-mismatch validation at submit */
-  previewStore?: PreviewFileStore
+  /** Mandatory for hash-mismatch validation at submit — fail-closed when absent */
+  previewStore: PreviewFileStore
 }): ReviewService {
   const history: ReviewVerdictProjection[] = []
 
@@ -76,31 +76,30 @@ export function createReviewService(opts: {
         return { ok: false, reason: access.reason, plan }
       }
 
-      // Hash-mismatch fail-closed: verify artifacts against store before submission
-      if (opts.previewStore) {
-        const resolved: ReviewEvidence[] = []
-        for (const art of req.artifacts) {
-          const record = await opts.previewStore.resolveById(art.artifactId)
-          if (!record) {
-            return {
-              ok: false,
-              reason: `artifact ${art.artifactId} not found in store — fail-closed`,
-              plan,
-            }
-          }
-          resolved.push({
-            ...art,
-            actualSha256: record.sha256,
-          })
-        }
-        const hashCheck = validateArtifactHashes(resolved)
-        if (!hashCheck.ok) {
+      // Hash-mismatch fail-closed: verify artifacts against store
+      // — store is mandatory; if unavailable, reject the submission.
+      const resolved: ReviewEvidence[] = []
+      for (const art of req.artifacts) {
+        const record = await opts.previewStore.resolveById(art.artifactId)
+        if (!record) {
           return {
             ok: false,
-            reason: `hash mismatch: ${hashCheck.mismatches.map((m) => `${m.artifactId} expected=${m.expected} actual=${m.actual}`).join('; ')}`,
+            reason: `artifact ${art.artifactId} not found in store — fail-closed`,
             plan,
-            hashMismatches: hashCheck.mismatches,
           }
+        }
+        resolved.push({
+          ...art,
+          actualSha256: record.sha256,
+        })
+      }
+      const hashCheck = validateArtifactHashes(resolved)
+      if (!hashCheck.ok) {
+        return {
+          ok: false,
+          reason: `hash mismatch: ${hashCheck.mismatches.map((m) => `${m.artifactId} expected=${m.expected} actual=${m.actual}`).join('; ')}`,
+          plan,
+          hashMismatches: hashCheck.mismatches,
         }
       }
 

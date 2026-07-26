@@ -302,6 +302,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
         })
         return raw
       },
+      previewStore,
     })
 
   safeHandle(ipcMain, 'review:plan', async (_event, payload: unknown) => {
