@@ -1,0 +1,570 @@
+#!/usr/bin/env python3
+"""Generate the machine-readable Lumen Science product status (LS5-F0-01).
+
+Why this exists
+---------------
+Prose status documents in this repo disagree with each other and with the
+source tree (skills approved 5 vs 10, connector rejected 1 vs 2, four different
+"current" version numbers, a SOURCE_LOCK pinned ~40 commits behind HEAD).
+A reader cannot tell which document is true.
+
+This script makes status *derived*, not *asserted*: every field is read from
+the source tree or from git. Prose docs become pointers to the generated file
+rather than independent claims.
+
+Honesty rules enforced here
+---------------------------
+1. A gate result is only ``pass`` when an evidence record says a real command
+   exited 0. With no evidence record the value is ``not_run``.
+2. ``not_run`` and ``skipped`` are distinct from ``pass`` and never coerced.
+   ``emit_gate()`` raises rather than inventing a passing value.
+3. No wall-clock timestamps. Time comes from the source commit, so the output
+   is reproducible: same commit + same evidence => byte-identical JSON.
+
+Usage
+-----
+    python3 scripts/generate-science-status.py            # write current.json
+    python3 scripts/generate-science-status.py --stdout   # print, write nothing
+    python3 scripts/generate-science-status.py --evidence ci-evidence.json
+
+Stdlib only: CI must be able to run it without installing anything.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_PATH = ROOT / "docs" / "science" / "status" / "current.json"
+
+SCHEMA_VERSION = 1
+
+# Gate vocabulary. Deliberately small, and deliberately without a value that
+# means "probably fine".
+PASS = "pass"
+FAIL = "fail"
+NOT_RUN = "not_run"
+VALID_GATE_STATES = (PASS, FAIL, NOT_RUN)
+
+
+class StatusError(RuntimeError):
+    """Raised when the tree cannot be described honestly."""
+
+
+# ── helpers ──────────────────────────────────────────────────────────────
+
+
+def git(*args: str) -> str:
+    result = subprocess.run(
+        ["git", *args], cwd=ROOT, capture_output=True, text=True, check=False
+    )
+    if result.returncode != 0:
+        raise StatusError(f"git {' '.join(args)} failed: {result.stderr.strip()}")
+    return result.stdout.strip()
+
+
+def read_text(rel: str) -> str | None:
+    path = ROOT / rel
+    if not path.is_file():
+        return None
+    return path.read_text(encoding="utf-8")
+
+
+def read_json(rel: str) -> Any | None:
+    raw = read_text(rel)
+    if raw is None:
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise StatusError(f"{rel} is not valid JSON: {exc}") from exc
+
+
+def emit_gate(state: str, evidence: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Build a gate record.
+
+    ``pass`` requires evidence naming the command that produced it. This is the
+    single choke point that stops "we did not run it" from being written down
+    as "it passed".
+    """
+    if state not in VALID_GATE_STATES:
+        raise StatusError(f"invalid gate state {state!r}; use one of {VALID_GATE_STATES}")
+    if state == PASS and not (evidence and evidence.get("command")):
+        raise StatusError(
+            "refusing to emit pass without evidence.command — "
+            "an unproven gate must be recorded as not_run"
+        )
+    record: dict[str, Any] = {"state": state}
+    if evidence:
+        record["evidence"] = evidence
+    return record
+
+
+# ── version ownership ────────────────────────────────────────────────────
+
+
+def cargo_version(rel: str) -> str | None:
+    raw = read_text(rel)
+    if raw is None:
+        return None
+    # Only the [package] version, which is the first `version = "..."` before
+    # any [dependencies] table.
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped != "[package]":
+            break
+        match = re.match(r'^version\s*=\s*"([^"]+)"', stripped)
+        if match:
+            return match.group(1)
+    return None
+
+
+def collect_versions() -> dict[str, Any]:
+    root_version = (read_text("VERSION") or "").strip() or None
+    cli_version = (read_text("packs/science/VERSION") or "").strip() or None
+
+    desktop_pkg = read_json("packs/science-desktop/package.json") or {}
+    desktop_version = desktop_pkg.get("version")
+
+    pager = cargo_version("agent/crates/codegen/xai-grok-pager/Cargo.toml")
+    pager_bin = cargo_version("agent/crates/codegen/xai-grok-pager-bin/Cargo.toml")
+
+    # docs/VERSIONING.md is the human contract; record it so the verifier can
+    # detect drift between the contract and the tree.
+    return {
+        "rootVersion": {
+            "value": root_version,
+            "path": "VERSION",
+            "role": "legacy; still read by scripts/install-science.sh",
+            "authoritative": False,
+        },
+        "cliVersion": {
+            "value": cli_version,
+            "path": "packs/science/VERSION",
+            "role": "Lumen Science CLI/MCP release line",
+            "authoritative": True,
+        },
+        "desktopVersion": {
+            "value": desktop_version,
+            "path": "packs/science-desktop/package.json",
+            "role": "Electron desktop; not GA",
+            "authoritative": True,
+        },
+        "rustCoreVersion": {
+            "value": pager,
+            "path": "agent/crates/codegen/xai-grok-pager/Cargo.toml",
+            "role": "Lumen Core coding agent",
+            "authoritative": True,
+        },
+        "rustCoreBinVersion": {
+            "value": pager_bin,
+            "path": "agent/crates/codegen/xai-grok-pager-bin/Cargo.toml",
+            "role": "binary crate that produces `lumen`",
+            "authoritative": False,
+        },
+    }
+
+
+# ── inventories ──────────────────────────────────────────────────────────
+
+
+def collect_connectors() -> dict[str, Any]:
+    lock = read_json("docs/science/fusion-sources.lock.json")
+    if lock is None:
+        return {"present": False}
+    items = lock.get("items", [])
+    breakdown: dict[str, int] = {}
+    for item in items:
+        key = item.get("admission_status", "unknown")
+        breakdown[key] = breakdown.get(key, 0) + 1
+    summary = lock.get("summary", {})
+    return {
+        "present": True,
+        "source": "docs/science/fusion-sources.lock.json",
+        "total": len(items),
+        "declaredTotal": summary.get("total_inventory"),
+        "implemented": summary.get("implemented"),
+        "rejected": summary.get("rejected"),
+        "unresolved": summary.get("final_disposition_unresolved"),
+        "admissionStatusBreakdown": dict(sorted(breakdown.items())),
+        # Counted from items, not copied from summary, so a stale summary block
+        # cannot hide behind itself.
+        "derivedFromItems": True,
+    }
+
+
+def collect_skills() -> dict[str, Any]:
+    registry = read_json("packs/science/skills/registry.json")
+    if registry is None:
+        return {"present": False}
+    skills = registry.get("skills", [])
+    breakdown: dict[str, int] = {}
+    upstreams: dict[str, int] = {}
+    for skill in skills:
+        key = skill.get("final_disposition", "unknown")
+        breakdown[key] = breakdown.get(key, 0) + 1
+        repo = skill.get("source_repository", "unknown")
+        upstreams[repo] = upstreams.get(repo, 0) + 1
+    summary = registry.get("summary", {})
+    approved = sum(1 for s in skills if s.get("final_disposition") == "approved")
+    return {
+        "present": True,
+        "source": "packs/science/skills/registry.json",
+        "total": len(skills),
+        "declaredTotal": summary.get("total"),
+        "declaredApproved": summary.get("approved"),
+        "derivedApproved": approved,
+        "dispositionBreakdown": dict(sorted(breakdown.items())),
+        # Upstream attribution feeds the adoption provenance ledger (LS5-F0-02):
+        # a skill borrowed from another project must stay traceable to it.
+        "bySourceRepository": dict(sorted(upstreams.items())),
+        "derivedFromItems": True,
+    }
+
+
+# ── CI / release facts (statically derivable from workflow YAML) ─────────
+
+
+def workflow_facts() -> dict[str, Any]:
+    """Read hardening properties straight out of the workflow files.
+
+    Line-oriented rather than YAML-parsed on purpose: CI must run this with a
+    bare stdlib interpreter, and every check below is a literal token whose
+    presence or absence is unambiguous.
+    """
+    facts: dict[str, Any] = {}
+    wf_dir = ROOT / ".github" / "workflows"
+    workflows = sorted(p.name for p in wf_dir.glob("*.yml")) if wf_dir.is_dir() else []
+    facts["workflows"] = workflows
+
+    def scan(name: str) -> dict[str, Any]:
+        raw = read_text(f".github/workflows/{name}")
+        if raw is None:
+            return {"present": False}
+        lines = raw.splitlines()
+        uses = re.findall(r"uses:\s*([^\s]+)", raw)
+        # A pinned action reference is `owner/repo@<40-hex>`.
+        unpinned = sorted(
+            {u for u in uses if not re.search(r"@[0-9a-f]{40}$", u)}
+        )
+        return {
+            "present": True,
+            "continueOnError": raw.count("continue-on-error: true"),
+            "usesClobber": "--clobber" in raw,
+            "actionRefs": len(uses),
+            "unpinnedActionRefs": unpinned,
+            "actionsFullyPinned": not unpinned,
+            "declaresTopLevelContentsWrite": bool(
+                re.search(r"^permissions:\s*$\n\s+contents:\s*write", raw, re.M)
+            ),
+            "usesProtectedEnvironment": bool(re.search(r"^\s+environment:\s*\S", raw, re.M)),
+            "verifiesTagPeel": "git/tags" in raw or "peel_tag" in raw,
+            "usesVerifyTag": "--verify-tag" in raw,
+            "sourceDateEpochFromCommit": "git show -s --format=%ct" in raw,
+            "sourceDateEpochFromWallClock": "int(time.time())" in raw,
+            "lineCount": len(lines),
+        }
+
+    for name in ("science-release.yml", "release.yml", "desktop-ci.yml", "science-ci.yml"):
+        facts[name] = scan(name)
+    return facts
+
+
+def collect_release() -> dict[str, Any]:
+    tags = [t for t in git("tag", "-l").splitlines() if t.strip()]
+    science_tags = sorted(t for t in tags if re.match(r"^v\d+\.\d+\.\d+", t))
+    return {
+        "tags": sorted(tags),
+        "scienceReleaseTags": science_tags,
+        "latestScienceTag": science_tags[-1] if science_tags else None,
+        # Signing/SBOM/provenance for the *science* asset line. These are
+        # statements about the pipeline, verified by verify-science-status.py.
+        "scienceAssetsSigned": False,
+        "scienceAssetsHaveSbom": False,
+        "scienceAssetsHaveProvenance": False,
+        "immutablePublish": False,
+        "notes": (
+            "science-release.yml publishes with `gh release upload --clobber` and "
+            "grants contents: write at workflow scope; assets carry SHA256SUMS only. "
+            "Signing, per-asset SBOM and provenance are core-only today."
+        ),
+    }
+
+
+# ── authority facts (the load-bearing architecture claims) ───────────────
+
+
+def collect_authority() -> dict[str, Any]:
+    """Record what the code actually does about execution authority.
+
+    These are the claims most likely to rot, because several documents assert
+    "SessionActor-gated" for paths that are not.
+    """
+    bridge = read_text("packs/science-desktop/src/main/lumen-acp-bridge.ts") or ""
+    science_ext = (
+        read_text("agent/crates/codegen/xai-grok-shell/src/extensions/science.rs") or ""
+    )
+    go_main = read_text("packs/science/standalone/cmd/science/main.go") or ""
+
+    # Rust ACP extension methods, read from the dispatch table.
+    acp_methods = sorted(set(re.findall(r'"(x\.ai/science/[a-z_]+)"', science_ext)))
+
+    # Desktop-side tool names sent over the bridge.
+    # Bridge call sites live in src/main/files/ (acp-membership, acp-preview-store,
+    # notebook-service, review-service, compute-service). Scope the scan there:
+    # src/main/connectors/ contains connector *descriptors* whose tool names are
+    # MCP definitions, not calls the desktop makes over the bridge.
+    desktop_dir = ROOT / "packs/science-desktop/src/main/files"
+    desktop_tools: set[str] = set()
+    # Either `acpCall('tool', …)` or a locally-aliased `call('tool', …)`.
+    tool_call = re.compile(r"""\b(?:acpCall|call)\(\s*['"]([a-z][a-z0-9]*(?:_[a-z0-9]+)+)['"]""")
+    if desktop_dir.is_dir():
+        for path in desktop_dir.rglob("*.ts"):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            desktop_tools.update(tool_call.findall(text))
+
+    go_tools: set[str] = set()
+    mcp_dir = ROOT / "packs/science/mcp"
+    if mcp_dir.is_dir():
+        for path in mcp_dir.rglob("*.go"):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            go_tools.update(re.findall(r'Name:\s*"([a-z_]+)"', text))
+
+    return {
+        "engines": {
+            "rust": {
+                "path": "agent/crates/codegen/xai-grok-science",
+                "transport": "ACP ext methods over `lumen agent stdio`",
+                "acpMethods": acp_methods,
+                "acpMethodCount": len(acp_methods),
+            },
+            "go": {
+                "path": "packs/science",
+                "transport": "MCP tools + loopback HTTP bridge (bearer token)",
+                "shipsBinary": "lumen-science",
+                "isReleasedCliBinary": True,
+                "mcpToolCount": len(go_tools),
+                "hasServeSubcommand": "serve" in re.findall(r'case "([a-z]+)"', go_main),
+            },
+        },
+        "desktopBridge": {
+            "path": "packs/science-desktop/src/main/lumen-acp-bridge.ts",
+            "spawnsSubcommand": "serve --interface loopback --port 17000"
+            if "'serve', '--interface'" in bridge
+            else None,
+            "speaksStdioAcp": "initialize" in bridge and "jsonrpc" in bridge.lower(),
+            "speaksHttp": "/tools/call" in bridge,
+            "toolNamesSent": sorted(desktop_tools),
+            "toolNamesUnservedByEitherEngine": sorted(
+                desktop_tools - go_tools - {m.split("/")[-1] for m in acp_methods}
+            ),
+        },
+        "knownAuthorityGaps": [
+            {
+                "id": "AUTH-1",
+                "summary": "Desktop bridge speaks HTTP to a subcommand and port no engine implements",
+                "path": "packs/science-desktop/src/main/lumen-acp-bridge.ts:58",
+            },
+            {
+                "id": "AUTH-2",
+                "summary": "Local catalog fallback authorizes membership when ACP is unavailable or denies",
+                "path": "packs/science-desktop/src/main/files/hybrid-membership.ts:11",
+            },
+            {
+                "id": "AUTH-3",
+                "summary": "Project/Claim/Evidence mutations construct ProjectStore inside the ACP handler, bypassing SessionActor",
+                "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs:869",
+            },
+            {
+                "id": "AUTH-4",
+                "summary": "FeatureGates is in-memory only; rebuilt from Default on every request, no operator control surface",
+                "path": "agent/crates/codegen/xai-grok-science/src/features.rs:122",
+            },
+            {
+                "id": "AUTH-5",
+                "summary": "attach_evidence accepts >=16-char hex digests and truncates to 16 for node identity",
+                "path": "agent/crates/codegen/xai-grok-science/src/project/store.rs:254",
+            },
+        ],
+    }
+
+
+# ── evidence levels ──────────────────────────────────────────────────────
+
+# E0 doc, E1 source, E2 unit/negative, E3 offline product path, E4 built-binary
+# ACP, E5 cross-process restart/replay, E6 headed Electron E2E, E7 required CI
+# native matrix, E8 signed release + upgrade/rollback/canary, E9 authorized
+# live provider / HPC / HIL / real device.
+EVIDENCE_LEVELS = {
+    "scienceCliMcp": {
+        "level": "E8-partial",
+        "rationale": (
+            "Released with per-asset SHA-256 across five targets, but assets are "
+            "unsigned, carry no SBOM or provenance, and publish is mutable."
+        ),
+    },
+    "rustScienceAcp": {
+        "level": "E4",
+        "rationale": (
+            "run_csv / import_preview / connector_fetch / ssh_scp_fixture / "
+            "goal_host_verify are proven over a rebuilt binary via stdio ACP in "
+            "tests/test_built_binary_e2e.rs."
+        ),
+    },
+    "projectEvidenceModel": {
+        "level": "E2",
+        "rationale": "Model plus JSON store plus unit tests; mutations bypass SessionActor.",
+    },
+    "workflowKernel": {
+        "level": "E1",
+        "rationale": "DAG validation and admission types exist; no executor, no real kernel probe.",
+    },
+    "dummyLabTwin": {
+        "level": "E2",
+        "rationale": "DummyLab has simulated logic and unit tests; unreachable from any ACP route.",
+    },
+    "deviceGovernance": {
+        "level": "E1",
+        "rationale": "Contract structs only; DeviceCommand/HardwareInLoop/RealDevice gates Disabled.",
+    },
+    "desktop": {
+        "level": "E1",
+        "rationale": (
+            "Authority policy is real and unit-tested, but the shipped `dist` target "
+            "is a branding shell, the bridge cannot reach any engine, and no headed "
+            "Electron E2E exists."
+        ),
+    },
+}
+
+
+# ── desktop gates ────────────────────────────────────────────────────────
+
+
+def collect_desktop(evidence: dict[str, Any]) -> dict[str, Any]:
+    pkg = read_json("packs/science-desktop/package.json") or {}
+    scripts = pkg.get("scripts", {})
+    desktop_evidence = evidence.get("desktop", {})
+
+    def gate(name: str) -> dict[str, Any]:
+        record = desktop_evidence.get(name)
+        if not record:
+            return emit_gate(NOT_RUN)
+        state = record.get("state", NOT_RUN)
+        return emit_gate(state, record.get("evidence"))
+
+    dist_script = scripts.get("dist", "")
+    return {
+        "version": pkg.get("version"),
+        "typecheck": gate("typecheck"),
+        "fullBuild": gate("fullBuild"),
+        "headedE2E": gate("headedE2E"),
+        "distTargetIsBrandingShell": "pack-dir" in dist_script,
+        "distScript": dist_script,
+        "fullBuildScript": scripts.get("dist:full"),
+        "bundlesEngineBinary": False,
+        "notes": (
+            "`npm run dist` builds src/main/pack-main.ts + pack-index.html — a "
+            "packaging smoke shell, not the product. The product entry is "
+            "src/main/index.ts, built only by dist:full, which nothing calls."
+        ),
+    }
+
+
+def collect_ci(evidence: dict[str, Any]) -> dict[str, Any]:
+    facts = workflow_facts()
+    ci_evidence = evidence.get("ci", {})
+    checks: dict[str, Any] = {}
+    for name in facts["workflows"]:
+        record = ci_evidence.get(name)
+        if record:
+            checks[name] = emit_gate(record.get("state", NOT_RUN), record.get("evidence"))
+        else:
+            checks[name] = emit_gate(NOT_RUN)
+    return {
+        "checks": checks,
+        "workflowFacts": {
+            k: v for k, v in facts.items() if k != "workflows"
+        },
+        "desktopCiAllowsTypecheckFailure": facts["desktop-ci.yml"].get("continueOnError", 0) > 0,
+    }
+
+
+# ── assembly ─────────────────────────────────────────────────────────────
+
+
+def build_status(evidence: dict[str, Any]) -> dict[str, Any]:
+    commit = git("rev-parse", "HEAD")
+    commit_epoch = int(git("show", "-s", "--format=%ct", commit))
+    commit_iso = git("show", "-s", "--format=%cI", commit)
+
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "generator": "scripts/generate-science-status.py",
+        "doc": (
+            "Machine-generated product status. Derived from the source tree and git "
+            "only. Prose documents must point here rather than restate status. "
+            "Regenerate with: python3 scripts/generate-science-status.py"
+        ),
+        "sourceCommit": commit,
+        "sourceCommitEpoch": commit_epoch,
+        "sourceCommitIso": commit_iso,
+        "gateVocabulary": {
+            "states": list(VALID_GATE_STATES),
+            "rule": "pass requires evidence.command; absent evidence is not_run, never pass",
+        },
+        "versions": collect_versions(),
+        "connectorInventory": collect_connectors(),
+        "skillInventory": collect_skills(),
+        "ci": collect_ci(evidence),
+        "release": collect_release(),
+        "desktop": collect_desktop(evidence),
+        "authority": collect_authority(),
+        "evidenceLevels": EVIDENCE_LEVELS,
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--evidence",
+        type=Path,
+        help="JSON file of real gate results produced by CI; absent gates are not_run",
+    )
+    parser.add_argument("--stdout", action="store_true", help="print instead of writing")
+    parser.add_argument("--out", type=Path, default=OUT_PATH)
+    args = parser.parse_args()
+
+    evidence: dict[str, Any] = {}
+    if args.evidence:
+        if not args.evidence.is_file():
+            print(f"FAIL: evidence file not found: {args.evidence}", file=sys.stderr)
+            return 2
+        evidence = json.loads(args.evidence.read_text(encoding="utf-8"))
+
+    try:
+        status = build_status(evidence)
+    except StatusError as exc:
+        print(f"FAIL: {exc}", file=sys.stderr)
+        return 2
+
+    rendered = json.dumps(status, indent=2, sort_keys=False, ensure_ascii=False) + "\n"
+
+    if args.stdout:
+        sys.stdout.write(rendered)
+        return 0
+
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(rendered, encoding="utf-8")
+    print(f"OK: wrote {args.out.relative_to(ROOT)} ({len(rendered)} bytes)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

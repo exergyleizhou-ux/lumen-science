@@ -1,3 +1,7 @@
+<!-- status-claim: historical -->
+> **Historical record.** Local acceptance run for `1.0.0`; its numbers are not
+> current. Live status: [`docs/science/status/current.json`](status/current.json).
+
 # Lumen Science 1.0.0 — Local Acceptance
 
 **Date:** 2026-07-26  

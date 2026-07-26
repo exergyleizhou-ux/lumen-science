@@ -1,3 +1,5 @@
+<!-- status-claim: historical -->
+
 # Lumen Science Fusion Candidate — Status (superseded)
 
 > **Superseded by `1.0.0-rc.1`.** See `docs/science/LUMEN_SCIENCE_1_0_RC_STATUS.md`.

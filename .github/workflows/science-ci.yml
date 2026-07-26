@@ -9,6 +9,10 @@ on:
       - 'scripts/science-machine-gates.sh'
       - 'scripts/science-go-module-boundary.sh'
       - 'scripts/verify-release-assets.sh'
+      - 'scripts/generate-science-status.py'
+      - 'scripts/verify-science-status.py'
+      - 'scripts/test-science-status.py'
+      - 'docs/science/status/current.json'
       - 'docs/science/fusion-sources.lock.json'
       - 'agent/crates/codegen/xai-grok-science/**'
       - 'agent/crates/codegen/xai-grok-shell/src/extensions/science.rs'
@@ -75,10 +79,26 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          # verify-science-status regenerates from the tree and needs real git
+          # metadata (commit + committer date), which a shallow clone still has,
+          # but tag enumeration for the release block does not.
+          fetch-depth: 0
+
       - name: Science machine gates
         run: bash scripts/science-machine-gates.sh
+
       - name: Go module boundary (product vs legacy)
         run: bash scripts/science-go-module-boundary.sh
+
+      # LS5-F0-01: status truth. The negative tests run first — if the verifier
+      # cannot detect a corrupted status file, its pass on the real one is
+      # meaningless.
+      - name: Status gate self-test (negative cases)
+        run: python3 scripts/test-science-status.py
+
+      - name: Verify machine-readable status is fresh and honest
+        run: python3 scripts/verify-science-status.py
 
   rust-science:
     name: Rust xai-grok-science (test + clippy)

@@ -1,3 +1,7 @@
+<!-- status-claim: historical -->
+> **Historical record.** Point-in-time snapshot for `1.0.0-rc.1`; its numbers are
+> not current. Live status: [`docs/science/status/current.json`](status/current.json).
+
 # Lumen Science 1.0.0-rc.1 — Status
 
 **Date:** 2026-07-26  
