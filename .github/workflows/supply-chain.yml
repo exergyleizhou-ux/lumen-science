@@ -1,0 +1,142 @@
+# Supply-chain and vulnerability gates (LS5 §16).
+#
+# docs/science/5.0/THREAT_MODEL.md A15 requires dependency and license auditing.
+# Before this workflow the repo had none: no cargo audit, no govulncheck, no
+# npm audit, no CodeQL — while publishing multi-platform binaries.
+#
+# Runs on a schedule as well as on PR, because a dependency becomes vulnerable
+# without anyone touching this repository.
+name: Supply chain
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, so newly-disclosed advisories surface without a code change.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: supply-chain-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rust-audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v4
+
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4  # stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked --version ^0.21
+
+      - name: Audit Cargo.lock
+        working-directory: agent
+        # Advisories with no fixed version available would otherwise block every
+        # PR indefinitely. Any use of --ignore must name the advisory and why.
+        run: cargo audit --deny warnings
+
+  go-vuln:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
+        with:
+          go-version: '1.23'
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Scan the science pack
+        working-directory: packs/science
+        # govulncheck reports only vulnerabilities actually reachable from this
+        # module's call graph, so a finding here is real rather than advisory.
+        run: govulncheck ./...
+
+  npm-audit:
+    name: npm audit + licenses
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: packs/science-desktop
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: packs/science-desktop/package-lock.json
+
+      - run: npm ci
+
+      - name: Audit production dependencies
+        # Production scope only: a dev-only advisory does not reach users, and
+        # failing on it would train people to ignore this gate.
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Reject copyleft licenses in shipped dependencies
+        # Lumen Science ships Apache-2.0. A GPL/AGPL dependency in the production
+        # tree would be a licensing incompatibility, not a style preference.
+        run: |
+          set -euo pipefail
+          npm ls --omit=dev --json --all > /tmp/prod-tree.json || true
+          node --input-type=module -e '
+            import { readFileSync, existsSync } from "node:fs"
+            import { join } from "node:path"
+            const seen = new Set()
+            const bad = []
+            const FORBIDDEN = /^(GPL|AGPL|SSPL|CC-BY-NC)/i
+            const walk = (node) => {
+              for (const [name, dep] of Object.entries(node.dependencies ?? {})) {
+                if (seen.has(name)) continue
+                seen.add(name)
+                const pkg = join("node_modules", name, "package.json")
+                if (existsSync(pkg)) {
+                  const { license, licenses } = JSON.parse(readFileSync(pkg, "utf8"))
+                  const declared =
+                    license ?? (Array.isArray(licenses) ? licenses.map((l) => l.type).join(" OR ") : undefined)
+                  if (typeof declared === "string" && FORBIDDEN.test(declared)) {
+                    bad.push(`${name}: ${declared}`)
+                  }
+                }
+                walk(dep)
+              }
+            }
+            walk(JSON.parse(readFileSync("/tmp/prod-tree.json", "utf8")))
+            if (bad.length) {
+              console.error("Copyleft licenses in shipped dependencies:\n  " + bad.join("\n  "))
+              process.exit(1)
+            }
+            console.log(`OK: ${seen.size} production dependencies, no copyleft licenses`)
+          '
+
+  secret-scan:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v4
+        with:
+          fetch-depth: 0
+
+      # Official action, pinned by SHA. Preferred over curl-ing a release
+      # tarball: that would need a checksum maintained by hand here, and a
+      # hand-maintained checksum is exactly the kind of unverifiable claim this
+      # repository is trying to eliminate.
+      - name: Scan history for secrets
+        uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc  # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,59 @@
+# Code owners (LS5 §16).
+#
+# Review requirements for the paths where a mistake is expensive: execution
+# authority, evidence integrity, release publishing, and device control.
+#
+# This repo has a single maintainer today, so these rules do not add a second
+# pair of eyes. They exist so the boundary is explicit and stays enforced when
+# more people are added — and so the security-critical paths are named
+# somewhere other than a design document.
+
+# Default owner for everything not matched below.
+*                                       @exergyleizhou-ux
+
+# ── Execution authority ──────────────────────────────────────────
+# The Rust SessionActor is the sole execution, permission and evidence
+# authority. Changes here can silently create a second authority.
+/agent/crates/codegen/xai-grok-science/         @exergyleizhou-ux
+/agent/crates/codegen/xai-grok-shell/src/extensions/science.rs  @exergyleizhou-ux
+/agent/crates/codegen/xai-grok-shell/src/session/               @exergyleizhou-ux
+
+# ── Desktop authority boundary ───────────────────────────────────
+# The IPC allow/deny list, artifact preview containment, session binding and
+# the ACP bridge. A permissive change here is a privilege escalation.
+/packs/science-desktop/src/main/lumen-authority-policy.ts    @exergyleizhou-ux
+/packs/science-desktop/src/main/lumen-acp-bridge.ts          @exergyleizhou-ux
+/packs/science-desktop/src/main/files/                       @exergyleizhou-ux
+/packs/science-desktop/src/shared/update-policy.ts           @exergyleizhou-ux
+
+# ── Release and supply chain ─────────────────────────────────────
+# Publishing, signing, provenance and dependency gates.
+/.github/workflows/release.yml          @exergyleizhou-ux
+/.github/workflows/science-release.yml  @exergyleizhou-ux
+/.github/workflows/supply-chain.yml     @exergyleizhou-ux
+/.github/dependabot.yml                 @exergyleizhou-ux
+/scripts/release_contract.py            @exergyleizhou-ux
+/scripts/science_release_contract.py    @exergyleizhou-ux
+/scripts/repro-archive.sh               @exergyleizhou-ux
+/release/                               @exergyleizhou-ux
+
+# ── Status and provenance truth ──────────────────────────────────
+# These make claims machine-checkable. Weakening a checker is worse than
+# never having had it, because the green stays.
+/scripts/generate-science-status.py     @exergyleizhou-ux
+/scripts/verify-science-status.py       @exergyleizhou-ux
+/scripts/test-science-status.py         @exergyleizhou-ux
+/docs/science/status/                   @exergyleizhou-ux
+/docs/provenance/                       @exergyleizhou-ux
+
+# ── Admission locks ──────────────────────────────────────────────
+# Connector and skill admission decisions, including license dispositions.
+/docs/science/fusion-sources.lock.json  @exergyleizhou-ux
+/packs/science/skills/registry.json     @exergyleizhou-ux
+
+# ── Legal ────────────────────────────────────────────────────────
+/LICENSE            @exergyleizhou-ux
+/NOTICE             @exergyleizhou-ux
+/LEGAL.md           @exergyleizhou-ux
+/SECURITY.md        @exergyleizhou-ux
+/third_party/       @exergyleizhou-ux
