@@ -99,14 +99,14 @@ nsis:
   allowToChangeInstallationDirectory: true
   include: build/installer.nsh
 mac:
-  artifactName: aipoch-${name}-${version}-mac-${arch}.${ext}
+  artifactName: lumen-science-${version}-mac-${arch}.${ext}
   # Minimum macOS to run the app (written to Info.plist LSMinimumSystemVersion). macOS 12 (Monterey)
   # and up; below this the OS refuses to launch. Independent of the CI build runner's macOS version.
   minimumSystemVersion: '12.0.0'
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
-    CFBundleName: Open Science
-    CFBundleDisplayName: Open Science
+    CFBundleName: Lumen Science Desktop
+    CFBundleDisplayName: Lumen Science Desktop
     NSCameraUsageDescription: Application requests access to the device's camera.
     NSMicrophoneUsageDescription: Application requests access to the device's microphone.
     NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
@@ -119,7 +119,7 @@ mac:
     - from: resources/bin/mac/${arch}/micromamba
       to: micromamba
 dmg:
-  artifactName: aipoch-${name}-${version}-mac-${arch}.${ext}
+  artifactName: lumen-science-${version}-mac-${arch}.${ext}
 linux:
   # snap is intentionally omitted: building it on a stock GitHub runner needs snapcraft + LXD and
   # is flaky in CI. AppImage (portable, runs anywhere) + deb (Debian/Ubuntu) cover the common cases.

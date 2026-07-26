@@ -88,11 +88,11 @@ The following Open Science subsystems have execution authority REMOVED:
 | resources/notebook/ | packs/science-desktop/resources/notebook/ | Planned | Python/R loops, REPL scripts |
 
 ### Key modifications (OSF-3)
-- TypeScript kernel executor REPLACED with Rust KernelAdapter
-- Kernel process lifecycle owned by SessionActor (not Electron)
-- Artifact scan after each cell execution → ArtifactRegistry
-- Network, cwd, timeout policies enforced by Rust
-- IPYNB export: UI reused; execution data from Rust artifact store
+- kernel-executor.ts: STUBBED — no Python/R kernel execution
+- runtime-service.ts: STUBBED — no notebook runtime authority
+- notebook/ipc.ts: STUBBED — no-op registerNotebookIpcHandlers
+- Actual notebook execution requires wiring Rust KernelAdapter (follow-on)
+- TypeScript kernel executor preserved in git history; replaced by stubs in working tree
 
 ## Batch 4: Reviewer UX (OSF-4) — 2026-07-26
 
@@ -137,12 +137,14 @@ The following Open Science subsystems have execution authority REMOVED:
 - ssh-runner.ts: STUBBED — no SSH execution; throws 'use Rust Lumen'
 - scp-runner.ts: STUBBED — no SCP execution
 - job-poller.ts: STUBBED — no-op EventEmitter
-- compute/ipc.ts: STUBBED — all handlers throw 'stubbed'
+- compute/ipc.ts: STUBBED — returns compatible stub shapes for ipc.ts destructuring
 - compute-approval-broker.ts: STUBBED
+- compute-service.ts: STUBBED — empty class
+- job-dispatcher.ts: STUBBED — empty class
+- harvest-engine.ts: STUBBED — returns rejection
 - enabled-hosts-registry.ts: STUBBED
-- Compute UI → x.ai/science/compute_plan → SessionActor admission → Rust SSH/Slurm ToolAdapter
-- Permission bound to plan hash
-- Output hash verification → ArtifactRegistry → EvidenceGraph
+- Compute UI preserved; SSH/Slurm execution via Rust ToolAdapter (follow-on)
+- TypeScript SSH/SCP stored in git history; replaced by stubs in working tree
 
 ## Batch 7: Connector Catalog UX (OSF-7) — 2026-07-26
 

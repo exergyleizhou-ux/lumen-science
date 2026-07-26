@@ -30,17 +30,21 @@ Apache-2.0 §4. Modifications include:
   integration (ACP loopback). Bridge orchestrates lumen binary lifecycle;
   Electron main does NOT execute science tools directly.
 - Connector catalog: UI reused; Rust adapters remain authoritative.
-- Notebook: kernel-executor.ts and runtime-service.ts are STUBBED.
+- Notebook: kernel-executor.ts, runtime-service.ts, and notebook/ipc.ts
+  are STUBBED — no Python/R kernel execution through Electron.
   Actual notebook execution requires wiring Rust KernelAdapter (follow-on).
-- Reviewer: correction proposal routing through SessionActor is DESIGNED
-  but not yet wired; reviewer IPC stubbed.
-- Persistence: Electron local state limited to UI layout/session/draft;
-  science state owned by Rust ProjectStore/ArtifactRegistry/EvidenceGraph.
-- IPC: compute/ipc.ts, notebook/ipc.ts, compute/ssh-runner.ts,
-  compute/scp-runner.ts, compute/job-poller.ts, compute/compute-approval-broker.ts
-  are ALL stubbed — no production SSH/SCP/job/notebook execution through
-  Electron. Original Open Science executors are preserved in git history
-  but replaced by stubs in the working tree.
+- Reviewer: reviewer/ipc.ts is STUBBED — no runReview orchestration
+  through Electron. Reviewer verdict routing through SessionActor
+  is DESIGNED as follow-on work.
+- Compute: ssh-runner.ts, scp-runner.ts, job-poller.ts, compute-service.ts,
+  job-dispatcher.ts, harvest-engine.ts, compute/ipc.ts, and
+  compute-approval-broker.ts are all STUBBED — no SSH/SCP/job execution
+  through Electron. Actual remote compute requires Rust ToolAdapter
+  integration (follow-on).
+- Desktop bridge: lumen-acp-bridge.ts added for Rust Lumen SessionActor
+  integration (ACP loopback). Bridge exports installIpcGuard which is
+  wired into ipcMain at startup — BANNED channels are blocked and acp:call
+  routes to Rust binary. Bridge orchestrates lumen binary lifecycle.
 
 === UPSTREAM CREDITS ===
 

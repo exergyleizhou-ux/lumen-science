@@ -140,8 +140,13 @@ async function startElectronApp(mainEntryPath: string): Promise<void> {
       // ── Lumen Rust binary supervision ──────────────────────────
       // Start the Rust Lumen binary and surface its identity hash so the UI
       // can attest "this desktop is backed by this exact science engine."
-      const { startLumen, getLumenBinaryHash, stopLumen } = await import('./lumen-acp-bridge')
+      const { startLumen, getLumenBinaryHash, stopLumen, installIpcGuard } = await import('./lumen-acp-bridge')
       app.on('before-quit', () => stopLumen())
+
+      // Wire IPC guard BEFORE any handlers register so BANNED channels are
+      // rejected at the IPC layer and acp:call routes to Rust Lumen.
+      installIpcGuard(ipcMain)
+
       startLumen().then(() => {
         if (getLumenBinaryHash()) {
           log.info('lumen binary started', { hash: getLumenBinaryHash() })

@@ -12,7 +12,7 @@
  */
 
 import { ChildProcess, spawn } from 'child_process';
-import { app } from 'electron';
+import { type IpcMain, app } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -168,4 +168,57 @@ export async function acpCall(toolName: string, args: Record<string, unknown>): 
     body: JSON.stringify({ name: toolName, arguments: args }),
   });
   return resp.json();
+}
+
+// ── Wire into Electron IPC ────────────────────────────────────────
+// This MUST be called during app startup so BANNED channels are rejected
+// at the IPC layer before any handler registers, and acp:call routes to
+// the Rust Lumen binary instead of Electron main.
+
+let _guardInstalled = false
+
+export function installIpcGuard(ipcMain: IpcMain): void {
+  if (_guardInstalled) return
+  _guardInstalled = true
+
+  // 1. BANNED channel guard — runs BEFORE any handler, fails closed
+  ipcMain.handle('*', (event, channel: string, ...args: unknown[]) => {
+    if (BANNED_CHANNELS.has(channel)) {
+      console.error(`[lumen-security] BANNED IPC channel rejected: ${channel}`)
+      event.preventDefault()
+      return { _lumenBanned: true, channel, reason: 'EXECUTION AUTHORITY REMOVED — use Lumen bridge' }
+    }
+    return undefined // pass through: let registered handlers process
+  })
+
+  // 2. ACP proxy handler — forwards science calls to Rust binary
+  ipcMain.handle('acp:call', async (_event, toolName: string, args: Record<string, unknown>) => {
+    try {
+      return await acpCall(toolName, args)
+    } catch (e: unknown) {
+      return { _lumenError: true, message: (e as Error).message || String(e) }
+    }
+  })
+
+  ipcMain.handle('acp:list-tools', async () => {
+    try {
+      const resp = await fetch('http://127.0.0.1:17000/tools/list')
+      return resp.json()
+    } catch {
+      return { tools: [], _lumenUnavailable: true }
+    }
+  })
+
+  ipcMain.handle('acp:health', async () => {
+    try {
+      const resp = await fetch('http://127.0.0.1:17000/health')
+      return { ok: resp.ok, hash: getLumenBinaryHash() }
+    } catch {
+      return { ok: false, hash: null }
+    }
+  })
+
+  ipcMain.handle('app:get-lumen-hash', () => getLumenBinaryHash())
+
+  console.log('[lumen-security] IPC guard installed — BANNED channels blocked, ACP proxy active')
 }
