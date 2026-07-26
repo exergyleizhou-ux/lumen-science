@@ -18,7 +18,7 @@ beforeEach(() => {
 
   useUpdateStore.setState({
     appInfo: {
-      name: 'Open Science',
+      name: 'Lumen Science',
       version: '0.2.0',
       copyright: '© 2026 AIPOCH. All rights reserved.'
     },
@@ -37,9 +37,9 @@ describe('AppVersionSection', () => {
       root.render(<AppVersionSection />)
     })
 
-    expect(container.textContent).toContain('Open Science')
+    expect(container.textContent).toContain('Lumen Science')
     expect(container.textContent).toContain('v0.2.0')
-    expect(container.textContent).toContain('© 2026 AIPOCH')
+    expect(container.textContent).toContain('© 2026 Lumen Science contributors. Apache-2.0.')
   })
 
   it('shows an update action when a new version is available', () => {

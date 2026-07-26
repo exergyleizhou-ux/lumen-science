@@ -60,6 +60,15 @@ SOURCE_SUFFIXES = {".ts", ".tsx", ".css", ".html"}
 EXTRA_ADOPTIONS = {
     "agent/crates/codegen/xai-grok-science/resources/lumen_python_loop.py":
         "resources/notebook/python_loop.py",
+    # LS5-K33: the spreadsheet window-cache vendor patch and the fake-table test
+    # fixture. Upstream keeps both at repo root; the desktop pack keeps them
+    # under its own tree so patch-package and vitest find them relative to the
+    # package. The fixture carries a 5-line attribution header, so its digest
+    # legitimately differs from upstream's; the patch is adopted verbatim.
+    "packs/science-desktop/patches/@file-viewer+renderer-spreadsheet+2.2.3.patch":
+        "patches/@file-viewer+renderer-spreadsheet+2.2.3.patch",
+    "packs/science-desktop/test/fixtures/fake-e-virt-table.ts":
+        "test/fixtures/fake-e-virt-table.ts",
 }
 
 

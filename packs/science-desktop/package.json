@@ -23,7 +23,9 @@
     "smoke:live": "npx tsx scripts/lumen-live-smoke.mts",
     "check:release": "npx tsx scripts/osf8-release-check.mts",
     "test:e2e": "electron-vite build && playwright test",
-    "test:e2e:live": "electron-vite build && LUMEN_E2E_LIVE=1 playwright test"
+    "test:e2e:live": "electron-vite build && LUMEN_E2E_LIVE=1 playwright test",
+    "postinstall": "patch-package",
+    "test:unit": "vitest run"
   },
   "dependencies": {
     "@aiden0z/pptx-renderer": "^1.2.4",
@@ -70,6 +72,8 @@
     "@playwright/test": "^1.62.0",
     "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.3.3",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^20.14.0",
     "@types/papaparse": "^5.5.2",
     "@types/react": "^19.2.17",
@@ -81,6 +85,8 @@
     "electron-vite": "^3.1.0",
     "esbuild": "^0.25.12",
     "eslint": "^9.0.0",
+    "jsdom": "^26.1.0",
+    "patch-package": "^8.0.1",
     "prettier": "^3.3.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.5.0",

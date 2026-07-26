@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { UpdateManifest } from '../../shared/update'
 import { UpdateService } from './service'
@@ -18,6 +18,22 @@ const manifest: UpdateManifest = {
 
 const jsonResponse = (body: unknown): Response =>
   ({ ok: true, status: 200, json: () => Promise.resolve(body) }) as unknown as Response
+
+
+// The hardened update policy refuses to construct a networked strategy without
+// an explicit Lumen-owned feed (update-policy.ts) — the fallback these tests
+// relied on used to be a hardcoded third-party URL, which is exactly what the
+// hardening removed. The suite configures a syntactically valid Lumen feed so
+// it can test the strategy MECHANICS; the refusal paths have their own
+// coverage in scripts/test-update-egress.mts.
+beforeAll(() => {
+  process.env.LUMEN_UPDATE_FEED_URL = 'https://releases.lumen.science/desktop/manifest.json'
+  process.env.LUMEN_UPDATE_PUBLIC_KEY = 'RWTest0000000000000000000000000000000000000000000000000000'
+})
+afterAll(() => {
+  delete process.env.LUMEN_UPDATE_FEED_URL
+  delete process.env.LUMEN_UPDATE_PUBLIC_KEY
+})
 
 describe('UpdateService.check', () => {
   it('reports available with the platform download when newer', async () => {

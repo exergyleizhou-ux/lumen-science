@@ -142,7 +142,7 @@ describe('OnboardingWizard flow', () => {
 
     expect(currentSection('Choose data location')).not.toBeNull()
     expect(container.textContent).toContain('/mnt/data/OpenScience')
-    expect(container.textContent).toContain('Open Science will restart to set this up')
+    expect(container.textContent).toContain('Lumen Science will restart to set this up')
   })
 
   it('initializes (detects) the env store on mount without auto-provisioning python', async () => {

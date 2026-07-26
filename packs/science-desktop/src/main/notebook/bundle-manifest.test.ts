@@ -222,17 +222,17 @@ describe('verifyPackChecksum', () => {
 
 describe('url helpers', () => {
   it('builds the manifest key', () => {
-    expect(manifestUrl('https://cdn.example/envs', 1, 'osx-arm64')).toBe(
-      'https://cdn.example/envs/runtime-bundle/1/osx-arm64/manifest.json'
+    expect(manifestUrl('https://releases.lumen.science/envs', 1, 'osx-arm64')).toBe(
+      'https://releases.lumen.science/envs/runtime-bundle/1/osx-arm64/manifest.json'
     )
   })
 
   it('builds the pack key from a manifest entry file', () => {
-    expect(packUrl('https://cdn.example/envs', 1, 'linux-64', 'python-3.11.tar.zst')).toBe(
-      'https://cdn.example/envs/runtime-bundle/1/linux-64/python-3.11.tar.zst'
+    expect(packUrl('https://releases.lumen.science/envs', 1, 'linux-64', 'python-3.11.tar.zst')).toBe(
+      'https://releases.lumen.science/envs/runtime-bundle/1/linux-64/python-3.11.tar.zst'
     )
-    expect(packUrl('https://cdn.example/envs', 2, 'win-64', 'r-4.4.tar.zst')).toBe(
-      'https://cdn.example/envs/runtime-bundle/2/win-64/r-4.4.tar.zst'
+    expect(packUrl('https://releases.lumen.science/envs', 2, 'win-64', 'r-4.4.tar.zst')).toBe(
+      'https://releases.lumen.science/envs/runtime-bundle/2/win-64/r-4.4.tar.zst'
     )
   })
 })

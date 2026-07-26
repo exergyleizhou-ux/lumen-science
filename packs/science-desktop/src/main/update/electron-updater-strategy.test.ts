@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { ElectronUpdaterStrategy } from './electron-updater-strategy'
 
@@ -66,6 +66,22 @@ const offlineFetch = (): typeof fetch =>
   vi.fn(async () => {
     throw new Error('no network in test')
   }) as unknown as typeof fetch
+
+
+// The hardened update policy refuses to construct a networked strategy without
+// an explicit Lumen-owned feed (update-policy.ts) — the fallback these tests
+// relied on used to be a hardcoded third-party URL, which is exactly what the
+// hardening removed. The suite configures a syntactically valid Lumen feed so
+// it can test the strategy MECHANICS; the refusal paths have their own
+// coverage in scripts/test-update-egress.mts.
+beforeAll(() => {
+  process.env.LUMEN_UPDATE_FEED_URL = 'https://releases.lumen.science/desktop/manifest.json'
+  process.env.LUMEN_UPDATE_PUBLIC_KEY = 'RWTest0000000000000000000000000000000000000000000000000000'
+})
+afterAll(() => {
+  delete process.env.LUMEN_UPDATE_FEED_URL
+  delete process.env.LUMEN_UPDATE_PUBLIC_KEY
+})
 
 describe('ElectronUpdaterStrategy', () => {
   it('disables auto download/install on construction', () => {

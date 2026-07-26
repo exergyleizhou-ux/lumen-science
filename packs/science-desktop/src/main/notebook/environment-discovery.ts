@@ -82,6 +82,11 @@ export type DiscoveryDeps = {
   rRunnable: (interpreterPath: string) => Promise<boolean>
   // Resolve a path to its canonical form for identity/dedup; tolerate a missing path (return as-is).
   realpath: (p: string) => string
+  // Platform the pinned-path rule judges candidates against. Optional; defaults to the running
+  // process. Injectable because LS5-K4 re-applies the rule INSIDE discoverInterpreters, and a
+  // Windows fixture judged by a macOS process.platform silently loses all its candidates —
+  // which is exactly how the Windows CRAN R test broke on every non-Windows machine.
+  platform?: NodeJS.Platform
   // App runtime root (<storageRoot>/runtime); used to classify provenance of an interpreter by whether
   // it lives under runtime/envs and whether it is a default (app-managed) vs a named (agent-created) env.
   runtimeRoot: string
@@ -473,7 +478,10 @@ export const discoverInterpreters = async (
   // and none appears in the result.
   const seen = new Set<string>()
   const unique: { path: string; envId: string }[] = []
-  const { pinned, unpinned } = partitionCandidates(await deps.candidatePaths(language))
+  const { pinned, unpinned } = partitionCandidates(
+    await deps.candidatePaths(language),
+    deps.platform ?? process.platform
+  )
   for (const { candidate, reason } of unpinned) deps.onUnpinnedCandidate?.(candidate, reason)
   for (const path of pinned) {
     const envId = deps.realpath(path)

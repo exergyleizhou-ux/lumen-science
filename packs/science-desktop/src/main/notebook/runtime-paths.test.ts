@@ -176,8 +176,8 @@ describe('runtime CDN platform mapping', () => {
   })
 
   it('trims CDN base overrides without changing the path namespace', () => {
-    expect(resolveRuntimeCdnBase('https://cdn.example/open-science///')).toBe(
-      'https://cdn.example/open-science'
+    expect(resolveRuntimeCdnBase('https://releases.lumen.science/open-science///')).toBe(
+      'https://releases.lumen.science/open-science'
     )
   })
 

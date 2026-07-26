@@ -319,10 +319,10 @@ describe('ProviderStep', () => {
     expect(container.querySelector<HTMLInputElement>('[aria-label="Model"]')?.value).toBe('gpt-5')
   })
 
-  // Switches the auth picker to the isolated "Sign in with Open Science" mode — the only path that
+  // Switches the auth picker to the isolated "Sign in with Lumen Science" mode — the only path that
   // runs the browser login (loginIsolatedCodex).
   const switchToIsolatedSignIn = async (): Promise<void> => {
-    await selectOption('Codex authentication', 'Sign in with Open Science')
+    await selectOption('Codex authentication', 'Sign in with Lumen Science')
   }
 
   it('runs the isolated Codex sign-in then advances', async () => {

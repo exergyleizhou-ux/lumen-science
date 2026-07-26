@@ -56,6 +56,13 @@ jobs:
       - name: Authority + release honesty + office gate
         run: npm run test:authority
 
+      # 4,315 unit tests that existed for months while nothing ran them: no
+      # config, no script, 597 failing — some against behaviour this fork
+      # changed deliberately. Wired in LS5-K33; exclusions derive from the
+      # tsconfig production-exclusion list (see vitest.config.ts).
+      - name: Unit suites (vitest)
+        run: npm run test:unit
+
       # LS5-D1-01: required. Proves the tsconfig exclusion list still matches
       # the computed import graph — an excluded file must be genuinely
       # unreachable, or exclusion would be hiding real type errors.
