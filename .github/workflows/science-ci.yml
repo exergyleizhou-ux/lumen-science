@@ -168,6 +168,21 @@ jobs:
       - name: cargo test -p xai-grok-science --lib
         run: cargo test -p xai-grok-science --lib --locked -- --test-threads=2
 
+      # xai-grok-workspace + xai-grok-tools ran in NO job, and both were red:
+      # 15 failures from fixtures that fed uncanonicalized temp paths into the
+      # capability layer (invisible on Linux, where /tmp is not a symlink), and
+      # 44 from tests that shell out to ripgrep. Both are now green and stay
+      # that way only if something runs them.
+      #
+      # ripgrep is a real dependency of the grep/glob tools in a DEBUG build
+      # (build.rs bundles it for release only), so the job installs it rather
+      # than letting 43 tests quietly assert nothing.
+      - name: Install ripgrep (grep/glob tools shell out to it)
+        run: sudo apt-get update -y && sudo apt-get install -y ripgrep
+
+      - name: cargo test -p xai-grok-workspace -p xai-grok-tools --lib
+        run: cargo test -p xai-grok-workspace -p xai-grok-tools --lib --locked -- --test-threads=2
+
       - name: cargo clippy -p xai-grok-science -D warnings
         run: cargo clippy -p xai-grok-science --all-targets --locked -- -D warnings
 

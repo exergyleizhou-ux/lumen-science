@@ -4,14 +4,15 @@ use std::ffi::OsString;
 #[cfg(windows)]
 use super::windows;
 use super::*;
+use crate::foreign_sessions::canonical_tempdir;
 
 #[cfg(unix)]
 #[test]
 fn retained_directory_capability_survives_path_replacement() {
     use std::io::Read as _;
 
-    let root = tempfile::tempdir().unwrap();
-    let outside = tempfile::tempdir().unwrap();
+    let root = canonical_tempdir();
+    let outside = canonical_tempdir();
     let original = root.path().join("sessions");
     std::fs::create_dir_all(&original).unwrap();
     std::fs::write(original.join("inside"), "inside").unwrap();
@@ -45,7 +46,7 @@ fn retained_directory_capability_survives_path_replacement() {
 #[cfg(unix)]
 #[test]
 fn bounded_directory_visit_reports_exact_cutoff() {
-    let root = tempfile::tempdir().unwrap();
+    let root = canonical_tempdir();
     for index in 0..5 {
         std::fs::write(root.path().join(format!("entry-{index}")), "").unwrap();
     }
@@ -61,7 +62,7 @@ fn bounded_directory_visit_reports_exact_cutoff() {
         }
     );
 
-    let small = tempfile::tempdir().unwrap();
+    let small = canonical_tempdir();
     std::fs::write(small.path().join("a"), "").unwrap();
     std::fs::write(small.path().join("b"), "").unwrap();
     let approved = ApprovedRoot::new(small.path()).unwrap();
@@ -74,7 +75,7 @@ fn bounded_directory_visit_reports_exact_cutoff() {
         }
     );
 
-    let exact = tempfile::tempdir().unwrap();
+    let exact = canonical_tempdir();
     for index in 0..3 {
         std::fs::write(exact.path().join(format!("entry-{index}")), "").unwrap();
     }
@@ -95,7 +96,7 @@ fn bounded_directory_visit_reports_exact_cutoff() {
 fn nonblocking_open_rejects_fifo() {
     use std::os::unix::ffi::OsStrExt as _;
 
-    let root = tempfile::tempdir().unwrap();
+    let root = canonical_tempdir();
     let fifo = root.path().join("metadata");
     let path = std::ffi::CString::new(fifo.as_os_str().as_bytes()).unwrap();
     // SAFETY: the path is NUL-terminated and points into the live tempdir.
@@ -106,7 +107,7 @@ fn nonblocking_open_rejects_fifo() {
 
 #[test]
 fn sqlite_truncate_mode_skips_foreign_database_without_mutation() {
-    let root = tempfile::tempdir().unwrap();
+    let root = canonical_tempdir();
     let path = root.path().join("state.db");
     let connection = rusqlite::Connection::open(&path).unwrap();
     connection
@@ -137,7 +138,7 @@ fn sqlite_truncate_mode_skips_foreign_database_without_mutation() {
 
 #[test]
 fn sqlite_wal_mode_queries_and_pins_snapshot() {
-    let root = tempfile::tempdir().unwrap();
+    let root = canonical_tempdir();
     let path = root.path().join("state.db");
     let writer = rusqlite::Connection::open(&path).unwrap();
     writer
@@ -169,7 +170,7 @@ fn sqlite_wal_mode_queries_and_pins_snapshot() {
 
 #[test]
 fn sqlite_scanner_connection_is_query_only() {
-    let root = tempfile::tempdir().unwrap();
+    let root = canonical_tempdir();
     let path = root.path().join("state.db");
     let connection = rusqlite::Connection::open(&path).unwrap();
     connection
@@ -193,7 +194,7 @@ fn sqlite_scanner_connection_is_query_only() {
 #[cfg(windows)]
 #[test]
 fn windows_open_verifies_stable_file_identity() {
-    let root = tempfile::tempdir().unwrap();
+    let root = canonical_tempdir();
     let first = root.path().join("first");
     let second = root.path().join("second");
     std::fs::write(&first, "first").unwrap();
@@ -214,7 +215,7 @@ fn windows_open_verifies_stable_file_identity() {
 #[cfg(windows)]
 #[test]
 fn windows_directory_scans_fail_closed() {
-    let root = tempfile::tempdir().unwrap();
+    let root = canonical_tempdir();
     let child = root.path().join("child");
     std::fs::create_dir_all(&child).unwrap();
     let approved = ApprovedRoot::new(root.path()).unwrap();

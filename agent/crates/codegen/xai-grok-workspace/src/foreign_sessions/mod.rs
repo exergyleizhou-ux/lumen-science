@@ -66,6 +66,42 @@ fn approved_root_for_recent(path: &Path) -> Result<Option<ApprovedRoot>, ()> {
         Ok(_) => ApprovedRoot::new(path).map(Some).ok_or(()),
     }
 }
+/// A temp directory whose `path()` is already canonical.
+///
+/// `ApprovedRoot::new` canonicalizes what it is given and keeps the canonical
+/// form, and `relative_path` strips that canonical root from paths callers hand
+/// back. Production callers derive those paths from `root.path()`, so they
+/// match — but a fixture that builds paths from the RAW `tempfile::tempdir()`
+/// path does not, wherever the temp dir sits behind a symlink. On macOS `/var`
+/// links to `/private/var`, so 15 tests across this module tree failed on every
+/// developer machine while passing on Linux CI — red where people work, green
+/// in the only place anyone looked.
+///
+/// Canonicalizing here makes the fixture construct the state production is
+/// actually in, rather than loosening the production path rules to accept a
+/// shape production never produces. It is a drop-in for
+/// `canonical_tempdir()`: same `path()`, same drop-cleanup.
+#[cfg(test)]
+pub(super) struct CanonicalTempDir {
+    // Held for its Drop: the directory is removed when the fixture ends.
+    _dir: tempfile::TempDir,
+    path: std::path::PathBuf,
+}
+
+#[cfg(test)]
+impl CanonicalTempDir {
+    pub(super) fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+}
+
+#[cfg(test)]
+pub(super) fn canonical_tempdir() -> CanonicalTempDir {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dunce::canonicalize(dir.path()).unwrap();
+    CanonicalTempDir { _dir: dir, path }
+}
+
 #[cfg(test)]
 impl<T> RecentProbe<T> {
     fn unwrap(self) -> T {
@@ -340,7 +376,7 @@ mod tests {
     fn recent_winner_is_newest_across_tools_with_deterministic_ties() {
         let now = UNIX_EPOCH + Duration::from_secs(10_000);
         let within = Duration::from_secs(600);
-        let root = tempfile::tempdir().unwrap();
+        let root = canonical_tempdir();
         let cwd = dunce::canonicalize(root.path()).unwrap();
         let enabled = EnabledForeignSessionSources {
             claude: true,
@@ -418,7 +454,7 @@ mod tests {
     fn recent_window_includes_cutoff_and_clamps_safe_future_age() {
         let now = UNIX_EPOCH + Duration::from_secs(10_000);
         let within = Duration::from_secs(600);
-        let root = tempfile::tempdir().unwrap();
+        let root = canonical_tempdir();
         let cwd = dunce::canonicalize(root.path()).unwrap();
         let claude_only = EnabledForeignSessionSources {
             claude: true,
@@ -487,7 +523,7 @@ mod tests {
     #[test]
     fn recent_scan_never_touches_disabled_tool_stores() {
         let now = UNIX_EPOCH + Duration::from_secs(10_000);
-        let root = tempfile::tempdir().unwrap();
+        let root = canonical_tempdir();
         let cwd = dunce::canonicalize(root.path()).unwrap();
         let calls = Cell::new((0, 0, 0));
         let found = most_recent_with(
@@ -525,7 +561,7 @@ mod tests {
     #[test]
     fn incomplete_enabled_tool_suppresses_cross_tool_winner() {
         let now = UNIX_EPOCH + Duration::from_secs(10_000);
-        let root = tempfile::tempdir().unwrap();
+        let root = canonical_tempdir();
         let cwd = dunce::canonicalize(root.path()).unwrap();
         let result = most_recent_with(
             &cwd,
@@ -551,7 +587,7 @@ mod tests {
     }
     #[test]
     fn recent_scan_normalizes_cwd_before_store_access() {
-        let root = tempfile::tempdir().unwrap();
+        let root = canonical_tempdir();
         let cwd = root.path().join("repo");
         let child = cwd.join("child");
         std::fs::create_dir_all(&child).unwrap();
@@ -577,7 +613,7 @@ mod tests {
     #[test]
     fn recent_scan_canonicalization_failure_never_invokes_stores() {
         let calls = Cell::new(0);
-        let root = tempfile::tempdir().unwrap();
+        let root = canonical_tempdir();
         let missing = root.path().join("missing");
         let found = most_recent_with(
             &missing,
@@ -694,7 +730,7 @@ mod tests {
     }
     #[test]
     fn enabled_scanners_receive_canonical_and_supplied_cwd_spellings() {
-        let root = tempfile::tempdir().unwrap();
+        let root = canonical_tempdir();
         let cwd = root.path().join("repo");
         let child = cwd.join("child");
         std::fs::create_dir_all(&child).unwrap();
@@ -742,7 +778,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn normalized_cwd_uses_ordinary_windows_spelling() {
-        let root = tempfile::tempdir().unwrap();
+        let root = canonical_tempdir();
         let cwd = root.path().join("repo");
         std::fs::create_dir_all(&cwd).unwrap();
         scan_with(

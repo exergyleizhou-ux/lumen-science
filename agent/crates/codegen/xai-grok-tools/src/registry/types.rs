@@ -2198,8 +2198,8 @@ mod tests {
     #[tokio::test]
     async fn full_toolset_descriptions_render_cleanly() {
         use crate::implementations::grok_build::{
-            DEPLOY_APP_TOOL_NAME, IMAGE_GEN_TOOL_NAME, IMAGE_TO_VIDEO_TOOL_NAME,
-            REFERENCE_TO_VIDEO_TOOL_NAME, SCHEDULER_CREATE_TOOL_NAME, SCHEDULER_DELETE_TOOL_NAME,
+            IMAGE_GEN_TOOL_NAME, IMAGE_TO_VIDEO_TOOL_NAME, REFERENCE_TO_VIDEO_TOOL_NAME,
+            SCHEDULER_CREATE_TOOL_NAME, SCHEDULER_DELETE_TOOL_NAME,
         };
         let builder = ToolRegistryBuilder::new();
         let config = ToolServerConfig {
@@ -2220,7 +2220,13 @@ mod tests {
                 "web_fetch",
                 "lsp",
                 IMAGE_GEN_TOOL_NAME,
-                DEPLOY_APP_TOOL_NAME,
+                // NOT deploy_app: this fork stubs it unconditionally
+                // (grok_build/mod.rs maps the module to deploy_app_stub.rs),
+                // so nothing registers that id and finalize() correctly
+                // refuses it. The stub still exports DEPLOY_APP_TOOL_NAME for
+                // callers that name the tool, which is what let this list keep
+                // asking for a tool the build does not have — the test failed
+                // on a real inconsistency, not a flake.
                 IMAGE_TO_VIDEO_TOOL_NAME,
                 REFERENCE_TO_VIDEO_TOOL_NAME,
                 "monitor",

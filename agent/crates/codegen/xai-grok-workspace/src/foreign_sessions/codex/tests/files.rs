@@ -1,4 +1,5 @@
 use super::*;
+use crate::foreign_sessions::canonical_tempdir;
 
 fn rollout_records(id: uuid::Uuid, cwd: &Path, source: serde_json::Value, title: &str) -> String {
     [
@@ -23,7 +24,7 @@ fn rollout_records(id: uuid::Uuid, cwd: &Path, source: serde_json::Value, title:
 
 #[test]
 fn recent_fallback_skips_excluded_sources_and_wrong_cwds() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     fs::create_dir_all(&cwd).unwrap();
     let now = UNIX_EPOCH + Duration::from_secs(1_800_090_000);
@@ -71,7 +72,7 @@ fn recent_fallback_skips_excluded_sources_and_wrong_cwds() {
 
 #[test]
 fn recent_fallback_fails_closed_at_directory_entry_cap() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     fs::create_dir_all(&cwd).unwrap();
     let now = UNIX_EPOCH + Duration::from_secs(1_800_095_000);
@@ -96,7 +97,7 @@ fn recent_fallback_fails_closed_at_directory_entry_cap() {
 
 #[test]
 fn recent_fallback_includes_old_creation_directory_with_fresh_mtime() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     fs::create_dir_all(&cwd).unwrap();
     let now = UNIX_EPOCH + Duration::from_secs(1_800_097_000);
@@ -118,7 +119,7 @@ fn recent_fallback_includes_old_creation_directory_with_fresh_mtime() {
 
 #[test]
 fn falls_back_to_bounded_plain_and_compressed_heads() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     fs::create_dir_all(&cwd).unwrap();
     let now = UNIX_EPOCH + Duration::from_secs(1_800_100_000);
@@ -265,7 +266,7 @@ fn falls_back_to_bounded_plain_and_compressed_heads() {
 
 #[test]
 fn fallback_requires_complete_matching_first_session_meta() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     fs::create_dir_all(&cwd).unwrap();
     let now = UNIX_EPOCH + Duration::from_secs(1_800_150_000);
@@ -306,7 +307,7 @@ fn fallback_requires_complete_matching_first_session_meta() {
 
 #[test]
 fn rollout_paths_must_remain_under_approved_roots() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let sessions = root.path().join("sessions");
     fs::create_dir_all(&sessions).unwrap();
     let approved_id = uuid::Uuid::from_u128(600);
@@ -399,8 +400,8 @@ fn rollout_paths_must_remain_under_approved_roots() {
 #[cfg(unix)]
 #[test]
 fn fallback_rejects_sessions_parent_symlink_escape() {
-    let root = TempDir::new().unwrap();
-    let outside = TempDir::new().unwrap();
+    let root = canonical_tempdir();
+    let outside = canonical_tempdir();
     let codex_home = root.path().join("codex");
     let cwd = codex_home.join("repo");
     fs::create_dir_all(&cwd).unwrap();

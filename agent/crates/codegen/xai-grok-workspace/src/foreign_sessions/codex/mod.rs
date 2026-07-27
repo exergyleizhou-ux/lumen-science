@@ -173,10 +173,11 @@ fn title(primary: &str, fallback: &str) -> Option<String> {
 #[cfg(test)]
 mod fixed_path_tests {
     use super::*;
+    use crate::foreign_sessions::canonical_tempdir;
 
     #[test]
     fn fixed_rollout_qualification_does_not_require_enumeration() {
-        let root = tempfile::tempdir().unwrap();
+        let root = canonical_tempdir();
         let sessions = root.path().join("sessions/2027/01/15");
         std::fs::create_dir_all(&sessions).unwrap();
         let id = uuid::Uuid::from_u128(9_000);
