@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
 pub const TOOL: &str = "lumen-seqbench";
-pub const TOOL_VERSION: &str = "1.1.0";
+pub const TOOL_VERSION: &str = "1.2.0";
 pub const MOTIF_REPOSITORY: &str = "https://github.com/jvogan/motif.git";
 pub const MOTIF_COMMIT: &str = "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0";
 pub const MOTIF_LICENSE: &str = "MIT";
@@ -54,9 +54,13 @@ pub struct AlgorithmSource {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Orf {
     pub frame: i32,
+    pub strand: i8,
     pub start: usize,
     pub end: usize,
-    pub length_aa: usize,
+    pub length_bp: usize,
+    pub amino_acids: usize,
+    pub start_codon: String,
+    pub stop_codon: String,
     pub protein: String,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub truncated: bool,
@@ -212,7 +216,7 @@ pub fn analyze(records: &[Record], source_bytes: &[u8]) -> Analysis {
         summaries.push(summarize(r));
     }
     Analysis {
-        schema_version: 2,
+        schema_version: 3,
         tool: TOOL.into(),
         tool_version: TOOL_VERSION.into(),
         source_sha256,
@@ -225,13 +229,15 @@ pub fn analyze(records: &[Record], source_bytes: &[u8]) -> Analysis {
                 "src/bio/gc-content.ts".into(),
                 "src/bio/reverse-complement.ts".into(),
                 "src/bio/translate.ts".into(),
+                "src/bio/codon-tables.ts".into(),
+                "src/bio/orf-detection.ts".into(),
             ],
         }],
         records: summaries,
         notes: vec![
             "Deterministic offline analysis. Not a substitute for wet-lab validation.".into(),
             "Restriction sites are recognition-pattern hits only.".into(),
-            "ORFs use standard genetic code; min length 30 aa; ATG start.".into(),
+            "ORFs use NCBI translation table 1 starts/stops; min length 30 aa.".into(),
             format!(
                 "FASTA and sequence metrics are adapted from Motif {MOTIF_COMMIT} ({MOTIF_LICENSE})."
             ),
@@ -279,11 +285,22 @@ pub fn markdown_report(a: &Analysis, source_label: &str) -> String {
         b.push('\n');
         if !r.orfs.is_empty() {
             b.push_str("### ORFs (min 30 aa)\n\n");
-            b.push_str("| frame | start | end | aa | truncated |\n|---|---:|---:|---:|---|\n");
+            b.push_str(
+                "| frame | strand | start | end | bp | aa | start codon | stop codon | truncated |\n\
+                 |---|---:|---:|---:|---:|---:|---|---|---|\n",
+            );
             for o in &r.orfs {
                 b.push_str(&format!(
-                    "| {:+} | {} | {} | {} | {} |\n",
-                    o.frame, o.start, o.end, o.length_aa, o.truncated
+                    "| {} | {} | {} | {} | {} | {} | {} | {} | {} |\n",
+                    o.frame,
+                    o.strand,
+                    o.start,
+                    o.end,
+                    o.length_bp,
+                    o.amino_acids,
+                    o.start_codon,
+                    o.stop_codon,
+                    o.truncated
                 ));
             }
             b.push('\n');
@@ -362,7 +379,7 @@ fn summarize(r: &Record) -> RecordSummary {
             };
             s.translation_frames.insert(format!("-{frame}"), short_n);
         }
-        s.orfs = find_orfs(&r.sequence, rna, 30);
+        s.orfs = find_orfs(&r.sequence, 30);
         if r.kind == "dna" {
             s.restriction_hits = find_restriction_sites(&r.sequence);
         }
@@ -674,58 +691,94 @@ fn genetic_code(codon: &str) -> char {
     }
 }
 
-fn find_orfs(seq: &str, rna: bool, min_aa: usize) -> Vec<Orf> {
+const STANDARD_START_CODONS: [&str; 3] = ["TTG", "CTG", "ATG"];
+const STANDARD_STOP_CODONS: [&str; 3] = ["TAA", "TAG", "TGA"];
+
+// Direct Rust adaptation of Motif's `src/bio/orf-detection.ts` and the NCBI
+// table-1 start/stop sets in `src/bio/codon-tables.ts` at `MOTIF_COMMIT`.
+// Lumen keeps the same six-frame scan, nested-start behavior, terminal
+// no-stop ORFs, reverse-strand coordinate mapping, and length-descending sort.
+// The only product-specific addition is a 50-record output cap.
+fn find_orfs(seq: &str, min_aa: usize) -> Vec<Orf> {
+    let dna = to_dna(seq);
     let mut out = Vec::new();
-    for frame in 1..=3 {
-        out.extend(orfs_on_strand(seq, frame, min_aa));
+    let sequence_len = dna.len();
+    if sequence_len < 3 {
+        return out;
     }
-    let rc = reverse_complement(seq, rna);
-    for frame in 1..=3 {
-        for mut o in orfs_on_strand(&rc, frame, min_aa) {
-            o.frame = -frame;
-            out.push(o);
+
+    for frame_offset in 0..3 {
+        out.extend(orfs_in_frame(&dna, frame_offset, 1, min_aa));
+    }
+
+    let reverse = reverse_complement(&dna, false);
+    for frame_offset in 0..3 {
+        for mut orf in orfs_in_frame(&reverse, frame_offset, -1, min_aa) {
+            let reverse_start = orf.start;
+            let reverse_end = orf.end;
+            orf.start = sequence_len - reverse_end;
+            orf.end = sequence_len - reverse_start;
+            out.push(orf);
         }
     }
+
+    out.sort_by(|left, right| right.length_bp.cmp(&left.length_bp));
     out.truncate(50);
     out
 }
 
-fn orfs_on_strand(seq: &str, frame: i32, min_aa: usize) -> Vec<Orf> {
-    let dna = to_dna(seq);
-    let bytes = dna.as_bytes();
+fn orfs_in_frame(seq: &str, frame_offset: usize, strand: i8, min_aa: usize) -> Vec<Orf> {
+    let mut start_positions = Vec::new();
+    let mut stop_positions = Vec::new();
+    let mut position = frame_offset;
+    while position + 2 < seq.len() {
+        let codon = &seq[position..position + 3];
+        if STANDARD_START_CODONS.contains(&codon) {
+            start_positions.push(position);
+        }
+        if STANDARD_STOP_CODONS.contains(&codon) {
+            stop_positions.push(position);
+        }
+        position += 3;
+    }
+
     let mut out = Vec::new();
-    let mut i = (frame.unsigned_abs() as usize) - 1;
-    while i + 2 < bytes.len() {
-        if &bytes[i..i + 3] != b"ATG" {
-            i += 3;
+    let mut next_stop_index = 0usize;
+    for start in start_positions {
+        while next_stop_index < stop_positions.len() && stop_positions[next_stop_index] <= start {
+            next_stop_index += 1;
+        }
+
+        let (end, amino_acids, stop_codon, truncated) =
+            if let Some(stop) = stop_positions.get(next_stop_index).copied() {
+                let end = stop + 3;
+                (
+                    end,
+                    (end - start) / 3 - 1,
+                    seq[stop..end].to_string(),
+                    false,
+                )
+            } else {
+                let end = seq.len() - ((seq.len() - start) % 3);
+                (end, (end - start) / 3, String::new(), true)
+            };
+        if amino_acids < min_aa {
             continue;
         }
-        let start = i;
-        let mut pep = String::new();
-        let mut trunc = true;
-        let mut j = i;
-        while j + 2 < bytes.len() {
-            let codon = std::str::from_utf8(&bytes[j..j + 3]).unwrap_or("NNN");
-            let aa = genetic_code(codon);
-            if aa == '*' {
-                trunc = false;
-                j += 3;
-                break;
-            }
-            pep.push(aa);
-            j += 3;
-        }
-        if pep.len() >= min_aa {
-            out.push(Orf {
-                frame,
-                start,
-                end: j,
-                length_aa: pep.len(),
-                protein: pep,
-                truncated: trunc,
-            });
-        }
-        i += 3;
+
+        let translated_end = if truncated { end } else { end - 3 };
+        out.push(Orf {
+            frame: frame_offset as i32 + 1,
+            strand,
+            start,
+            end,
+            length_bp: end - start,
+            amino_acids,
+            start_codon: seq[start..start + 3].to_string(),
+            stop_codon,
+            protein: translate(&seq[start..translated_end], 1),
+            truncated,
+        });
     }
     out
 }
@@ -824,8 +877,8 @@ mod tests {
         let summary = &analysis.records[0];
         let composition = summary.nucleotide_composition.as_ref().unwrap();
 
-        assert_eq!(analysis.schema_version, 2);
-        assert_eq!(analysis.tool_version, "1.1.0");
+        assert_eq!(analysis.schema_version, 3);
+        assert_eq!(analysis.tool_version, "1.2.0");
         assert_eq!(analysis.algorithm_sources[0].commit, MOTIF_COMMIT);
         assert_eq!(
             composition,
@@ -875,6 +928,52 @@ mod tests {
             "NBDHVKMWSRYACGU"
         );
         assert_eq!(translate("augugauga", 1), "M**");
+    }
+
+    #[test]
+    fn motif_orf_port_honors_standard_alternative_starts_and_nested_order() {
+        let orfs = find_orfs("TTGATGAAATAA", 1);
+        let forward = orfs
+            .iter()
+            .filter(|orf| orf.strand == 1)
+            .collect::<Vec<_>>();
+
+        assert_eq!(forward.len(), 2);
+        assert_eq!(forward[0].start, 0);
+        assert_eq!(forward[0].end, 12);
+        assert_eq!(forward[0].length_bp, 12);
+        assert_eq!(forward[0].amino_acids, 3);
+        assert_eq!(forward[0].start_codon, "TTG");
+        assert_eq!(forward[0].stop_codon, "TAA");
+        assert_eq!(forward[0].protein, "LMK");
+        assert!(!forward[0].truncated);
+        assert_eq!(forward[1].start, 3);
+        assert_eq!(forward[1].amino_acids, 2);
+    }
+
+    #[test]
+    fn motif_orf_port_preserves_terminal_orfs_and_reverse_coordinates() {
+        let terminal = find_orfs("ATGAAA", 1);
+        let terminal = terminal
+            .iter()
+            .find(|orf| orf.strand == 1 && orf.start == 0)
+            .unwrap();
+        assert_eq!(terminal.end, 6);
+        assert_eq!(terminal.amino_acids, 2);
+        assert_eq!(terminal.stop_codon, "");
+        assert_eq!(terminal.protein, "MK");
+        assert!(terminal.truncated);
+
+        let reverse = find_orfs("TTATTTCAT", 1);
+        let reverse = reverse
+            .iter()
+            .find(|orf| orf.strand == -1 && orf.start == 0)
+            .unwrap();
+        assert_eq!(reverse.end, 9);
+        assert_eq!(reverse.frame, 1);
+        assert_eq!(reverse.start_codon, "ATG");
+        assert_eq!(reverse.stop_codon, "TAA");
+        assert_eq!(reverse.protein, "MK");
     }
 }
 
@@ -1021,7 +1120,7 @@ pub fn finish_analysis(
         input_sha256: hex_sha256(source_bytes),
         tool: tool_identity.clone(),
         environment: BTreeMap::from([
-            ("algorithm".into(), "seqbench-v2".into()),
+            ("algorithm".into(), "seqbench-v3".into()),
             (
                 "algorithm_source_repository".into(),
                 MOTIF_REPOSITORY.into(),

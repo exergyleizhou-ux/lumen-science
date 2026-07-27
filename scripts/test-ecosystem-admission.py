@@ -409,6 +409,21 @@ def main() -> int:
         "Motif algorithm marker missing",
     )
 
+    def remove_motif_orf_proof(lock: dict[str, Any]) -> None:
+        source = next(item for item in lock["sources"] if item["id"] == "jvogan-motif")
+        source["source_proofs"] = [
+            proof
+            for proof in source["source_proofs"]
+            if proof["path"] != "src/bio/orf-detection.ts"
+        ]
+
+    check(
+        "the Motif ORF port cannot lose its exact source proof",
+        remove_motif_orf_proof,
+        expected_exit=1,
+        needle="Motif algorithm source-proof set is incomplete",
+    )
+
     copied_protocol = (
         ROOT
         / "third_party/biomni-resource-catalog/protocols/addgene/copied.txt"

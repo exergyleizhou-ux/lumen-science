@@ -119,15 +119,19 @@ The first deterministic algorithm slice is adapted from the same locked
 - `src/bio/gc-content.ts`
 - `src/bio/reverse-complement.ts`
 - `src/bio/translate.ts`
+- `src/bio/codon-tables.ts`
+- `src/bio/orf-detection.ts`
 
 The exact upstream TypeScript was executed locally without a dependency install
 and its parsing, composition, GC, Tm, molecular-mass, IUPAC-complement and RNA
-translation results matched the Rust focused fixtures. `analysis.json` schema
-2 and durable run provenance carry the upstream repository, commit and MIT
-license. Execution stays in the existing Rust SessionActor route; no Motif MCP,
-Node agent, installer, provider or network path is admitted.
+translation results matched the Rust focused fixtures. The exact ORF source
+also matched nested alternative starts, terminal no-stop ORFs, and
+reverse-strand coordinates. `analysis.json` schema 3 and durable run provenance
+carry the upstream repository, commit and MIT license. Execution stays in the
+existing Rust SessionActor route; no Motif MCP, Node agent, installer, provider
+or network path is admitted.
 
 See `third_party/provenance/motif-876a-seqbench.md`. A fresh current-source
 `lumen` binary passed all three filtered `seq_analyze` allow/boundary/deny
-product tests, including store-reopen assertions for the new schema-v2 output.
-Exact-head CI remains a separate gate.
+product tests for schema v3, including a store-reopened 30-aa standard-table
+`TTG` ORF. Exact-head CI remains a separate gate.

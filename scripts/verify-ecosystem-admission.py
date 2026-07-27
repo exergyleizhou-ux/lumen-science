@@ -51,6 +51,14 @@ REQUIRED_PROPRIETARY_REJECTIONS = {
     "skills/pptx/**",
     "skills/xlsx/**",
 }
+REQUIRED_MOTIF_ALGORITHM_PROOFS = {
+    "src/bio/fasta-parser.ts",
+    "src/bio/gc-content.ts",
+    "src/bio/reverse-complement.ts",
+    "src/bio/translate.ts",
+    "src/bio/codon-tables.ts",
+    "src/bio/orf-detection.ts",
+}
 FORBIDDEN_COPY_PREFIXES = (
     "third_party/openclaudescience/skills/docx/",
     "third_party/openclaudescience/skills/pdf/",
@@ -1049,6 +1057,13 @@ def verify_lock(
     all_sources = sources + transitive
     for index, source in enumerate(all_sources):
         verify_source_shape(source, f"all_sources[{index}]")
+
+    motif = next(source for source in sources if source["id"] == "jvogan-motif")
+    motif_proof_paths = {proof["path"] for proof in motif["source_proofs"]}
+    require(
+        REQUIRED_MOTIF_ALGORITHM_PROOFS <= motif_proof_paths,
+        "Motif algorithm source-proof set is incomplete",
+    )
 
     ocs = next(source for source in sources if source["id"] == "qzzqzzb-openclaudescience")
     rejected = {

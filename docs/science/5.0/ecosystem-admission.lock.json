@@ -187,12 +187,15 @@
           {
             "path": "agent/crates/codegen/xai-grok-science/src/seqbench.rs",
             "contains": [
-              "pub const TOOL_VERSION: &str = \"1.1.0\"",
+              "pub const TOOL_VERSION: &str = \"1.2.0\"",
               "pub const MOTIF_COMMIT: &str = \"876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0\"",
-              "schema_version: 2",
+              "schema_version: 3",
               "\"algorithm_source_commit\".into(), MOTIF_COMMIT.into()",
               "motif_nucleotide_metrics_match_the_cross_language_reference_values",
-              "motif_iupac_reverse_complement_and_rna_translation_match"
+              "motif_iupac_reverse_complement_and_rna_translation_match",
+              "src/bio/orf-detection.ts",
+              "motif_orf_port_honors_standard_alternative_starts_and_nested_order",
+              "motif_orf_port_preserves_terminal_orfs_and_reverse_coordinates"
             ]
           }
         ]
@@ -300,7 +303,7 @@
       "license_file": "LICENSE",
       "license_sha256": "606f9372bf61b63b32725d69f312ead92010afdaeea35befc46dc4db1ed19d49",
       "runtime_authority": "none",
-      "admission_status": "renderer vendored; first FASTA/metrics/reverse-complement/translation Rust algorithm slice actor-adapted; remaining algorithms and data under audit",
+      "admission_status": "renderer vendored; FASTA/metrics/reverse-complement/translation and standard-table ORF Rust algorithm slices actor-adapted; remaining algorithms and data under audit",
       "source_proofs": [
         {
           "path": "THIRD_PARTY_NOTICES.md",
@@ -321,6 +324,14 @@
         {
           "path": "src/bio/translate.ts",
           "sha256": "91c480612f998383baa7b858a5ca39c9437621576710c829a86dd649aba57fc6"
+        },
+        {
+          "path": "src/bio/codon-tables.ts",
+          "sha256": "87a683dcd4d3152f71c1d9e3c5efa6af32c7df3ff6d695bd4077f68d570e0304"
+        },
+        {
+          "path": "src/bio/orf-detection.ts",
+          "sha256": "e163ddbb40ca051bdd723f1918588b1c341fec1171fe2572359990e8e1b44c1c"
         }
       ],
       "components": [
@@ -328,7 +339,7 @@
           "path": "src/bio/** and src/plasmid-map/** deterministic functions",
           "disposition": "adopt",
           "license": "MIT",
-          "reason": "The first FASTA/metrics/reverse-complement/translation slice is adapted into Rust seqbench with exact source hashes, cross-language fixtures, artifact provenance, and SessionActor authority; remaining pure algorithms stay incremental."
+          "reason": "FASTA/metrics/reverse-complement/translation and standard-table ORF detection are adapted into Rust seqbench with exact source hashes, cross-language fixtures, artifact provenance, and SessionActor authority; remaining pure algorithms stay incremental."
         },
         {
           "path": "src/artifacts/claude-science-analysis-results.ts and workspace envelope",

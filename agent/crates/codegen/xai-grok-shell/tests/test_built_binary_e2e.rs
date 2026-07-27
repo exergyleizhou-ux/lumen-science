@@ -1314,14 +1314,15 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
         let workdir = git_workdir();
         let artifact_root = workdir.path().join("science-seq-store");
         let source = workdir.path().join("micro.fasta");
-        std::fs::copy(
-            concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../xai-grok-science/fixtures/micro.fasta"
-            ),
+        let motif_orf = format!("TTG{}TAA", "AAA".repeat(29));
+        std::fs::write(
             &source,
+            format!(
+                ">seq1 synthetic control fragment\nACGTACGTAC\n\
+                 >seq2 Motif standard-table alternative start\n{motif_orf}\n"
+            ),
         )
-        .expect("copy fixed sequence fixture");
+        .expect("write fixed sequence fixture");
 
         let client = GrokStdioClient::spawn(&server, workdir.path()).await;
         client.initialize_with_timeout().await;
@@ -1408,8 +1409,8 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             .expect("read durable analysis.json");
         let analysis: serde_json::Value =
             serde_json::from_slice(&analysis_bytes).expect("parse durable analysis.json");
-        assert_eq!(analysis["schema_version"], 2, "analysis: {analysis}");
-        assert_eq!(analysis["tool_version"], "1.1.0", "analysis: {analysis}");
+        assert_eq!(analysis["schema_version"], 3, "analysis: {analysis}");
+        assert_eq!(analysis["tool_version"], "1.2.0", "analysis: {analysis}");
         assert_eq!(
             analysis["algorithm_sources"][0]["commit"],
             xai_grok_science::seqbench::MOTIF_COMMIT,
@@ -1417,6 +1418,18 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
         );
         assert_eq!(
             analysis["records"][0]["nucleotide_composition"]["A"], 3,
+            "analysis: {analysis}"
+        );
+        assert_eq!(
+            analysis["records"][1]["orfs"][0]["start_codon"], "TTG",
+            "analysis: {analysis}"
+        );
+        assert_eq!(
+            analysis["records"][1]["orfs"][0]["amino_acids"], 30,
+            "analysis: {analysis}"
+        );
+        assert_eq!(
+            analysis["records"][1]["orfs"][0]["strand"], 1,
             "analysis: {analysis}"
         );
         assert_eq!(
