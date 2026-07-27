@@ -54,6 +54,16 @@ EvidenceGraph           = sole evidence relationship authority (V2+)
 Workflow                = white-listed StepKinds only; never arbitrary shell
 ```
 
+## Lumen core admission
+
+The newer Lumen core is the source of truth, but Science admits it in reviewed
+security/correctness slices until a shared-core Platform API exists. See
+[`CORE_V0_1_251_ADMISSION.md`](CORE_V0_1_251_ADMISSION.md) and the
+machine-readable
+[`core-v0.1.251-admission.lock.json`](core-v0.1.251-admission.lock.json).
+This is not a claim that the embedded `0.1.222` line already has complete
+v0.1.251 source or release parity.
+
 ## Quick start (WP-2～8 CLI surface)
 
 ```bash

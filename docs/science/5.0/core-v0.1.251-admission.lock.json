@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-07-27T20:12:03+08:00",
+  "purpose": "Record selective Lumen core v0.1.251 admission into Lumen Science without claiming full source or release parity.",
+  "policy": {
+    "source_of_truth": "lumen",
+    "integration_mode": "reviewed security/correctness slices",
+    "full_tree_overlay": false,
+    "version_equivalence_claimed": false,
+    "science_session_actor_remains_execution_authority": true
+  },
+  "science_baseline": {
+    "repository": "https://github.com/exergyleizhou-ux/lumen-science.git",
+    "pinned_lumen_version": "0.1.222",
+    "pinned_lumen_main_sha": "537191998c959b66b41f6a057dd3d3bdf16a9eb6",
+    "source_lock": "SOURCE_LOCK.json",
+    "protected_policy": "PINNED; security/correctness cherry-picks only; no full merge"
+  },
+  "lumen_source": {
+    "repository": "https://github.com/exergyleizhou-ux/lumen.git",
+    "target_tag": "v0.1.251",
+    "target_tag_commit": "88a204cfe468a325b53272dddf70afc8036d24ad",
+    "audited_main_head": "dc563b1e0db9eaca7e970d56d7816e1522511723"
+  },
+  "admissions": [
+    {
+      "name": "2026-07-26 core security closure",
+      "science_commit": "926fa620156306ec4210b34c6eb1257f9d62ed0a",
+      "coverage": "eight tracked security fixes",
+      "status": "admitted"
+    },
+    {
+      "name": "v0.1.251 verification and recovery safety",
+      "science_commit": "188a88a45b89866f44b9dc95aacc02504a0ef4a0",
+      "lumen_commits": [
+        "0f5433af01befb029f614f9949d5415143a2298d",
+        "f5c18dca382818d5e32741726db380ba69abf404",
+        "4b8afb26279cd4dd3489d807ebb3b3a0a06c66f3"
+      ],
+      "coverage": [
+        "torn UTF-8 JSONL load recovery",
+        "no-tests verification is inconclusive rather than passing",
+        "synthetic cancellation test stack isolation"
+      ],
+      "status": "admitted"
+    },
+    {
+      "name": "typed verify-after-edit delivery",
+      "science_commit": "58783fc25ec7297e50f40a3f8ed653e4f82d05f4",
+      "lumen_commits": [
+        "94803093ad31faa236e309dcfbdb1ac4e546d412"
+      ],
+      "coverage": [
+        "typed pass/failed verification outcome",
+        "inconclusive verification remains untrusted",
+        "SessionActor delivery accepts only an explicit typed pass",
+        "dead ChatState becomes a turn-scoped ACP error instead of a panic"
+      ],
+      "adaptation": "Selected coherent hunks were applied to the Science fork; this is not a claim that the complete Lumen commit was copied byte-for-byte.",
+      "status": "admitted"
+    }
+  ],
+  "comparison": {
+    "tool": "lumen/scripts/check-core-drift.sh",
+    "lumen_head": "dc563b1e0db9eaca7e970d56d7816e1522511723",
+    "science_code_head": "58783fc25ec7297e50f40a3f8ed653e4f82d05f4",
+    "diverged_rust_files": 129,
+    "missing_in_science_rust_files": 5,
+    "total_drift": 134,
+    "tracked_security_markers_present": 8,
+    "tracked_security_markers_total": 8,
+    "strict_zero_drift_gate": false
+  },
+  "verification": {
+    "source_and_focused_tests": [
+      {
+        "command": "cargo test -p lumen-verify",
+        "passed": 29,
+        "failed": 0,
+        "ignored": 0,
+        "exit_code": 0
+      },
+      {
+        "command": "cargo test -p xai-grok-science",
+        "passed": 378,
+        "failed": 0,
+        "ignored": 8,
+        "exit_code": 0
+      }
+    ],
+    "built_binary": {
+      "source_commit": "58783fc25ec7297e50f40a3f8ed653e4f82d05f4",
+      "path": "agent/target/debug/lumen",
+      "sha256": "33dc60ac77fa13e18b908c1c0a7c78ae5c1eea840949aef9c5b9cee8526a1f64",
+      "osf9_steps_passed": 17,
+      "osf9_assertions_passed": 5,
+      "failures": 0
+    }
+  },
+  "deferred": [
+    {
+      "item": "full v0.1.251 source parity",
+      "reason": "134 shared-core Rust files still differ or are missing; a bulk overlay could erase Science authority and product-specific behavior"
+    },
+    {
+      "item": "version metadata bump from 0.1.222 to 0.1.251",
+      "reason": "selected safety admissions do not establish complete source, package, SBOM, migration, or release equivalence"
+    },
+    {
+      "item": "v0.1.251 release metadata and generated ledgers",
+      "reason": "release-only evidence is not portable to a different repository and exact source head"
+    },
+    {
+      "item": "single-core dependency architecture",
+      "reason": "requires an explicit platform API and migration plan; it must not be approximated by merging the two divergent histories"
+    },
+    {
+      "item": "CI, live-provider proof, release, and deployment",
+      "reason": "not exercised or authorized by this admission record"
+    }
+  ]
+}
