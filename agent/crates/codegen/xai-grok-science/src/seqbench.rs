@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
 pub const TOOL: &str = "lumen-seqbench";
-pub const TOOL_VERSION: &str = "1.2.0";
+pub const TOOL_VERSION: &str = "1.3.0";
 pub const MOTIF_REPOSITORY: &str = "https://github.com/jvogan/motif.git";
 pub const MOTIF_COMMIT: &str = "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0";
 pub const MOTIF_LICENSE: &str = "MIT";
@@ -49,6 +49,244 @@ pub struct AlgorithmSource {
     pub commit: String,
     pub license: String,
     pub components: Vec<String>,
+}
+
+pub const SUPPORTED_TRANSLATION_TABLE_IDS: &[u8] = &[
+    1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 21, 22, 23, 24, 25, 26, 29, 30, 32, 33,
+];
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SeqAnalyzeOptions {
+    pub translation_table_id: u8,
+}
+
+impl Default for SeqAnalyzeOptions {
+    fn default() -> Self {
+        Self {
+            translation_table_id: 1,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TranslationTableSummary {
+    pub id: u8,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TranslationTable {
+    id: u8,
+    name: &'static str,
+    starts: &'static [&'static str],
+    stops: &'static [&'static str],
+    overrides: &'static [(&'static str, char)],
+}
+
+pub fn is_supported_translation_table(id: u8) -> bool {
+    translation_table(id).is_some()
+}
+
+pub fn translation_table_name(id: u8) -> Option<&'static str> {
+    translation_table(id).map(|table| table.name)
+}
+
+// Direct data adaptation of Motif's representable NCBI translation-table
+// registry in `src/bio/codon-tables.ts` at `MOTIF_COMMIT`. Tables 27, 28 and
+// 31 remain deliberately absent because their context-dependent sense/stop
+// codons cannot be represented by a single-valued codon map.
+fn translation_table(id: u8) -> Option<TranslationTable> {
+    let table = match id {
+        1 => TranslationTable {
+            id,
+            name: "Standard",
+            starts: &["TTG", "CTG", "ATG"],
+            stops: &["TAA", "TAG", "TGA"],
+            overrides: &[],
+        },
+        2 => TranslationTable {
+            id,
+            name: "Vertebrate Mitochondrial",
+            starts: &["ATT", "ATC", "ATA", "ATG", "GTG"],
+            stops: &["TAA", "TAG", "AGA", "AGG"],
+            overrides: &[("TGA", 'W'), ("ATA", 'M'), ("AGA", '*'), ("AGG", '*')],
+        },
+        3 => TranslationTable {
+            id,
+            name: "Yeast Mitochondrial",
+            starts: &["ATA", "ATG", "GTG"],
+            stops: &["TAA", "TAG"],
+            overrides: &[
+                ("TGA", 'W'),
+                ("CTT", 'T'),
+                ("CTC", 'T'),
+                ("CTA", 'T'),
+                ("CTG", 'T'),
+                ("ATA", 'M'),
+            ],
+        },
+        4 => TranslationTable {
+            id,
+            name: "Mold, Protozoan, Coelenterate Mitochondrial / Mycoplasma",
+            starts: &["TTA", "TTG", "CTG", "ATT", "ATC", "ATA", "ATG", "GTG"],
+            stops: &["TAA", "TAG"],
+            overrides: &[("TGA", 'W')],
+        },
+        5 => TranslationTable {
+            id,
+            name: "Invertebrate Mitochondrial",
+            starts: &["ATT", "ATC", "ATA", "ATG", "GTG", "TTG"],
+            stops: &["TAA", "TAG"],
+            overrides: &[("TGA", 'W'), ("ATA", 'M'), ("AGA", 'S'), ("AGG", 'S')],
+        },
+        6 => TranslationTable {
+            id,
+            name: "Ciliate, Dasycladacean and Hexamita Nuclear",
+            starts: &["ATG"],
+            stops: &["TGA"],
+            overrides: &[("TAA", 'Q'), ("TAG", 'Q')],
+        },
+        9 => TranslationTable {
+            id,
+            name: "Echinoderm and Flatworm Mitochondrial",
+            starts: &["ATG", "GTG"],
+            stops: &["TAA", "TAG"],
+            overrides: &[("TGA", 'W'), ("AAA", 'N'), ("AGA", 'S'), ("AGG", 'S')],
+        },
+        10 => TranslationTable {
+            id,
+            name: "Euplotid Nuclear",
+            starts: &["ATG"],
+            stops: &["TAA", "TAG"],
+            overrides: &[("TGA", 'C')],
+        },
+        11 => TranslationTable {
+            id,
+            name: "Bacterial, Archaeal and Plant Plastid",
+            starts: &["ATG", "GTG", "TTG", "ATT", "CTG", "ATC", "ATA"],
+            stops: &["TAA", "TAG", "TGA"],
+            overrides: &[],
+        },
+        12 => TranslationTable {
+            id,
+            name: "Alternative Yeast Nuclear",
+            starts: &["CTG", "ATG"],
+            stops: &["TAA", "TAG", "TGA"],
+            overrides: &[("CTG", 'S')],
+        },
+        13 => TranslationTable {
+            id,
+            name: "Ascidian Mitochondrial",
+            starts: &["ATG", "GTG", "TTG", "ATA"],
+            stops: &["TAA", "TAG"],
+            overrides: &[("TGA", 'W'), ("ATA", 'M'), ("AGA", 'G'), ("AGG", 'G')],
+        },
+        14 => TranslationTable {
+            id,
+            name: "Alternative Flatworm Mitochondrial",
+            starts: &["ATG"],
+            stops: &["TAG"],
+            overrides: &[
+                ("TAA", 'Y'),
+                ("TGA", 'W'),
+                ("AAA", 'N'),
+                ("AGA", 'S'),
+                ("AGG", 'S'),
+            ],
+        },
+        15 => TranslationTable {
+            id,
+            name: "Blepharisma Macronuclear",
+            starts: &["ATG"],
+            stops: &["TAA", "TGA"],
+            overrides: &[("TAG", 'Q')],
+        },
+        16 => TranslationTable {
+            id,
+            name: "Chlorophycean Mitochondrial",
+            starts: &["ATG"],
+            stops: &["TAA", "TGA"],
+            overrides: &[("TAG", 'L')],
+        },
+        21 => TranslationTable {
+            id,
+            name: "Trematode Mitochondrial",
+            starts: &["ATG", "GTG"],
+            stops: &["TAA", "TAG"],
+            overrides: &[
+                ("TGA", 'W'),
+                ("ATA", 'M'),
+                ("AAA", 'N'),
+                ("AGA", 'S'),
+                ("AGG", 'S'),
+            ],
+        },
+        22 => TranslationTable {
+            id,
+            name: "Scenedesmus obliquus Mitochondrial",
+            starts: &["ATG"],
+            stops: &["TAA", "TCA", "TGA"],
+            overrides: &[("TCA", '*'), ("TAG", 'L')],
+        },
+        23 => TranslationTable {
+            id,
+            name: "Thraustochytrium Mitochondrial",
+            starts: &["ATT", "ATG", "GTG"],
+            stops: &["TTA", "TAA", "TAG", "TGA"],
+            overrides: &[("TTA", '*')],
+        },
+        24 => TranslationTable {
+            id,
+            name: "Rhabdopleuridae Mitochondrial",
+            starts: &["TTG", "CTG", "ATG", "GTG"],
+            stops: &["TAA", "TAG"],
+            overrides: &[("TGA", 'W'), ("AGA", 'S'), ("AGG", 'K')],
+        },
+        25 => TranslationTable {
+            id,
+            name: "Candidate Division SR1 and Gracilibacteria",
+            starts: &["TTG", "ATG", "GTG"],
+            stops: &["TAA", "TAG"],
+            overrides: &[("TGA", 'G')],
+        },
+        26 => TranslationTable {
+            id,
+            name: "Pachysolen tannophilus Nuclear",
+            starts: &["CTG", "ATG"],
+            stops: &["TAA", "TAG", "TGA"],
+            overrides: &[("CTG", 'A')],
+        },
+        29 => TranslationTable {
+            id,
+            name: "Mesodinium Nuclear",
+            starts: &["ATG"],
+            stops: &["TGA"],
+            overrides: &[("TAA", 'Y'), ("TAG", 'Y')],
+        },
+        30 => TranslationTable {
+            id,
+            name: "Peritrich Nuclear",
+            starts: &["ATG"],
+            stops: &["TGA"],
+            overrides: &[("TAA", 'E'), ("TAG", 'E')],
+        },
+        32 => TranslationTable {
+            id,
+            name: "Balanophoraceae Plastid",
+            starts: &["TTG", "CTG", "ATT", "ATC", "ATA", "ATG", "GTG"],
+            stops: &["TAA", "TGA"],
+            overrides: &[("TAG", 'W')],
+        },
+        33 => TranslationTable {
+            id,
+            name: "Cephalodiscidae Mitochondrial UAA-Tyr",
+            starts: &["TTG", "CTG", "ATG", "GTG"],
+            stops: &["TAG"],
+            overrides: &[("TAA", 'Y'), ("TGA", 'W'), ("AGA", 'S'), ("AGG", 'K')],
+        },
+        _ => return None,
+    };
+    Some(table)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -113,6 +351,7 @@ pub struct Analysis {
     pub tool_version: String,
     pub source_sha256: String,
     pub algorithm_sources: Vec<AlgorithmSource>,
+    pub translation_table: TranslationTableSummary,
     pub records: Vec<RecordSummary>,
     pub notes: Vec<String>,
 }
@@ -210,13 +449,33 @@ pub fn parse_fasta(raw: &str) -> Result<Vec<Record>, String> {
 }
 
 pub fn analyze(records: &[Record], source_bytes: &[u8]) -> Analysis {
+    analyze_with_options(records, source_bytes, &SeqAnalyzeOptions::default())
+        .expect("the default translation table is always valid")
+}
+
+pub fn analyze_with_options(
+    records: &[Record],
+    source_bytes: &[u8],
+    options: &SeqAnalyzeOptions,
+) -> Result<Analysis, String> {
+    let table = translation_table(options.translation_table_id).ok_or_else(|| {
+        format!(
+            "unsupported NCBI translation table {}; supported ids: {}",
+            options.translation_table_id,
+            SUPPORTED_TRANSLATION_TABLE_IDS
+                .iter()
+                .map(u8::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        )
+    })?;
     let source_sha256 = hex_sha256(source_bytes);
     let mut summaries = Vec::with_capacity(records.len());
     for r in records {
-        summaries.push(summarize(r));
+        summaries.push(summarize(r, table));
     }
-    Analysis {
-        schema_version: 3,
+    Ok(Analysis {
+        schema_version: 4,
         tool: TOOL.into(),
         tool_version: TOOL_VERSION.into(),
         source_sha256,
@@ -233,16 +492,23 @@ pub fn analyze(records: &[Record], source_bytes: &[u8]) -> Analysis {
                 "src/bio/orf-detection.ts".into(),
             ],
         }],
+        translation_table: TranslationTableSummary {
+            id: table.id,
+            name: table.name.into(),
+        },
         records: summaries,
         notes: vec![
             "Deterministic offline analysis. Not a substitute for wet-lab validation.".into(),
             "Restriction sites are recognition-pattern hits only.".into(),
-            "ORFs use NCBI translation table 1 starts/stops; min length 30 aa.".into(),
+            format!(
+                "Translation and ORFs use NCBI translation table {} ({}); ORF min length 30 aa.",
+                table.id, table.name
+            ),
             format!(
                 "FASTA and sequence metrics are adapted from Motif {MOTIF_COMMIT} ({MOTIF_LICENSE})."
             ),
         ],
-    }
+    })
 }
 
 pub fn markdown_report(a: &Analysis, source_label: &str) -> String {
@@ -251,6 +517,10 @@ pub fn markdown_report(a: &Analysis, source_label: &str) -> String {
     b.push_str(&format!("- tool: `{}` {}\n", a.tool, a.tool_version));
     b.push_str(&format!("- source: `{source_label}`\n"));
     b.push_str(&format!("- source_sha256: `{}`\n", a.source_sha256));
+    b.push_str(&format!(
+        "- NCBI translation table: {} ({})\n",
+        a.translation_table.id, a.translation_table.name
+    ));
     b.push_str(&format!("- records: {}\n\n", a.records.len()));
     for r in &a.records {
         b.push_str(&format!("## {}\n\n", r.id));
@@ -332,7 +602,7 @@ pub fn hex_sha256(bytes: &[u8]) -> String {
     format!("{:x}", h.finalize())
 }
 
-fn summarize(r: &Record) -> RecordSummary {
+fn summarize(r: &Record, table: TranslationTable) -> RecordSummary {
     let mut s = RecordSummary {
         id: r.id.clone(),
         kind: r.kind.clone(),
@@ -363,7 +633,7 @@ fn summarize(r: &Record) -> RecordSummary {
         let rna = r.kind == "rna";
         s.reverse_complement = Some(reverse_complement(&r.sequence, rna));
         for frame in 1..=3 {
-            let pep = translate(&r.sequence, frame);
+            let pep = translate_with_table(&r.sequence, frame, table);
             let short = if pep.len() > 80 {
                 format!("{}…", &pep[..80])
             } else {
@@ -371,7 +641,7 @@ fn summarize(r: &Record) -> RecordSummary {
             };
             s.translation_frames.insert(format!("+{frame}"), short);
             let rc = reverse_complement(&r.sequence, rna);
-            let pep_n = translate(&rc, frame);
+            let pep_n = translate_with_table(&rc, frame, table);
             let short_n = if pep_n.len() > 80 {
                 format!("{}…", &pep_n[..80])
             } else {
@@ -379,7 +649,7 @@ fn summarize(r: &Record) -> RecordSummary {
             };
             s.translation_frames.insert(format!("-{frame}"), short_n);
         }
-        s.orfs = find_orfs(&r.sequence, 30);
+        s.orfs = find_orfs_with_table(&r.sequence, 30, table);
         if r.kind == "dna" {
             s.restriction_hits = find_restriction_sites(&r.sequence);
         }
@@ -648,7 +918,16 @@ fn to_dna(seq: &str) -> String {
 // Standard-code frame translation is adapted from Motif's
 // `src/bio/translate.ts` at `MOTIF_COMMIT`. Lumen's public frame labels remain
 // one-based (+1..+3 / -1..-3), so the offset conversion stays at this boundary.
+#[cfg(test)]
 fn translate(seq: &str, frame: usize) -> String {
+    translate_with_table(
+        seq,
+        frame,
+        translation_table(1).expect("standard translation table"),
+    )
+}
+
+fn translate_with_table(seq: &str, frame: usize, table: TranslationTable) -> String {
     if !(1..=3).contains(&frame) {
         return String::new();
     }
@@ -658,10 +937,18 @@ fn translate(seq: &str, frame: usize) -> String {
     let mut i = frame - 1;
     while i + 3 <= bytes.len() {
         let codon = std::str::from_utf8(&bytes[i..i + 3]).unwrap_or("NNN");
-        out.push(genetic_code(codon));
+        out.push(translate_codon(codon, table));
         i += 3;
     }
     out
+}
+
+fn translate_codon(codon: &str, table: TranslationTable) -> char {
+    table
+        .overrides
+        .iter()
+        .find_map(|(candidate, amino_acid)| (*candidate == codon).then_some(*amino_acid))
+        .unwrap_or_else(|| genetic_code(codon))
 }
 
 fn genetic_code(codon: &str) -> char {
@@ -691,15 +978,21 @@ fn genetic_code(codon: &str) -> char {
     }
 }
 
-const STANDARD_START_CODONS: [&str; 3] = ["TTG", "CTG", "ATG"];
-const STANDARD_STOP_CODONS: [&str; 3] = ["TAA", "TAG", "TGA"];
-
 // Direct Rust adaptation of Motif's `src/bio/orf-detection.ts` and the NCBI
 // table-1 start/stop sets in `src/bio/codon-tables.ts` at `MOTIF_COMMIT`.
 // Lumen keeps the same six-frame scan, nested-start behavior, terminal
 // no-stop ORFs, reverse-strand coordinate mapping, and length-descending sort.
 // The only product-specific addition is a 50-record output cap.
+#[cfg(test)]
 fn find_orfs(seq: &str, min_aa: usize) -> Vec<Orf> {
+    find_orfs_with_table(
+        seq,
+        min_aa,
+        translation_table(1).expect("standard translation table"),
+    )
+}
+
+fn find_orfs_with_table(seq: &str, min_aa: usize, table: TranslationTable) -> Vec<Orf> {
     let dna = to_dna(seq);
     let mut out = Vec::new();
     let sequence_len = dna.len();
@@ -708,12 +1001,12 @@ fn find_orfs(seq: &str, min_aa: usize) -> Vec<Orf> {
     }
 
     for frame_offset in 0..3 {
-        out.extend(orfs_in_frame(&dna, frame_offset, 1, min_aa));
+        out.extend(orfs_in_frame(&dna, frame_offset, 1, min_aa, table));
     }
 
     let reverse = reverse_complement(&dna, false);
     for frame_offset in 0..3 {
-        for mut orf in orfs_in_frame(&reverse, frame_offset, -1, min_aa) {
+        for mut orf in orfs_in_frame(&reverse, frame_offset, -1, min_aa, table) {
             let reverse_start = orf.start;
             let reverse_end = orf.end;
             orf.start = sequence_len - reverse_end;
@@ -727,16 +1020,22 @@ fn find_orfs(seq: &str, min_aa: usize) -> Vec<Orf> {
     out
 }
 
-fn orfs_in_frame(seq: &str, frame_offset: usize, strand: i8, min_aa: usize) -> Vec<Orf> {
+fn orfs_in_frame(
+    seq: &str,
+    frame_offset: usize,
+    strand: i8,
+    min_aa: usize,
+    table: TranslationTable,
+) -> Vec<Orf> {
     let mut start_positions = Vec::new();
     let mut stop_positions = Vec::new();
     let mut position = frame_offset;
     while position + 2 < seq.len() {
         let codon = &seq[position..position + 3];
-        if STANDARD_START_CODONS.contains(&codon) {
+        if table.starts.contains(&codon) {
             start_positions.push(position);
         }
-        if STANDARD_STOP_CODONS.contains(&codon) {
+        if table.stops.contains(&codon) {
             stop_positions.push(position);
         }
         position += 3;
@@ -776,7 +1075,7 @@ fn orfs_in_frame(seq: &str, frame_offset: usize, strand: i8, min_aa: usize) -> V
             amino_acids,
             start_codon: seq[start..start + 3].to_string(),
             stop_codon,
-            protein: translate(&seq[start..translated_end], 1),
+            protein: translate_with_table(&seq[start..translated_end], 1, table),
             truncated,
         });
     }
@@ -877,9 +1176,11 @@ mod tests {
         let summary = &analysis.records[0];
         let composition = summary.nucleotide_composition.as_ref().unwrap();
 
-        assert_eq!(analysis.schema_version, 3);
-        assert_eq!(analysis.tool_version, "1.2.0");
+        assert_eq!(analysis.schema_version, 4);
+        assert_eq!(analysis.tool_version, "1.3.0");
         assert_eq!(analysis.algorithm_sources[0].commit, MOTIF_COMMIT);
+        assert_eq!(analysis.translation_table.id, 1);
+        assert_eq!(analysis.translation_table.name, "Standard");
         assert_eq!(
             composition,
             &NucleotideComposition {
@@ -975,6 +1276,104 @@ mod tests {
         assert_eq!(reverse.stop_codon, "TAA");
         assert_eq!(reverse.protein, "MK");
     }
+
+    #[test]
+    fn motif_translation_table_registry_is_complete_and_internally_coherent() {
+        use std::collections::BTreeSet;
+
+        assert_eq!(
+            SUPPORTED_TRANSLATION_TABLE_IDS,
+            &[
+                1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 21, 22, 23, 24, 25, 26, 29, 30,
+                32, 33,
+            ]
+        );
+        assert!(!is_supported_translation_table(27));
+        assert!(!is_supported_translation_table(28));
+        assert!(!is_supported_translation_table(31));
+
+        let bases = ['T', 'C', 'A', 'G'];
+        for id in SUPPORTED_TRANSLATION_TABLE_IDS {
+            let table = translation_table(*id).unwrap();
+            assert_eq!(table.id, *id);
+            assert!(!table.name.is_empty());
+            assert_eq!(
+                table.starts.iter().copied().collect::<BTreeSet<_>>().len(),
+                table.starts.len()
+            );
+            assert_eq!(
+                table.stops.iter().copied().collect::<BTreeSet<_>>().len(),
+                table.stops.len()
+            );
+
+            let mut encoded_stops = BTreeSet::new();
+            let mut codon_count = 0;
+            for first in bases {
+                for second in bases {
+                    for third in bases {
+                        codon_count += 1;
+                        let codon = format!("{first}{second}{third}");
+                        if translate_codon(&codon, table) == '*' {
+                            encoded_stops.insert(codon);
+                        }
+                    }
+                }
+            }
+            assert_eq!(codon_count, 64);
+            assert_eq!(
+                encoded_stops,
+                table
+                    .stops
+                    .iter()
+                    .map(|codon| (*codon).to_string())
+                    .collect()
+            );
+        }
+    }
+
+    #[test]
+    fn motif_translation_tables_drive_translation_and_orf_stops() {
+        let table_2 = translation_table(2).unwrap();
+        let standard = translation_table(1).unwrap();
+        let sequence = "ATGAAAAGATTTTAA";
+
+        let standard_orf = find_orfs_with_table(sequence, 1, standard)
+            .into_iter()
+            .find(|orf| orf.strand == 1 && orf.start == 0)
+            .unwrap();
+        let mitochondrial_orf = find_orfs_with_table(sequence, 1, table_2)
+            .into_iter()
+            .find(|orf| orf.strand == 1 && orf.start == 0)
+            .unwrap();
+        assert_eq!(standard_orf.end, 15);
+        assert_eq!(standard_orf.stop_codon, "TAA");
+        assert_eq!(mitochondrial_orf.end, 9);
+        assert_eq!(mitochondrial_orf.stop_codon, "AGA");
+        assert_eq!(translate_with_table("ATATGAAGA", 1, table_2), "MW*");
+        assert_eq!(
+            translate_with_table("ATGTAGTGA", 1, translation_table(15).unwrap()),
+            "MQ*"
+        );
+        assert_eq!(
+            translate_with_table("ATGTAGTGA", 1, translation_table(32).unwrap()),
+            "MW*"
+        );
+    }
+
+    #[test]
+    fn unsupported_translation_table_fails_closed() {
+        let raw = ">seq\nATGAAATAA\n";
+        let records = parse_fasta(raw).unwrap();
+        let error = analyze_with_options(
+            &records,
+            raw.as_bytes(),
+            &SeqAnalyzeOptions {
+                translation_table_id: 27,
+            },
+        )
+        .unwrap_err();
+        assert!(error.contains("unsupported NCBI translation table 27"));
+    }
 }
 
 // ── SessionActor-gated run protocol ──────────────────────────────────────────
@@ -1005,6 +1404,27 @@ pub fn begin_analysis(
     store: &ScienceStore,
     context: RunContext,
 ) -> crate::Result<ScienceRunTicket> {
+    begin_analysis_with_options(store, context, &SeqAnalyzeOptions::default())
+}
+
+pub fn begin_analysis_with_options(
+    store: &ScienceStore,
+    mut context: RunContext,
+    options: &SeqAnalyzeOptions,
+) -> crate::Result<ScienceRunTicket> {
+    let table = translation_table(options.translation_table_id).ok_or_else(|| {
+        ScienceError::Invalid(format!(
+            "unsupported NCBI translation table {}",
+            options.translation_table_id
+        ))
+    })?;
+    context.environment.insert(
+        "translation_table_id".into(),
+        options.translation_table_id.to_string(),
+    );
+    context
+        .environment
+        .insert("translation_table_name".into(), table.name.into());
     let ticket = ScienceRunTicket {
         project_id: context.project_id.clone(),
         run_id: context.run_id.clone(),
@@ -1016,7 +1436,11 @@ pub fn begin_analysis(
         &ticket.run_id,
         "SessionActor",
         "run.created",
-        serde_json::json!({ "kind": "seq_analyze" }),
+        serde_json::json!({
+            "kind": "seq_analyze",
+            "translation_table_id": table.id,
+            "translation_table_name": table.name,
+        }),
     )?;
     store.request_approval(Approval {
         project_id: ticket.project_id.clone(),
@@ -1052,6 +1476,28 @@ pub fn finish_analysis(
     source_path: &Path,
     source_bytes: &[u8],
 ) -> crate::Result<SeqAnalyzeResult> {
+    finish_analysis_with_options(
+        store,
+        ticket,
+        source_path,
+        source_bytes,
+        &SeqAnalyzeOptions::default(),
+    )
+}
+
+pub fn finish_analysis_with_options(
+    store: &ScienceStore,
+    ticket: ScienceRunTicket,
+    source_path: &Path,
+    source_bytes: &[u8],
+    options: &SeqAnalyzeOptions,
+) -> crate::Result<SeqAnalyzeResult> {
+    let table = translation_table(options.translation_table_id).ok_or_else(|| {
+        ScienceError::Invalid(format!(
+            "unsupported NCBI translation table {}",
+            options.translation_table_id
+        ))
+    })?;
     // The same guard the csv path uses: only an allowed, running run may
     // commit output. Without it a caller could finish a run it never got
     // permission for.
@@ -1067,6 +1513,14 @@ pub fn finish_analysis(
             "seq analysis output requires an allowed running run".into(),
         ));
     }
+    if run.context.environment.get("translation_table_id")
+        != Some(&options.translation_table_id.to_string())
+        || run.context.environment.get("translation_table_name") != Some(&table.name.to_string())
+    {
+        let error = "seq analysis options do not match the durably approved run".to_string();
+        let _ = store.transition(&ticket.run_id, RunState::Failed, Some(error.clone()));
+        return Err(ScienceError::Invalid(error));
+    }
 
     let text = String::from_utf8_lossy(source_bytes);
     let records = match parse_fasta(&text) {
@@ -1078,7 +1532,13 @@ pub fn finish_analysis(
             return Err(ScienceError::Invalid(error));
         }
     };
-    let analysis = analyze(&records, source_bytes);
+    let analysis = match analyze_with_options(&records, source_bytes, options) {
+        Ok(analysis) => analysis,
+        Err(error) => {
+            let _ = store.transition(&ticket.run_id, RunState::Failed, Some(error.clone()));
+            return Err(ScienceError::Invalid(error));
+        }
+    };
     let report = markdown_report(
         &analysis,
         source_path
@@ -1120,7 +1580,7 @@ pub fn finish_analysis(
         input_sha256: hex_sha256(source_bytes),
         tool: tool_identity.clone(),
         environment: BTreeMap::from([
-            ("algorithm".into(), "seqbench-v3".into()),
+            ("algorithm".into(), "seqbench-v4".into()),
             (
                 "algorithm_source_repository".into(),
                 MOTIF_REPOSITORY.into(),
@@ -1129,6 +1589,11 @@ pub fn finish_analysis(
             ("algorithm_source_license".into(), MOTIF_LICENSE.into()),
             ("authority".into(), "SessionActor".into()),
             ("network".into(), "disabled".into()),
+            (
+                "translation_table_id".into(),
+                options.translation_table_id.to_string(),
+            ),
+            ("translation_table_name".into(), table.name.into()),
         ]),
     })?;
     store.add_evidence(Evidence {
@@ -1148,6 +1613,8 @@ pub fn finish_analysis(
         serde_json::json!({
             "tool": tool_identity,
             "records": analysis.records.len(),
+            "translation_table_id": table.id,
+            "translation_table_name": table.name,
             "artifacts": [
                 analysis_artifact.sha256,
                 report_artifact.sha256,
@@ -1303,5 +1770,78 @@ mod protocol_tests {
             assert!(store.evidence(&ticket.run_id).unwrap().is_empty());
             assert!(store.provenance(&ticket.run_id).unwrap().is_empty());
         }
+    }
+
+    #[test]
+    fn approved_translation_table_cannot_be_swapped_before_finish() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path().join("science-store"));
+        let approved = SeqAnalyzeOptions {
+            translation_table_id: 2,
+        };
+        let ticket = begin_analysis_with_options(
+            &store,
+            context(temp.path(), "project-a", "alice"),
+            &approved,
+        )
+        .unwrap();
+        crate::csv::mark_allowed(&store, &ticket).unwrap();
+
+        let swapped = SeqAnalyzeOptions {
+            translation_table_id: 1,
+        };
+        let error = finish_analysis_with_options(
+            &store,
+            ticket.clone(),
+            Path::new("input.fa"),
+            FASTA,
+            &swapped,
+        )
+        .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("options do not match the durably approved run"));
+        assert_eq!(
+            store.load_run(&ticket.run_id).unwrap().state,
+            RunState::Failed
+        );
+        assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
+        assert!(store.evidence(&ticket.run_id).unwrap().is_empty());
+        assert!(store.provenance(&ticket.run_id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn allowed_translation_table_is_durable_in_output_and_provenance() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path().join("science-store"));
+        let options = SeqAnalyzeOptions {
+            translation_table_id: 2,
+        };
+        let ticket = begin_analysis_with_options(
+            &store,
+            context(temp.path(), "project-a", "alice"),
+            &options,
+        )
+        .unwrap();
+        crate::csv::mark_allowed(&store, &ticket).unwrap();
+        let sequence = format!(">mitochondrial\nATG{}AGA\n", "AAA".repeat(29));
+        let result = finish_analysis_with_options(
+            &store,
+            ticket,
+            Path::new("input.fa"),
+            sequence.as_bytes(),
+            &options,
+        )
+        .unwrap();
+
+        assert_eq!(result.analysis.translation_table.id, 2);
+        assert_eq!(result.analysis.records[0].orfs[0].stop_codon, "AGA");
+        assert_eq!(
+            result.provenance[0]
+                .environment
+                .get("translation_table_id")
+                .map(String::as_str),
+            Some("2")
+        );
     }
 }

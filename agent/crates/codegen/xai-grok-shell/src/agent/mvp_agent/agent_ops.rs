@@ -2084,6 +2084,7 @@ impl MvpAgent {
         session_id: &acp::SessionId,
         store: xai_grok_science::ScienceStore,
         context: xai_grok_science::RunContext,
+        options: xai_grok_science::seqbench::SeqAnalyzeOptions,
         source_path: PathBuf,
         source_bytes: Vec<u8>,
         approval_timeout: std::time::Duration,
@@ -2100,6 +2101,7 @@ impl MvpAgent {
             .run_science_seq_analyze_with_approval_timeout(
                 store,
                 context,
+                options,
                 source_path,
                 source_bytes,
                 approval_timeout,

@@ -1314,12 +1314,12 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
         let workdir = git_workdir();
         let artifact_root = workdir.path().join("science-seq-store");
         let source = workdir.path().join("micro.fasta");
-        let motif_orf = format!("TTG{}TAA", "AAA".repeat(29));
+        let motif_orf = format!("ATG{}AGA{}TAA", "AAA".repeat(29), "AAA".repeat(2));
         std::fs::write(
             &source,
             format!(
                 ">seq1 synthetic control fragment\nACGTACGTAC\n\
-                 >seq2 Motif standard-table alternative start\n{motif_orf}\n"
+                 >seq2 Motif vertebrate-mitochondrial stop\n{motif_orf}\n"
             ),
         )
         .expect("write fixed sequence fixture");
@@ -1337,6 +1337,7 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
                     "ownerId": "science-owner",
                     "artifactRoot": artifact_root,
                     "sourcePath": source,
+                    "translationTableId": 2,
                     "approvalTimeoutMs": 5_000,
                 }),
             ),
@@ -1409,8 +1410,8 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             .expect("read durable analysis.json");
         let analysis: serde_json::Value =
             serde_json::from_slice(&analysis_bytes).expect("parse durable analysis.json");
-        assert_eq!(analysis["schema_version"], 3, "analysis: {analysis}");
-        assert_eq!(analysis["tool_version"], "1.2.0", "analysis: {analysis}");
+        assert_eq!(analysis["schema_version"], 4, "analysis: {analysis}");
+        assert_eq!(analysis["tool_version"], "1.3.0", "analysis: {analysis}");
         assert_eq!(
             analysis["algorithm_sources"][0]["commit"],
             xai_grok_science::seqbench::MOTIF_COMMIT,
@@ -1421,20 +1422,40 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             "analysis: {analysis}"
         );
         assert_eq!(
-            analysis["records"][1]["orfs"][0]["start_codon"], "TTG",
+            analysis["translation_table"]["id"], 2,
             "analysis: {analysis}"
         );
         assert_eq!(
-            analysis["records"][1]["orfs"][0]["amino_acids"], 30,
+            analysis["translation_table"]["name"],
+            "Vertebrate Mitochondrial",
             "analysis: {analysis}"
         );
+        let table_two_orf = analysis["records"][1]["orfs"]
+            .as_array()
+            .expect("seq2 ORF array")
+            .iter()
+            .find(|orf| {
+                orf["strand"] == 1
+                    && orf["start"] == 0
+                    && orf["start_codon"] == "ATG"
+                    && orf["stop_codon"] == "AGA"
+            })
+            .expect("table 2 forward ORF terminated by AGA");
         assert_eq!(
-            analysis["records"][1]["orfs"][0]["strand"], 1,
+            table_two_orf["amino_acids"], 30,
             "analysis: {analysis}"
         );
         assert_eq!(
             result["provenance"][0]["environment"]["algorithm_source_commit"],
             xai_grok_science::seqbench::MOTIF_COMMIT,
+            "result: {result}"
+        );
+        assert_eq!(
+            result["provenance"][0]["environment"]["translation_table_id"], "2",
+            "result: {result}"
+        );
+        assert_eq!(
+            result["run"]["context"]["environment"]["translation_table_id"], "2",
             "result: {result}"
         );
         assert!(
@@ -1653,6 +1674,17 @@ async fn test_stdio_science_seq_analyze_boundaries_fail_closed() {
                     "ownerId": "science-owner",
                     "artifactRoot": artifact_root,
                     "sourcePath": outside.path(),
+                }),
+            ),
+            (
+                "unsupported translation table",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": "science-seq-project",
+                    "ownerId": "science-owner",
+                    "artifactRoot": artifact_root,
+                    "sourcePath": source,
+                    "translationTableId": 27,
                 }),
             ),
         ] {

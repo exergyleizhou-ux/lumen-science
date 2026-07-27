@@ -8,7 +8,7 @@
 | license | MIT |
 | role in Lumen | Optional molecular-biology renderer plus attributed Rust sequence algorithms |
 | runtime authority | none |
-| admission | renderer vendored; two Rust algorithm slices admitted |
+| admission | renderer vendored; three Rust algorithm slices admitted |
 
 ## Integration contract
 
@@ -16,10 +16,10 @@
 - Motif UI may only load **registered** artifacts (project/session/owner + SHA-256).
 - Renderer output, if any, is a **new derived artifact** with its own hash.
 - Upstream Motif MCP server, Claude Science installer, and external MSA CLIs are **not** wired.
-- FASTA parsing, sequence metrics, IUPAC reverse-complement, standard-code
-  translation, and standard-table six-frame ORF detection are adapted into
-  Rust `seqbench` and still execute only inside the SessionActor approval
-  protocol.
+- FASTA parsing, sequence metrics, IUPAC reverse-complement, all 24
+  single-valued NCBI translation tables, and table-aware six-frame ORF
+  detection are adapted into Rust `seqbench` and still execute only inside the
+  SessionActor approval protocol.
 
 ## Notices
 

@@ -320,6 +320,7 @@ impl SessionActor {
         &self,
         store: xai_grok_science::ScienceStore,
         context: xai_grok_science::RunContext,
+        options: xai_grok_science::seqbench::SeqAnalyzeOptions,
         source_path: std::path::PathBuf,
         source_bytes: Vec<u8>,
     ) -> xai_grok_science::Result<PreparedScienceSeqAnalyze> {
@@ -343,7 +344,11 @@ impl SessionActor {
                     .into(),
             ));
         }
-        let ticket = xai_grok_science::seqbench::begin_analysis(&store, context.clone())?;
+        let ticket = xai_grok_science::seqbench::begin_analysis_with_options(
+            &store,
+            context.clone(),
+            &options,
+        )?;
         let target = context
             .artifact_root
             .join("runs")
@@ -354,6 +359,7 @@ impl SessionActor {
         Ok(PreparedScienceSeqAnalyze {
             store,
             ticket,
+            options,
             source_path,
             source_bytes,
             target,
@@ -379,11 +385,12 @@ impl SessionActor {
             )));
         }
         xai_grok_science::csv::mark_allowed(&prepared.store, &prepared.ticket)?;
-        xai_grok_science::seqbench::finish_analysis(
+        xai_grok_science::seqbench::finish_analysis_with_options(
             &prepared.store,
             prepared.ticket,
             &prepared.source_path,
             &prepared.source_bytes,
+            &prepared.options,
         )
     }
 

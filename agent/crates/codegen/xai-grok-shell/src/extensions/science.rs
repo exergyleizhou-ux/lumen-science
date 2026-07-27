@@ -29,6 +29,10 @@ fn default_approval_timeout_ms() -> u64 {
     120_000
 }
 
+fn default_translation_table_id() -> u8 {
+    1
+}
+
 fn internal(error: impl std::fmt::Display) -> acp::Error {
     acp::Error::internal_error().data(error.to_string())
 }
@@ -1054,6 +1058,8 @@ struct SeqAnalyzeParams {
     owner_id: String,
     artifact_root: PathBuf,
     source_path: PathBuf,
+    #[serde(default = "default_translation_table_id")]
+    translation_table_id: u8,
     #[serde(default = "default_approval_timeout_ms")]
     approval_timeout_ms: u64,
 }
@@ -1065,6 +1071,18 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
     }
     if !(1..=300_000).contains(&params.approval_timeout_ms) {
         return Err(acp::Error::invalid_params().data("approvalTimeoutMs must be in 1..=300000"));
+    }
+    if !xai_grok_science::seqbench::is_supported_translation_table(
+        params.translation_table_id,
+    ) {
+        return Err(acp::Error::invalid_params().data(format!(
+            "translationTableId must be one of {}",
+            xai_grok_science::seqbench::SUPPORTED_TRANSLATION_TABLE_IDS
+                .iter()
+                .map(u8::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        )));
     }
     let session_id = acp::SessionId::new(params.session_id);
     let handle = agent
@@ -1090,11 +1108,15 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
         workspace_root: workspace,
         provider: "offline-deterministic".into(),
         approval_policy: "production-session-permission".into(),
-        tool_profile: "science-seqbench-v1".into(),
+        tool_profile: "science-seqbench-v2".into(),
         artifact_root: artifact_root.clone(),
         environment: BTreeMap::from([
             ("network".into(), "disabled".into()),
             ("locale".into(), "C".into()),
+            (
+                "translation_table_id".into(),
+                params.translation_table_id.to_string(),
+            ),
         ]),
     };
     let result = agent
@@ -1102,6 +1124,9 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
             &session_id,
             ScienceStore::new(artifact_root),
             context,
+            xai_grok_science::seqbench::SeqAnalyzeOptions {
+                translation_table_id: params.translation_table_id,
+            },
             source_path,
             bytes,
             Duration::from_millis(params.approval_timeout_ms),

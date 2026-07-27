@@ -146,6 +146,7 @@ pub struct FinishScienceImport {
 pub struct PreparedScienceSeqAnalyze {
     pub(crate) store: xai_grok_science::ScienceStore,
     pub(crate) ticket: xai_grok_science::csv::ScienceRunTicket,
+    pub(crate) options: xai_grok_science::seqbench::SeqAnalyzeOptions,
     pub(crate) source_path: std::path::PathBuf,
     pub(crate) source_bytes: Vec<u8>,
     /// Store-owned artifact target shown in the permission prompt.
@@ -154,6 +155,7 @@ pub struct PreparedScienceSeqAnalyze {
 pub struct BeginScienceSeqAnalyze {
     pub(crate) store: xai_grok_science::ScienceStore,
     pub(crate) context: xai_grok_science::RunContext,
+    pub(crate) options: xai_grok_science::seqbench::SeqAnalyzeOptions,
     pub(crate) source_path: std::path::PathBuf,
     pub(crate) source_bytes: Vec<u8>,
     pub(crate) respond_to: oneshot::Sender<xai_grok_science::Result<PreparedScienceSeqAnalyze>>,

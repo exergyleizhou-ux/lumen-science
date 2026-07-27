@@ -82,11 +82,11 @@ streaming ZIP classifier and 28-case adversarial parity suite are also
 source-adapted, but remain disconnected from product import until a Rust
 SessionActor route owns approval and persistence. See
 [`open-science-fd2853-skill-preview.md`](../../../third_party/provenance/open-science-fd2853-skill-preview.md).
-Two Motif algorithm slices are now adapted into Rust `seqbench`: hardened FASTA
-parsing, nucleotide/protein metrics, full IUPAC reverse-complement,
-case-insensitive RNA translation, and standard-table six-frame ORF detection
-run inside the existing SessionActor approval and hashed-artifact path. Exact
-source hashes and cross-language fixture results are in
+Three Motif algorithm slices are now adapted into Rust `seqbench`: hardened
+FASTA parsing, nucleotide/protein metrics, full IUPAC reverse-complement, all
+24 single-valued NCBI translation tables, and table-aware six-frame ORF
+detection run inside the existing SessionActor approval and hashed-artifact
+path. Exact source hashes and cross-language fixture results are in
 [`motif-876a-seqbench.md`](../../../third_party/provenance/motif-876a-seqbench.md).
 
 ## Quick start (WP-2～8 CLI surface)

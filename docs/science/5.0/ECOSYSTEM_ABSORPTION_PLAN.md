@@ -294,7 +294,7 @@ Remaining:
 
 ### Phase 3 — deterministic scientific mechanics
 
-Implemented in the first two Rust algorithm slices:
+Implemented in the first three Rust algorithm slices:
 
 - directly adapted Motif FASTA parsing semantics: first-whitespace headers,
   PIR comments, ASCII-only sequence cleaning, and explicit gap-removal counts;
@@ -303,21 +303,30 @@ Implemented in the first two Rust algorithm slices:
 - preserved Motif's complete DNA/RNA IUPAC reverse-complement behavior and
   fixed lowercase RNA normalization before standard-code translation;
 - recorded the exact Motif repository, commit, license, and component paths in
-  both schema-v3 `analysis.json` and durable provenance;
+  both schema-v4 `analysis.json` and durable provenance;
 - executed the exact upstream TypeScript locally and matched the Rust fixture
   results for parsing, all numeric metrics, IUPAC complements, and translation;
 - retained the existing SessionActor allow/deny/timeout/cancel and
   owner/project/call artifact boundaries;
 - rebuilt the current `lumen` binary and passed all three filtered
   `seq_analyze` product tests, including reopening the store-owned
-  `analysis.json` to verify schema 3, Motif commit, composition output, a
-  standard-table ORF, and durable provenance;
+  `analysis.json` to verify schema 4, Motif commit, composition output, table
+  2's `AGA`-terminated 30-aa ORF, and durable table context/provenance;
 - directly adapted Motif's standard-table ORF scanner: `TTG`/`CTG`/`ATG`
   initiators, nested starts, implicit terminal ORFs, six-frame scanning,
   reverse-strand coordinate mapping, and length ordering now land in
-  schema-v3 output with an explicit 50-record Lumen cap;
+  schema-v4 output with an explicit 50-record Lumen cap;
 - executed the exact Motif ORF source locally and matched Rust on nested,
-  terminal, and reverse-strand fixtures.
+  terminal, and reverse-strand fixtures;
+- directly adapted all 24 single-valued NCBI translation tables Motif ships,
+  including exact names, initiators, stops, and codon overrides; tables 27, 28
+  and 31 remain explicitly unsupported because context-dependent sense/stop
+  semantics cannot be represented honestly by one codon map;
+- froze `translationTableId` in the durable actor run before approval, refused
+  unsupported IDs before run creation, and made any post-Allow option swap
+  fail terminally without artifacts, evidence, or provenance;
+- executed the exact Motif registry, translation, and table-aware ORF sources
+  locally and matched all IDs/names plus tables 2, 15, and 32 fixtures.
 
 Remaining:
 
@@ -352,10 +361,11 @@ classifier is a tested source module, not a product route; SessionActor-bound
 attachment import remains open. Motif sequence metrics do execute only through
 the already actor-gated `seq_analyze` path and produce store-owned hashed
 artifacts. A fresh current-source binary passed the three filtered
-`seq_analyze` allow/boundary/deny product tests for schema v3, including
-store-reopen assertions for a 30-aa standard-table `TTG` ORF. This does not
-claim that the 224 Biomni tools, remaining connectors/Motif algorithms, or
-clean-room document features are already product-complete.
+`seq_analyze` allow/boundary/deny product tests for the schema-v4 table-aware
+route; the allow case selected table 2 and the negative cases produced no
+unauthorized output. This does not claim that the 224 Biomni tools,
+remaining connectors/Motif algorithms, or clean-room document features are
+already product-complete.
 
 For each later slice, report separately:
 

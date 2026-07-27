@@ -126,12 +126,16 @@ The exact upstream TypeScript was executed locally without a dependency install
 and its parsing, composition, GC, Tm, molecular-mass, IUPAC-complement and RNA
 translation results matched the Rust focused fixtures. The exact ORF source
 also matched nested alternative starts, terminal no-stop ORFs, and
-reverse-strand coordinates. `analysis.json` schema 3 and durable run provenance
-carry the upstream repository, commit and MIT license. Execution stays in the
-existing Rust SessionActor route; no Motif MCP, Node agent, installer, provider
-or network path is admitted.
+reverse-strand coordinates. All 24 single-valued NCBI table IDs/names and
+table-specific 2/15/32 translations also matched; unsupported/context-dependent
+tables fail closed instead of falling back. `analysis.json` schema 4 and durable
+run provenance carry the upstream repository, commit, MIT license, and selected
+table. Execution stays in the existing Rust SessionActor route; no Motif MCP,
+Node agent, installer, provider or network path is admitted.
 
 See `third_party/provenance/motif-876a-seqbench.md`. A fresh current-source
 `lumen` binary passed all three filtered `seq_analyze` allow/boundary/deny
-product tests for schema v3, including a store-reopened 30-aa standard-table
-`TTG` ORF. Exact-head CI remains a separate gate.
+product tests for schema v4. The allow case selected table 2 and reopened the
+store-owned output to verify its `AGA`-terminated 30-aa ORF plus durable table
+context/provenance; the boundary and deny cases produced no unauthorized
+output. Exact-head CI remains a separate gate.

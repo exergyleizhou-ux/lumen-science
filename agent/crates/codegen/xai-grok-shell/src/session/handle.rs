@@ -381,6 +381,7 @@ impl SessionHandle {
         &self,
         store: xai_grok_science::ScienceStore,
         context: xai_grok_science::RunContext,
+        options: xai_grok_science::seqbench::SeqAnalyzeOptions,
         source_path: std::path::PathBuf,
         source_bytes: Vec<u8>,
         approval_timeout: std::time::Duration,
@@ -392,6 +393,7 @@ impl SessionHandle {
                 crate::session::commands::BeginScienceSeqAnalyze {
                     store,
                     context,
+                    options,
                     source_path,
                     source_bytes,
                     respond_to: begin_tx,
@@ -411,7 +413,10 @@ impl SessionHandle {
             call_id,
             acp::ToolCallUpdateFields::new()
                 .kind(Some(acp::ToolKind::Other))
-                .title(Some("Lumen Science sequence analysis".into())),
+                .title(Some(format!(
+                    "Lumen Science sequence analysis (NCBI table {})",
+                    prepared.options.translation_table_id
+                ))),
         );
         let permission = tokio::time::timeout(
             approval_timeout,
