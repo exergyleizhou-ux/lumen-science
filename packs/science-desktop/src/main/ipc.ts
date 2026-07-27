@@ -124,7 +124,7 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
   )
 
   // ── Science + OSF-2 product path (single registration site) ──
-  // ACP-wired store + hybrid membership (ACP then local UI catalog) + seed.
+  // ACP-wired store + ACP-authoritative membership + verified artifact seed.
   const acpTool = async (tool: string, args: Record<string, unknown>) =>
     acpCall(tool, args)
   const wiredStore = new AcpPreviewStore(acpTool)
@@ -197,8 +197,12 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
     assertMembership: createAcpAuthoritativeMembershipAsserter({
       acp: createAcpMembershipAsserter(acpTool),
     }),
-    listArtifacts: ({ projectId, runId }) =>
-      listArtifactsViaAcp(acpTool, { projectId, runId }),
+    listArtifacts: ({ ownerId, projectId, runId }) =>
+      listArtifactsViaAcp(acpTool, {
+        ownerId,
+        projectId,
+        runId,
+      }),
     projectCatalog,
     defaultOwnerId: process.env.LUMEN_DESKTOP_OWNER_ID || 'local-user',
     // LS5-K4: where this installation's environments live. Resolved here

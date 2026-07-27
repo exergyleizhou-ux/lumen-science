@@ -1,25 +1,13 @@
 /**
  * Turns the result of opening a project into something worth reading.
  *
- * Opening emitted its internals directly into a full-width monospace bar, so
- * the first thing a user saw on entering a project was:
- *
- *   Open: seeded 0 artifacts (seed: science method 'artifact_list' rejected by
- *   registry: Go MCP tool, not a Rust ACP extension method. The Rust engine
- *   dispatches only x.ai/science/* (extensions/science.rs); this call site
- *   needs the Go MCP client, not this bridge.)
- *
- * Three separate problems in one line:
+ * Opening used to emit its internals directly into a full-width monospace bar.
+ * Two separate problems were hidden in that presentation:
  *
  *   1. "seeded 0 artifacts" reads as a failure. For a project created seconds
  *      ago it is simply the truth — there is nothing to seed yet.
  *
- *   2. The seed error is PERMANENT in this build. `artifact_list` is a Go MCP
- *      tool and this bridge speaks Rust ACP; no user action changes that, and
- *      it will appear on every open forever. A message that always fires is one
- *      people learn to ignore, which is how the banner that matters gets missed.
- *
- *   3. It names a source file. That is a fact about our repository, not about
+ *   2. Errors named source files. That is a fact about our repository, not about
  *      the user's project.
  *
  * The fix is not to hide it — a swallowed absence is how a product ends up
@@ -35,19 +23,9 @@ export type OpenOutcome = {
    * summarised; the UI puts it behind a disclosure rather than dropping it.
    */
   detail?: string
-  /**
-   * Whether `detail` describes something structurally absent from this build
-   * rather than something that went wrong.
-   *
-   * Worth distinguishing: a capability this build does not have is not an
-   * incident, and showing both in the same alarmed styling teaches people that
-   * the styling means nothing.
-   */
+  /** Whether the outcome is normal rather than a seed failure. */
   expected: boolean
 }
-
-/** A seed failure this build can never avoid, so it is stated as an absence. */
-const STRUCTURAL = /rejected by registry|not a Rust ACP extension method|needs the Go MCP client/i
 
 export function describeOpen(res: { seeded?: number; seedError?: string }): OpenOutcome {
   const seeded = res.seeded ?? 0
@@ -64,16 +42,8 @@ export function describeOpen(res: { seeded?: number; seedError?: string }): Open
     }
   }
 
-  if (STRUCTURAL.test(res.seedError)) {
-    return {
-      headline: 'Opened. Artifact previews are not available in this build.',
-      detail: res.seedError,
-      expected: true,
-    }
-  }
-
-  // An unrecognised seed failure. Say that it is unexpected rather than
-  // folding it in with the absences above — this is the one worth looking at.
+  // artifact_list is part of the Rust engine now. Any seed error is unexpected
+  // and worth surfacing; an old/new binary mismatch is not a normal absence.
   return {
     headline: 'Opened, but artifacts could not be loaded.',
     detail: res.seedError,

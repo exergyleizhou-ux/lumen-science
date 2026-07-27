@@ -472,11 +472,21 @@ def collect_authority() -> dict[str, Any]:
             {
                 "id": "AUTH-7",
                 "summary": (
-                    "artifact_list, notebook_execute and start_review are Go MCP tools, "
-                    "not Rust ACP methods; their desktop call sites fail explicitly "
-                    "pending a Go MCP client"
+                    "Former Go-only desktop call sites now remain on the single Rust "
+                    "ACP transport: workflow_execute, review_record and artifact_list"
                 ),
                 "path": "packs/science-desktop/src/main/science-method-registry.ts",
+                "status": "closed",
+                "note": (
+                    "artifact_list is a read-only Rust ScienceStore query bound to the "
+                    "current session, owner, project, run and workspace. It requires a "
+                    "Succeeded run and re-hashes every artifact before returning any "
+                    "preview path. The session's frozen research_project gate is checked "
+                    "before filesystem access, and the desktop rejects malformed or "
+                    "identity-mismatched rows instead of treating them as an empty list. "
+                    "Notebook and review call sites already route through workflow_execute "
+                    "and review_record; no Go/HTTP client was added."
+                ),
             },
             {
                 "id": "AUTH-8",

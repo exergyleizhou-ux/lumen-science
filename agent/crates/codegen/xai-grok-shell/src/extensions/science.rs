@@ -3,9 +3,14 @@
 use super::{ExtResult, parse_params, to_raw_response};
 use crate::agent::MvpAgent;
 use agent_client_protocol as acp;
-use serde::Deserialize;
-use std::{collections::BTreeMap, path::PathBuf, time::Duration};
-use xai_grok_science::{ProjectId, RunContext, RunId, ScienceStore};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+    time::Duration,
+};
+use xai_grok_science::{ProjectId, RunContext, RunId, RunState, ScienceError, ScienceStore};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -38,7 +43,7 @@ fn canonical_dir_within(path: PathBuf, workspace: &std::path::Path) -> Result<Pa
         return Err(acp::Error::invalid_params()
             .data("science path must contain no dot components"));
     }
-    let workspace = std::fs::canonicalize(workspace).map_err(internal)?;
+    let workspace = dunce::canonicalize(workspace).map_err(internal)?;
     let path = if path.is_absolute() {
         path
     } else {
@@ -50,21 +55,51 @@ fn canonical_dir_within(path: PathBuf, workspace: &std::path::Path) -> Result<Pa
             acp::Error::invalid_params().data("science path has no existing ancestor")
         })?;
     }
-    let existing = std::fs::canonicalize(existing).map_err(internal)?;
+    let existing = dunce::canonicalize(existing).map_err(internal)?;
     if !existing.starts_with(&workspace) {
         return Err(acp::Error::invalid_params().data("science path must be inside session cwd"));
     }
     std::fs::create_dir_all(&path).map_err(internal)?;
-    let canonical = std::fs::canonicalize(path).map_err(internal)?;
+    let canonical = dunce::canonicalize(path).map_err(internal)?;
     if !canonical.starts_with(&workspace) {
         return Err(acp::Error::invalid_params().data("science path must be inside session cwd"));
     }
     Ok(canonical)
 }
 
+/// Resolve an existing directory inside the session workspace without writing.
+///
+/// Read-only ACP methods must not call `create_dir_all`: a rejected or empty
+/// query is not authority to leave durable state behind.
+fn canonical_existing_dir_within(path: PathBuf, workspace: &Path) -> Result<PathBuf, acp::Error> {
+    use std::path::Component;
+
+    if path
+        .components()
+        .any(|part| matches!(part, Component::CurDir | Component::ParentDir))
+    {
+        return Err(
+            acp::Error::invalid_params().data("science path must contain no dot components")
+        );
+    }
+    let workspace = dunce::canonicalize(workspace).map_err(internal)?;
+    let path = if path.is_absolute() {
+        path
+    } else {
+        workspace.join(path)
+    };
+    let canonical = dunce::canonicalize(path)
+        .map_err(|error| acp::Error::invalid_params().data(error.to_string()))?;
+    if !canonical.is_dir() || !canonical.starts_with(&workspace) {
+        return Err(acp::Error::invalid_params()
+            .data("science path must be an existing directory inside session cwd"));
+    }
+    Ok(canonical)
+}
+
 #[cfg(test)]
 mod canonical_dir_tests {
-    use super::canonical_dir_within;
+    use super::{canonical_dir_within, canonical_existing_dir_within};
     use std::path::PathBuf;
 
     #[test]
@@ -98,6 +133,19 @@ mod canonical_dir_tests {
         let relative = canonical_dir_within(PathBuf::from("relative-store"), &workspace).unwrap();
         assert_eq!(relative, workspace.join("relative-store"));
         assert!(relative.is_dir());
+    }
+
+    #[test]
+    fn existing_directory_confinement_never_creates_for_a_read() {
+        let workspace = tempfile::tempdir().unwrap();
+        let workspace = std::fs::canonicalize(workspace.path()).unwrap();
+        let absent = workspace.join("absent-read-root");
+
+        assert!(canonical_existing_dir_within(absent.clone(), &workspace).is_err());
+        assert!(
+            !absent.exists(),
+            "a read-only confinement check created its target"
+        );
     }
 
     #[cfg(unix)]
@@ -193,6 +241,7 @@ pub async fn handle(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
         "x.ai/science/ssh_scp_fixture" => handle_ssh_scp_fixture(agent, args).await,
         "x.ai/science/goal_host_verify" => handle_goal_host_verify(agent, args).await,
         "x.ai/science/seq_analyze" => handle_seq_analyze(agent, args).await,
+        "x.ai/science/artifact_list" => handle_artifact_list(agent, args).await,
         "x.ai/science/project_create" => handle_project_create(agent, args).await,
         "x.ai/science/project_get" => handle_project_get(agent, args).await,
         "x.ai/science/project_assert_membership" => {
@@ -222,6 +271,324 @@ pub async fn handle(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
         "x.ai/science/remote_compute_plan" => handle_remote_compute_plan(agent, args).await,
         _ => Err(acp::Error::method_not_found()),
     }
+}
+
+// ── Durable artifact listing (AUTH-7) ───────────────────────────
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ArtifactListParams {
+    session_id: String,
+    owner_id: String,
+    store_root: PathBuf,
+    project_id: String,
+    run_id: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ArtifactListItem {
+    artifact_id: String,
+    path: PathBuf,
+    label: String,
+    mime_type: String,
+    bytes: u64,
+    sha256: String,
+    project_id: String,
+    run_id: String,
+    owner_id: String,
+}
+
+/// Reopen and verify every artifact before returning any preview capability.
+///
+/// This deliberately returns an all-or-nothing list. A single missing,
+/// replaced, symlinked or hash-drifted artifact makes the whole query fail;
+/// returning the remaining entries would let a partially corrupted run look
+/// complete in the desktop.
+fn verified_artifact_list(
+    store: &ScienceStore,
+    store_root: &Path,
+    project_id: &ProjectId,
+    run_id: &RunId,
+    owner_id: &str,
+    session_id: &str,
+    workspace: &Path,
+) -> Result<Vec<ArtifactListItem>, ScienceError> {
+    let run = store.load_run(run_id)?;
+    if run.context.project_id != *project_id
+        || run.context.owner_id != owner_id
+        || run.context.session_id != session_id
+        || run.context.workspace_root != workspace
+    {
+        return Err(ScienceError::Ownership);
+    }
+    if run.state != RunState::Succeeded {
+        return Err(ScienceError::Invalid(
+            "artifacts are listable only for a succeeded run".into(),
+        ));
+    }
+
+    let artifact_root = store_root.join("runs").join(&run_id.0).join("artifacts");
+    let canonical_artifact_root = dunce::canonicalize(&artifact_root)?;
+    if !canonical_artifact_root.starts_with(workspace) {
+        return Err(ScienceError::Invalid(
+            "artifact root resolved outside session workspace".into(),
+        ));
+    }
+
+    let mut items = Vec::new();
+    for artifact in store.artifacts(run_id)? {
+        let bytes = store.artifact_bytes(project_id, run_id, owner_id, &artifact.relative_path)?;
+        if bytes.len() as u64 != artifact.bytes
+            || format!("{:x}", Sha256::digest(&bytes)) != artifact.sha256
+        {
+            return Err(ScienceError::Invalid(
+                "registered science artifact hash or length mismatch".into(),
+            ));
+        }
+        let path = dunce::canonicalize(canonical_artifact_root.join(&artifact.relative_path))?;
+        if !path.starts_with(&canonical_artifact_root) {
+            return Err(ScienceError::Invalid(
+                "artifact resolved outside its run root".into(),
+            ));
+        }
+        items.push(ArtifactListItem {
+            artifact_id: artifact.sha256.clone(),
+            path,
+            label: artifact.relative_path.to_string_lossy().into_owned(),
+            mime_type: artifact.mime,
+            bytes: artifact.bytes,
+            sha256: artifact.sha256,
+            project_id: project_id.0.clone(),
+            run_id: run_id.0.clone(),
+            owner_id: owner_id.to_owned(),
+        });
+    }
+    Ok(items)
+}
+
+#[cfg(test)]
+mod artifact_list_tests {
+    use super::verified_artifact_list;
+    use std::{collections::BTreeMap, path::Path};
+    use xai_grok_science::{CallId, ProjectId, RunContext, RunId, RunState, ScienceStore};
+
+    fn context(workspace: &Path, run_id: &RunId, project_id: &ProjectId) -> RunContext {
+        RunContext {
+            run_id: run_id.clone(),
+            project_id: project_id.clone(),
+            session_id: "session-1".into(),
+            owner_id: "owner-1".into(),
+            workspace_root: workspace.to_path_buf(),
+            provider: "offline-test".into(),
+            approval_policy: "test".into(),
+            tool_profile: "artifact-list-test".into(),
+            artifact_root: workspace.join("science-store").join("runs"),
+            environment: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn listing_is_verified_and_bound_to_run_identity() {
+        let workspace = tempfile::tempdir().unwrap();
+        let workspace = std::fs::canonicalize(workspace.path()).unwrap();
+        let store_root = workspace.join("science-store");
+        let store = ScienceStore::new(&store_root);
+        let run_id = RunId::new("run-1");
+        let project_id = ProjectId::new("project-1");
+        store
+            .create_run(context(&workspace, &run_id, &project_id))
+            .unwrap();
+        let artifact = store
+            .put_artifact(
+                &project_id,
+                &run_id,
+                "owner-1",
+                CallId::new("call-1"),
+                Path::new("report.md"),
+                b"verified report\n",
+                "text/markdown",
+                "report",
+            )
+            .unwrap();
+        store
+            .transition(&run_id, RunState::Succeeded, None)
+            .unwrap();
+
+        let listed = verified_artifact_list(
+            &store,
+            &store_root,
+            &project_id,
+            &run_id,
+            "owner-1",
+            "session-1",
+            &workspace,
+        )
+        .unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].artifact_id, artifact.sha256);
+        assert_eq!(listed[0].sha256, artifact.sha256);
+        assert!(listed[0].path.starts_with(&workspace));
+
+        for (project, owner, session, bound_workspace) in [
+            (
+                ProjectId::new("other-project"),
+                "owner-1",
+                "session-1",
+                workspace.as_path(),
+            ),
+            (
+                project_id.clone(),
+                "other-owner",
+                "session-1",
+                workspace.as_path(),
+            ),
+            (
+                project_id.clone(),
+                "owner-1",
+                "other-session",
+                workspace.as_path(),
+            ),
+        ] {
+            assert!(
+                verified_artifact_list(
+                    &store,
+                    &store_root,
+                    &project,
+                    &run_id,
+                    owner,
+                    session,
+                    bound_workspace,
+                )
+                .is_err(),
+                "forged identity listed an artifact"
+            );
+        }
+
+        let other_workspace = tempfile::tempdir().unwrap();
+        let other_workspace = std::fs::canonicalize(other_workspace.path()).unwrap();
+        assert!(
+            verified_artifact_list(
+                &store,
+                &store_root,
+                &project_id,
+                &run_id,
+                "owner-1",
+                "session-1",
+                &other_workspace,
+            )
+            .is_err(),
+            "forged workspace listed an artifact"
+        );
+
+        std::fs::write(
+            store_root
+                .join("runs")
+                .join(&run_id.0)
+                .join("artifacts")
+                .join("report.md"),
+            b"tampered report\n",
+        )
+        .unwrap();
+        assert!(
+            verified_artifact_list(
+                &store,
+                &store_root,
+                &project_id,
+                &run_id,
+                "owner-1",
+                "session-1",
+                &workspace,
+            )
+            .is_err(),
+            "hash-drifted bytes were returned"
+        );
+    }
+
+    #[test]
+    fn non_succeeded_runs_never_list_artifacts() {
+        let workspace = tempfile::tempdir().unwrap();
+        let workspace = std::fs::canonicalize(workspace.path()).unwrap();
+        let store_root = workspace.join("science-store");
+        let store = ScienceStore::new(&store_root);
+        let run_id = RunId::new("run-denied");
+        let project_id = ProjectId::new("project-1");
+        store
+            .create_run(context(&workspace, &run_id, &project_id))
+            .unwrap();
+        store
+            .transition(&run_id, RunState::Denied, Some("refused".into()))
+            .unwrap();
+
+        assert!(
+            verified_artifact_list(
+                &store,
+                &store_root,
+                &project_id,
+                &run_id,
+                "owner-1",
+                "session-1",
+                &workspace,
+            )
+            .is_err()
+        );
+        assert!(store.artifacts(&run_id).unwrap().is_empty());
+    }
+}
+
+async fn handle_artifact_list(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: ArtifactListParams = parse_params(args)?;
+    if params.owner_id.is_empty() || params.project_id.is_empty() || params.run_id.is_empty() {
+        return Err(acp::Error::invalid_params().data("ownerId, projectId and runId are required"));
+    }
+    let session_id = acp::SessionId::new(params.session_id);
+    let handle = agent
+        .get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    handle
+        .science_feature_gates
+        .require(xai_grok_science::features::ScienceFeature::ResearchProject)
+        .map_err(internal)?;
+    let workspace = dunce::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let store_root = canonical_existing_dir_within(params.store_root, &workspace)?;
+    let store = ScienceStore::new(&store_root);
+    let project_id = ProjectId::new(params.project_id);
+    let run_id = RunId::new(params.run_id);
+    let items = match store.load_run(&run_id) {
+        Ok(_) => verified_artifact_list(
+            &store,
+            &store_root,
+            &project_id,
+            &run_id,
+            &params.owner_id,
+            session_id.0.as_ref(),
+            &workspace,
+        ),
+        // A newly-created project has no runs yet. Return the honest empty
+        // list only after checking its durable owner record; otherwise a
+        // missing run would become a project-existence or ownership probe.
+        Err(ScienceError::Io(ref error)) if error.kind() == std::io::ErrorKind::NotFound => {
+            let project_store = xai_grok_science::project::ProjectStore::new(&store_root)
+                .with_gates(handle.science_feature_gates.clone());
+            match project_store
+                .load_project(&xai_grok_science::project::ProjectId(project_id.0.clone()))
+            {
+                // `default` is the desktop catalog's explicit no-run sentinel.
+                // The durable project aggregate does not mint a default run,
+                // so this exception must remain narrower than "any missing
+                // run": an arbitrary absent run id is not evidence that the
+                // caller is opening a newly-created project.
+                Ok(project)
+                    if project.owner_id.0 == params.owner_id && run_id.0 == "default" =>
+                {
+                    Ok(Vec::new())
+                }
+                _ => Err(ScienceError::Ownership),
+            }
+        }
+        Err(error) => Err(error),
+    }
+    .map_err(internal)?;
+    to_raw_response(&items)
 }
 
 // ── WP-2 product path: ResearchProject + EvidenceGraph + Claims ──

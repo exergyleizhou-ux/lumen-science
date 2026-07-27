@@ -89,7 +89,8 @@ if (!live) {
     ok(live.versionOk)
     ok(live.helpOk)
     ok(/1\.\d/.test(live.versionOutput))
-    ok(/SessionActor/i.test(live.helpOutput))
+    ok(/Lumen TUI/i.test(live.helpOutput))
+    ok(/Run the agent over stdio/i.test(live.helpOutput))
   })
   test('live binary path is absolute existing file', () => {
     ok(path.isAbsolute(live.binaryPath))

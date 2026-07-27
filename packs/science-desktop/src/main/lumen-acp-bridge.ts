@@ -206,10 +206,9 @@ export function safeHandle(
  *
  * `toolName` is a science method name — the registry decides whether it may go
  * on the wire. Three names this pack has been sending exist in neither engine
- * (`project_assert_membership`, `artifact_resolve`, `compute_plan`) and three
- * more are Go MCP tools rather than Rust ACP methods (`artifact_list`,
- * `notebook_execute`, `start_review`); all six are rejected here, by name, with
- * the reason. That rejection is deliberate and load-bearing: while the
+ * (`artifact_resolve`, `compute_plan`) and two more are Go MCP tools rather
+ * than Rust ACP methods (`notebook_execute`, `start_review`); all four are
+ * rejected here, by name, with the reason. That rejection is deliberate and load-bearing: while the
  * transport was fictional those calls failed with ECONNREFUSED, which read as
  * "engine down" instead of "this method does not exist".
  *

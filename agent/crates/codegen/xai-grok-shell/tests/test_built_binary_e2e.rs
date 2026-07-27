@@ -1382,7 +1382,8 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             store.load_run(&run_id).expect("reopen durable run").state,
             xai_grok_science::RunState::Succeeded
         );
-        for artifact in store.artifacts(&run_id).expect("reopen artifacts") {
+        let durable_artifacts = store.artifacts(&run_id).expect("reopen artifacts");
+        for artifact in &durable_artifacts {
             let bytes = store
                 .artifact_bytes(
                     &project_id,
@@ -1399,6 +1400,161 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
                 .join("seqbench")
                 .exists(),
             "legacy ACP-task loose artifact directory was written"
+        );
+
+        // AUTH-7: the desktop can seed previews from the same Rust engine
+        // without adding a Go/HTTP authority. Listing is a read, so it must not
+        // ask for another permission after the one that admitted seq_analyze.
+        let permission_count = client.permission_request_count();
+        assert_eq!(permission_count, 1, "analysis must ask exactly once");
+        let list_params =
+            |session_id: &str, owner_id: &str, project_id: &str, store_root: &Path| {
+                serde_json::json!({
+                    "sessionId": session_id,
+                    "ownerId": owner_id,
+                    "projectId": project_id,
+                    "runId": run_id.0.as_str(),
+                    "storeRoot": store_root,
+                })
+            };
+        let response = client
+            .ext_method(
+                "x.ai/science/artifact_list",
+                list_params(
+                    session_id.0.as_ref(),
+                    "science-owner",
+                    "science-seq-project",
+                    &artifact_root,
+                ),
+            )
+            .await
+            .unwrap_or_else(|error| {
+                panic!(
+                    "artifact_list failed: {error:?}\nstderr:\n{}",
+                    client.stderr()
+                )
+            });
+        let listed: serde_json::Value =
+            serde_json::from_str(response.0.get()).expect("artifact_list returned JSON");
+        let listed = listed.as_array().expect("artifact_list array");
+        assert_eq!(listed.len(), durable_artifacts.len());
+        let expected_run_root =
+            std::fs::canonicalize(artifact_root.join("runs").join(&run_id.0))
+                .expect("canonical run root");
+        for item in listed {
+            let sha = item["sha256"].as_str().expect("listed sha256");
+            assert_eq!(item["artifact_id"], sha);
+            assert!(
+                durable_artifacts
+                    .iter()
+                    .any(|artifact| artifact.sha256 == sha),
+                "list returned an unregistered digest: {item}"
+            );
+            let path = Path::new(item["path"].as_str().expect("listed path"));
+            assert!(path.is_absolute());
+            assert!(path.starts_with(&expected_run_root));
+        }
+        assert_eq!(
+            client.permission_request_count(),
+            permission_count,
+            "read-only artifact listing asked for permission"
+        );
+
+        // Every identity dimension fails closed, including another real
+        // session in the same workspace. None may receive a preview path.
+        for (label, params) in [
+            (
+                "wrong owner",
+                list_params(
+                    session_id.0.as_ref(),
+                    "other-owner",
+                    "science-seq-project",
+                    &artifact_root,
+                ),
+            ),
+            (
+                "wrong project",
+                list_params(
+                    session_id.0.as_ref(),
+                    "science-owner",
+                    "other-project",
+                    &artifact_root,
+                ),
+            ),
+        ] {
+            assert!(
+                client
+                    .ext_method("x.ai/science/artifact_list", params)
+                    .await
+                    .is_err(),
+                "{label} listed artifacts"
+            );
+        }
+        let other_session = client.create_session_with_timeout(workdir.path()).await;
+        assert!(
+            client
+                .ext_method(
+                    "x.ai/science/artifact_list",
+                    list_params(
+                        other_session.0.as_ref(),
+                        "science-owner",
+                        "science-seq-project",
+                        &artifact_root,
+                    ),
+                )
+                .await
+                .is_err(),
+            "a different real session listed the run"
+        );
+        let outside = tempfile::tempdir().expect("outside workspace");
+        let absent_outside = outside.path().join("must-not-be-created");
+        assert!(
+            client
+                .ext_method(
+                    "x.ai/science/artifact_list",
+                    list_params(
+                        session_id.0.as_ref(),
+                        "science-owner",
+                        "science-seq-project",
+                        &absent_outside,
+                    ),
+                )
+                .await
+                .is_err(),
+            "an outside store root was accepted"
+        );
+        assert!(
+            !absent_outside.exists(),
+            "rejected read-only listing created its store root"
+        );
+
+        // A store record is not enough: list must reopen the bytes and reject
+        // digest drift before returning even a partial result.
+        let tampered = PathBuf::from(
+            listed[0]["path"]
+                .as_str()
+                .expect("first listed artifact path"),
+        );
+        std::fs::write(&tampered, b"tampered after commit\n").expect("tamper registered artifact");
+        assert!(
+            client
+                .ext_method(
+                    "x.ai/science/artifact_list",
+                    list_params(
+                        session_id.0.as_ref(),
+                        "science-owner",
+                        "science-seq-project",
+                        &artifact_root,
+                    ),
+                )
+                .await
+                .is_err(),
+            "hash-drifted artifact was listed"
+        );
+        assert_eq!(
+            client.permission_request_count(),
+            permission_count,
+            "rejected listing asked for permission"
         );
     })
     .await;
@@ -1545,6 +1701,22 @@ async fn test_stdio_science_seq_analyze_denied_writes_nothing() {
         assert!(store.artifacts(&run_id).expect("artifacts").is_empty());
         assert!(store.evidence(&run_id).expect("evidence").is_empty());
         assert!(store.provenance(&run_id).expect("provenance").is_empty());
+        assert!(
+            client
+                .ext_method(
+                    "x.ai/science/artifact_list",
+                    serde_json::json!({
+                        "sessionId": session_id.0.as_ref(),
+                        "ownerId": "science-owner",
+                        "projectId": "science-seq-project",
+                        "runId": run_id.0.as_str(),
+                        "storeRoot": artifact_root,
+                    }),
+                )
+                .await
+                .is_err(),
+            "a denied run exposed an artifact listing"
+        );
         assert!(
             !artifact_root
                 .join("science-seq-project")
@@ -2765,6 +2937,73 @@ async fn test_stdio_science_project_mutation_is_actor_gated_and_idempotent() {
         let project_id = first["projectId"].as_str().expect("projectId").to_owned();
         assert!(!project_id.is_empty());
 
+        // A newly-created project has no run yet. The desktop still asks for
+        // its configured default run when opening it; the Rust list query must
+        // return an honest empty list after verifying project ownership, not
+        // turn every new project into a seed error.
+        let permissions_after_create = client.permission_request_count();
+        let empty: serde_json::Value = serde_json::from_str(
+            client
+                .ext_method(
+                    "x.ai/science/artifact_list",
+                    serde_json::json!({
+                        "sessionId": session_id.0.as_ref(),
+                        "ownerId": "science-owner",
+                        "projectId": project_id.as_str(),
+                        "runId": "default",
+                        "storeRoot": store_root,
+                    }),
+                )
+                .await
+                .expect("owned project with no run should list empty")
+                .0
+                .get(),
+        )
+        .expect("empty artifact list returned JSON");
+        assert_eq!(empty, serde_json::json!([]));
+        assert_eq!(
+            client.permission_request_count(),
+            permissions_after_create,
+            "read-only empty listing asked for permission"
+        );
+        assert!(
+            client
+                .ext_method(
+                    "x.ai/science/artifact_list",
+                    serde_json::json!({
+                        "sessionId": session_id.0.as_ref(),
+                        "ownerId": "other-owner",
+                        "projectId": project_id.as_str(),
+                        "runId": "default",
+                        "storeRoot": store_root,
+                    }),
+                )
+                .await
+                .is_err(),
+            "wrong owner received an empty-list grant"
+        );
+        assert!(
+            client
+                .ext_method(
+                    "x.ai/science/artifact_list",
+                    serde_json::json!({
+                        "sessionId": session_id.0.as_ref(),
+                        "ownerId": "science-owner",
+                        "projectId": project_id.as_str(),
+                        "runId": "forged-missing-run",
+                        "storeRoot": store_root,
+                    }),
+                )
+                .await
+                .is_err(),
+            "arbitrary missing run was treated as the new-project default"
+        );
+        assert_eq!(
+            client.permission_request_count(),
+            permissions_after_create,
+            "read-only rejected listings asked for permission"
+        );
+
         // Replaying the same operation id must return the SAME project rather
         // than creating a second one. Without the durable operation ledger a
         // retried request silently forks the store.
@@ -3058,6 +3297,31 @@ async fn test_stdio_science_operator_gate_snapshot_denies_read_and_mutation_befo
         let client = GrokStdioClient::spawn_with_home(&server, workdir.path(), home).await;
         client.initialize_with_timeout().await;
         let session_id = client.create_session_with_timeout(workdir.path()).await;
+
+        let artifact_read = client
+            .ext_method(
+                "x.ai/science/artifact_list",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "ownerId": "science-owner",
+                    "projectId": "disabled-project",
+                    "runId": "default",
+                    "storeRoot": store_root,
+                }),
+            )
+            .await;
+        let artifact_error = format!(
+            "{:?}",
+            artifact_read.expect_err("disabled artifact_list was accepted")
+        );
+        assert!(
+            artifact_error.contains("feature disabled: research_project"),
+            "artifact_list failed for the wrong reason: {artifact_error}"
+        );
+        assert!(
+            !store_root.exists(),
+            "disabled read-only artifact_list created its store root"
+        );
 
         let read = client
             .ext_method(
