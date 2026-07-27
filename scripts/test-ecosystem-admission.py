@@ -443,6 +443,23 @@ def main() -> int:
         "Motif algorithm marker missing",
     )
 
+    def remove_restriction_digest_option_binding() -> None:
+        text = seqbench_path.read_text(encoding="utf-8")
+        seqbench_path.write_text(
+            text.replace(
+                "approved_restriction_digest_enzymes_cannot_be_swapped_before_finish",
+                "restriction_digest_enzyme_swap_is_unchecked",
+            ),
+            encoding="utf-8",
+        )
+
+    check_file_tamper(
+        "approved digest enzymes cannot lose their anti-swap proof",
+        [seqbench_path],
+        remove_restriction_digest_option_binding,
+        "Motif algorithm marker missing",
+    )
+
     def remove_motif_orf_proof(lock: dict[str, Any]) -> None:
         source = next(item for item in lock["sources"] if item["id"] == "jvogan-motif")
         source["source_proofs"] = [

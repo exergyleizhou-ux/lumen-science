@@ -1339,6 +1339,7 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
                     "sourcePath": source,
                     "translationTableId": 2,
                     "topology": "circular",
+                    "restrictionDigestEnzymes": ["EcoRI"],
                     "approvalTimeoutMs": 5_000,
                 }),
             ),
@@ -1411,8 +1412,8 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             .expect("read durable analysis.json");
         let analysis: serde_json::Value =
             serde_json::from_slice(&analysis_bytes).expect("parse durable analysis.json");
-        assert_eq!(analysis["schema_version"], 5, "analysis: {analysis}");
-        assert_eq!(analysis["tool_version"], "1.4.0", "analysis: {analysis}");
+        assert_eq!(analysis["schema_version"], 6, "analysis: {analysis}");
+        assert_eq!(analysis["tool_version"], "1.5.0", "analysis: {analysis}");
         assert_eq!(
             analysis["algorithm_sources"][0]["commit"],
             xai_grok_science::seqbench::MOTIF_COMMIT,
@@ -1434,6 +1435,11 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             analysis["restriction_enzyme_count"], 30,
             "analysis: {analysis}"
         );
+        assert_eq!(
+            analysis["restriction_digest_enzymes"],
+            serde_json::json!(["EcoRI"]),
+            "analysis: {analysis}"
+        );
         let circular_eco_ri = analysis["records"][0]["restriction_hits"]
             .as_array()
             .expect("seq1 restriction hits")
@@ -1443,6 +1449,30 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
         assert_eq!(circular_eco_ri["position"], 9, "analysis: {analysis}");
         assert_eq!(circular_eco_ri["cut_position"], 0, "analysis: {analysis}");
         assert_eq!(circular_eco_ri["strand"], 1, "analysis: {analysis}");
+        let circular_digest = analysis["records"][0]["restriction_digest_fragments"]
+            .as_array()
+            .expect("seq1 digest fragments");
+        assert_eq!(circular_digest.len(), 1, "analysis: {analysis}");
+        assert_eq!(
+            circular_digest[0]["sequence"], "AATTCCCCCG",
+            "analysis: {analysis}"
+        );
+        assert_eq!(
+            circular_digest[0]["left_enzyme"], "EcoRI",
+            "analysis: {analysis}"
+        );
+        assert_eq!(
+            circular_digest[0]["right_enzyme"], "EcoRI",
+            "analysis: {analysis}"
+        );
+        assert_eq!(
+            circular_digest[0]["overhang5"], "AATT",
+            "analysis: {analysis}"
+        );
+        assert_eq!(
+            circular_digest[0]["overhang3"], "AATT",
+            "analysis: {analysis}"
+        );
         assert_eq!(
             analysis["translation_table"]["name"],
             "Vertebrate Mitochondrial",
@@ -1478,12 +1508,22 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             "result: {result}"
         );
         assert_eq!(
+            result["provenance"][0]["environment"]["restriction_digest_enzymes"],
+            "EcoRI",
+            "result: {result}"
+        );
+        assert_eq!(
             result["run"]["context"]["environment"]["translation_table_id"], "2",
             "result: {result}"
         );
         assert_eq!(
             result["run"]["context"]["environment"]["restriction_topology"],
             "circular",
+            "result: {result}"
+        );
+        assert_eq!(
+            result["run"]["context"]["environment"]["restriction_digest_enzymes"],
+            "EcoRI",
             "result: {result}"
         );
         assert!(
@@ -1724,6 +1764,17 @@ async fn test_stdio_science_seq_analyze_boundaries_fail_closed() {
                     "artifactRoot": artifact_root,
                     "sourcePath": source,
                     "topology": "toroidal",
+                }),
+            ),
+            (
+                "unsupported digest enzyme",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": "science-seq-project",
+                    "ownerId": "science-owner",
+                    "artifactRoot": artifact_root,
+                    "sourcePath": source,
+                    "restrictionDigestEnzymes": ["UnknownI"],
                 }),
             ),
         ] {

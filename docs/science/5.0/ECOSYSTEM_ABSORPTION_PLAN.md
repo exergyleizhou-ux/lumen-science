@@ -294,7 +294,7 @@ Remaining:
 
 ### Phase 3 — deterministic scientific mechanics
 
-Implemented in the first four Rust algorithm slices:
+Implemented in the first five Rust algorithm slices:
 
 - directly adapted Motif FASTA parsing semantics: first-whitespace headers,
   PIR comments, ASCII-only sequence cleaning, and explicit gap-removal counts;
@@ -302,7 +302,7 @@ Implemented in the first four Rust algorithm slices:
   calculations, plus average/monoisotopic protein mass tables;
 - preserved Motif's complete DNA/RNA IUPAC reverse-complement behavior and
   fixed lowercase RNA normalization before standard-code translation;
-- recorded the exact Motif repository, commit and license in both schema-v5
+- recorded the exact Motif repository, commit and license in both schema-v6
   `analysis.json` and durable provenance, with component paths in the analysis;
 - executed the exact upstream TypeScript locally and matched the Rust fixture
   results for parsing, all numeric metrics, IUPAC complements, and translation;
@@ -335,6 +335,16 @@ Implemented in the first four Rust algorithm slices:
   provenance;
 - executed the exact upstream TypeScript locally and matched the full catalog
   fingerprint, reverse BsaI, circular EcoRI and IUPAC fixtures.
+- directly adapted Motif's selected-enzyme digest mechanics for the locked
+  30-enzyme panel: cut deduplication, linear/circular fragments, wrap
+  coordinates and strand-aware sticky ends;
+- bounded selection to eight canonical enzyme names, froze the ordered
+  selection before approval, and made post-Allow enzyme swaps fail terminally
+  without artifacts, evidence or provenance;
+- failed closed on a truncated 100-cut scan, an over-1-MiB digest record, or a
+  linear Type IIS cut outside the supplied sequence;
+- executed the exact upstream digest locally and matched linear/circular EcoRI
+  plus forward/reverse BsaI fragment and overhang fixtures.
 
 Remaining:
 
@@ -374,7 +384,11 @@ route; the allow case selected table 2 and the negative cases produced no
 unauthorized output. A fresh schema-v5 run passed the same three product tests
 with circular restriction scanning: the allow case verified the 30-enzyme
 panel and origin-spanning EcoRI cut, while invalid topology and deny produced
-no unauthorized output. This does not claim that the 224 Biomni tools,
+no unauthorized output. The schema-v6 selected-enzyme digest route
+passed a fresh three-test product rerun: the allowed output contained the
+selected EcoRI circular fragment with both `AATT` ends, while invalid enzyme
+selection and deny produced no unauthorized output. This does not claim that
+the 224 Biomni tools,
 remaining connectors/Motif algorithms, or clean-room document features are
 already product-complete.
 

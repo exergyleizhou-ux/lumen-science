@@ -6,8 +6,8 @@
 | Exact commit | `876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0` |
 | Root license | MIT |
 | Lumen implementation | `agent/crates/codegen/xai-grok-science/src/seqbench.rs` |
-| Lumen tool version | `lumen-seqbench 1.4.0` |
-| Analysis schema | 5 |
+| Lumen tool version | `lumen-seqbench 1.5.0` |
+| Analysis schema | 6 |
 | Execution authority | Rust `SessionActor` |
 | Network/provider behavior | none; deterministic and offline |
 
@@ -25,13 +25,16 @@ implementation, not a behavior-only rewrite:
 | `src/bio/codon-tables.ts` | `87a683dcd4d3152f71c1d9e3c5efa6af32c7df3ff6d695bd4077f68d570e0304` | all 24 single-valued NCBI tables Motif ships, including names, starts, stops and codon overrides |
 | `src/bio/orf-detection.ts` | `e163ddbb40ca051bdd723f1918588b1c341fec1171fe2572359990e8e1b44c1c` | table-aware six-frame ORF scan, nested starts, terminal ORFs, reverse coordinates and length ordering |
 | `src/bio/restriction-sites.ts` | `1ffe08381227a498db2ccfd96862e33f0090cf77d35e64e019419d1cfc182fec` | exact 30-enzyme default panel, overlapping IUPAC recognition, forward/reverse scanning, mirrored Type IIS cuts and circular-origin scanning |
+| `src/bio/restriction-digest.ts` | `3adb69105f22921b604f20ee49d2ded4fa68cb7ede71869cf312fe0aac34c2b7` | selected-enzyme cut deduplication, linear/circular fragments, wrap coordinates and strand-aware sticky ends |
 
 The Rust implementation preserves Motif's one-based frame plus explicit strand
 metadata and adds a Lumen-specific 50-ORF output cap and explicit 100-hit
 restriction-site cap. Restriction topology is frozen into the durable run
 before approval. It does not import Motif's MCP server, Claude installer, Node
 runtime, filesystem authority, digest feature mapper, full 154-enzyme catalog,
-or external alignment runners.
+or external alignment runners. Digest selection is limited to eight names from
+the locked 30-enzyme panel; a truncated scan or out-of-sequence linear cut
+fails the run instead of emitting a partial digest.
 
 Motif omits NCBI tables 27, 28 and 31 because their context-dependent
 sense/stop semantics cannot be represented by a single codon map. Lumen keeps
@@ -63,6 +66,9 @@ focused tests use the same inputs and require the same outputs:
 | reverse BsaI `AAAAAAGAGACCTTTTT` | match 6; cut 1; strand -1 |
 | EcoRI across `AATTCCCCCG` origin | no linear hit; circular match 9 and cut 0 |
 | degenerate `RGATCY` recognition | `AGATCC` matches; sequence-side `NGATCC` does not |
+| linear EcoRI digest `AAAAGAATTCTTTT` | `AAAAG` / `AATTCTTTT`; complementary `AATT` sticky ends |
+| one-cut circular EcoRI digest | `AATTCTTTTAAAAG`; source span 1..15; EcoRI/AATT at both ends |
+| forward / reverse BsaI digest | `ACTG`↔`CAGT` / `GGGG`↔`CCCC` strand-aware ends |
 
 ## Durable evidence boundary
 
@@ -75,9 +81,9 @@ focused tests use the same inputs and require the same outputs:
 - deny, timeout, cancel, owner/project/call mismatch and parse failure retain
   the pre-existing fail-closed terminal behavior.
 
-All four slices have fresh rebuilt-binary evidence. The schema-5 product seam
-reopened the store-owned output and verified the 30-enzyme panel, circular
-topology, an origin-spanning EcoRI match at 9 with cut 0, table-2 ORF output,
-and durable topology context/provenance. All three filtered
+All five slices have fresh rebuilt-binary evidence. The schema-6 product seam
+reopened the store-owned digest output and verified the selected EcoRI enzyme,
+one circular fragment with both `AATT` ends, immutable digest options in run
+context/provenance, and the existing table/ORF/site results. All three filtered
 allow/boundary/deny tests passed. No CI, live/provider, release, or deployment
 proof is claimed.

@@ -8,7 +8,7 @@
 | license | MIT |
 | role in Lumen | Optional molecular-biology renderer plus attributed Rust sequence algorithms |
 | runtime authority | none |
-| admission | renderer vendored; four Rust algorithm slices admitted |
+| admission | renderer vendored; five Rust algorithm slices admitted |
 
 ## Integration contract
 
@@ -19,8 +19,9 @@
 - FASTA parsing, sequence metrics, IUPAC reverse-complement, all 24
   single-valued NCBI translation tables, and table-aware six-frame ORF
   detection, plus the 30-enzyme restriction-site scanner with frozen
-  linear/circular topology, are adapted into Rust `seqbench` and still execute
-  only inside the SessionActor approval protocol.
+  linear/circular topology and bounded selected-enzyme digest fragments, are
+  adapted into Rust `seqbench` and still execute only inside the SessionActor
+  approval protocol.
 
 ## Notices
 

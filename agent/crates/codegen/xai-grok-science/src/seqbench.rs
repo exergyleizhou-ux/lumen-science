@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const TOOL: &str = "lumen-seqbench";
-pub const TOOL_VERSION: &str = "1.4.0";
+pub const TOOL_VERSION: &str = "1.5.0";
 pub const MOTIF_REPOSITORY: &str = "https://github.com/jvogan/motif.git";
 pub const MOTIF_COMMIT: &str = "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0";
 pub const MOTIF_LICENSE: &str = "MIT";
@@ -60,6 +60,8 @@ pub struct SeqAnalyzeOptions {
     pub translation_table_id: u8,
     #[serde(default)]
     pub topology: SequenceTopology,
+    #[serde(default)]
+    pub restriction_digest_enzymes: Vec<String>,
 }
 
 impl Default for SeqAnalyzeOptions {
@@ -67,6 +69,7 @@ impl Default for SeqAnalyzeOptions {
         Self {
             translation_table_id: 1,
             topology: SequenceTopology::Linear,
+            restriction_digest_enzymes: Vec::new(),
         }
     }
 }
@@ -335,6 +338,20 @@ pub struct RestrictionHit {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RestrictionDigestFragment {
+    pub sequence: String,
+    pub length: usize,
+    pub start_in_original: usize,
+    pub end_in_original: usize,
+    pub left_enzyme: Option<String>,
+    pub right_enzyme: Option<String>,
+    pub overhang5: String,
+    pub overhang3: String,
+    pub overhang5_type: String,
+    pub overhang3_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RecordSummary {
     pub id: String,
     pub kind: String,
@@ -367,6 +384,8 @@ pub struct RecordSummary {
     pub restriction_hits: Vec<RestrictionHit>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub restriction_hits_truncated: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restriction_digest_fragments: Option<Vec<RestrictionDigestFragment>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -379,6 +398,7 @@ pub struct Analysis {
     pub translation_table: TranslationTableSummary,
     pub restriction_topology: SequenceTopology,
     pub restriction_enzyme_count: usize,
+    pub restriction_digest_enzymes: Vec<String>,
     pub records: Vec<RecordSummary>,
     pub notes: Vec<String>,
 }
@@ -496,13 +516,17 @@ pub fn analyze_with_options(
                 .join(",")
         )
     })?;
+    let digest_enzymes = canonical_restriction_digest_enzymes(&options.restriction_digest_enzymes)?;
+    if digest_enzymes != options.restriction_digest_enzymes {
+        return Err("restriction digest enzymes must use canonical names and catalog order".into());
+    }
     let source_sha256 = hex_sha256(source_bytes);
     let mut summaries = Vec::with_capacity(records.len());
     for r in records {
-        summaries.push(summarize(r, table, options.topology));
+        summaries.push(summarize(r, table, options.topology, &digest_enzymes)?);
     }
     Ok(Analysis {
-        schema_version: 5,
+        schema_version: 6,
         tool: TOOL.into(),
         tool_version: TOOL_VERSION.into(),
         source_sha256,
@@ -518,6 +542,7 @@ pub fn analyze_with_options(
                 "src/bio/codon-tables.ts".into(),
                 "src/bio/orf-detection.ts".into(),
                 "src/bio/restriction-sites.ts".into(),
+                "src/bio/restriction-digest.ts".into(),
             ],
         }],
         translation_table: TranslationTableSummary {
@@ -526,6 +551,7 @@ pub fn analyze_with_options(
         },
         restriction_topology: options.topology,
         restriction_enzyme_count: RESTRICTION_ENZYMES.len(),
+        restriction_digest_enzymes: digest_enzymes.clone(),
         records: summaries,
         notes: vec![
             "Deterministic offline analysis. Not a substitute for wet-lab validation.".into(),
@@ -533,6 +559,15 @@ pub fn analyze_with_options(
                 "Restriction sites use the {} topology and Motif's 30-enzyme default panel; hits are bounded recognition-pattern predictions only.",
                 options.topology.as_str()
             ),
+            if digest_enzymes.is_empty() {
+                "Restriction digest was not requested.".into()
+            } else {
+                format!(
+                    "Restriction digest uses {} selected enzyme(s): {}.",
+                    digest_enzymes.len(),
+                    digest_enzymes.join(", ")
+                )
+            },
             format!(
                 "Translation and ORFs use NCBI translation table {} ({}); ORF min length 30 aa.",
                 table.id, table.name
@@ -559,6 +594,12 @@ pub fn markdown_report(a: &Analysis, source_label: &str) -> String {
         a.restriction_topology.as_str(),
         a.restriction_enzyme_count
     ));
+    if !a.restriction_digest_enzymes.is_empty() {
+        b.push_str(&format!(
+            "- restriction digest enzymes: {}\n",
+            a.restriction_digest_enzymes.join(", ")
+        ));
+    }
     b.push_str(&format!("- records: {}\n\n", a.records.len()));
     for r in &a.records {
         b.push_str(&format!("## {}\n\n", r.id));
@@ -635,6 +676,29 @@ pub fn markdown_report(a: &Analysis, source_label: &str) -> String {
             }
             b.push('\n');
         }
+        if let Some(fragments) = &r.restriction_digest_fragments {
+            b.push_str("### Restriction digest fragments\n\n");
+            b.push_str(
+                "| fragment | length | source span | left | right | 5′ end | 3′ end |\n\
+                 |---:|---:|---|---|---|---|---|\n",
+            );
+            for (index, fragment) in fragments.iter().enumerate() {
+                b.push_str(&format!(
+                    "| {} | {} | {}..{} | {} | {} | `{}` ({}) | `{}` ({}) |\n",
+                    index + 1,
+                    fragment.length,
+                    fragment.start_in_original,
+                    fragment.end_in_original,
+                    fragment.left_enzyme.as_deref().unwrap_or("—"),
+                    fragment.right_enzyme.as_deref().unwrap_or("—"),
+                    fragment.overhang5,
+                    fragment.overhang5_type,
+                    fragment.overhang3,
+                    fragment.overhang3_type
+                ));
+            }
+            b.push('\n');
+        }
     }
     b.push_str(
         "## Provenance\n\nGenerated offline by Lumen Science seqbench inside the Rust \
@@ -655,7 +719,8 @@ fn summarize(
     r: &Record,
     table: TranslationTable,
     restriction_topology: SequenceTopology,
-) -> RecordSummary {
+    digest_enzymes: &[String],
+) -> Result<RecordSummary, String> {
     let mut s = RecordSummary {
         id: r.id.clone(),
         kind: r.kind.clone(),
@@ -674,6 +739,7 @@ fn summarize(
         orfs: Vec::new(),
         restriction_hits: Vec::new(),
         restriction_hits_truncated: false,
+        restriction_digest_fragments: None,
     };
     if r.kind == "dna" || r.kind == "rna" {
         let composition = nucleotide_composition(&r.sequence);
@@ -708,6 +774,13 @@ fn summarize(
             let (hits, truncated) = find_restriction_sites(&r.sequence, restriction_topology);
             s.restriction_hits = hits;
             s.restriction_hits_truncated = truncated;
+            if !digest_enzymes.is_empty() {
+                s.restriction_digest_fragments = Some(restriction_digest(
+                    &r.sequence,
+                    restriction_topology,
+                    digest_enzymes,
+                )?);
+            }
         }
     } else if r.kind == "protein" {
         s.estimated_protein_average_molecular_weight_da = Some(protein_molecular_weight(
@@ -719,7 +792,7 @@ fn summarize(
             ProteinMassMode::Monoisotopic,
         ));
     }
-    s
+    Ok(s)
 }
 
 fn normalize_seq_with_gaps(s: &str) -> (String, usize) {
@@ -1365,6 +1438,37 @@ const RESTRICTION_ENZYMES: &[RestrictionEnzyme] = &[
 ];
 
 const MAX_RESTRICTION_HITS: usize = 100;
+pub const MAX_RESTRICTION_DIGEST_ENZYMES: usize = 8;
+const MAX_RESTRICTION_DIGEST_SEQUENCE_BYTES: usize = 1024 * 1024;
+
+pub fn canonical_restriction_digest_enzymes(names: &[String]) -> Result<Vec<String>, String> {
+    if names.len() > MAX_RESTRICTION_DIGEST_ENZYMES {
+        return Err(format!(
+            "restriction digest accepts at most {MAX_RESTRICTION_DIGEST_ENZYMES} enzymes"
+        ));
+    }
+    let mut selected = BTreeSet::new();
+    for requested in names {
+        if requested.trim() != requested || requested.is_empty() {
+            return Err("restriction digest enzyme names must be non-empty and unpadded".into());
+        }
+        let enzyme = RESTRICTION_ENZYMES
+            .iter()
+            .find(|enzyme| enzyme.name.eq_ignore_ascii_case(requested))
+            .ok_or_else(|| format!("unsupported restriction digest enzyme {requested}"))?;
+        if !selected.insert(enzyme.name) {
+            return Err(format!(
+                "duplicate restriction digest enzyme {}",
+                enzyme.name
+            ));
+        }
+    }
+    Ok(RESTRICTION_ENZYMES
+        .iter()
+        .filter(|enzyme| selected.contains(enzyme.name))
+        .map(|enzyme| enzyme.name.to_string())
+        .collect())
+}
 
 fn iupac_recognition_matches(
     dna: &[u8],
@@ -1409,11 +1513,19 @@ fn iupac_recognition_matches(
 }
 
 fn find_restriction_sites(seq: &str, topology: SequenceTopology) -> (Vec<RestrictionHit>, bool) {
+    find_restriction_sites_with_enzymes(seq, topology, RESTRICTION_ENZYMES)
+}
+
+fn find_restriction_sites_with_enzymes(
+    seq: &str,
+    topology: SequenceTopology,
+    enzymes: &[RestrictionEnzyme],
+) -> (Vec<RestrictionHit>, bool) {
     let dna = to_dna(seq);
     let dna_bytes = dna.as_bytes();
     let mut hits = Vec::new();
 
-    for enzyme in RESTRICTION_ENZYMES {
+    for enzyme in enzymes {
         let recognition = enzyme.recognition_sequence.as_bytes();
         let reverse = reverse_complement(enzyme.recognition_sequence, false);
         let palindrome = reverse == enzyme.recognition_sequence;
@@ -1455,6 +1567,215 @@ fn find_restriction_sites(seq: &str, topology: SequenceTopology) -> (Vec<Restric
     }
     hits.sort_by_key(|hit| hit.position);
     (hits, false)
+}
+
+#[derive(Debug, Clone)]
+struct FragmentEnd {
+    overhang: String,
+    end_type: String,
+}
+
+fn blunt_end() -> FragmentEnd {
+    FragmentEnd {
+        overhang: String::new(),
+        end_type: "blunt".into(),
+    }
+}
+
+fn read_sense_overhang(seq: &str, start: isize, end: isize, topology: SequenceTopology) -> String {
+    if end <= start || seq.is_empty() {
+        return String::new();
+    }
+    match topology {
+        SequenceTopology::Linear => {
+            if start < 0 || end > seq.len() as isize {
+                String::new()
+            } else {
+                seq[start as usize..end as usize].to_ascii_uppercase()
+            }
+        }
+        SequenceTopology::Circular => {
+            let bytes = seq.as_bytes();
+            (start..end)
+                .map(|position| {
+                    bytes[position.rem_euclid(bytes.len() as isize) as usize].to_ascii_uppercase()
+                        as char
+                })
+                .collect()
+        }
+    }
+}
+
+fn restriction_cut_ends(
+    seq: &str,
+    topology: SequenceTopology,
+    hit: &RestrictionHit,
+) -> (FragmentEnd, FragmentEnd) {
+    let Some(enzyme) = RESTRICTION_ENZYMES
+        .iter()
+        .find(|enzyme| enzyme.name == hit.enzyme)
+    else {
+        return (blunt_end(), blunt_end());
+    };
+    if enzyme.overhang == "blunt" || enzyme.cut_offset == enzyme.complement_cut_offset {
+        return (blunt_end(), blunt_end());
+    }
+    let gap = (enzyme.cut_offset - enzyme.complement_cut_offset).abs();
+    let recognition_len = enzyme.recognition_sequence.len() as isize;
+    let left_cut = if hit.strand == -1 {
+        hit.position as isize + recognition_len
+            - enzyme.cut_offset.max(enzyme.complement_cut_offset)
+    } else {
+        hit.position as isize + enzyme.cut_offset.min(enzyme.complement_cut_offset)
+    };
+    let sense_overhang = read_sense_overhang(seq, left_cut, left_cut + gap, topology);
+    if sense_overhang.is_empty() {
+        return (blunt_end(), blunt_end());
+    }
+    let sticky_overhang = if enzyme.overhang == "3prime" {
+        reverse_complement(&sense_overhang, false)
+    } else {
+        sense_overhang
+    };
+    (
+        FragmentEnd {
+            overhang: sticky_overhang.clone(),
+            end_type: enzyme.overhang.into(),
+        },
+        FragmentEnd {
+            overhang: reverse_complement(&sticky_overhang, false),
+            end_type: enzyme.overhang.into(),
+        },
+    )
+}
+
+fn restriction_digest(
+    seq: &str,
+    topology: SequenceTopology,
+    enzyme_names: &[String],
+) -> Result<Vec<RestrictionDigestFragment>, String> {
+    if seq.len() > MAX_RESTRICTION_DIGEST_SEQUENCE_BYTES {
+        return Err(format!(
+            "restriction digest sequence exceeds {} byte cap",
+            MAX_RESTRICTION_DIGEST_SEQUENCE_BYTES
+        ));
+    }
+    let enzymes = RESTRICTION_ENZYMES
+        .iter()
+        .filter(|enzyme| enzyme_names.iter().any(|name| name == enzyme.name))
+        .copied()
+        .collect::<Vec<_>>();
+    let (sites, truncated) = find_restriction_sites_with_enzymes(seq, topology, &enzymes);
+    if truncated {
+        return Err("restriction digest exceeds the 100-cut safety cap".into());
+    }
+    if sites.is_empty() {
+        return Ok(vec![RestrictionDigestFragment {
+            sequence: seq.into(),
+            length: seq.len(),
+            start_in_original: 0,
+            end_in_original: seq.len(),
+            left_enzyme: None,
+            right_enzyme: None,
+            overhang5: String::new(),
+            overhang3: String::new(),
+            overhang5_type: "blunt".into(),
+            overhang3_type: "blunt".into(),
+        }]);
+    }
+
+    let mut seen_cuts = BTreeSet::new();
+    let mut cuts = Vec::new();
+    for site in &sites {
+        if seen_cuts.insert(site.cut_position) {
+            cuts.push(site);
+        }
+    }
+    cuts.sort_by_key(|site| site.cut_position);
+    if topology == SequenceTopology::Linear
+        && cuts
+            .iter()
+            .any(|site| !(0..=seq.len() as isize).contains(&site.cut_position))
+    {
+        return Err("linear restriction digest has a cut outside the sequence".into());
+    }
+
+    let mut fragments = Vec::new();
+    match topology {
+        SequenceTopology::Linear => {
+            for index in 0..=cuts.len() {
+                let start = if index == 0 {
+                    0
+                } else {
+                    cuts[index - 1].cut_position as usize
+                };
+                let end = if index == cuts.len() {
+                    seq.len()
+                } else {
+                    cuts[index].cut_position as usize
+                };
+                if end <= start {
+                    continue;
+                }
+                let left_end = if index == 0 {
+                    blunt_end()
+                } else {
+                    restriction_cut_ends(seq, topology, cuts[index - 1]).0
+                };
+                let right_end = if index == cuts.len() {
+                    blunt_end()
+                } else {
+                    restriction_cut_ends(seq, topology, cuts[index]).1
+                };
+                fragments.push(RestrictionDigestFragment {
+                    sequence: seq[start..end].into(),
+                    length: end - start,
+                    start_in_original: start,
+                    end_in_original: end,
+                    left_enzyme: (index > 0).then(|| cuts[index - 1].enzyme.clone()),
+                    right_enzyme: (index < cuts.len()).then(|| cuts[index].enzyme.clone()),
+                    overhang5: left_end.overhang,
+                    overhang3: right_end.overhang,
+                    overhang5_type: left_end.end_type,
+                    overhang3_type: right_end.end_type,
+                });
+            }
+        }
+        SequenceTopology::Circular => {
+            for index in 0..cuts.len() {
+                let start = cuts[index].cut_position as usize;
+                let next = (index + 1) % cuts.len();
+                let end = cuts[next].cut_position as usize;
+                let (sequence, length, end_in_original) = if end > start {
+                    (seq[start..end].into(), end - start, end)
+                } else {
+                    (
+                        format!("{}{}", &seq[start..], &seq[..end]),
+                        seq.len() - start + end,
+                        end + seq.len(),
+                    )
+                };
+                if length == 0 {
+                    continue;
+                }
+                let left_end = restriction_cut_ends(seq, topology, cuts[index]).0;
+                let right_end = restriction_cut_ends(seq, topology, cuts[next]).1;
+                fragments.push(RestrictionDigestFragment {
+                    sequence,
+                    length,
+                    start_in_original: start,
+                    end_in_original,
+                    left_enzyme: Some(cuts[index].enzyme.clone()),
+                    right_enzyme: Some(cuts[next].enzyme.clone()),
+                    overhang5: left_end.overhang,
+                    overhang3: right_end.overhang,
+                    overhang5_type: left_end.end_type,
+                    overhang3_type: right_end.end_type,
+                });
+            }
+        }
+    }
+    Ok(fragments)
 }
 
 #[cfg(test)]
@@ -1512,8 +1833,8 @@ mod tests {
         let summary = &analysis.records[0];
         let composition = summary.nucleotide_composition.as_ref().unwrap();
 
-        assert_eq!(analysis.schema_version, 5);
-        assert_eq!(analysis.tool_version, "1.4.0");
+        assert_eq!(analysis.schema_version, 6);
+        assert_eq!(analysis.tool_version, "1.5.0");
         assert_eq!(analysis.algorithm_sources[0].commit, MOTIF_COMMIT);
         assert_eq!(analysis.translation_table.id, 1);
         assert_eq!(analysis.translation_table.name, "Standard");
@@ -1765,6 +2086,75 @@ mod tests {
     }
 
     #[test]
+    fn motif_restriction_digest_preserves_linear_and_circular_fragment_ends() {
+        let enzymes = vec!["EcoRI".to_string()];
+        let linear =
+            restriction_digest("AAAAGAATTCTTTT", SequenceTopology::Linear, &enzymes).unwrap();
+        assert_eq!(linear.len(), 2);
+        assert_eq!(linear[0].sequence, "AAAAG");
+        assert_eq!(linear[0].right_enzyme.as_deref(), Some("EcoRI"));
+        assert_eq!(linear[0].overhang3, "AATT");
+        assert_eq!(linear[0].overhang3_type, "5prime");
+        assert_eq!(linear[1].sequence, "AATTCTTTT");
+        assert_eq!(linear[1].left_enzyme.as_deref(), Some("EcoRI"));
+        assert_eq!(linear[1].overhang5, "AATT");
+        assert_eq!(linear[1].overhang5_type, "5prime");
+
+        let circular =
+            restriction_digest("GAATTCTTTTAAAA", SequenceTopology::Circular, &enzymes).unwrap();
+        assert_eq!(circular.len(), 1);
+        assert_eq!(circular[0].sequence, "AATTCTTTTAAAAG");
+        assert_eq!(circular[0].start_in_original, 1);
+        assert_eq!(circular[0].end_in_original, 15);
+        assert_eq!(circular[0].left_enzyme.as_deref(), Some("EcoRI"));
+        assert_eq!(circular[0].right_enzyme.as_deref(), Some("EcoRI"));
+        assert_eq!(circular[0].overhang5, "AATT");
+        assert_eq!(circular[0].overhang3, "AATT");
+
+        let bsai = vec!["BsaI".to_string()];
+        let forward =
+            restriction_digest("TTTTTGGTCTCACAGTGGGGGGGG", SequenceTopology::Linear, &bsai)
+                .unwrap();
+        assert_eq!(forward[0].sequence, "TTTTTGGTCTCA");
+        assert_eq!(forward[0].overhang3, "ACTG");
+        assert_eq!(forward[1].sequence, "CAGTGGGGGGGG");
+        assert_eq!(forward[1].overhang5, "CAGT");
+
+        let reverse =
+            restriction_digest("AAAACCCCAGAGACCTTTTTTTT", SequenceTopology::Linear, &bsai).unwrap();
+        assert_eq!(reverse[0].sequence, "AAAA");
+        assert_eq!(reverse[0].overhang3, "GGGG");
+        assert_eq!(reverse[1].sequence, "CCCCAGAGACCTTTTTTTT");
+        assert_eq!(reverse[1].overhang5, "CCCC");
+    }
+
+    #[test]
+    fn restriction_digest_selection_and_incomplete_cuts_fail_closed() {
+        assert_eq!(
+            canonical_restriction_digest_enzymes(&["BsaI".to_string(), "EcoRI".to_string()])
+                .unwrap(),
+            vec!["EcoRI".to_string(), "BsaI".to_string()]
+        );
+        assert!(
+            canonical_restriction_digest_enzymes(&["EcoRI".to_string(), "ecori".to_string()])
+                .is_err()
+        );
+        assert!(canonical_restriction_digest_enzymes(&["UnknownI".to_string()]).is_err());
+        assert!(
+            restriction_digest("GGTCTC", SequenceTopology::Linear, &["BsaI".to_string()])
+                .unwrap_err()
+                .contains("cut outside")
+        );
+
+        let repeated = "GAATTC".repeat(MAX_RESTRICTION_HITS + 1);
+        assert!(
+            restriction_digest(&repeated, SequenceTopology::Linear, &["EcoRI".to_string()])
+                .unwrap_err()
+                .contains("100-cut")
+        );
+    }
+
+    #[test]
     fn unsupported_translation_table_fails_closed() {
         let raw = ">seq\nATGAAATAA\n";
         let records = parse_fasta(raw).unwrap();
@@ -1774,6 +2164,7 @@ mod tests {
             &SeqAnalyzeOptions {
                 translation_table_id: 27,
                 topology: SequenceTopology::Linear,
+                restriction_digest_enzymes: Vec::new(),
             },
         )
         .unwrap_err();
@@ -1823,6 +2214,13 @@ pub fn begin_analysis_with_options(
             options.translation_table_id
         ))
     })?;
+    let digest_enzymes = canonical_restriction_digest_enzymes(&options.restriction_digest_enzymes)
+        .map_err(ScienceError::Invalid)?;
+    if digest_enzymes != options.restriction_digest_enzymes {
+        return Err(ScienceError::Invalid(
+            "restriction digest enzymes must use canonical names and catalog order".into(),
+        ));
+    }
     context.environment.insert(
         "translation_table_id".into(),
         options.translation_table_id.to_string(),
@@ -1833,6 +2231,10 @@ pub fn begin_analysis_with_options(
     context.environment.insert(
         "restriction_topology".into(),
         options.topology.as_str().into(),
+    );
+    context.environment.insert(
+        "restriction_digest_enzymes".into(),
+        digest_enzymes.join(","),
     );
     let ticket = ScienceRunTicket {
         project_id: context.project_id.clone(),
@@ -1850,6 +2252,7 @@ pub fn begin_analysis_with_options(
             "translation_table_id": table.id,
             "translation_table_name": table.name,
             "restriction_topology": options.topology,
+            "restriction_digest_enzymes": digest_enzymes,
         }),
     )?;
     store.request_approval(Approval {
@@ -1908,6 +2311,13 @@ pub fn finish_analysis_with_options(
             options.translation_table_id
         ))
     })?;
+    let digest_enzymes = canonical_restriction_digest_enzymes(&options.restriction_digest_enzymes)
+        .map_err(ScienceError::Invalid)?;
+    if digest_enzymes != options.restriction_digest_enzymes {
+        return Err(ScienceError::Invalid(
+            "restriction digest enzymes must use canonical names and catalog order".into(),
+        ));
+    }
     // The same guard the csv path uses: only an allowed, running run may
     // commit output. Without it a caller could finish a run it never got
     // permission for.
@@ -1928,6 +2338,8 @@ pub fn finish_analysis_with_options(
         || run.context.environment.get("translation_table_name") != Some(&table.name.to_string())
         || run.context.environment.get("restriction_topology")
             != Some(&options.topology.as_str().to_string())
+        || run.context.environment.get("restriction_digest_enzymes")
+            != Some(&digest_enzymes.join(","))
     {
         let error = "seq analysis options do not match the durably approved run".to_string();
         let _ = store.transition(&ticket.run_id, RunState::Failed, Some(error.clone()));
@@ -1992,7 +2404,7 @@ pub fn finish_analysis_with_options(
         input_sha256: hex_sha256(source_bytes),
         tool: tool_identity.clone(),
         environment: BTreeMap::from([
-            ("algorithm".into(), "seqbench-v5".into()),
+            ("algorithm".into(), "seqbench-v6".into()),
             (
                 "algorithm_source_repository".into(),
                 MOTIF_REPOSITORY.into(),
@@ -2009,6 +2421,10 @@ pub fn finish_analysis_with_options(
             (
                 "restriction_topology".into(),
                 options.topology.as_str().into(),
+            ),
+            (
+                "restriction_digest_enzymes".into(),
+                digest_enzymes.join(","),
             ),
         ]),
     })?;
@@ -2032,6 +2448,7 @@ pub fn finish_analysis_with_options(
             "translation_table_id": table.id,
             "translation_table_name": table.name,
             "restriction_topology": options.topology,
+            "restriction_digest_enzymes": digest_enzymes,
             "artifacts": [
                 analysis_artifact.sha256,
                 report_artifact.sha256,
@@ -2196,6 +2613,7 @@ mod protocol_tests {
         let approved = SeqAnalyzeOptions {
             translation_table_id: 2,
             topology: SequenceTopology::Linear,
+            restriction_digest_enzymes: Vec::new(),
         };
         let ticket = begin_analysis_with_options(
             &store,
@@ -2208,6 +2626,7 @@ mod protocol_tests {
         let swapped = SeqAnalyzeOptions {
             translation_table_id: 1,
             topology: SequenceTopology::Linear,
+            restriction_digest_enzymes: Vec::new(),
         };
         let error = finish_analysis_with_options(
             &store,
@@ -2236,6 +2655,7 @@ mod protocol_tests {
         let approved = SeqAnalyzeOptions {
             translation_table_id: 1,
             topology: SequenceTopology::Circular,
+            restriction_digest_enzymes: Vec::new(),
         };
         let ticket = begin_analysis_with_options(
             &store,
@@ -2248,6 +2668,49 @@ mod protocol_tests {
         let swapped = SeqAnalyzeOptions {
             translation_table_id: 1,
             topology: SequenceTopology::Linear,
+            restriction_digest_enzymes: Vec::new(),
+        };
+        let error = finish_analysis_with_options(
+            &store,
+            ticket.clone(),
+            Path::new("input.fa"),
+            FASTA,
+            &swapped,
+        )
+        .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("options do not match the durably approved run"));
+        assert_eq!(
+            store.load_run(&ticket.run_id).unwrap().state,
+            RunState::Failed
+        );
+        assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
+        assert!(store.evidence(&ticket.run_id).unwrap().is_empty());
+        assert!(store.provenance(&ticket.run_id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn approved_restriction_digest_enzymes_cannot_be_swapped_before_finish() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path().join("science-store"));
+        let approved = SeqAnalyzeOptions {
+            translation_table_id: 1,
+            topology: SequenceTopology::Linear,
+            restriction_digest_enzymes: vec!["EcoRI".into()],
+        };
+        let ticket = begin_analysis_with_options(
+            &store,
+            context(temp.path(), "project-a", "alice"),
+            &approved,
+        )
+        .unwrap();
+        crate::csv::mark_allowed(&store, &ticket).unwrap();
+
+        let swapped = SeqAnalyzeOptions {
+            translation_table_id: 1,
+            topology: SequenceTopology::Linear,
+            restriction_digest_enzymes: vec!["BamHI".into()],
         };
         let error = finish_analysis_with_options(
             &store,
@@ -2276,6 +2739,7 @@ mod protocol_tests {
         let options = SeqAnalyzeOptions {
             translation_table_id: 2,
             topology: SequenceTopology::Circular,
+            restriction_digest_enzymes: vec!["EcoRI".into()],
         };
         let ticket = begin_analysis_with_options(
             &store,
@@ -2299,6 +2763,10 @@ mod protocol_tests {
             result.analysis.restriction_topology,
             SequenceTopology::Circular
         );
+        assert_eq!(
+            result.analysis.restriction_digest_enzymes,
+            vec!["EcoRI".to_string()]
+        );
         assert_eq!(result.analysis.records[0].orfs[0].stop_codon, "AGA");
         assert_eq!(
             result.provenance[0]
@@ -2313,6 +2781,13 @@ mod protocol_tests {
                 .get("restriction_topology")
                 .map(String::as_str),
             Some("circular")
+        );
+        assert_eq!(
+            result.provenance[0]
+                .environment
+                .get("restriction_digest_enzymes")
+                .map(String::as_str),
+            Some("EcoRI")
         );
     }
 }

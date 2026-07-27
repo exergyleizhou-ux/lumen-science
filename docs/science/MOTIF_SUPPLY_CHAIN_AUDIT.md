@@ -122,6 +122,7 @@ The first deterministic algorithm slice is adapted from the same locked
 - `src/bio/codon-tables.ts`
 - `src/bio/orf-detection.ts`
 - `src/bio/restriction-sites.ts`
+- `src/bio/restriction-digest.ts`
 
 The exact upstream TypeScript was executed locally without a dependency install
 and its parsing, composition, GC, Tm, molecular-mass, IUPAC-complement and RNA
@@ -131,10 +132,12 @@ reverse-strand coordinates. All 24 single-valued NCBI table IDs/names and
 table-specific 2/15/32 translations also matched; unsupported/context-dependent
 tables fail closed instead of falling back. The exact 30-enzyme default panel,
 reverse BsaI, circular-origin EcoRI and IUPAC recognition fixtures also match.
-`analysis.json` schema 5 and durable run provenance carry the upstream
-repository, commit, MIT license, selected translation table and restriction
-topology. Execution stays in the existing Rust SessionActor route; no Motif
-MCP, Node agent, installer, provider or network path is admitted.
+Selected-enzyme linear/circular EcoRI and forward/reverse BsaI digest fragments
+and sticky ends match as well. `analysis.json` schema 6 and durable run
+provenance carry the upstream repository, commit, MIT license, selected
+translation table and restriction topology/digest enzymes. Execution stays in
+the existing Rust SessionActor route; no Motif MCP, Node agent, installer,
+provider or network path is admitted.
 
 See `third_party/provenance/motif-876a-seqbench.md`. A fresh current-source
 `lumen` binary passed all three filtered `seq_analyze` allow/boundary/deny
@@ -144,4 +147,7 @@ context/provenance; the boundary and deny cases produced no unauthorized
 output. A later fresh current-source run passed all three again for schema v5:
 the allow case additionally verified the 30-enzyme circular scan and
 origin-spanning EcoRI cut plus durable topology, while invalid topology and
-deny remained output-free. Exact-head CI remains a separate gate.
+deny remained output-free. The schema-v6 selected-enzyme digest route
+passed all three tests in a fresh later run: the allowed output contained the
+selected EcoRI circular fragment and both `AATT` ends, while invalid enzyme
+selection and deny stayed output-free. Exact-head CI remains a separate gate.

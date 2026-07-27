@@ -414,9 +414,10 @@ impl SessionHandle {
             acp::ToolCallUpdateFields::new()
                 .kind(Some(acp::ToolKind::Other))
                 .title(Some(format!(
-                    "Lumen Science sequence analysis (NCBI table {}; {} restriction scan)",
+                    "Lumen Science sequence analysis (NCBI table {}; {} restriction scan; {} digest enzyme(s))",
                     prepared.options.translation_table_id,
-                    prepared.options.topology.as_str()
+                    prepared.options.topology.as_str(),
+                    prepared.options.restriction_digest_enzymes.len()
                 ))),
         );
         let permission = tokio::time::timeout(
