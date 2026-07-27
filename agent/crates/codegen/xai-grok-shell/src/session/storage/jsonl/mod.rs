@@ -285,6 +285,61 @@ impl JsonlStorageAdapter {
         }
         Ok(items)
     }
+    /// Lenient sibling of [`Self::read_jsonl`] for LOAD paths. Appends are not
+    /// crash-atomic, so one torn line must not brick the whole session.
+    /// Rewrite paths keep using the strict reader so malformed bytes are never
+    /// silently discarded by a subsequent write.
+    fn read_jsonl_lenient<T: serde::de::DeserializeOwned>(
+        &self,
+        path: PathBuf,
+    ) -> io::Result<Vec<T>> {
+        if !path.exists() {
+            return Ok(Vec::new());
+        }
+        let mut file = OpenOptions::new().read(true).open(&path)?;
+        let mut contents = Vec::new();
+        file.read_to_end(&mut contents)?;
+        let mut items = Vec::new();
+        let mut skipped: usize = 0;
+        for line in contents.split(|byte| *byte == b'\n') {
+            if line.iter().all(|byte| byte.is_ascii_whitespace()) {
+                continue;
+            }
+            match serde_json::from_slice::<T>(line) {
+                Ok(item) => items.push(item),
+                Err(error) => {
+                    skipped += 1;
+                    if skipped == 1 {
+                        tracing::warn!(
+                            error = %error, path = %path.display(),
+                            "skipping unparseable jsonl line (torn append?)"
+                        );
+                    }
+                }
+            }
+        }
+        if skipped > 1 {
+            tracing::warn!(
+                skipped, path = %path.display(),
+                "skipped additional unparseable jsonl lines"
+            );
+        }
+        Ok(items)
+    }
+    async fn load_rewind_points_strict(
+        &self,
+        info: &Info,
+    ) -> io::Result<Vec<xai_grok_workspace::session::file_state::RewindPoint>> {
+        let info_clone = info.clone();
+        let adapter_clone = self.clone();
+        tokio::task::spawn_blocking(move || {
+            let adapter = adapter_clone;
+            let path = adapter.rewind_points_file(&info_clone);
+            adapter.read_jsonl::<xai_grok_workspace::session::file_state::RewindPoint>(path)
+        })
+        .await
+        .map_err(io::Error::other)?
+    }
     /// Append a session update to the updates.jsonl file, wrapping it in an envelope with timestamp.
     async fn append_update_to_file(
         &self,
@@ -1199,7 +1254,8 @@ impl StorageAdapter for JsonlStorageAdapter {
             .read_optional_json_sync::<crate::session::expert::ExpertModeState>(
                 &self.expert_mode_state_file(info),
             )?;
-        let rewind_points = self.read_jsonl::<RewindPoint>(self.rewind_points_file(info))?;
+        let rewind_points =
+            self.read_jsonl_lenient::<RewindPoint>(self.rewind_points_file(info))?;
         let result = PersistedData {
             summary,
             chat_history,
@@ -1325,13 +1381,13 @@ impl StorageAdapter for JsonlStorageAdapter {
         tokio::task::spawn_blocking(move || {
             let adapter = adapter_clone;
             let path = adapter.rewind_points_file(&info_clone);
-            adapter.read_jsonl::<RewindPoint>(path)
+            adapter.read_jsonl_lenient::<RewindPoint>(path)
         })
         .await
         .map_err(io::Error::other)?
     }
     async fn truncate_rewind_points_from(&self, info: &Info, from_index: usize) -> io::Result<()> {
-        let points = self.load_rewind_points(info).await?;
+        let points = self.load_rewind_points_strict(info).await?;
         let filtered: Vec<RewindPoint> = points
             .into_iter()
             .filter(|p| p.prompt_index < from_index)
@@ -1340,7 +1396,7 @@ impl StorageAdapter for JsonlStorageAdapter {
             .await
     }
     async fn merge_rewind_points_from(&self, info: &Info, target_index: usize) -> io::Result<()> {
-        let points = self.load_rewind_points(info).await?;
+        let points = self.load_rewind_points_strict(info).await?;
         let merged =
             xai_grok_workspace::session::file_state::merge_rewind_points_from(points, target_index);
         self.write_jsonl(self.rewind_points_file(info), &merged)

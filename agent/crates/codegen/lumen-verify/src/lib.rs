@@ -44,7 +44,8 @@ pub struct StepResult {
     pub diagnostics: Vec<Diagnostic>,
     /// Duration in milliseconds.
     pub duration_ms: u64,
-    /// True when the executable was unavailable and the step was intentionally skipped.
+    /// True when the executable was unavailable or the runner did no
+    /// conclusive work (for example, pytest collected no tests).
     pub skipped: bool,
     /// True when the verifier killed the command after its configured deadline.
     pub timed_out: bool,
@@ -344,8 +345,8 @@ mod tests {
         let result = run_after_edit(workspace.path(), &changed, &config::Config::default())
             .unwrap()
             .expect("python project marker should trigger automatic verification");
-        // Tools may be absent on the host; skip semantics must keep ok=true,
-        // and the pytest no-tests exit (5) is treated as ok by the runner.
+        // Tools may be absent on the host; skip semantics must keep ok=true.
+        // Pytest exit 5 is non-failing but skipped, not pass evidence.
         assert!(result.ok, "python auto verify should not fail closed: {result:#?}");
     }
 

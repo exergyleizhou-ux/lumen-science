@@ -1480,8 +1480,23 @@ async fn handle_prompt_injects_interrupt_reminder_before_user_message() {
 /// between the abort and the user's resend must NOT consume the one-shot or
 /// inject the reminder — it has to survive to the next *genuine* user turn.
 /// Guards the `PromptOrigin::User` gate on the injection call.
-#[tokio::test(flavor = "current_thread")]
-async fn handle_prompt_synthetic_origin_preserves_interrupt_reminder() {
+#[test]
+fn handle_prompt_synthetic_origin_preserves_interrupt_reminder() {
+    let test_thread = std::thread::Builder::new()
+        .name("synthetic-origin-large-fixture".to_string())
+        .stack_size(16 * 1024 * 1024)
+        .spawn(|| {
+            let runtime = tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .enable_all()
+                .build()
+                .expect("test runtime");
+            runtime.block_on(handle_prompt_synthetic_origin_preserves_interrupt_reminder_inner());
+        })
+        .expect("large-stack test thread");
+    test_thread.join().expect("synthetic-origin test thread");
+}
+async fn handle_prompt_synthetic_origin_preserves_interrupt_reminder_inner() {
     let local = tokio::task::LocalSet::new();
     local
         .run_until(async {
