@@ -690,6 +690,7 @@ async fn handle_bridge_tool_success_runs_consumed_completion_sweep() {
                 output,
                 prompt_text: "ok".into(),
                 effective_tool_name: None,
+                verify_outcome: None,
             };
             let parsed_args = serde_json::json!({});
             let _ = actor

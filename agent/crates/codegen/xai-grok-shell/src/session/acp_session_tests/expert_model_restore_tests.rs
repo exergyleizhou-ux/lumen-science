@@ -369,7 +369,56 @@ fn bash_tool_result(command: &str, exit_code: i32, output: &str) -> ToolRunResul
         }),
         prompt_text: output.to_owned(),
         effective_tool_name: None,
+        verify_outcome: None,
     }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn typed_auto_verify_pass_is_delivery_evidence() {
+    let local = tokio::task::LocalSet::new();
+    local
+        .run_until(async {
+            let (gateway_tx, _gateway_rx) = tokio::sync::mpsc::unbounded_channel();
+            let (persistence_tx, _persistence_rx) = tokio::sync::mpsc::unbounded_channel();
+            let actor = create_test_actor(0, 32_000, 85, gateway_tx, persistence_tx).await;
+            let mut result = bash_tool_result("echo edited", 0, "edited");
+            result.verify_outcome = Some(xai_grok_tools::VerifyAfterEditOutcome::Pass);
+            actor.record_delivery_evidence_from_tool_result("write_file", "write_file", &result);
+            assert!(
+                actor.delivery_state.borrow().verify_ok_this_turn,
+                "typed auto-verify pass did not satisfy the delivery gate"
+            );
+        })
+        .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn nonpass_or_error_auto_verify_never_opens_delivery_gate() {
+    let local = tokio::task::LocalSet::new();
+    local
+        .run_until(async {
+            for (outcome, exit_code) in [
+                (Some(xai_grok_tools::VerifyAfterEditOutcome::Failed), 0),
+                (None, 0),
+                (Some(xai_grok_tools::VerifyAfterEditOutcome::Pass), 1),
+            ] {
+                let (gateway_tx, _gateway_rx) = tokio::sync::mpsc::unbounded_channel();
+                let (persistence_tx, _persistence_rx) = tokio::sync::mpsc::unbounded_channel();
+                let actor = create_test_actor(0, 32_000, 85, gateway_tx, persistence_tx).await;
+                let mut result = bash_tool_result("echo edited", exit_code, "edited");
+                result.verify_outcome = outcome;
+                actor.record_delivery_evidence_from_tool_result(
+                    "write_file",
+                    "write_file",
+                    &result,
+                );
+                assert!(
+                    !actor.delivery_state.borrow().verify_ok_this_turn,
+                    "non-pass or error output opened the delivery gate: {outcome:?}/{exit_code}"
+                );
+            }
+        })
+        .await;
 }
 
 #[tokio::test(flavor = "current_thread")]

@@ -32,6 +32,7 @@ pub mod tool_taxonomy;
 pub mod types;
 pub mod util;
 mod verify_after_edit;
+pub use verify_after_edit::VerifyAfterEditOutcome;
 pub mod versions;
 
 pub use attribution::{

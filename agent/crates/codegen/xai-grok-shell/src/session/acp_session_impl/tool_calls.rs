@@ -69,6 +69,7 @@ fn interrupted_wait_tool_result_with_msg(args: &serde_json::Value, msg: &str) ->
         output: ToolsToolOutput::TaskOutput(TaskOutputOutput::Result(result)),
         prompt_text: msg.to_string(),
         effective_tool_name: None,
+        verify_outcome: None,
     }
 }
 /// Clears `awaiting_plan_approval` (and re-persists) when the
@@ -277,6 +278,9 @@ impl SessionActor {
         };
         let mut delivery = self.delivery_state.borrow_mut();
         if is_verify(requested_tool_name) || is_verify(effective_tool_name) {
+            delivery.on_verify_ok();
+        }
+        if result.verify_outcome == Some(xai_grok_tools::VerifyAfterEditOutcome::Pass) {
             delivery.on_verify_ok();
         }
         if let ToolsToolOutput::Bash(bash) = &result.output {

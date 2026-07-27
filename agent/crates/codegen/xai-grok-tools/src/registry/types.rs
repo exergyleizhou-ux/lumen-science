@@ -1643,10 +1643,13 @@ impl FinalizedToolset {
         } else {
             Vec::new()
         };
+        let verify_outcome = verify_feedback
+            .as_ref()
+            .and_then(|feedback| feedback.outcome);
         let mut prompt_text = output.to_prompt_format();
         if let Some(feedback) = verify_feedback {
             prompt_text.push_str("\n\n");
-            prompt_text.push_str(&feedback);
+            prompt_text.push_str(&feedback.text);
         }
         let prompt_text = crate::reminders::format_with_reminders(
             prompt_text,
@@ -1661,6 +1664,7 @@ impl FinalizedToolset {
             output,
             prompt_text,
             effective_tool_name,
+            verify_outcome,
         })
     }
     /// Reverse-remap client-facing param names to canonical names.
@@ -4323,11 +4327,7 @@ mod tests {
             return;
         }
         let tmp = TempDir::new().unwrap();
-        std::fs::write(
-            tmp.path().join("go.mod"),
-            "module example.com/toolverify\n",
-        )
-        .unwrap();
+        std::fs::write(tmp.path().join("go.mod"), "module example.com/toolverify\n").unwrap();
         let file = tmp.path().join("main.go");
         std::fs::write(&file, "package main\n\nfunc main() {}\n").unwrap();
         let bridge = grok_build_bridge(&tmp).await;
@@ -4354,6 +4354,10 @@ mod tests {
             .expect("breaking edit still returns its tool result");
         assert!(broken.prompt_text.contains("[verify-after-edit] FAILED"));
         assert!(broken.prompt_text.contains("missingSymbol"));
+        assert_eq!(
+            broken.verify_outcome,
+            Some(crate::VerifyAfterEditOutcome::Failed)
+        );
         match &broken.output {
             ToolOutput::SearchReplace(SearchReplaceOutput::EditsApplied(applied)) => assert!(
                 !applied.tool_output_for_prompt.contains("verify-after-edit"),
@@ -4378,6 +4382,10 @@ mod tests {
             fixed.prompt_text.contains("[verify-after-edit] PASS"),
             "fixed edit should carry green verification: {}",
             fixed.prompt_text
+        );
+        assert_eq!(
+            fixed.verify_outcome,
+            Some(crate::VerifyAfterEditOutcome::Pass)
         );
     }
 
@@ -4410,6 +4418,10 @@ mod tests {
             .expect("write tool result");
         assert!(broken.prompt_text.contains("[verify-after-edit] FAILED"));
         assert!(broken.prompt_text.contains("missingFromWrite"));
+        assert_eq!(
+            broken.verify_outcome,
+            Some(crate::VerifyAfterEditOutcome::Failed)
+        );
 
         let fixed = bridge
             .call(
@@ -4423,6 +4435,10 @@ mod tests {
             .await
             .expect("fixed write tool result");
         assert!(fixed.prompt_text.contains("[verify-after-edit] PASS"));
+        assert_eq!(
+            fixed.verify_outcome,
+            Some(crate::VerifyAfterEditOutcome::Pass)
+        );
     }
     /// bash (run_terminal_cmd) works through hub dispatch.
     #[tokio::test]

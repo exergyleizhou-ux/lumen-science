@@ -8,6 +8,18 @@ const STRUCTURED_OUTPUT_TOOL: &str = "StructuredOutput";
 /// Max times the model may re-call `StructuredOutput` with non-conforming args
 /// before the turn ends with the last validation error.
 const STRUCTURED_OUTPUT_MAX_RETRIES: u32 = 3;
+fn require_chat_state_request(
+    session_id: &acp::SessionId,
+    request: Option<xai_grok_sampling_types::ConversationRequest>,
+) -> Result<xai_grok_sampling_types::ConversationRequest, acp::Error> {
+    request.ok_or_else(|| {
+        tracing::error!(
+            session_id = %session_id,
+            "ChatStateActor dead during build_request; failing turn instead of aborting process"
+        );
+        acp::Error::internal_error().data("chat state actor unavailable (session shutting down?)")
+    })
+}
 /// What a `StructuredOutput` tool call means for the turn (see
 /// `handle_structured_output_tool_call`).
 enum StructuredOutputStep {
@@ -2015,25 +2027,26 @@ impl SessionActor {
                 });
             }
             let build_req_start = std::time::Instant::now();
-            let request = self
-                .chat_state_handle
-                .build_request(
-                    effective_tools,
-                    memory_reminder,
-                    self.memory.is_enabled(),
-                    trace_gcs_config
-                        .clone()
-                        .map(|cfg| -> Box<dyn crate::sampling::TraceContext> {
-                            Box::new(crate::sampling::ConversationRequestTrace {
-                                gcs_config: cfg,
-                                artifact_tracker: artifact_tracker.cloned(),
-                            })
-                        }),
-                    self.session_info.id.to_string(),
-                    req_id.to_owned(),
-                )
-                .await
-                .expect("chat state actor should be alive");
+            let request = require_chat_state_request(
+                &self.session_info.id,
+                self.chat_state_handle
+                    .build_request(
+                        effective_tools,
+                        memory_reminder,
+                        self.memory.is_enabled(),
+                        trace_gcs_config.clone().map(
+                            |cfg| -> Box<dyn crate::sampling::TraceContext> {
+                                Box::new(crate::sampling::ConversationRequestTrace {
+                                    gcs_config: cfg,
+                                    artifact_tracker: artifact_tracker.cloned(),
+                                })
+                            },
+                        ),
+                        self.session_info.id.to_string(),
+                        req_id.to_owned(),
+                    )
+                    .await,
+            )?;
             xai_grok_telemetry::unified_log::debug(
                 "shell.turn.build_request_done",
                 Some(self.session_info.id.0.as_ref()),
@@ -2708,5 +2721,37 @@ mod structured_output_validation_tests {
         let bad: Result<jsonschema::Validator, String> = Err("invalid output schema: boom".into());
         let err = validate_structured_output(&bad, r#"{"name":"alice","age":1}"#).unwrap_err();
         assert_eq!(err, "invalid output schema: boom");
+    }
+}
+
+#[cfg(test)]
+mod dead_chat_state_request_tests {
+    use super::require_chat_state_request;
+
+    #[tokio::test]
+    async fn dead_handle_returns_turn_error_instead_of_panicking() {
+        let request = xai_chat_state::ChatStateHandle::noop()
+            .build_request(
+                vec![],
+                None,
+                false,
+                None,
+                "dead-conversation".to_string(),
+                "dead-request".to_string(),
+            )
+            .await;
+        assert!(
+            request.is_none(),
+            "fixture must exercise a dead actor handle"
+        );
+        let error = require_chat_state_request(
+            &agent_client_protocol::SessionId::new("dead-session"),
+            request,
+        )
+        .expect_err("dead actor must fail only this turn");
+        assert_eq!(
+            error.data.as_ref().and_then(serde_json::Value::as_str),
+            Some("chat state actor unavailable (session shutting down?)")
+        );
     }
 }
