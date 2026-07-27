@@ -720,7 +720,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
       interpreterPath: typeof p.interpreterPath === 'string' ? p.interpreterPath : '',
       packageLockPath: typeof p.packageLockPath === 'string' ? p.packageLockPath : undefined,
     })
-    return { ok: true, ...result, authority: 'observation-only' }
+    return { ok: true, ...result, authority: 'SessionActor-required' }
   })
 
   safeHandle(ipcMain, 'environment:request-admission', async (_event, payload: unknown) => {
@@ -728,6 +728,8 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     const p = (payload ?? {}) as Partial<AdmissionAsk> & { kind?: string }
     const outcome = await environment.requestAdmission({
       sessionId: typeof p.sessionId === 'string' ? p.sessionId : '',
+      ownerId: typeof p.ownerId === 'string' ? p.ownerId : '',
+      projectId: typeof p.projectId === 'string' ? p.projectId : '',
       storeRoot: typeof p.storeRoot === 'string' ? p.storeRoot : '',
       kernelId: typeof p.kernelId === 'string' ? p.kernelId : '',
       kind: normalizeKernelKind(p.kind),
@@ -735,6 +737,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
       packageLockPath: typeof p.packageLockPath === 'string' ? p.packageLockPath : undefined,
       allowedRoot: typeof p.allowedRoot === 'string' ? p.allowedRoot : undefined,
       probeTimeoutMs: typeof p.probeTimeoutMs === 'number' ? p.probeTimeoutMs : undefined,
+      approvalTimeoutMs: typeof p.approvalTimeoutMs === 'number' ? p.approvalTimeoutMs : undefined,
     })
     return { ok: true, ...outcome, authority: 'SessionActor/kernel_admission' }
   })

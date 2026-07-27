@@ -2176,6 +2176,37 @@ impl MvpAgent {
             .await
     }
 
+    /// Route kernel identity probing through the owning SessionActor. This
+    /// facade validates the session binding and adds no process or store
+    /// authority of its own.
+    pub async fn run_science_kernel_admission(
+        &self,
+        session_id: &acp::SessionId,
+        store: xai_grok_science::ScienceStore,
+        project_root: std::path::PathBuf,
+        context: xai_grok_science::RunContext,
+        request: xai_grok_science::workflow::KernelAdmissionRequest,
+        approval_timeout: std::time::Duration,
+    ) -> xai_grok_science::Result<xai_grok_science::workflow::KernelAdmissionResult> {
+        if context.session_id != session_id.0.as_ref() {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "science context session does not match target SessionActor".into(),
+            ));
+        }
+        let handle = self.get_session_handle(session_id).ok_or_else(|| {
+            xai_grok_science::ScienceError::Invalid("science session not found".into())
+        })?;
+        handle
+            .run_science_kernel_admission_with_approval_timeout(
+                store,
+                project_root,
+                context,
+                request,
+                approval_timeout,
+            )
+            .await
+    }
+
     /// LS5-K8 workflow execution entry: verifies the science context and the
     /// execution request both target this SessionActor, then delegates to the
     /// session handle's begin/permission/finish protocol.

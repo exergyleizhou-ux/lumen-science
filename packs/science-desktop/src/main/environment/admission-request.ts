@@ -1,27 +1,19 @@
 /**
  * Kernel admission request construction (LS5-K4) — pure, no Electron, no spawn.
  *
- * Turns an observed [`InterpreterIdentity`] into the parameters of the engine's
- * `x.ai/science/kernel_admission` method. That is the whole of this module's
- * job: it asks. The answer — admitted, rejected, and why — is produced by the
- * Rust SessionActor, which re-probes the interpreter itself and compares what
- * it finds against the digests asserted here.
+ * Turns a user-selected, absolute candidate path into the parameters of the
+ * engine's `x.ai/science/kernel_admission` method. It does not execute or hash
+ * the candidate. The answer — including the executable and package-lock
+ * digests — is produced by the Rust SessionActor after permission.
  *
  * The asymmetry is deliberate and is the point of the adapter split. The
- * desktop is well placed to *find* an interpreter: it can enumerate PATH, conda
- * roots, framework installs and the app's own envs, which the engine has no
- * business doing. The desktop is not the right place to *bless* one. So it
- * sends facts and a claim, and receives a verdict.
- *
- * The digests travel as `execHash` / `lockHash`, which the engine treats as
- * caller assertions to be VERIFIED against its own probe and rejected on
- * mismatch — never copied into the admission record. Echoing a caller's hash
- * back into a record as though it had been checked was precisely the defect
- * this work exists to close, so nothing here should read as if the desktop's
- * measurement is the authoritative one. It is a second opinion that must agree.
+ * desktop is well placed to *enumerate candidate paths*: PATH, conda roots,
+ * framework installs and the app's own envs. It sends a path and receives an
+ * actor-owned verdict. Optional caller digests remain assertion fields for
+ * non-desktop clients, but this adapter never manufactures them.
  */
 
-import type { InterpreterIdentity, KernelKindName } from './interpreter-identity'
+import type { KernelKindName } from './interpreter-identity'
 
 /**
  * Wire parameters for `x.ai/science/kernel_admission`.
@@ -33,6 +25,8 @@ import type { InterpreterIdentity, KernelKindName } from './interpreter-identity
  */
 export type KernelAdmissionParams = {
   sessionId: string
+  ownerId: string
+  projectId: string
   storeRoot: string
   kernelId: string
   kind: KernelKindName
@@ -42,14 +36,21 @@ export type KernelAdmissionParams = {
   packageLockPath?: string
   lockHash?: string
   probeTimeoutMs: number
+  approvalTimeoutMs: number
 }
 
 export type BuildAdmissionRequest = {
   sessionId: string
+  ownerId: string
+  projectId: string
   storeRoot: string
   /** Stable name for this kernel within the project. */
   kernelId: string
-  identity: InterpreterIdentity
+  kind: KernelKindName
+  interpreterPath: string
+  packageLockPath?: string
+  execHash?: string
+  lockHash?: string
   /**
    * Confinement root for the resolved interpreter, when the caller wants one.
    *
@@ -60,6 +61,7 @@ export type BuildAdmissionRequest = {
    */
   allowedRoot?: string
   probeTimeoutMs?: number
+  approvalTimeoutMs?: number
 }
 
 export type BuildAdmissionResult =
@@ -70,8 +72,13 @@ export type BuildAdmissionResult =
 export const MIN_PROBE_TIMEOUT_MS = 1
 export const MAX_PROBE_TIMEOUT_MS = 120_000
 export const DEFAULT_ADMISSION_PROBE_TIMEOUT_MS = 10_000
+export const MIN_APPROVAL_TIMEOUT_MS = 1
+export const MAX_APPROVAL_TIMEOUT_MS = 300_000
+export const DEFAULT_ADMISSION_APPROVAL_TIMEOUT_MS = 60_000
 
 const SHA256_HEX = /^[0-9a-f]{64}$/
+const isAbsolutePath = (value: string): boolean =>
+  value.startsWith('/') || /^([A-Za-z]:[\\/]|\\\\)/.test(value)
 
 /**
  * Build the request, or say why it cannot be built.
@@ -84,44 +91,60 @@ const SHA256_HEX = /^[0-9a-f]{64}$/
 export const buildKernelAdmissionRequest = (
   request: BuildAdmissionRequest,
 ): BuildAdmissionResult => {
-  const { identity } = request
   const sessionId = request.sessionId?.trim()
+  const ownerId = request.ownerId?.trim()
+  const projectId = request.projectId?.trim()
   const storeRoot = request.storeRoot?.trim()
   const kernelId = request.kernelId?.trim()
+  const interpreterPath = request.interpreterPath?.trim()
 
   if (!sessionId) return { ok: false, reason: 'sessionId is required' }
+  if (!ownerId) return { ok: false, reason: 'ownerId is required' }
+  if (!projectId) return { ok: false, reason: 'projectId is required' }
   if (!storeRoot) return { ok: false, reason: 'storeRoot is required' }
   if (!kernelId) {
-    return { ok: false, reason: 'kernelId is required: an admission record needs a name' }
-  }
-  if (!identity?.interpreterPath) {
-    return { ok: false, reason: 'identity.interpreterPath is required' }
-  }
-  // Re-asserted rather than assumed. An identity always carries a resolved
-  // absolute path, but this function is reachable from IPC with a
-  // caller-constructed object, and a relative path here would be probed by the
-  // engine against ITS working directory — a different file, silently.
-  if (!identity.interpreterPath.startsWith('/') && !/^([A-Za-z]:[\\/]|\\\\)/.test(identity.interpreterPath)) {
     return {
       ok: false,
-      reason: `interpreterPath '${identity.interpreterPath}' is not absolute`,
+      reason: 'kernelId is required: an admission record needs a name',
     }
   }
-  if (!SHA256_HEX.test(identity.executableSha256)) {
+  if (!interpreterPath) {
+    return { ok: false, reason: 'interpreterPath is required' }
+  }
+  if (!isAbsolutePath(interpreterPath)) {
     return {
       ok: false,
-      reason: `executableSha256 '${identity.executableSha256}' is not a lowercase sha256 hex digest`,
+      reason: `interpreterPath '${interpreterPath}' is not absolute`,
     }
   }
-  if (identity.packageLock !== null) {
-    if (!SHA256_HEX.test(identity.packageLock.sha256)) {
-      return {
-        ok: false,
-        reason: `packageLock.sha256 '${identity.packageLock.sha256}' is not a lowercase sha256 hex digest`,
-      }
+  if (request.allowedRoot && !isAbsolutePath(request.allowedRoot)) {
+    return {
+      ok: false,
+      reason: `allowedRoot '${request.allowedRoot}' is not absolute`,
     }
-    if (!identity.packageLock.path) {
-      return { ok: false, reason: 'packageLock.path is required when a lock digest is asserted' }
+  }
+  if (request.packageLockPath && !isAbsolutePath(request.packageLockPath)) {
+    return {
+      ok: false,
+      reason: `packageLockPath '${request.packageLockPath}' is not absolute`,
+    }
+  }
+  if (request.execHash && !SHA256_HEX.test(request.execHash)) {
+    return {
+      ok: false,
+      reason: `execHash '${request.execHash}' is not a lowercase sha256 hex digest`,
+    }
+  }
+  if (request.lockHash && !SHA256_HEX.test(request.lockHash)) {
+    return {
+      ok: false,
+      reason: `lockHash '${request.lockHash}' is not a lowercase sha256 hex digest`,
+    }
+  }
+  if (request.lockHash && !request.packageLockPath) {
+    return {
+      ok: false,
+      reason: 'packageLockPath is required when lockHash is asserted',
     }
   }
 
@@ -137,19 +160,34 @@ export const buildKernelAdmissionRequest = (
     }
   }
 
+  const approvalTimeoutMs = request.approvalTimeoutMs ?? DEFAULT_ADMISSION_APPROVAL_TIMEOUT_MS
+  if (
+    !Number.isInteger(approvalTimeoutMs) ||
+    approvalTimeoutMs < MIN_APPROVAL_TIMEOUT_MS ||
+    approvalTimeoutMs > MAX_APPROVAL_TIMEOUT_MS
+  ) {
+    return {
+      ok: false,
+      reason:
+        `approvalTimeoutMs must be an integer in ` +
+        `${MIN_APPROVAL_TIMEOUT_MS}..=${MAX_APPROVAL_TIMEOUT_MS}`,
+    }
+  }
+
   const params: KernelAdmissionParams = {
     sessionId,
+    ownerId,
+    projectId,
     storeRoot,
     kernelId,
-    kind: identity.kind,
-    interpreterPath: identity.interpreterPath,
-    execHash: identity.executableSha256,
+    kind: request.kind,
+    interpreterPath,
     probeTimeoutMs,
+    approvalTimeoutMs,
   }
   if (request.allowedRoot) params.allowedRoot = request.allowedRoot
-  if (identity.packageLock !== null) {
-    params.packageLockPath = identity.packageLock.path
-    params.lockHash = identity.packageLock.sha256
-  }
+  if (request.packageLockPath) params.packageLockPath = request.packageLockPath
+  if (request.execHash) params.execHash = request.execHash
+  if (request.lockHash) params.lockHash = request.lockHash
   return { ok: true, method: 'kernel_admission', params }
 }

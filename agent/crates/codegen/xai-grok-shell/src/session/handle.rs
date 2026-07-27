@@ -689,6 +689,103 @@ impl SessionHandle {
             .map_err(|_| xai_grok_science::ScienceError::Invalid("session actor stopped".into()))?
     }
 
+    /// Kernel admission executes an interpreter version probe. The actor first
+    /// opens a durable pending run, this handle obtains the production
+    /// permission decision, and the actor alone records the decision and probes.
+    pub async fn run_science_kernel_admission_with_approval_timeout(
+        &self,
+        store: xai_grok_science::ScienceStore,
+        project_root: std::path::PathBuf,
+        context: xai_grok_science::RunContext,
+        request: xai_grok_science::workflow::KernelAdmissionRequest,
+        approval_timeout: std::time::Duration,
+    ) -> xai_grok_science::Result<xai_grok_science::workflow::KernelAdmissionResult> {
+        use xai_grok_workspace::permission::{AccessKind, Decision};
+        let (begin_tx, begin_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SessionCommand::BeginScienceKernelAdmission(Box::new(
+                crate::session::commands::BeginScienceKernelAdmission {
+                    store,
+                    project_root,
+                    context,
+                    request,
+                    respond_to: begin_tx,
+                },
+            )))
+            .map_err(|_| {
+                xai_grok_science::ScienceError::Invalid("session actor unavailable".into())
+            })?;
+        let prepared = begin_rx.await.map_err(|_| {
+            xai_grok_science::ScienceError::Invalid("session actor stopped".into())
+        })??;
+
+        let call_id = acp::ToolCallId::new(std::sync::Arc::from(format!(
+            "science-kernel-admission-{}",
+            prepared.ticket.run_id.0
+        )));
+        let update = acp::ToolCallUpdate::new(
+            call_id,
+            acp::ToolCallUpdateFields::new()
+                .kind(Some(acp::ToolKind::Execute))
+                .title(Some(format!(
+                    "Lumen Science kernel admission: {}",
+                    prepared.request.kernel_id
+                ))),
+        );
+        let permission = tokio::time::timeout(
+            approval_timeout,
+            self.permission_handle.request(
+                AccessKind::Bash(prepared.target.clone()),
+                update,
+                Some(self.info.id.0.to_string()),
+                None,
+                None,
+            ),
+        )
+        .await;
+        let (decision, reason) = match permission {
+            Err(_) => (
+                xai_grok_science::ApprovalDecision::Timeout,
+                format!(
+                    "permission request timed out after {} ms",
+                    approval_timeout.as_millis()
+                ),
+            ),
+            Ok(Decision::Allow) => (xai_grok_science::ApprovalDecision::Allow, String::new()),
+            Ok(Decision::Ask) => (
+                xai_grok_science::ApprovalDecision::Deny,
+                "permission manager returned unresolved Ask".into(),
+            ),
+            Ok(Decision::Reject(reason)) | Ok(Decision::PolicyDeny(reason)) => {
+                (xai_grok_science::ApprovalDecision::Deny, reason)
+            }
+            Ok(Decision::Cancelled) => (
+                xai_grok_science::ApprovalDecision::Cancel,
+                "permission request cancelled".into(),
+            ),
+            Ok(Decision::FollowupMessage(message)) => (
+                xai_grok_science::ApprovalDecision::Deny,
+                format!("permission requires follow-up: {message}"),
+            ),
+        };
+        let (respond_to, response) = oneshot::channel();
+        self.cmd_tx
+            .send(SessionCommand::FinishScienceKernelAdmission(Box::new(
+                crate::session::commands::FinishScienceKernelAdmission {
+                    prepared,
+                    decision,
+                    reason,
+                    respond_to,
+                },
+            )))
+            .map_err(|_| {
+                xai_grok_science::ScienceError::Invalid("session actor unavailable".into())
+            })?;
+        response
+            .await
+            .map_err(|_| xai_grok_science::ScienceError::Invalid("session actor stopped".into()))?
+    }
+
     /// LS5-K8 workflow execution: admits the run inside this session actor,
     /// awaits the production permission bridge, then executes through the
     /// actor, so the durable run record, the approval decision, the kernel

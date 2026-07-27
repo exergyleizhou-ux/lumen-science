@@ -1833,6 +1833,8 @@ fn workflow_execution_response(
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct KernelAdmParams2 {
     session_id: String,
+    owner_id: String,
+    project_id: String,
     store_root: PathBuf,
     kernel_id: String,
     #[serde(default = "_python_kind")]
@@ -1853,33 +1855,99 @@ struct KernelAdmParams2 {
     lock_hash: Option<String>,
     #[serde(default = "_probe_timeout_ms")]
     probe_timeout_ms: u64,
+    #[serde(default = "default_approval_timeout_ms")]
+    approval_timeout_ms: u64,
 }
 fn _python_kind() -> String { "python".into() }
 fn _probe_timeout_ms() -> u64 { 10_000 }
 
-/// KNOWN BYPASS: like the other WP-4/5 preview entries this builds a store on
-/// the ACP request task. Unlike them it now *executes* the interpreter to read
-/// its version, so it takes more authority than a read-only query: route it
-/// through `run_project_mutation`'s pattern (typed SessionCommand + permission
-/// request) before it is promoted past preview.
+/// Resolve only request syntax and actor-owned roots here. The interpreter is
+/// neither read nor executed on the ACP request task; the SessionActor opens
+/// the durable run, obtains permission, and performs the identity probe.
 async fn handle_kernel_admission(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: KernelAdmParams2 = parse_params(args)?;
-    let kind = match params.kind.as_str() { "r" | "R" => xai_grok_science::workflow::KernelKind::R, "julia" => xai_grok_science::workflow::KernelKind::Julia, _ => xai_grok_science::workflow::KernelKind::Python };
+    if params.owner_id.trim().is_empty()
+        || params.project_id.trim().is_empty()
+        || params.kernel_id.trim().is_empty()
+    {
+        return Err(
+            acp::Error::invalid_params().data("ownerId, projectId, and kernelId are required")
+        );
+    }
+    if !params.interpreter_path.is_absolute() {
+        return Err(acp::Error::invalid_params().data("interpreterPath must be absolute"));
+    }
+    let kind = match params.kind.trim().to_ascii_lowercase().as_str() {
+        "python" => xai_grok_science::workflow::KernelKind::Python,
+        "r" => xai_grok_science::workflow::KernelKind::R,
+        "julia" => xai_grok_science::workflow::KernelKind::Julia,
+        _ => {
+            return Err(acp::Error::invalid_params()
+                .data("kind must be one of python, r, or julia"));
+        }
+    };
     if !(1..=120_000).contains(&params.probe_timeout_ms) {
         return Err(acp::Error::invalid_params().data("probeTimeoutMs must be in 1..=120000"));
     }
+    if !(1..=300_000).contains(&params.approval_timeout_ms) {
+        return Err(acp::Error::invalid_params()
+            .data("approvalTimeoutMs must be in 1..=300000"));
+    }
+    let session_id = acp::SessionId::new(params.session_id);
+    let handle = agent
+        .get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    let workspace = dunce::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let project_root = canonical_dir_within(params.store_root, &workspace)?;
+    let run_root = canonical_dir_within(project_root.join("runs"), &workspace)?;
+    let context = RunContext {
+        run_id: RunId::new_v7(),
+        project_id: ProjectId::new(params.project_id),
+        session_id: session_id.0.to_string(),
+        owner_id: params.owner_id,
+        workspace_root: workspace,
+        provider: "offline-deterministic".into(),
+        approval_policy: "production-session-permission".into(),
+        tool_profile: "science-kernel-admission-v1".into(),
+        artifact_root: run_root,
+        environment: BTreeMap::from([
+            ("network".into(), "disabled".into()),
+            ("locale".into(), "C".into()),
+        ]),
+    };
     let mut request = xai_grok_science::workflow::KernelAdmissionRequest::new(
         params.kernel_id,
         kind,
         params.interpreter_path,
     )
-    .with_admitted_by(format!("acp-session:{}", params.session_id))
     .with_probe_timeout(Duration::from_millis(params.probe_timeout_ms));
     request.allowed_root = params.allowed_root;
     request.supplied_executable_hash = params.exec_hash;
     request.package_lock_path = params.package_lock_path;
     request.supplied_package_lock_hash = params.lock_hash;
-    store_handler(agent, &params.session_id, params.store_root, move |s| s.check_kernel_admission(&request)).await
+    let result = agent
+        .run_science_kernel_admission(
+            &session_id,
+            ScienceStore::new(&project_root),
+            project_root,
+            context,
+            request,
+            Duration::from_millis(params.approval_timeout_ms),
+        )
+        .await
+        .map_err(internal)?;
+    to_raw_response(&serde_json::json!({
+        "runId": result.run.context.run_id,
+        "projectId": result.run.context.project_id,
+        "state": result.run.state,
+        "admission": result.admission,
+        "artifacts": result.artifacts,
+        "evidence": result.evidence,
+        "provenance": result.provenance,
+        "approvals": result.approvals,
+        "replayAfter": result.replay_after,
+        "runtimeAuthority": "SessionActor-gated ACP adapter",
+    }))
 }
 
 #[derive(Debug, Deserialize)]
