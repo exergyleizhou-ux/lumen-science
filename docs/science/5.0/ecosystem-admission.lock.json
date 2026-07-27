@@ -1,0 +1,437 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-07-27T23:30:00+08:00",
+  "purpose": "Lock the exact external sources considered for Lumen Science ecosystem absorption, record component-level license and authority dispositions, and prove that the existing SessionActor foundation remains present.",
+  "policy": {
+    "runtime_authority": "Rust SessionActor",
+    "external_runtime_authority": "denied",
+    "default_external_skill_disposition": "quarantined",
+    "root_license_overrides_nested_license": false,
+    "unreviewed_data_is_scientific_truth": false,
+    "direct_provider_or_billable_calls_during_admission": false,
+    "proprietary_material_policy": "do-not-copy-or-derive; implement functional equivalents from open standards and independently written Lumen requirements"
+  },
+  "protected_foundation": {
+    "commits": [
+      {
+        "name": "LS5-K39 baseline",
+        "sha": "d0746ce5612a53732228b627fd44e26d48f32116"
+      },
+      {
+        "name": "SessionActor authority bypass closure",
+        "sha": "a49b4635b448a7fda6dde568a7fa9ad9b5f988bb"
+      },
+      {
+        "name": "per-session operator gates",
+        "sha": "c712c69e2598265d21c696b088e1f4c0c7d52ebc"
+      },
+      {
+        "name": "verified Rust ACP artifacts",
+        "sha": "702a2acab93a11330a019c7cb2d39c4e6a914da9"
+      },
+      {
+        "name": "kernel admission authority",
+        "sha": "f8f3240c0cc5ce6b61f54e2db7fafce78ae42a0c"
+      },
+      {
+        "name": "review record authority",
+        "sha": "6c48c5a527f725d1a8e93d619280205dd1933324"
+      },
+      {
+        "name": "interrupted review recovery",
+        "sha": "c8cad864343e5e25493868b979df128612626478"
+      },
+      {
+        "name": "v0.1.251 verification safety",
+        "sha": "188a88a45b89866f44b9dc95aacc02504a0ef4a0"
+      },
+      {
+        "name": "typed edit verification delivery",
+        "sha": "58783fc25ec7297e50f40a3f8ed653e4f82d05f4"
+      },
+      {
+        "name": "v0.1.251 admission boundary",
+        "sha": "7d5294425d6e92e94593c5dc0858dd0fb238fbf4"
+      },
+      {
+        "name": "hermetic permission tests",
+        "sha": "75d7251b625ddff19745e9cde6910b36a7df5c89"
+      },
+      {
+        "name": "hermetic permission evidence",
+        "sha": "767ce515bea4209b648f532e67957adbdf8ac678"
+      }
+    ],
+    "required_markers": [
+      {
+        "path": "agent/crates/codegen/xai-grok-science/src/seqbench.rs",
+        "contains": [
+          "CallId::new(\"science_seq_analyze\")",
+          "authority\".into(), \"SessionActor\".into()"
+        ]
+      },
+      {
+        "path": "agent/crates/codegen/xai-grok-shell/src/session/commands.rs",
+        "contains": [
+          "BeginScienceSeqAnalyze",
+          "FinishScienceSeqAnalyze",
+          "BeginScienceKernelAdmission",
+          "FinishScienceKernelAdmission"
+        ]
+      },
+      {
+        "path": "agent/crates/codegen/xai-grok-shell/src/session/handle.rs",
+        "contains": [
+          "SessionCommand::BeginScienceSeqAnalyze",
+          "SessionCommand::FinishScienceSeqAnalyze",
+          "SessionCommand::BeginScienceKernelAdmission",
+          "SessionCommand::FinishScienceKernelAdmission"
+        ]
+      },
+      {
+        "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs",
+        "contains": [
+          "\"x.ai/science/seq_analyze\"",
+          "\"x.ai/science/project_migrate\"",
+          "\"x.ai/science/kernel_admission\"",
+          "\"x.ai/science/review_record\""
+        ]
+      },
+      {
+        "path": "agent/crates/codegen/xai-grok-shell/tests/test_built_binary_e2e.rs",
+        "contains": [
+          "legacy ACP-task loose artifact directory was written",
+          "test_stdio_science_project_migrate_refusal_writes_no_project",
+          "test_stdio_science_review_record_denied_writes_no_review_or_artifact"
+        ]
+      }
+    ],
+    "carried_ledgers": {
+      "open_science_adoption": {
+        "path": "docs/provenance/open-science-adoption.json",
+        "commit": "d8f11e34314fdfa36f750cdb617af1cc2f30bace",
+        "minimum_total_shipped": 1082,
+        "upstream_files_not_adopted": 0
+      },
+      "science_skills": {
+        "path": "packs/science/skills/registry.json",
+        "minimum_total": 27,
+        "minimum_approved": 10
+      },
+      "connector_inventory": {
+        "path": "docs/science/fusion-sources.lock.json",
+        "required_connectors": 42
+      },
+      "motif_vendor": {
+        "path": "third_party/motif/VENDOR_MANIFEST.json",
+        "commit": "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0",
+        "runtime_authority": "none"
+      },
+      "scp_quarantine_catalog": {
+        "catalog_path": "packs/science/skills/ecosystem/scp-catalog.json",
+        "vendor_manifest_path": "third_party/internscience-scp/VENDOR_MANIFEST.json",
+        "commit": "cea5398564032aea65a78e246d06c30ae945e03f",
+        "required_total": 207,
+        "approved": 0,
+        "minimum_redacted_source_files": 17
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "snap-stanford-biomni",
+      "repository": "https://github.com/snap-stanford/Biomni.git",
+      "default_branch": "main",
+      "exact_commit": "400c1f366b96a35ca253e13c9b06c5076af41d65",
+      "root_license": "Apache-2.0",
+      "license_file": "LICENSE",
+      "license_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "runtime_authority": "none",
+      "admission_status": "source-audited; component-admission-in-progress",
+      "source_proofs": [
+        {
+          "path": "license_info.md",
+          "sha256": "30b01936b02b768a6e58dd95ad11ad227b32c5e72f86ebc26cf3733cbf698948"
+        }
+      ],
+      "inventory": {
+        "declared_tools": 224,
+        "tool_modules": 22,
+        "database_tools": 40,
+        "data_lake_entries": 76,
+        "software_catalog_entries": 113,
+        "local_protocols": 82
+      },
+      "components": [
+        {
+          "path": "biomni/know_how/**",
+          "disposition": "adapt",
+          "license": "Apache-2.0 plus per-resource data terms",
+          "reason": "Convert guides and protocol metadata into versioned Lumen knowledge records with citations, safety labels, and no implicit execution."
+        },
+        {
+          "path": "biomni/tool/tool_description/**",
+          "disposition": "adapt",
+          "license": "Apache-2.0",
+          "reason": "Use as capability-discovery input; every resulting tool must map to an admitted Lumen connector or controlled adapter."
+        },
+        {
+          "path": "biomni/tool/schema_db/**",
+          "disposition": "quarantine",
+          "license": "Apache-2.0 code; upstream API and data terms vary",
+          "reason": "Schemas are useful discovery material but require endpoint, ToS, version, and parser review before admission."
+        },
+        {
+          "path": "biomni/agent/**",
+          "disposition": "reject-authority",
+          "license": "Apache-2.0",
+          "reason": "The agent loop directly selects and executes Python, R, Bash, tools, and MCP calls without Lumen durable approval and evidence."
+        },
+        {
+          "path": "biomni/tool/lab_automation.py",
+          "disposition": "reject-authority",
+          "license": "Apache-2.0",
+          "reason": "Contains direct dynamic execution and cannot enter a product path outside SessionActor, device gates, and a typed safety adapter."
+        },
+        {
+          "path": "Biomni-E1.tar.gz and downloaded data lake",
+          "disposition": "reject-data-trust",
+          "license": "mixed, including proprietary, controlled-access, and non-commercial sources",
+          "reason": "No dataset is mirrored or treated as scientific truth without an exact digest, source license, access authorization, and dataset-specific admission."
+        }
+      ]
+    },
+    {
+      "id": "jvogan-motif",
+      "repository": "https://github.com/jvogan/motif.git",
+      "default_branch": "main",
+      "exact_commit": "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0",
+      "root_license": "MIT",
+      "license_file": "LICENSE",
+      "license_sha256": "606f9372bf61b63b32725d69f312ead92010afdaeea35befc46dc4db1ed19d49",
+      "runtime_authority": "none",
+      "admission_status": "renderer-vendored; algorithm-and-data-delta-audit",
+      "source_proofs": [
+        {
+          "path": "THIRD_PARTY_NOTICES.md",
+          "sha256": "bd232ce379f02d9dd12bd648be236966a739c5fc7d7f9698dfa533c11a350347"
+        }
+      ],
+      "components": [
+        {
+          "path": "src/bio/** and src/plasmid-map/** deterministic functions",
+          "disposition": "adopt",
+          "license": "MIT",
+          "reason": "Pure parsers, sequence algorithms, layout, and SVG serialization can be vendored with attribution and focused fixtures."
+        },
+        {
+          "path": "src/artifacts/claude-science-analysis-results.ts and workspace envelope",
+          "disposition": "adapt",
+          "license": "MIT",
+          "reason": "Typed inert-result and cross-reference validation are useful, but durable identity and artifact ownership remain Lumen store facts."
+        },
+        {
+          "path": "Motif workbench, export, and MSA UI",
+          "disposition": "adapt",
+          "license": "MIT plus dependency notices",
+          "reason": "Render only store-owned verified artifacts; mutations become typed intents and exports become SessionActor-owned artifacts."
+        },
+        {
+          "path": "mcp/** and Claude Science installer",
+          "disposition": "reject-authority",
+          "license": "MIT",
+          "reason": "Do not register Motif's server, page globals, or local config mutation as a second tool, session, or filesystem authority."
+        },
+        {
+          "path": "public/data/vectors.json and unverified biological catalogs",
+          "disposition": "reject-data-trust",
+          "license": "mixed scientific data provenance",
+          "reason": "Named vector lengths conflict with authoritative references and the enzyme catalog count claim is inaccurate; keep only as non-authoritative UI fixtures."
+        }
+      ]
+    },
+    {
+      "id": "aipoch-open-science",
+      "repository": "https://github.com/aipoch/open-science.git",
+      "default_branch": "main",
+      "exact_commit": "fd2853f0b9bdb6c063ccc1e741687584ab94bf9a",
+      "previous_adopted_commit": "d8f11e34314fdfa36f750cdb617af1cc2f30bace",
+      "root_license": "Apache-2.0",
+      "license_file": "LICENSE",
+      "license_sha256": "b038148f912bdd6e61e33e56214d02c4d8a9640f7a637e21dfcf939332816979",
+      "runtime_authority": "none",
+      "admission_status": "1082 shipped files carried; 228-file upstream delta under review",
+      "source_proofs": [
+        {
+          "path": "src/main/skills/skill-archive-sniffer.ts",
+          "sha256": "0c9fecfc7e9b0af0e25f57244a8a60e5e127d790c739e8970f65b63712392386"
+        },
+        {
+          "path": "src/main/skills/conversation-import.ts",
+          "sha256": "084f3e8d7dbaff7910eadeddb200ecf377164d5b4328bb4222cca52e5b60633d"
+        },
+        {
+          "path": "src/main/skills/github-import.ts",
+          "sha256": "c9e7cf24230b2749d558562f0806b90ade64f5d5dfcb1e20b603a44b6bd26548"
+        }
+      ],
+      "components": [
+        {
+          "path": "src/main/skills/skill-archive-sniffer.ts and bundle preview/import UI",
+          "disposition": "adapt",
+          "license": "Apache-2.0",
+          "reason": "Adopt bounded ZIP inspection and explicit preview/approval while preserving Lumen quarantine, file-license audit, and SessionActor admission."
+        },
+        {
+          "path": "src/main/uploads/** and file-reference resolver",
+          "disposition": "adapt",
+          "license": "Apache-2.0",
+          "reason": "Use ownership, turn, size, path, and cancellation hardening without granting Electron authoritative persistence."
+        },
+        {
+          "path": "renderer skill and workspace UX delta",
+          "disposition": "adapt",
+          "license": "Apache-2.0",
+          "reason": "Adopt useful discovery, preview, search, and draft-preservation UX over the existing single Rust ACP transport."
+        },
+        {
+          "path": "src/main/acp/** and agent-framework/**",
+          "disposition": "reject-authority",
+          "license": "Apache-2.0",
+          "reason": "Do not import peer agent backends, approval brokers, or a second ACP execution authority."
+        }
+      ]
+    },
+    {
+      "id": "qzzqzzb-openclaudescience",
+      "repository": "https://github.com/qzzqzzb/OpenClaudeScience.git",
+      "default_branch": "main",
+      "exact_commit": "4a5f2ab2879ebd4f806155c796e247da94bb1625",
+      "root_license": "MIT",
+      "license_file": "LICENSE",
+      "license_sha256": "f756cca8fc2a4ce8ab225636f3df3eae7f2f638f4df82447f01224d6a24a97cb",
+      "runtime_authority": "none",
+      "admission_status": "partial-license-audited; clean-room and catalog work in progress",
+      "source_proofs": [
+        {
+          "path": "ui/src/app/skills/science-skill-catalog.ts",
+          "sha256": "c30baaa00824559445d523e6a43d4cd220edcd3c57ed5a0f0467a7595cd5f07b"
+        },
+        {
+          "path": "skills/patent-disclosure-skill/LICENSE",
+          "sha256": "d9329ae3b2de58aebaa015d8d1570513d48f1702318e6423896a4620845ab798"
+        }
+      ],
+      "components": [
+        {
+          "path": "ui/src/app/skills/science-skill-catalog.ts and skill-search.ts",
+          "disposition": "adapt",
+          "license": "MIT; catalog points to separately pinned InternScience/scp",
+          "reason": "Import catalog/search metadata locally, but route every runnable skill through Lumen quarantine and controlled-tool mapping."
+        },
+        {
+          "path": "kb_infra/**",
+          "disposition": "adapt",
+          "license": "MIT",
+          "reason": "Reuse Git-native knowledge concepts behind Lumen owner/project/session boundaries, human review, durable runs, and evidence."
+        },
+        {
+          "path": "skills/patent-disclosure-skill/**",
+          "disposition": "quarantine",
+          "license": "MIT",
+          "reason": "Potentially useful knowledge workflow, but broad Bash/WebSearch/write permissions, external crawlers, document tooling, and legal-risk claims require decomposition into controlled Lumen tools."
+        },
+        {
+          "path": "internagents/**, agent.py, main.py, and remote compute runtime",
+          "disposition": "reject-authority",
+          "license": "MIT",
+          "reason": "DeepAgents/LangGraph/MCP/SSH orchestration is a parallel execution and permission runtime."
+        },
+        {
+          "path": "skills/docx/**",
+          "disposition": "reject-license",
+          "license": "Anthropic proprietary; all rights reserved",
+          "license_file": "skills/docx/LICENSE.txt",
+          "license_sha256": "79f6d8f5b427252fa3b1c11ecdbdb6bf610b944f7530b4de78f770f38741cfaa",
+          "reason": "License forbids retaining, copying, deriving, and redistributing these materials."
+        },
+        {
+          "path": "skills/pdf/**",
+          "disposition": "reject-license",
+          "license": "Anthropic proprietary; all rights reserved",
+          "license_file": "skills/pdf/LICENSE.txt",
+          "license_sha256": "79f6d8f5b427252fa3b1c11ecdbdb6bf610b944f7530b4de78f770f38741cfaa",
+          "reason": "License forbids retaining, copying, deriving, and redistributing these materials."
+        },
+        {
+          "path": "skills/pptx/**",
+          "disposition": "reject-license",
+          "license": "Anthropic proprietary; all rights reserved",
+          "license_file": "skills/pptx/LICENSE.txt",
+          "license_sha256": "79f6d8f5b427252fa3b1c11ecdbdb6bf610b944f7530b4de78f770f38741cfaa",
+          "reason": "License forbids retaining, copying, deriving, and redistributing these materials."
+        },
+        {
+          "path": "skills/xlsx/**",
+          "disposition": "reject-license",
+          "license": "Anthropic proprietary; all rights reserved",
+          "license_file": "skills/xlsx/LICENSE.txt",
+          "license_sha256": "79f6d8f5b427252fa3b1c11ecdbdb6bf610b944f7530b4de78f770f38741cfaa",
+          "reason": "License forbids retaining, copying, deriving, and redistributing these materials."
+        },
+        {
+          "path": "Lumen-owned Office and PDF functional replacements",
+          "disposition": "clean-room-reimplement",
+          "license": "Lumen-owned implementation over open file-format standards",
+          "reason": "Implement equivalent user-facing capabilities without reading from, copying, or deriving from the four proprietary skill implementations."
+        }
+      ]
+    }
+  ],
+  "transitive_sources": [
+    {
+      "id": "internscience-scp-skills",
+      "discovered_via": "qzzqzzb-openclaudescience",
+      "repository": "https://github.com/InternScience/scp.git",
+      "default_branch": "main",
+      "exact_commit": "cea5398564032aea65a78e246d06c30ae945e03f",
+      "root_license": "MIT",
+      "license_file": "LICENSE",
+      "license_sha256": "5e13dbbc1d120fc2a03cecde7c91424ae2d7de11b63d58ded2f4431e261ee50d",
+      "runtime_authority": "none",
+      "admission_status": "207 skill documents vendored as a sanitized local quarantine catalog; zero approved",
+      "source_proofs": [
+        {
+          "path": "README.md",
+          "sha256": "829f9609808d4f2c9d4e35dff8793dcfae3003ee02a548f0445437e7457e5dc3"
+        }
+      ],
+      "inventory": {
+        "skill_documents": 207
+      },
+      "components": [
+        {
+          "path": "skills/*/SKILL.md",
+          "disposition": "quarantine",
+          "license": "MIT",
+          "reason": "Preserve the complete knowledge/workflow catalog locally, but remove embedded direct SCP-Hub execution examples from runtime admission and map each required tool to controlled Lumen routes."
+        },
+        {
+          "path": "SCP Hub, remote MCP endpoints, and autonomous orchestration",
+          "disposition": "reject-authority",
+          "license": "MIT code plus external service terms",
+          "reason": "Catalog ingestion does not authorize remote MCP, credentials, network calls, or an external scheduler."
+        }
+      ]
+    }
+  ],
+  "evidence_boundary": {
+    "source_audit": "recorded",
+    "focused_tests": "not_run_for_ecosystem_slice",
+    "built_binary_product_proof": "not_run_for_ecosystem_slice",
+    "ci": "not_run_for_ecosystem_slice",
+    "live_provider_or_network_proof": "not_run_and_not_authorized",
+    "release": "not_run_and_not_authorized",
+    "deployment": "not_run_and_not_authorized"
+  }
+}

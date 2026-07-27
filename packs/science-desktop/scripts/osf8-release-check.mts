@@ -100,6 +100,13 @@ test('builder does not require missing prisma extraResources', () => {
   ok(!/^\s*from:\s*node_modules\/@prisma\/client/m.test(yml), 'no @prisma/client extraResources from:')
   ok(!/extraResources:[\s\S]*from:\s*node_modules\/\.prisma/.test(yml))
 })
+test('builder ships both approved and quarantined skill catalogs', () => {
+  ok(yml.includes('from: ../../packs/science/skills/registry.json'))
+  ok(yml.includes('to: science/skills-registry.json'))
+  ok(yml.includes('from: ../../packs/science/skills/ecosystem/scp-catalog.json'))
+  ok(yml.includes('to: science/ecosystem-skill-catalog.json'))
+  ok(fs.existsSync(path.resolve(root, '../science/skills/ecosystem/scp-catalog.json')))
+})
 test('auto-update publish feed disabled', () => {
   ok(!yml.includes('provider: generic') || !yml.includes('statics.aipoch.com'))
   // Prefer explicit omit of publish

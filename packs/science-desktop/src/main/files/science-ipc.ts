@@ -102,6 +102,8 @@ export type ScienceIpcDeps = {
   skillService?: SkillService
   /** Override path to Lumen skills registry.json */
   skillsRegistryPath?: string
+  /** Read-only ecosystem skill catalog; entries remain quarantined. */
+  skillsEcosystemCatalogPath?: string
   /** Optional inject compute service (tests). */
   computeService?: ComputeService
   /** Path to docs/science/fusion-sources.lock.json */
@@ -583,6 +585,9 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
       registryPath:
         deps.skillsRegistryPath ||
         path.resolve(process.cwd(), '../../packs/science/skills/registry.json'),
+      ecosystemCatalogPath:
+        deps.skillsEcosystemCatalogPath ||
+        path.resolve(process.cwd(), '../../packs/science/skills/ecosystem/scp-catalog.json'),
     })
 
   safeHandle(ipcMain, 'skills:list', async () => skills.listInventory())

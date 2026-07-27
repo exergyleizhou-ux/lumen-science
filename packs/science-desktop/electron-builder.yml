@@ -32,6 +32,8 @@ files:
 extraResources:
   - from: ../../packs/science/skills/registry.json
     to: science/skills-registry.json
+  - from: ../../packs/science/skills/ecosystem/scp-catalog.json
+    to: science/ecosystem-skill-catalog.json
   - from: ../../docs/science/fusion-sources.lock.json
     to: science/fusion-sources.lock.json
 

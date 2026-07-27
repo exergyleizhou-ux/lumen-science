@@ -11,6 +11,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { PermissionPrompt } from '@/components/PermissionPrompt'
 import { describeError } from './describe-error'
 import { describeOpen, type OpenOutcome } from './describe-open'
+import {
+  filterEcosystemSkills,
+  parseEcosystemSkillInventory,
+  type EcosystemSkillInventory,
+} from './ecosystem-skills'
 
 type UiProject = {
   id: string
@@ -308,9 +313,18 @@ export const ResearchShell = (): React.JSX.Element => {
     )
 
   const [skillsOut, setSkillsOut] = useState('')
+  const [skillsInventory, setSkillsInventory] = useState<EcosystemSkillInventory | null>(null)
+  const [skillsQuery, setSkillsQuery] = useState('')
   const skillsList = async (): Promise<void> => {
     if (!lumen) return
-    setSkillsOut(JSON.stringify(await lumen.skillsList(), null, 2))
+    const parsed = parseEcosystemSkillInventory(await lumen.skillsList())
+    if (!parsed.ok) {
+      setSkillsInventory(null)
+      setSkillsOut(parsed.reason)
+      return
+    }
+    setSkillsInventory(parsed.inventory)
+    setSkillsOut('')
   }
   const skillsBulkDeny = async (): Promise<void> => {
     if (!lumen) return
@@ -742,19 +756,80 @@ export const ResearchShell = (): React.JSX.Element => {
                 >
                   <h2 className={cx.h2}>Skills</h2>
                   <p className={cx.muted}>
-                    Imported skills arrive quarantined and stay pending until someone
-                    admits them file by file — <strong>nothing is approved in bulk</strong>,
-                    and that includes anything asking for a GPU. Ask this window to admit
-                    them all at once and it will refuse.
+                    本地科研能力目录先隔离、后逐项验收。每项必须映射到受控的 Lumen
+                    工具，并由 Rust SessionActor 管理权限、产物和证据；
+                    <strong>目录本身不能执行，也不能批量批准</strong>。
                   </p>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button type="button" className={cx.btn} onClick={() => void skillsList()}>
-                      List inventory
+                      加载本地科研能力
                     </button>
                     <button type="button" className={cx.btnQuiet} onClick={() => void skillsBulkDeny()}>
-                      Ask this window to admit all
+                      证伪：尝试批量批准
                     </button>
                   </div>
+                  {skillsInventory && (
+                    <div style={{ marginTop: 16 }}>
+                      <div className={cx.muted}>
+                        {skillsInventory.total} 项候选 · {skillsInventory.approved} 项已批准 ·{' '}
+                        {skillsInventory.quarantined} 项隔离中 · 仅 SessionActor 可执行
+                      </div>
+                      <input
+                        className={cx.input}
+                        style={{ width: '100%', marginTop: 10 }}
+                        value={skillsQuery}
+                        onChange={(event) => setSkillsQuery(event.target.value)}
+                        placeholder="搜索能力、学科或候选 Lumen 连接器…"
+                        aria-label="搜索本地科研能力目录"
+                      />
+                      <div
+                        style={{
+                          display: 'grid',
+                          gap: 10,
+                          marginTop: 12,
+                          maxHeight: 520,
+                          overflowY: 'auto',
+                        }}
+                      >
+                        {filterEcosystemSkills(skillsInventory.candidates, skillsQuery)
+                          .slice(0, 60)
+                          .map((candidate) => (
+                            <article
+                              key={candidate.skillId}
+                              style={{
+                                border: '1px solid var(--border)',
+                                borderRadius: 8,
+                                padding: 12,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  gap: 12,
+                                }}
+                              >
+                                <strong>{candidate.displayName}</strong>
+                                <span className={cx.muted}>隔离中</span>
+                              </div>
+                              <div className={cx.muted} style={{ marginTop: 4 }}>
+                                {candidate.discipline} · 上游工具引用{' '}
+                                {candidate.requiredUpstreamToolCount}
+                              </div>
+                              <p style={{ margin: '8px 0 0' }}>{candidate.description}</p>
+                              {candidate.candidateLumenRoutes.length > 0 && (
+                                <div className={cx.muted} style={{ marginTop: 8 }}>
+                                  候选 Lumen 路由：{candidate.candidateLumenRoutes.join(' · ')}
+                                </div>
+                              )}
+                            </article>
+                          ))}
+                      </div>
+                      {filterEcosystemSkills(skillsInventory.candidates, skillsQuery).length > 60 && (
+                        <p className={cx.muted}>仅显示前 60 项，请继续缩小搜索范围。</p>
+                      )}
+                    </div>
+                  )}
                   {skillsOut && <pre className={cx.pre}>{skillsOut}</pre>}
                 </section>
               )}

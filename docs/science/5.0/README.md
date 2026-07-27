@@ -64,6 +64,16 @@ machine-readable
 This is not a claim that the embedded `0.1.222` line already has complete
 v0.1.251 source or release parity.
 
+## External science ecosystem absorption
+
+Biomni, Motif, Open Science, OpenClaudeScience, and the transitive
+InternScience/SCP skill catalog are admitted through the component-level
+[`ECOSYSTEM_ABSORPTION_PLAN.md`](ECOSYSTEM_ABSORPTION_PLAN.md) and
+[`ecosystem-admission.lock.json`](ecosystem-admission.lock.json). The lock
+preserves the existing Science authority foundation, pins exact source and
+license hashes, rejects peer runtimes and restricted nested licenses, and
+keeps all unreviewed skills/data quarantined.
+
 ## Quick start (WP-2～8 CLI surface)
 
 ```bash

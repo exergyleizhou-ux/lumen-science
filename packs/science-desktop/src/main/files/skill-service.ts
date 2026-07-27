@@ -26,12 +26,39 @@ export type LumenRegistrySkill = {
   source_sha256?: string
 }
 
+export type EcosystemSkillCandidate = {
+  skillId: string
+  displayName: string
+  description: string
+  discipline: string
+  sourceRepository: string
+  exactCommit: string
+  sourceSha256: string
+  candidateLumenRoutes: string[]
+  requiredUpstreamToolCount: number
+  disposition: 'quarantined'
+}
+
 export type SkillService = {
   listInventory: () => {
+    ok: boolean
+    reason?: string
     approved: string[]
     pending: string[]
     quarantined: SkillRecord[]
-    summary: { approved: number; pending: number; quarantined: number; total: number }
+    ecosystem: {
+      candidates: EcosystemSkillCandidate[]
+      summary: { total: number; approved: 0; quarantined: number }
+      authority: 'catalog-only; Rust SessionActor required'
+      unavailable?: string
+    }
+    summary: {
+      approved: number
+      pending: number
+      quarantined: number
+      ecosystemQuarantined: number
+      total: number
+    }
   }
   import: (req: SkillImportRequest) => unknown
   admit: (req: SkillAdmitRequest) => unknown
@@ -44,6 +71,8 @@ export type SkillService = {
 export function createSkillService(opts: {
   /** Path to packs/science/skills/registry.json */
   registryPath: string
+  /** Optional path to the read-only, zero-approved ecosystem candidate catalog. */
+  ecosystemCatalogPath?: string
 }): SkillService {
   const quarantine = new Map<string, SkillRecord>()
 
@@ -89,21 +118,145 @@ export function createSkillService(opts: {
     }
   }
 
+  function loadEcosystemCatalog(): {
+    candidates: EcosystemSkillCandidate[]
+    unavailable?: string
+  } {
+    if (!opts.ecosystemCatalogPath) return { candidates: [] }
+
+    try {
+      const raw = JSON.parse(fs.readFileSync(opts.ecosystemCatalogPath, 'utf-8')) as {
+        schema_version?: number
+        authority?: {
+          runtime_authority?: string
+          source_runtime_authority?: string
+          catalog_is_executable?: boolean
+          direct_scp_hub_calls_admitted?: boolean
+          bulk_auto_approval?: boolean
+        }
+        summary?: { total?: number; approved?: number; quarantined?: number }
+        skills?: Array<{
+          skill_id?: string
+          display_name?: string
+          description?: string
+          discipline?: string
+          source_repository?: string
+          exact_commit?: string
+          source_sha256?: string
+          candidate_lumen_routes?: string[]
+          required_upstream_tools?: unknown[]
+          prompt_injection_audit?: { status?: string }
+          runtime_permissions?: {
+            session_actor_required?: boolean
+            may_call_lumen_tools_only?: boolean
+            controlled_tools?: unknown[]
+            independent_execution_authority?: boolean
+            network?: string
+            shell?: string
+            filesystem?: string
+          }
+          final_disposition?: string
+        }>
+      }
+      const authority = raw.authority
+      const skills = raw.skills ?? []
+      if (
+        raw.schema_version !== 1 ||
+        authority?.runtime_authority !== 'Rust SessionActor' ||
+        authority.source_runtime_authority !== 'none' ||
+        authority.catalog_is_executable !== false ||
+        authority.direct_scp_hub_calls_admitted !== false ||
+        authority.bulk_auto_approval !== false ||
+        raw.summary?.approved !== 0 ||
+        raw.summary?.total !== skills.length ||
+        raw.summary?.quarantined !== skills.length
+      ) {
+        throw new Error('ecosystem catalog authority or summary invariant failed')
+      }
+
+      const ids = new Set<string>()
+      const candidates = skills.map((skill): EcosystemSkillCandidate => {
+        const permissions = skill.runtime_permissions
+        if (
+          !skill.skill_id ||
+          ids.has(skill.skill_id) ||
+          !skill.display_name ||
+          !skill.description ||
+          !skill.source_repository ||
+          !/^[0-9a-f]{40}$/.test(skill.exact_commit ?? '') ||
+          !/^[0-9a-f]{64}$/.test(skill.source_sha256 ?? '') ||
+          skill.final_disposition !== 'quarantined' ||
+          skill.prompt_injection_audit?.status !== 'pending' ||
+          permissions?.session_actor_required !== true ||
+          permissions.may_call_lumen_tools_only !== true ||
+          permissions.independent_execution_authority !== false ||
+          permissions.network !== 'denied-until-per-skill-admission' ||
+          permissions.shell !== 'denied' ||
+          permissions.filesystem !== 'denied' ||
+          !Array.isArray(permissions.controlled_tools) ||
+          permissions.controlled_tools.length !== 0
+        ) {
+          throw new Error(`unsafe or malformed ecosystem skill: ${skill.skill_id ?? '<missing>'}`)
+        }
+        ids.add(skill.skill_id)
+        return {
+          skillId: skill.skill_id,
+          displayName: skill.display_name,
+          description: skill.description,
+          discipline: skill.discipline || 'unclassified',
+          sourceRepository: skill.source_repository,
+          exactCommit: skill.exact_commit!,
+          sourceSha256: skill.source_sha256!,
+          candidateLumenRoutes: Array.isArray(skill.candidate_lumen_routes)
+            ? skill.candidate_lumen_routes.filter(
+                (route): route is string => typeof route === 'string',
+              )
+            : [],
+          requiredUpstreamToolCount: Array.isArray(skill.required_upstream_tools)
+            ? skill.required_upstream_tools.length
+            : 0,
+          disposition: 'quarantined',
+        }
+      })
+      return { candidates }
+    } catch (e: unknown) {
+      return {
+        candidates: [],
+        unavailable: `ecosystem skill catalog unreadable at ${opts.ecosystemCatalogPath}: ${(e as Error).message}`,
+      }
+    }
+  }
+
   return {
     listInventory() {
       const reg = loadRegistry()
+      const ecosystem = loadEcosystemCatalog()
       const quarantined = [...quarantine.values()]
+      const reasons = [reg.unavailable, ecosystem.unavailable].filter((reason): reason is string =>
+        Boolean(reason),
+      )
       return {
-        ok: reg.unavailable === undefined,
-        ...(reg.unavailable ? { reason: reg.unavailable } : {}),
+        ok: reasons.length === 0,
+        ...(reasons.length > 0 ? { reason: reasons.join('; ') } : {}),
         approved: reg.approved,
         pending: reg.pending,
         quarantined,
+        ecosystem: {
+          candidates: ecosystem.candidates,
+          summary: {
+            total: ecosystem.candidates.length,
+            approved: 0,
+            quarantined: ecosystem.candidates.length,
+          },
+          authority: 'catalog-only; Rust SessionActor required',
+          ...(ecosystem.unavailable ? { unavailable: ecosystem.unavailable } : {}),
+        },
         summary: {
           approved: reg.approved.length,
           pending: reg.pending.length,
           quarantined: quarantined.length,
-          total: reg.total + quarantined.length,
+          ecosystemQuarantined: ecosystem.candidates.length,
+          total: reg.total + quarantined.length + ecosystem.candidates.length,
         },
       }
     },

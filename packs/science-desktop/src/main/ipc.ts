@@ -189,6 +189,9 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
     skillsRegistryPath: app.isPackaged
       ? join(process.resourcesPath, 'science', 'skills-registry.json')
       : join(__dirname, '../../../../packs/science/skills/registry.json'),
+    skillsEcosystemCatalogPath: app.isPackaged
+      ? join(process.resourcesPath, 'science', 'ecosystem-skill-catalog.json')
+      : join(__dirname, '../../../../packs/science/skills/ecosystem/scp-catalog.json'),
     connectorLockPath: app.isPackaged
       ? join(process.resourcesPath, 'science', 'fusion-sources.lock.json')
       : join(__dirname, '../../../../docs/science/fusion-sources.lock.json'),

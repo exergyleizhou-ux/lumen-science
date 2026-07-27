@@ -4,6 +4,8 @@
  * Run: npx tsx scripts/test-osf5-skills.mts
  */
 import { strictEqual, ok } from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import {
   planSkillImport,
@@ -41,6 +43,10 @@ const safeHandle: SafeHandleFn = (ipc, ch, h) => {
 }
 
 const REGISTRY = path.resolve(process.cwd(), '../../packs/science/skills/registry.json')
+const ECOSYSTEM_CATALOG = path.resolve(
+  process.cwd(),
+  '../../packs/science/skills/ecosystem/scp-catalog.json',
+)
 
 async function run() {
   // ── Pure import plan ─────────────────────────────────────────
@@ -71,7 +77,11 @@ async function run() {
   })
   await test('import plans quarantine disposition', () => {
     ok(!('ok' in good))
-    const r = good as { disposition: string; contentHash: string; ds43: { complete: boolean } }
+    const r = good as {
+      disposition: string
+      contentHash: string
+      ds43: { complete: boolean }
+    }
     strictEqual(r.disposition, 'quarantined')
     strictEqual(r.contentHash, hashSkillContent('# Demo\nUse for charts only.\n'))
     ok(!r.ds43.complete)
@@ -140,13 +150,62 @@ async function run() {
   })
 
   // ── Service + real registry ──────────────────────────────────
-  const svc = createSkillService({ registryPath: REGISTRY })
+  const svc = createSkillService({
+    registryPath: REGISTRY,
+    ecosystemCatalogPath: ECOSYSTEM_CATALOG,
+  })
   clearTrustedPreviewContext()
   const invNoSession = svc.listInventory()
   await test('inventory reads registry without session', () => {
+    strictEqual(invNoSession.ok, true)
     ok(invNoSession.summary.approved >= 10)
     strictEqual(invNoSession.summary.approved, 10)
     strictEqual(invNoSession.summary.pending, 17)
+  })
+  await test('inventory exposes 207 ecosystem candidates as quarantine-only', () => {
+    strictEqual(invNoSession.ecosystem.summary.total, 207)
+    strictEqual(invNoSession.ecosystem.summary.approved, 0)
+    strictEqual(invNoSession.ecosystem.summary.quarantined, 207)
+    strictEqual(invNoSession.summary.ecosystemQuarantined, 207)
+    strictEqual(invNoSession.ecosystem.candidates.length, 207)
+    strictEqual(invNoSession.ecosystem.authority, 'catalog-only; Rust SessionActor required')
+    ok(
+      invNoSession.ecosystem.candidates.every(
+        (candidate) => candidate.disposition === 'quarantined',
+      ),
+    )
+  })
+  await test('ecosystem candidates expose metadata, never executable permissions', () => {
+    const candidate = invNoSession.ecosystem.candidates[0]
+    ok(candidate.skillId.startsWith('ecosystem/scp/'))
+    ok(candidate.sourceRepository === 'https://github.com/InternScience/scp.git')
+    ok(/^[0-9a-f]{40}$/.test(candidate.exactCommit))
+    ok(/^[0-9a-f]{64}$/.test(candidate.sourceSha256))
+    ok(!Object.hasOwn(candidate, 'runtimePermissions'))
+    ok(!Object.hasOwn(candidate, 'requiredUpstreamTools'))
+    ok(!Object.hasOwn(candidate, 'sourceEndpointsNotAdmitted'))
+  })
+
+  const tamperDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lumen-scp-catalog-'))
+  const tamperedCatalog = path.join(tamperDir, 'scp-catalog.json')
+  const tampered = JSON.parse(fs.readFileSync(ECOSYSTEM_CATALOG, 'utf-8')) as {
+    summary: { approved: number; quarantined: number }
+    skills: Array<{ final_disposition: string }>
+  }
+  tampered.summary.approved = 1
+  tampered.summary.quarantined = 206
+  tampered.skills[0].final_disposition = 'approved'
+  fs.writeFileSync(tamperedCatalog, `${JSON.stringify(tampered, null, 2)}\n`)
+  const tamperedInventory = createSkillService({
+    registryPath: REGISTRY,
+    ecosystemCatalogPath: tamperedCatalog,
+  }).listInventory()
+  fs.rmSync(tamperDir, { recursive: true, force: true })
+  await test('catalog approval tamper fails closed with no candidates', () => {
+    strictEqual(tamperedInventory.ok, false)
+    strictEqual(tamperedInventory.ecosystem.candidates.length, 0)
+    strictEqual(tamperedInventory.summary.ecosystemQuarantined, 0)
+    ok(tamperedInventory.reason?.includes('authority or summary invariant failed'))
   })
 
   const impNoSess = svc.import({
@@ -211,6 +270,7 @@ async function run() {
     previewStore: new AcpPreviewStore(),
     skillService: svc,
     skillsRegistryPath: REGISTRY,
+    skillsEcosystemCatalogPath: ECOSYSTEM_CATALOG,
   })
   await test('ipc registers skills channels', () => {
     ok(handlers.has('skills:list'))
@@ -221,6 +281,8 @@ async function run() {
   const listed = await listH({})
   await test('ipc list inventory', () => {
     strictEqual(listed.summary.approved, 10)
+    strictEqual(listed.ecosystem.summary.total, 207)
+    strictEqual(listed.ecosystem.summary.approved, 0)
   })
 
   const bulkH = handlers.get('skills:bulk-admit')!

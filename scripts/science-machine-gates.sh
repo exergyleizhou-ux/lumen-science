@@ -7,6 +7,9 @@ cd "$ROOT"
 fail() { echo "GATE FAIL: $*" >&2; exit 1; }
 ok() { echo "GATE OK: $*"; }
 
+python3 scripts/verify-ecosystem-admission.py || fail "ecosystem admission"
+ok "ecosystem admission"
+
 python3 - <<'PY' || fail "fusion-sources.lock.json"
 import json
 from pathlib import Path

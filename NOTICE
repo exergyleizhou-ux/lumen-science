@@ -2,3 +2,10 @@ Lumen agent runtime is derived from SpaceXAI Grok Build
 (https://github.com/xai-org/grok-build), licensed under Apache License 2.0.
 See agent/LICENSE and agent/THIRD-PARTY-NOTICES.
 Vertical packs and modifications: Copyright Lumen authors.
+
+Lumen Science includes a sanitized, non-executable source corpus derived from
+InternScience/SCP at commit
+cea5398564032aea65a78e246d06c30ae945e03f, licensed under MIT.
+See third_party/internscience-scp/LICENSE, NOTICE.md, VENDOR_MANIFEST.json, and
+third_party/provenance/internscience-scp.md. Embedded remote endpoints and
+execution examples are not admitted product capabilities.
