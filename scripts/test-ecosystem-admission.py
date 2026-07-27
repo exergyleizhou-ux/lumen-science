@@ -348,6 +348,26 @@ def main() -> int:
         "unreviewed approval",
     )
 
+    preview_component_path = (
+        ROOT
+        / "packs/science-desktop/src/renderer/src/pages/settings/"
+        / "SkillImportCandidatePreview.tsx"
+    )
+
+    def enable_untrusted_preview_media() -> None:
+        text = preview_component_path.read_text(encoding="utf-8")
+        preview_component_path.write_text(
+            text.replace("allowMedia={false}", "allowMedia={true}"),
+            encoding="utf-8",
+        )
+
+    check_file_tamper(
+        "untrusted Skill previews cannot silently enable remote media",
+        [preview_component_path],
+        enable_untrusted_preview_media,
+        "Open Science preview marker missing",
+    )
+
     copied_protocol = (
         ROOT
         / "third_party/biomni-resource-catalog/protocols/addgene/copied.txt"

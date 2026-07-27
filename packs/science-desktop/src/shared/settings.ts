@@ -776,6 +776,7 @@ export type SkillView = {
 // `references/` directory, for the detail/edit view.
 export type SkillDetailView = SkillView & {
   body: string
+  metadata: Record<string, string>
   references: SkillReferenceInfo[]
 }
 
@@ -802,6 +803,7 @@ export type CreateSkillRequest = {
   name: string
   description: string
   body: string
+  metadata?: Record<string, string>
   slug?: string
   references?: SkillReference[]
 }
@@ -812,6 +814,7 @@ export type UpdateSkillRequest = {
   name: string
   description: string
   body: string
+  metadata?: Record<string, string>
   references?: SkillReference[]
 }
 
@@ -837,6 +840,22 @@ export type ImportSkillZipRequest = {
 // Parse an uploaded .zip / .skill bundle without importing it, for a confirm-before-import preview.
 export type PreviewSkillZipRequest = {
   dataBase64: string
+}
+
+// Read-only SKILL.md content shown before import. Every source adapter returns this renderer-safe
+// shape: sourceLabel is a display path/URL (never an absolute host path), metadata contains parsed
+// frontmatter fields other than name/description, and files contains relative names only.
+export type SkillImportPreviewContent = {
+  name: string
+  description: string
+  sourceLabel: string
+  metadata: Record<string, string>
+  body: string
+  files: string[]
+}
+
+export type PreviewGitHubSkillRequest = {
+  url: string
 }
 
 // Import several skills from ONE uploaded bundle in a single call, so a bundle holding many skills is
@@ -868,6 +887,9 @@ export type SkillBundlePreview = {
   subPath: string
   name: string
   description: string
+  metadata: Record<string, string>
+  body: string
+  previewError?: string
   files: string[]
   alreadyImported: boolean
   replaceableId?: string

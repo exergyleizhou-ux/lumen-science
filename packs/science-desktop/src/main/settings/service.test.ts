@@ -3254,6 +3254,29 @@ describe('SettingsService: skills', () => {
 
     expect(scanRepo).toHaveBeenCalledWith('o/r', netFetch)
   })
+
+  it('previews a GitHub skill through the proxy-aware bounded repository path', async () => {
+    const previewGitHubSkill = vi.fn().mockResolvedValue({
+      name: 'Demo',
+      description: 'Remote skill',
+      metadata: { license: 'MIT' },
+      body: '# Demo',
+      files: ['SKILL.md']
+    })
+    const service = new SettingsService({
+      repository,
+      storageRoot,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      userSkills: { previewGitHubSkill } as any
+    })
+    const url = 'https://github.com/o/r/tree/main/skills/demo'
+
+    await expect(service.previewGitHubSkill({ url })).resolves.toMatchObject({
+      sourceLabel: 'github.com/o/r@main/skills/demo',
+      body: '# Demo'
+    })
+    expect(previewGitHubSkill).toHaveBeenCalledWith(url, netFetch)
+  })
 })
 
 describe('installClaude (app-managed source)', () => {

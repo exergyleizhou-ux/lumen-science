@@ -158,6 +158,8 @@ import type {
   ImportAgentHomeSkillRequest,
   AgentHomeSkillView,
   PreviewSkillZipRequest,
+  PreviewGitHubSkillRequest,
+  SkillImportPreviewContent,
   SkillBundlePreviewResult,
   ScanRepoRequest,
   ScanRepoResult,
@@ -317,6 +319,7 @@ type OpenScienceAPI = {
     importSkillZip: (request: ImportSkillZipRequest) => Promise<ImportSkillResult>
     importSkillZipBatch: (request: ImportSkillZipBatchRequest) => Promise<ImportSkillZipBatchResult>
     previewSkillZip: (request: PreviewSkillZipRequest) => Promise<SkillBundlePreviewResult>
+    previewGitHubSkill: (request: PreviewGitHubSkillRequest) => Promise<SkillImportPreviewContent>
     scanRepoSkills: (request: ScanRepoRequest) => Promise<ScanRepoResult>
     listAgentHomeSkills: () => Promise<AgentHomeSkillView[]>
     importAgentHomeSkill: (request: ImportAgentHomeSkillRequest) => Promise<ImportSkillResult>
@@ -902,6 +905,11 @@ const api: OpenScienceAPI = {
         'settings:preview-skill-zip',
         request
       ) as Promise<SkillBundlePreviewResult>,
+    previewGitHubSkill: (request: PreviewGitHubSkillRequest) =>
+      ipcRenderer.invoke(
+        'settings:preview-github-skill',
+        request
+      ) as Promise<SkillImportPreviewContent>,
     scanRepoSkills: (request: ScanRepoRequest) =>
       ipcRenderer.invoke('settings:scan-repo-skills', request) as Promise<ScanRepoResult>,
     // "From your agent home" import source: lists the skills under ~/.claude/skills/ for the

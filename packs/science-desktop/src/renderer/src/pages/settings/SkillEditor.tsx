@@ -2,6 +2,7 @@ import { FileUp, Upload, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import type { SkillReference } from '../../../../shared/settings'
+import { parseSkillDocument } from '../../../../shared/skill-frontmatter'
 import { FileDropOverlay } from '@/components/FileDropOverlay'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +16,7 @@ export type SkillDraft = {
   name: string
   description: string
   body: string
+  metadata?: Record<string, string>
   slug?: string
   references?: SkillReference[]
 }
@@ -40,25 +42,6 @@ const toSlug = (name: string): string =>
     .replace(/^-+|-+$/g, '')
     .slice(0, 64)
 
-// Pulls name/description out of a pasted SKILL.md frontmatter block, returning the stripped body.
-const consumeFrontmatter = (
-  text: string
-): { name?: string; description?: string; body: string } => {
-  const match = /^---\n([\s\S]*?)\n---\n?/.exec(text)
-  if (!match) return { body: text }
-
-  const fields: Record<string, string> = {}
-  for (const line of match[1].split('\n')) {
-    const field = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(line)
-    if (field) fields[field[1].toLowerCase()] = field[2].trim()
-  }
-  return {
-    name: fields.name,
-    description: fields.description,
-    body: text.slice(match[0].length).replace(/^\n+/, '')
-  }
-}
-
 type SkillEditorProps = {
   initial: SkillDraft
   onCancel: () => void
@@ -73,6 +56,8 @@ const SkillEditor = ({ initial, onCancel, onSave }: SkillEditorProps): React.JSX
   const [name, setName] = useState(initial.name)
   const [description, setDescription] = useState(initial.description)
   const [body, setBody] = useState(initial.body)
+  const [metadata, setMetadata] = useState(initial.metadata)
+  const [frontmatterImportMode, setFrontmatterImportMode] = useState(false)
   const [contentMode, setContentMode] = useState<'write' | 'upload'>('write')
   const [references, setReferences] = useState<{ path: string; dataBase64?: string }[]>(() =>
     (initial.references ?? []).map((ref) => ({ path: ref.path, dataBase64: ref.dataBase64 }))
@@ -101,17 +86,54 @@ const SkillEditor = ({ initial, onCancel, onSave }: SkillEditorProps): React.JSX
     return null
   }, [isCreate, currentSlug, skills])
 
-  const canSave = name.trim().length > 0 && body.trim().length > 0 && !slugError && !saving
+  const importedContent = frontmatterImportMode ? parseSkillDocument(body) : undefined
+  const persistedBody = importedContent?.hasFrontmatter ? importedContent.body : body
+  const persistedMetadata = importedContent?.hasFrontmatter ? importedContent.metadata : metadata
+  const metadataEntries = Object.entries(persistedMetadata ?? {})
+  const canSave = name.trim().length > 0 && persistedBody.trim().length > 0 && !slugError && !saving
 
+  // Plain textarea edits are always literal body content and keep the separately displayed metadata.
+  // In import mode the visible frontmatter is authoritative, so removing it clears derived metadata.
   const handleBodyChange = (value: string): void => {
-    const parsed = consumeFrontmatter(value)
-    if (parsed.name || parsed.description) {
+    if (frontmatterImportMode) {
+      const parsed = parseSkillDocument(value)
+      if (parsed.hasFrontmatter) {
+        if (parsed.name !== undefined) setName(parsed.name)
+        if (parsed.description !== undefined) setDescription(parsed.description)
+        setMetadata(parsed.metadata)
+      } else {
+        setMetadata(undefined)
+        setFrontmatterImportMode(false)
+      }
+    }
+    setBody(value)
+  }
+
+  // Explicit paste/upload/drop imports opt into frontmatter semantics. The raw block remains visible
+  // in the textarea so users can edit or remove it; it is stripped only from the persisted body.
+  const importContent = (value: string): void => {
+    const parsed = parseSkillDocument(value)
+    if (parsed.hasFrontmatter) {
       if (parsed.name && !name.trim()) setName(parsed.name)
       if (parsed.description && !description.trim()) setDescription(parsed.description)
-      setBody(parsed.body)
+      setMetadata(parsed.metadata)
+      setFrontmatterImportMode(true)
     } else {
-      setBody(value)
+      setMetadata(undefined)
+      setFrontmatterImportMode(false)
     }
+    setBody(value)
+  }
+
+  const handleBodyPaste = (event: React.ClipboardEvent<HTMLTextAreaElement>): void => {
+    const pasted = event.clipboardData.getData('text/plain')
+    const replacesAll =
+      body.length === 0 ||
+      (event.currentTarget.selectionStart === 0 && event.currentTarget.selectionEnd === body.length)
+    if (!replacesAll || !parseSkillDocument(pasted).hasFrontmatter) return
+
+    event.preventDefault()
+    importContent(pasted)
   }
 
   // Uploads a text/markdown file into the content body, then flips back to the Write editor.
@@ -122,7 +144,7 @@ const SkillEditor = ({ initial, onCancel, onSave }: SkillEditorProps): React.JSX
     input.onchange = async () => {
       const file = input.files?.[0]
       if (!file) return
-      handleBodyChange(await file.text())
+      importContent(await file.text())
       setContentMode('write')
     }
     input.click()
@@ -130,7 +152,7 @@ const SkillEditor = ({ initial, onCancel, onSave }: SkillEditorProps): React.JSX
 
   // Loads the first dropped text file into the body — the drop counterpart of uploadContent().
   const dropContent = async (files: File[]): Promise<void> => {
-    handleBodyChange(await files[0].text())
+    importContent(await files[0].text())
     setContentMode('write')
   }
 
@@ -167,7 +189,8 @@ const SkillEditor = ({ initial, onCancel, onSave }: SkillEditorProps): React.JSX
         id: initial.id,
         name: name.trim(),
         description: description.trim(),
-        body,
+        body: persistedBody,
+        metadata: persistedMetadata,
         slug: isCreate ? currentSlug : undefined,
         references: references.map((ref) => ({ path: ref.path, dataBase64: ref.dataBase64 }))
       })
@@ -295,6 +318,7 @@ const SkillEditor = ({ initial, onCancel, onSave }: SkillEditorProps): React.JSX
                   aria-label="Skill body"
                   value={body}
                   onChange={(event) => handleBodyChange(event.target.value)}
+                  onPaste={handleBodyPaste}
                   rows={16}
                   placeholder={'# Instructions\n\nStep-by-step guidance for the agent…'}
                   className="mt-4 min-h-64 resize-none font-mono text-[13px]"
@@ -303,6 +327,32 @@ const SkillEditor = ({ initial, onCancel, onSave }: SkillEditorProps): React.JSX
                   Paste a full SKILL.md — if it has a <code className="font-mono">---</code>{' '}
                   metadata block at the top, the fields above auto-fill.
                 </p>
+                {!frontmatterImportMode && metadataEntries.length > 0 ? (
+                  <div
+                    aria-label="Skill metadata"
+                    className="mt-3 flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-foreground">Saved metadata</p>
+                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        {metadataEntries.map(([key, value]) => (
+                          <span key={key} className="break-all">
+                            {key}: {value}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      aria-label="Clear skill metadata"
+                      onClick={() => setMetadata(undefined)}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                ) : null}
               </>
             ) : (
               <button
@@ -411,6 +461,7 @@ const SkillEditLoader = ({ skillId, onDone }: SkillEditLoaderProps): React.JSX.E
           name: detail.name,
           description: detail.description,
           body: detail.body,
+          metadata: detail.metadata,
           references: detail.references.map((ref) => ({ path: ref.path }))
         })
       }
@@ -432,6 +483,7 @@ const SkillEditLoader = ({ skillId, onDone }: SkillEditLoaderProps): React.JSX.E
           name: next.name,
           description: next.description,
           body: next.body,
+          metadata: next.metadata,
           references: next.references
         })
         onDone()

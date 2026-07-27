@@ -20,6 +20,7 @@ import {
   type ImportSkillZipRequest,
   type ImportSkillZipBatchRequest,
   type PreviewSkillZipRequest,
+  type PreviewGitHubSkillRequest,
   type ScanRepoRequest,
   type InstallClaudeRequest,
   type InstallCodexRequest,
@@ -469,6 +470,10 @@ const registerSettingsIpcHandlers = ({
   )
   ipcMain.handle('settings:preview-skill-zip', (_event, request: PreviewSkillZipRequest) =>
     service.previewSkillZip(request)
+  )
+  ipcMain.handle(
+    'settings:preview-github-skill',
+    (_event, request: PreviewGitHubSkillRequest) => service.previewGitHubSkill(request)
   )
   ipcMain.handle('settings:scan-repo-skills', (_event, request: ScanRepoRequest) =>
     service.scanRepoSkills(request)

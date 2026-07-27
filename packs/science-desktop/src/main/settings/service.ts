@@ -57,6 +57,8 @@ import type {
   ImportSkillZipBatchRequest,
   ImportSkillZipBatchResult,
   PreviewSkillZipRequest,
+  PreviewGitHubSkillRequest,
+  SkillImportPreviewContent,
   ReasoningEffort,
   SkillBundlePreviewResult,
   ScanRepoRequest,
@@ -186,6 +188,7 @@ import { SkillRegistry, type BundledSkill } from '../skills/registry'
 import { SAFE_SLUG, UserSkillRepository } from '../skills/user-skill-repository'
 import { netFetch, netFetchStandard } from '../skills/net-fetch'
 import { decodeBoundedBase64, SKILL_IMPORT_LIMITS } from '../skills/import-limits'
+import { parseGitHubSkillUrl } from '../skills/github-import'
 import { readSkillFile } from '../skills/skill-files'
 import { NOTEBOOK_MCP_SERVER_NAME, NOTEBOOK_RPC_TOOLS } from '../notebook/mcp-server'
 import { ARTIFACT_MCP_SERVER_NAME, writeArtifactFileToolSchema } from '../artifacts/mcp-server'
@@ -1021,10 +1024,13 @@ class SettingsService {
     }
 
     const disabled = new Set(settings.disabledSkillIds ?? [])
-    const { body } = await readSkillFile(skill.sourceDir)
+    const { fields, body } = await readSkillFile(skill.sourceDir)
+    const metadata = Object.fromEntries(
+      Object.entries(fields).filter(([key]) => key !== 'name' && key !== 'description')
+    )
     const references = await this.listSkillReferences(skill.sourceDir)
 
-    return { ...this.toSkillView(skill, disabled), body, references }
+    return { ...this.toSkillView(skill, disabled), body, metadata, references }
   }
 
   // Lists the file names directly under a skill's `references/` directory (empty when absent).
@@ -1062,6 +1068,7 @@ class SettingsService {
       name: request.name,
       description: request.description,
       body: request.body,
+      metadata: request.metadata,
       references: request.references
     })
 
@@ -1120,6 +1127,22 @@ class SettingsService {
     return this.userSkills.previewZip(
       decodeBoundedBase64(request.dataBase64, SKILL_IMPORT_LIMITS.maxBundleBytes)
     )
+  }
+
+  // Lazily previews one GitHub candidate without importing it or downloading its bundled assets.
+  async previewGitHubSkill(
+    request: PreviewGitHubSkillRequest
+  ): Promise<SkillImportPreviewContent> {
+    const location = parseGitHubSkillUrl(request.url)
+    if (!location) throw new Error('Not a recognizable GitHub URL.')
+    const preview = await this.userSkills.previewGitHubSkill(request.url, netFetch)
+    const suffix = location.path ? `/${location.path}` : ''
+    const revision = location.ref ? `@${location.ref}` : ''
+
+    return {
+      ...preview,
+      sourceLabel: `github.com/${location.owner}/${location.repo}${revision}${suffix}`
+    }
   }
 
   // Scans a GitHub repo for importable skill directories (marking already-imported ones).

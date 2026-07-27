@@ -23,3 +23,11 @@ commit. See third_party/biomni-resource-catalog and
 third_party/provenance/biomni-resource-catalog.md. Underlying datasets,
 software packages, CRISPick/Addgene resources, and 82 publisher protocol
 bodies are not copied or authorized by this catalog.
+
+Lumen Science adapts the bounded Skill preview and metadata-preservation design
+from Open Science at commit
+fd2853f0b9bdb6c063ccc1e741687584ab94bf9a, licensed under Apache License
+2.0. See third_party/open-science/LICENSE and
+third_party/provenance/open-science-fd2853-skill-preview.md. The upstream
+conversation import runtime and Electron-owned approval authority are not
+adopted.

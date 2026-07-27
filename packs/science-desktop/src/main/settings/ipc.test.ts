@@ -64,6 +64,7 @@ type FakeSettingsService = Record<
   | 'updateSkill'
   | 'deleteSkill'
   | 'importSkillZipBatch'
+  | 'previewGitHubSkill'
   | 'setConnectorEnabled',
   ReturnType<typeof vi.fn>
 >
@@ -141,6 +142,7 @@ const createFakeService = (): FakeSettingsService => ({
   updateSkill: vi.fn().mockResolvedValue([]),
   deleteSkill: vi.fn().mockResolvedValue([]),
   importSkillZipBatch: vi.fn().mockResolvedValue({ results: [], skills: [] }),
+  previewGitHubSkill: vi.fn().mockResolvedValue({ name: 'GitHub preview' }),
   setConnectorEnabled: vi.fn().mockResolvedValue({ connectors: [] })
 })
 
@@ -567,6 +569,19 @@ describe('settings IPC handlers', () => {
     expect(service.importSkillZipBatch).toHaveBeenCalledWith(request)
     expect(forwarded).toBe(result)
     expect(onSkillsChanged).toHaveBeenCalledTimes(1)
+  })
+
+  it('routes GitHub preview read-only without firing skills-changed', async () => {
+    handlers.clear()
+    const service = createFakeService()
+    const onSkillsChanged = vi.fn()
+    registerSettingsIpcHandlers({ service: asService(service), onSkillsChanged })
+    const request = { url: 'https://github.com/acme/skills/tree/main/foo' }
+
+    await invoke('settings:preview-github-skill', request)
+
+    expect(service.previewGitHubSkill).toHaveBeenCalledWith(request)
+    expect(onSkillsChanged).not.toHaveBeenCalled()
   })
 
   it('registers the OpenCode / framework-switch channels', () => {

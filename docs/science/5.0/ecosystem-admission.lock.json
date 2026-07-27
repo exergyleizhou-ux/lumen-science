@@ -113,6 +113,37 @@
         "minimum_total_shipped": 1082,
         "upstream_files_not_adopted": 0
       },
+      "open_science_skill_preview": {
+        "provenance_path": "third_party/provenance/open-science-fd2853-skill-preview.md",
+        "commit": "fd2853f0b9bdb6c063ccc1e741687584ab94bf9a",
+        "required_markers": [
+          {
+            "path": "packs/science-desktop/src/shared/skill-import-limits.ts",
+            "contains": [
+              "maxPreviewContentBytes: 4 * 1024 * 1024"
+            ]
+          },
+          {
+            "path": "packs/science-desktop/src/renderer/src/pages/settings/SkillImportCandidatePreview.tsx",
+            "contains": [
+              "allowMedia={false}"
+            ]
+          },
+          {
+            "path": "packs/science-desktop/src/main/settings/ipc.ts",
+            "contains": [
+              "'settings:preview-github-skill'"
+            ]
+          },
+          {
+            "path": "packs/science-desktop/src/main/skills/user-skill-repository.ts",
+            "contains": [
+              "async previewGitHubSkill",
+              "previewContentBytes + skillMd.content.length"
+            ]
+          }
+        ]
+      },
       "science_skills": {
         "path": "packs/science/skills/registry.json",
         "minimum_total": 27,
@@ -280,7 +311,7 @@
       "license_file": "LICENSE",
       "license_sha256": "b038148f912bdd6e61e33e56214d02c4d8a9640f7a637e21dfcf939332816979",
       "runtime_authority": "none",
-      "admission_status": "1082 shipped files carried; 228-file upstream delta under review",
+      "admission_status": "1082 shipped files carried; fd2853 bounded Skill metadata/preview slice adapted; remaining upstream delta under review",
       "source_proofs": [
         {
           "path": "src/main/skills/skill-archive-sniffer.ts",

@@ -147,6 +147,8 @@ import type {
   ImportSkillZipBatchRequest,
   ImportSkillZipBatchResult,
   PreviewSkillZipRequest,
+  PreviewGitHubSkillRequest,
+  SkillImportPreviewContent,
   SkillBundlePreviewResult,
   ScanRepoRequest,
   ScanRepoResult,
@@ -285,6 +287,7 @@ interface OpenScienceAPI {
     importSkillZip(request: ImportSkillZipRequest): Promise<ImportSkillResult>
     importSkillZipBatch(request: ImportSkillZipBatchRequest): Promise<ImportSkillZipBatchResult>
     previewSkillZip(request: PreviewSkillZipRequest): Promise<SkillBundlePreviewResult>
+    previewGitHubSkill(request: PreviewGitHubSkillRequest): Promise<SkillImportPreviewContent>
     scanRepoSkills(request: ScanRepoRequest): Promise<ScanRepoResult>
     listAgentHomeSkills(): Promise<AgentHomeSkillView[]>
     importAgentHomeSkill(request: ImportAgentHomeSkillRequest): Promise<ImportSkillResult>

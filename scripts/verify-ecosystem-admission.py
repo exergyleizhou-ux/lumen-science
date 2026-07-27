@@ -242,6 +242,30 @@ def verify_carried_ledgers(lock: dict[str, Any], science_repo: Path) -> None:
         "Open Science carried adoption ledger now reports missing upstream files",
     )
 
+    preview_spec = carried["open_science_skill_preview"]
+    preview_provenance_path = preview_spec["provenance_path"]
+    require_relative_path(preview_provenance_path, "Open Science preview provenance path")
+    preview_provenance = (
+        science_repo / preview_provenance_path
+    ).read_text(encoding="utf-8")
+    require(
+        preview_spec["commit"] in preview_provenance
+        and "Apache-2.0" in preview_provenance
+        and "Rust `SessionActor`; unchanged" in preview_provenance,
+        "Open Science preview provenance lost its source, license, or authority boundary",
+    )
+    for index, marker in enumerate(preview_spec["required_markers"]):
+        label = f"open_science_skill_preview.required_markers[{index}]"
+        require_relative_path(marker["path"], f"{label}.path")
+        marker_path = science_repo / marker["path"]
+        require(marker_path.is_file(), f"Open Science preview file is missing: {marker['path']}")
+        marker_text = marker_path.read_text(encoding="utf-8")
+        for expected in marker["contains"]:
+            require(
+                expected in marker_text,
+                f"Open Science preview marker missing from {marker['path']}: {expected}",
+            )
+
     skill_spec = carried["science_skills"]
     skill_ledger = load_json(science_repo / skill_spec["path"], "Science skill registry")
     require(

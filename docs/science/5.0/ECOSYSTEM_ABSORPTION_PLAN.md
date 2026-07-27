@@ -262,7 +262,27 @@ Remaining:
 
 ### Phase 2 — secure skill import delta
 
-- Port Open Science's bounded archive sniffer and preview flow.
+Implemented in the first preview slice:
+
+- adapted Open Science's shared YAML frontmatter parser so identity fields and
+  arbitrary flat string metadata use one parser in main and renderer;
+- preserved imported metadata without allowing it to override authoritative
+  `name` or `description`;
+- added a 4 MiB cumulative preview-content budget independent of the larger
+  import budget;
+- unified shallowest Skill-root selection with the upstream bundle-path
+  contract;
+- added read-only candidate previews for local Markdown, ZIP/Skill bundles,
+  and scanned GitHub Skills;
+- made GitHub preview lazy and bounded: only root `SKILL.md` is downloaded,
+  while asset names remain relative metadata;
+- disabled network-fetching media elements for untrusted preview Markdown;
+- kept preview separate from selection, import, approval, and execution.
+
+Remaining:
+
+- port the streaming bounded archive sniffer for prompt-time local attachment
+  classification;
 - Bind imports to current session/turn/attachment bytes and SHA-256.
 - Persist quarantine records through the Lumen authority path.
 - Add negative fixtures for ZIP traversal, decompression bombs, nested
@@ -292,14 +312,15 @@ Remaining:
 
 ## Evidence boundary
 
-Phase 0 and the Phase 1 SCP/Biomni catalogs currently have source audit,
-focused verifier evidence, desktop service tests, and TypeScript compile
+Phase 0, the Phase 1 SCP/Biomni catalogs, and the first Phase 2 read-only Skill
+preview slice currently have source audit, focused test, and TypeScript compile
 evidence. The 704 candidate capabilities are local and searchable in the
 desktop Skills tab, but none of the new 704 entries is executable or
-product-approved. A rebuilt packaged application has not yet been used to prove
-the new resource paths and rendered UI. This does not claim that the 224
-Biomni tools, new connectors, Motif algorithms, or clean-room document features
-are already product-complete.
+product-approved. The streaming archive sniffer and SessionActor-bound
+attachment import remain open. A rebuilt packaged application has not yet been
+used to prove the new resource paths and rendered UI. This does not claim that
+the 224 Biomni tools, new connectors, Motif algorithms, or clean-room document
+features are already product-complete.
 
 For each later slice, report separately:
 

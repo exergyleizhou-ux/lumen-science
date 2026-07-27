@@ -335,6 +335,32 @@ describe('UserSkillRepository', () => {
     expect(await new UserSkillRepository(await makeStorage()).list()).toEqual([])
   })
 
+  it('previews one selected GitHub skill without importing it', async () => {
+    const repo = new UserSkillRepository(await makeStorage())
+    const preview = await repo.previewGitHubSkill(
+      SKILL_URL,
+      fakeFetch(
+        [
+          '---',
+          'name: Foo',
+          'description: A remote skill.',
+          'license: MIT',
+          '---',
+          '# Preview body'
+        ].join('\n')
+      )
+    )
+
+    expect(preview).toEqual({
+      name: 'Foo',
+      description: 'A remote skill.',
+      metadata: { license: 'MIT' },
+      body: '# Preview body',
+      files: ['SKILL.md']
+    })
+    expect(await repo.list()).toEqual([])
+  })
+
   it('imports a .zip bundle (SKILL.md + files) and dedups an identical re-import', async () => {
     const storage = await makeStorage()
     const repo = new UserSkillRepository(storage)
@@ -488,6 +514,9 @@ describe('UserSkillRepository', () => {
         {
           name: 'Bundled',
           description: 'A test bundle.',
+          metadata: {},
+          body: 'body',
+          previewError: undefined,
           files: ['SKILL.md', 'scripts/run.py'],
           alreadyImported: false,
           replaceableId: undefined,

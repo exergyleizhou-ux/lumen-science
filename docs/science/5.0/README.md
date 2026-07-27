@@ -75,7 +75,10 @@ license hashes, rejects peer runtimes and restricted nested licenses, and
 keeps all unreviewed skills/data quarantined. The current local discovery
 surface contains 207 SCP skill documents, 224 Biomni tool descriptors, and 273
 Biomni data/software/protocol/knowledge records: 704 searchable candidates,
-zero newly approved.
+zero newly approved. The first Open Science `fd2853` delta is also adapted:
+local/GitHub Skill candidates now have a bounded, media-disabled, read-only
+preview that preserves flat YAML metadata before any explicit import. See
+[`open-science-fd2853-skill-preview.md`](../../../third_party/provenance/open-science-fd2853-skill-preview.md).
 
 ## Quick start (WP-2～8 CLI surface)
 

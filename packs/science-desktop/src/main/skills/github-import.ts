@@ -113,6 +113,79 @@ const contentsUrl = (location: GitHubSkillLocation, path: string): string => {
 
 type ContentsEntry = { type: string; name: string; path: string; download_url: string | null }
 
+export type FetchedSkillPreview = { skillMd: Buffer; files: string[] }
+
+// Adapted from Open Science at fd2853f0b9bdb6c063ccc1e741687584ab94bf9a.
+// Lists one selected skill directory and downloads only its root SKILL.md. Repo scans return metadata
+// only; opening a candidate calls this helper lazily. Directory depth, file count, and request count
+// share the import caps, while the renderer-bound body uses the smaller IPC preview cap.
+const fetchSkillPreview = async (
+  location: GitHubSkillLocation,
+  fetchImpl: FetchLike
+): Promise<FetchedSkillPreview> => {
+  const rootPrefix = location.path ? `${location.path}/` : ''
+  const files: string[] = []
+  let skillMd: Buffer | undefined
+  let requests = 0
+
+  const request: FetchLike = (url, init) => {
+    requests += 1
+    if (requests > SKILL_IMPORT_LIMITS.maxRequests) {
+      throw new Error(`Skill preview exceeded ${SKILL_IMPORT_LIMITS.maxRequests} requests.`)
+    }
+    return fetchImpl(url, init)
+  }
+
+  const walk = async (path: string, depth: number): Promise<void> => {
+    if (depth > SKILL_IMPORT_LIMITS.maxDepth) {
+      throw new Error(`Skill directory nesting exceeds ${SKILL_IMPORT_LIMITS.maxDepth} levels.`)
+    }
+
+    const response = await request(contentsUrl(location, path), { headers: GITHUB_HEADERS })
+    if (!response.ok) {
+      throw new Error(`GitHub API request failed (${response.status}) for ${path || 'repo root'}`)
+    }
+
+    const payload = (await response.json()) as ContentsEntry | ContentsEntry[]
+    const entries = Array.isArray(payload) ? payload : [payload]
+    for (const entry of entries) {
+      if (entry.type === 'dir') {
+        await walk(entry.path, depth + 1)
+        continue
+      }
+      if (entry.type !== 'file') continue
+      if (files.length >= SKILL_IMPORT_LIMITS.maxFiles) {
+        throw new Error(`Skill has too many files (limit ${SKILL_IMPORT_LIMITS.maxFiles}).`)
+      }
+
+      const relativePath = entry.path.startsWith(rootPrefix)
+        ? entry.path.slice(rootPrefix.length)
+        : entry.name
+      files.push(relativePath)
+
+      if (relativePath.toLowerCase() !== 'skill.md' || !entry.download_url) continue
+      const raw = await request(entry.download_url, { headers: GITHUB_HEADERS })
+      if (!raw.ok) throw new Error(`Failed to download ${entry.path} (${raw.status})`)
+
+      const previewTooLarge = (): never => {
+        throw new Error(
+          `GitHub Skill preview exceeds the ${SKILL_IMPORT_LIMITS.maxPreviewContentBytes / (1024 * 1024)} MB limit.`
+        )
+      }
+      const declared = Number(raw.headers?.get('content-length') ?? '')
+      if (Number.isFinite(declared) && declared > SKILL_IMPORT_LIMITS.maxPreviewContentBytes) {
+        previewTooLarge()
+      }
+      skillMd = await readBounded(raw, SKILL_IMPORT_LIMITS.maxPreviewContentBytes, previewTooLarge)
+    }
+  }
+
+  await walk(location.path, 0)
+  if (!skillMd) throw new Error('No SKILL.md found at the linked location.')
+
+  return { skillMd, files: files.sort() }
+}
+
 // Recursively downloads every file under a skill directory via the public GitHub contents API.
 const fetchSkillFiles = async (
   location: GitHubSkillLocation,
@@ -270,4 +343,10 @@ const scanRepoForSkills = async (
   return skills
 }
 
-export { parseGitHubSkillUrl, parseGitHubRepo, fetchSkillFiles, scanRepoForSkills }
+export {
+  parseGitHubSkillUrl,
+  parseGitHubRepo,
+  fetchSkillPreview,
+  fetchSkillFiles,
+  scanRepoForSkills
+}

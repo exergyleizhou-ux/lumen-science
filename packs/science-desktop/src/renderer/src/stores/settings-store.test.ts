@@ -56,6 +56,7 @@ type SettingsApi = {
   importSkillZip: ReturnType<typeof vi.fn>
   importSkillZipBatch: ReturnType<typeof vi.fn>
   previewSkillZip: ReturnType<typeof vi.fn>
+  previewGitHubSkill: ReturnType<typeof vi.fn>
   listConnectors: ReturnType<typeof vi.fn>
   getConnectorDetail: ReturnType<typeof vi.fn>
   setConnectorEnabled: ReturnType<typeof vi.fn>
@@ -192,6 +193,7 @@ beforeEach(() => {
     importSkillZip: vi.fn().mockResolvedValue({ status: 'imported', id: 'z', skills: [] }),
     importSkillZipBatch: vi.fn().mockResolvedValue({ results: [], skills: [] }),
     previewSkillZip: vi.fn().mockResolvedValue({ previews: [], skipped: [] }),
+    previewGitHubSkill: vi.fn(),
     listConnectors: vi
       .fn()
       .mockResolvedValue({ connectors: [], customServers: [], ncbi: { hasApiKey: false } }),
@@ -978,6 +980,8 @@ describe('settings store: skill bundle upload', () => {
           subPath: 'skills/alpha',
           name: 'Alpha',
           description: '',
+          metadata: {},
+          body: '# Alpha',
           files: ['SKILL.md'],
           alreadyImported: false
         },
@@ -985,6 +989,8 @@ describe('settings store: skill bundle upload', () => {
           subPath: 'skills/beta',
           name: 'Beta',
           description: '',
+          metadata: {},
+          body: '# Beta',
           files: ['SKILL.md'],
           alreadyImported: true
         }
@@ -997,6 +1003,27 @@ describe('settings store: skill bundle upload', () => {
     expect(api.previewSkillZip).toHaveBeenCalledWith({ dataBase64: 'YmFzZTY0' })
     expect(previews.map((preview) => preview.name)).toEqual(['Alpha', 'Beta'])
     expect(skipped).toEqual([{ source: 'oversized.zip', reason: 'too large (limit 8 MB)' }])
+  })
+
+  it('forwards a read-only GitHub candidate preview', async () => {
+    const preview = {
+      name: 'Alpha',
+      description: 'Preview',
+      sourceLabel: 'github.com/acme/skills@main/alpha',
+      metadata: {},
+      body: '# Alpha',
+      files: ['SKILL.md']
+    }
+    api.previewGitHubSkill.mockResolvedValue(preview)
+
+    await expect(
+      useSettingsStore
+        .getState()
+        .previewGitHubSkill('https://github.com/acme/skills/tree/main/alpha')
+    ).resolves.toBe(preview)
+    expect(api.previewGitHubSkill).toHaveBeenCalledWith({
+      url: 'https://github.com/acme/skills/tree/main/alpha'
+    })
   })
 
   it('importSkillZipBatch forwards every item and reconciles the skill list once', async () => {

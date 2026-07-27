@@ -50,6 +50,7 @@ import type {
   ImportSkillResult,
   ImportSkillZipBatchResult,
   SkillBundlePreviewResult,
+  SkillImportPreviewContent,
   ScanRepoResult,
   UpsertProviderRequest,
   ValidateProviderRequest,
@@ -266,6 +267,8 @@ type SettingsStore = SettingsStoreData & {
   // Parses an uploaded bundle without importing it, for a confirm-before-import preview. Returns the
   // importable skills plus any the bundle contained that were skipped and why.
   previewSkillZip: (dataBase64: string) => Promise<SkillBundlePreviewResult>
+  // Lazily fetches one scanned GitHub candidate's bounded SKILL.md preview without importing.
+  previewGitHubSkill: (url: string) => Promise<SkillImportPreviewContent>
   // Scans a GitHub repo for importable skill directories (does not mutate state).
   scanRepoSkills: (repo: string) => Promise<ScanRepoResult>
   // Lists the skills under the user's machine-level Claude config (~/.claude/skills/) for the
@@ -1099,6 +1102,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   },
 
   previewSkillZip: async (dataBase64) => window.api.settings.previewSkillZip({ dataBase64 }),
+
+  previewGitHubSkill: async (url) => window.api.settings.previewGitHubSkill({ url }),
 
   scanRepoSkills: async (repo) => window.api.settings.scanRepoSkills({ repo }),
 

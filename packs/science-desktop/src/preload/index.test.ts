@@ -61,6 +61,7 @@ type PreloadApi = {
     loginIsolatedClaudeBrowser: () => unknown
     cancelIsolatedClaudeLogin: () => unknown
     logoutIsolatedClaude: () => unknown
+    previewGitHubSkill: (request: unknown) => unknown
   }
   acp: {
     resumeSession: (request: unknown) => unknown
@@ -114,6 +115,9 @@ const sampleManifest = { projectId: 'p-1', sessionId: 's-1' }
 const sampleInstall = { executablePath: '/usr/local/bin/opencode' }
 const sampleFramework = { framework: 'opencode' }
 const sampleResumeRequest = { sessionId: 's-1', cwd: '/workspace/project' }
+const sampleGitHubPreview = {
+  url: 'https://github.com/acme/skills/tree/main/alpha'
+}
 
 const cases: ForwardingCase[] = [
   {
@@ -279,6 +283,12 @@ const cases: ForwardingCase[] = [
     invoke: (a) => a.settings.logoutIsolatedClaude(),
     channel: 'settings:logout-isolated-claude',
     args: []
+  },
+  {
+    name: 'settings.previewGitHubSkill → settings:preview-github-skill',
+    invoke: (a) => a.settings.previewGitHubSkill(sampleGitHubPreview),
+    channel: 'settings:preview-github-skill',
+    args: [sampleGitHubPreview]
   },
   // command-line launcher install/uninstall/status
   {
