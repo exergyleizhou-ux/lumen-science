@@ -3,8 +3,8 @@
 use super::*;
 use crate::session::commands::{
     PreparedScienceCsv, PreparedScienceFetch, PreparedScienceImport,
-    PreparedScienceProjectMutation, PreparedScienceSeqAnalyze, PreparedScienceSshScpAdmission,
-    PreparedScienceWorkflowExecution,
+    PreparedScienceKernelAdmission, PreparedScienceProjectMutation, PreparedScienceSeqAnalyze,
+    PreparedScienceSshScpAdmission, PreparedScienceWorkflowExecution,
 };
 use sha2::Digest as _;
 
@@ -81,6 +81,48 @@ fn validate_project_mutation_actor_roots(
     {
         return Err(xai_grok_science::ScienceError::Invalid(
             "project mutation store or paths do not belong to this SessionActor workspace".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_kernel_admission_actor_roots(
+    actor_workspace: &std::path::Path,
+    store: &xai_grok_science::ScienceStore,
+    project_root: &std::path::Path,
+    context: &xai_grok_science::RunContext,
+) -> xai_grok_science::Result<std::path::PathBuf> {
+    validate_project_mutation_actor_roots(actor_workspace, store, project_root, context)?;
+    if context.project_id.0.trim().is_empty() || context.owner_id.trim().is_empty() {
+        return Err(xai_grok_science::ScienceError::Invalid(
+            "kernel admission requires project and owner ids".into(),
+        ));
+    }
+    Ok(dunce::canonicalize(actor_workspace)?)
+}
+
+fn validate_kernel_project_binding(
+    project: &xai_grok_science::project::ResearchProject,
+    context: &xai_grok_science::RunContext,
+) -> xai_grok_science::Result<()> {
+    if project.project_id.0 != context.project_id.0 {
+        return Err(xai_grok_science::ScienceError::Invalid(
+            "kernel admission project does not match its run context".into(),
+        ));
+    }
+    if project.owner_id.0 != context.owner_id {
+        return Err(xai_grok_science::ScienceError::Ownership);
+    }
+    Ok(())
+}
+
+fn validate_kernel_session_binding(
+    actor_session: &str,
+    context: &xai_grok_science::RunContext,
+) -> xai_grok_science::Result<()> {
+    if context.session_id != actor_session {
+        return Err(xai_grok_science::ScienceError::Invalid(
+            "kernel admission session does not match this SessionActor".into(),
         ));
     }
     Ok(())
@@ -901,6 +943,129 @@ impl SessionActor {
         Ok(outcome)
     }
 
+    // ── LS5-K1 kernel admission ───────────────────────────────────
+
+    /// Open the durable run and pending approval inside the sole actor.
+    ///
+    /// This phase validates all identity and path bindings, but deliberately
+    /// does not hash or execute the interpreter. The permission manager must
+    /// decide first.
+    pub(super) fn prepare_science_kernel_admission(
+        &self,
+        store: xai_grok_science::ScienceStore,
+        project_root: std::path::PathBuf,
+        context: xai_grok_science::RunContext,
+        mut request: xai_grok_science::workflow::KernelAdmissionRequest,
+    ) -> xai_grok_science::Result<PreparedScienceKernelAdmission> {
+        use xai_grok_science::ScienceError;
+
+        validate_kernel_session_binding(self.session_info.id.0.as_ref(), &context)?;
+        self.science_feature_gates.require_all(&[
+            xai_grok_science::features::ScienceFeature::ResearchProject,
+            xai_grok_science::features::ScienceFeature::ComputeEnvironment,
+            xai_grok_science::features::ScienceFeature::MultiKernel,
+        ])?;
+        let actor_workspace = validate_kernel_admission_actor_roots(
+            std::path::Path::new(&self.session_info.cwd),
+            &store,
+            &project_root,
+            &context,
+        )?;
+        let project_store = xai_grok_science::project::ProjectStore::new(&project_root)
+            .with_gates(self.science_feature_gates.clone());
+        let project_id =
+            xai_grok_science::project::ProjectId(context.project_id.0.clone());
+        let project = project_store.load_project(&project_id)?;
+        validate_kernel_project_binding(&project, &context)?;
+
+        if !request.interpreter_path.is_absolute() {
+            return Err(ScienceError::Invalid(
+                "interpreter path must be absolute; a kernel is never resolved from PATH".into(),
+            ));
+        }
+        let interpreter = dunce::canonicalize(&request.interpreter_path)?;
+        if !std::fs::metadata(&interpreter)?.is_file() {
+            return Err(ScienceError::Invalid(
+                "kernel interpreter must be a regular file".into(),
+            ));
+        }
+        request.interpreter_path = interpreter.clone();
+
+        if let Some(allowed_root) = request.allowed_root.as_ref() {
+            if !allowed_root.is_absolute() {
+                return Err(ScienceError::Invalid(
+                    "kernel allowed root must be absolute".into(),
+                ));
+            }
+            let allowed_root = dunce::canonicalize(allowed_root)?;
+            if !interpreter.starts_with(&allowed_root) {
+                return Err(ScienceError::Invalid(
+                    "kernel interpreter is outside its allowed root".into(),
+                ));
+            }
+            request.allowed_root = Some(allowed_root);
+        }
+
+        if let Some(lock_path) = request.package_lock_path.as_ref() {
+            if !lock_path.is_absolute() {
+                return Err(ScienceError::Invalid(
+                    "package lock path must be absolute".into(),
+                ));
+            }
+            let lock_path = dunce::canonicalize(lock_path)?;
+            if !std::fs::metadata(&lock_path)?.is_file()
+                || !lock_path.starts_with(&actor_workspace)
+            {
+                return Err(ScienceError::Invalid(
+                    "package lock must be a regular file inside the SessionActor workspace".into(),
+                ));
+            }
+            request.package_lock_path = Some(lock_path);
+        }
+
+        request.admitted_by = format!("SessionActor:{}", self.session_info.id.0);
+        let target = format!(
+            "{} ({})",
+            request.kernel_id,
+            request.interpreter_path.display()
+        );
+        let ticket =
+            xai_grok_science::workflow::begin_kernel_admission(&store, context)?;
+        Ok(PreparedScienceKernelAdmission {
+            store,
+            ticket,
+            request,
+            target,
+        })
+    }
+
+    /// Persist the permission terminal and execute only after durable Allow.
+    pub(super) fn finish_science_kernel_admission(
+        &self,
+        prepared: PreparedScienceKernelAdmission,
+        decision: xai_grok_science::ApprovalDecision,
+        reason: String,
+    ) -> xai_grok_science::Result<xai_grok_science::workflow::KernelAdmissionResult> {
+        if decision != xai_grok_science::ApprovalDecision::Allow {
+            let terminal = xai_grok_science::csv::finish_without_execution(
+                &prepared.store,
+                &prepared.ticket,
+                decision,
+                reason,
+            )?;
+            return Err(xai_grok_science::ScienceError::Invalid(format!(
+                "science run {} finished {:?}",
+                prepared.ticket.run_id.0, terminal.state
+            )));
+        }
+        xai_grok_science::csv::mark_allowed(&prepared.store, &prepared.ticket)?;
+        xai_grok_science::workflow::finish_kernel_admission(
+            &prepared.store,
+            prepared.ticket,
+            &prepared.request,
+        )
+    }
+
     // ── LS5-K8 workflow execution ─────────────────────────────────
 
     /// Phase one inside the sole session actor: bind the execution to this
@@ -1394,5 +1559,43 @@ mod actor_root_tests {
                 .is_none(),
             "root validation wrote inside the durable run root"
         );
+    }
+
+    #[test]
+    fn kernel_project_and_owner_binding_fails_closed() {
+        let project = xai_grok_science::project::ResearchProject::new(
+            xai_grok_science::project::ProjectId("project-a".into()),
+            xai_grok_science::project::OwnerId("alice".into()),
+            "Project A".into(),
+            "Question".into(),
+        );
+        let workspace = tempfile::tempdir().unwrap();
+        let project_root = workspace.path().join("science-store");
+        let mut bound = context(workspace.path(), &project_root);
+        bound.project_id = xai_grok_science::ProjectId::new("project-a");
+        bound.owner_id = "alice".into();
+        validate_kernel_project_binding(&project, &bound).unwrap();
+
+        let mut wrong_project = bound.clone();
+        wrong_project.project_id = xai_grok_science::ProjectId::new("project-b");
+        assert!(validate_kernel_project_binding(&project, &wrong_project).is_err());
+
+        let mut wrong_owner = bound;
+        wrong_owner.owner_id = "mallory".into();
+        assert!(matches!(
+            validate_kernel_project_binding(&project, &wrong_owner),
+            Err(xai_grok_science::ScienceError::Ownership)
+        ));
+    }
+
+    #[test]
+    fn kernel_session_binding_fails_closed() {
+        let workspace = tempfile::tempdir().unwrap();
+        let project_root = workspace.path().join("science-store");
+        let mut bound = context(workspace.path(), &project_root);
+        validate_kernel_session_binding("session-root-test", &bound).unwrap();
+
+        bound.session_id = "foreign-session".into();
+        assert!(validate_kernel_session_binding("session-root-test", &bound).is_err());
     }
 }

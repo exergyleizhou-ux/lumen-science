@@ -230,6 +230,34 @@ pub struct FinishScienceProjectMutation {
         oneshot::Sender<xai_grok_science::Result<xai_grok_science::project::MutationOutcome>>,
 }
 
+/// A kernel admission run created by the actor and waiting on the production
+/// permission decision. The interpreter has not been executed or hashed yet.
+pub struct PreparedScienceKernelAdmission {
+    pub(crate) store: xai_grok_science::ScienceStore,
+    pub(crate) ticket: xai_grok_science::csv::ScienceRunTicket,
+    pub(crate) request: xai_grok_science::workflow::KernelAdmissionRequest,
+    /// Human-readable executable identity shown in the permission prompt.
+    pub(crate) target: String,
+}
+
+pub struct BeginScienceKernelAdmission {
+    pub(crate) store: xai_grok_science::ScienceStore,
+    pub(crate) project_root: std::path::PathBuf,
+    pub(crate) context: xai_grok_science::RunContext,
+    pub(crate) request: xai_grok_science::workflow::KernelAdmissionRequest,
+    pub(crate) respond_to:
+        oneshot::Sender<xai_grok_science::Result<PreparedScienceKernelAdmission>>,
+}
+
+pub struct FinishScienceKernelAdmission {
+    pub(crate) prepared: PreparedScienceKernelAdmission,
+    pub(crate) decision: xai_grok_science::ApprovalDecision,
+    pub(crate) reason: String,
+    pub(crate) respond_to: oneshot::Sender<
+        xai_grok_science::Result<xai_grok_science::workflow::KernelAdmissionResult>,
+    >,
+}
+
 /// Everything an executor needs to be bound to a workflow run.
 ///
 /// The ACP adapter RESOLVES these (session workspace, path confinement, param
@@ -388,6 +416,10 @@ pub enum SessionCommand {
     /// on its own request task.
     BeginScienceProjectMutation(Box<BeginScienceProjectMutation>),
     FinishScienceProjectMutation(Box<FinishScienceProjectMutation>),
+    /// Kernel identity probing executes the selected interpreter, so its
+    /// durable Begin/permission/Finish protocol belongs to the actor.
+    BeginScienceKernelAdmission(Box<BeginScienceKernelAdmission>),
+    FinishScienceKernelAdmission(Box<FinishScienceKernelAdmission>),
     /// LS5-K8 phase one: admit a workflow execution inside the actor. The ACP
     /// adapter must not build an executor or a runner of its own — a workflow
     /// step spawns a process, which is the most consequential authority in this

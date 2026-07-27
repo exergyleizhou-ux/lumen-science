@@ -4,6 +4,7 @@
 pub mod admission;
 pub mod executor;
 pub mod kernel;
+mod kernel_admission_protocol;
 pub mod package;
 pub mod python_runner;
 
@@ -12,6 +13,9 @@ mod e2e_tests;
 
 pub use admission::{
     KernelAdmissionRequest, KernelPolicy, RejectionReason, default_resource_cap, probe_kernel,
+};
+pub use kernel_admission_protocol::{
+    KernelAdmissionResult, begin_kernel_admission, finish_kernel_admission,
 };
 pub use executor::{
     ArtifactCommit, AttemptState, Clock, ErrorClass, ExecutionPolicy, KernelInvocation,

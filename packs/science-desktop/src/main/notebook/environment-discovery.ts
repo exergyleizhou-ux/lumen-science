@@ -461,8 +461,42 @@ const condaEnvName = (interpreterPath: string): string | undefined => {
     : undefined
 }
 
-// Discovers every interpreter for a language, deduped by real path, each probed for version +
-// runnability and classified by provenance. The orchestration is pure over the injected deps.
+// Enumerate pinned candidate paths without executing them. This is the product
+// path used by the environment admission UI: version, digest and runnability
+// remain unknown until the SessionActor receives an Allow decision and probes.
+export const enumerateInterpreterCandidates = async (
+  language: NotebookLanguage,
+  deps: DiscoveryDeps
+): Promise<DiscoveredInterpreter[]> => {
+  const seen = new Set<string>()
+  const results: DiscoveredInterpreter[] = []
+  const { pinned, unpinned } = partitionCandidates(
+    await deps.candidatePaths(language),
+    deps.platform ?? process.platform
+  )
+  for (const { candidate, reason } of unpinned) deps.onUnpinnedCandidate?.(candidate, reason)
+  for (const candidate of pinned) {
+    const envId = deps.realpath(candidate)
+    if (seen.has(envId)) continue
+    seen.add(envId)
+    const conda = condaEnvName(candidate)
+    results.push({
+      language,
+      provenance: classify(candidate, deps.runtimeRoot),
+      envId,
+      interpreterPath: candidate,
+      label: conda ? `conda: ${conda}` : candidate,
+      runnable: false,
+      condaEnv: conda,
+      detail: 'Candidate only; SessionActor admission has not probed this interpreter',
+    })
+  }
+  return results
+}
+
+// Legacy readiness discovery for notebook registry callers that explicitly
+// need UI readiness. It must not be used by kernel admission: it executes each
+// candidate before the user has approved a probe.
 export const discoverInterpreters = async (
   language: NotebookLanguage,
   deps: DiscoveryDeps

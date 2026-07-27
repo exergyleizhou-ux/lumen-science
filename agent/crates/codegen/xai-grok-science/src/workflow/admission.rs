@@ -64,7 +64,14 @@ pub enum RejectionReason {
     /// optionally `sha256:`-prefixed. Nothing can be verified against it.
     SuppliedDigestMalformed { field: String, value: String },
     ExecutableHashMismatch { supplied: String, probed: String },
+    /// The bytes changed after the executable was hashed but before the
+    /// admission record could be committed. The version and digest therefore
+    /// do not describe one stable identity.
+    InterpreterChangedDuringProbe { before: String, after: String },
     PackageLockHashMismatch { supplied: String, probed: String },
+    /// The dependency lock changed while the interpreter probe was running.
+    /// Do not bind a version observation to a different package set.
+    PackageLockChangedDuringProbe { before: String, after: String },
     /// A package-lock digest was asserted with no lock file to hash, so the
     /// assertion cannot be checked. Fail closed rather than accept it.
     PackageLockUnverifiable { supplied: String },
@@ -88,7 +95,9 @@ impl RejectionReason {
             Self::InterpreterOutsideAllowedRoot { .. } => "interpreter_outside_allowed_root",
             Self::SuppliedDigestMalformed { .. } => "supplied_digest_malformed",
             Self::ExecutableHashMismatch { .. } => "executable_hash_mismatch",
+            Self::InterpreterChangedDuringProbe { .. } => "interpreter_changed_during_probe",
             Self::PackageLockHashMismatch { .. } => "package_lock_hash_mismatch",
+            Self::PackageLockChangedDuringProbe { .. } => "package_lock_changed_during_probe",
             Self::PackageLockUnverifiable { .. } => "package_lock_unverifiable",
             Self::PackageLockNotAFile { .. } => "package_lock_not_a_file",
             Self::VersionProbeSpawnFailed { .. } => "version_probe_spawn_failed",
@@ -129,9 +138,17 @@ impl fmt::Display for RejectionReason {
                 f,
                 "executable hash mismatch: supplied {supplied}, probed {probed}"
             ),
+            Self::InterpreterChangedDuringProbe { before, after } => write!(
+                f,
+                "interpreter changed during the version probe: before {before}, after {after}"
+            ),
             Self::PackageLockHashMismatch { supplied, probed } => write!(
                 f,
                 "package lock hash mismatch: supplied {supplied}, probed {probed}"
+            ),
+            Self::PackageLockChangedDuringProbe { before, after } => write!(
+                f,
+                "package lock changed during the version probe: before {before}, after {after}"
             ),
             Self::PackageLockUnverifiable { supplied } => write!(
                 f,
@@ -503,9 +520,37 @@ fn probe_inner(
     let argv = request.version_argv();
     let exact_version = run_version_probe(&resolved, &argv, request.probe_timeout)?;
 
+    // 8. Close the time-of-check/time-of-use window. A probe may execute code
+    //    that replaces its own executable or rewrites the dependency lock.
+    //    Re-hash both after execution and only commit a record when the bytes
+    //    observed before and after are identical.
+    let executable_hash_after =
+        hash_file(&resolved).map_err(|error| RejectionReason::InterpreterNotAFile {
+            path: resolved_display,
+            file_type: format!("unreadable after probe ({error})"),
+        })?;
+    if executable_hash != executable_hash_after {
+        return Err(RejectionReason::InterpreterChangedDuringProbe {
+            before: executable_hash,
+            after: executable_hash_after,
+        });
+    }
+    if let Some(lock_path) = &request.package_lock_path {
+        let lock_hash_after =
+            hash_file(lock_path).map_err(|_| RejectionReason::PackageLockNotAFile {
+                path: lock_path.display().to_string(),
+            })?;
+        if package_lock_hash != lock_hash_after {
+            return Err(RejectionReason::PackageLockChangedDuringProbe {
+                before: package_lock_hash,
+                after: lock_hash_after,
+            });
+        }
+    }
+
     Ok(ProbedKernel {
         resolved_path: resolved,
-        executable_hash,
+        executable_hash: executable_hash_after,
         package_lock_hash,
         exact_version,
     })
@@ -956,6 +1001,45 @@ mod tests {
         .unwrap();
         assert_eq!(admission.admission_status, AdmissionStatus::Admitted);
         assert_eq!(admission.package_lock_hash, real);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn interpreter_that_changes_itself_during_probe_is_rejected() {
+        let dir = tempdir().unwrap();
+        let path = script(
+            dir.path(),
+            "python3",
+            "#!/bin/sh\nprintf '#!/bin/sh\\necho replaced\\n' > \"$0.replacement\"\nchmod +x \"$0.replacement\"\nmv \"$0.replacement\" \"$0\"\necho 'Python 3.12.0'\n",
+        );
+        let admission = probe_kernel(&request(&path)).unwrap();
+        assert_eq!(
+            reason(&admission).code(),
+            "interpreter_changed_during_probe"
+        );
+        assert!(admission.executable_hash.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn package_lock_that_changes_during_probe_is_rejected() {
+        let dir = tempdir().unwrap();
+        let lock = dir.path().join("requirements.lock");
+        fs::write(&lock, "numpy==2.0.0\n").unwrap();
+        let path = script(
+            dir.path(),
+            "python3",
+            &format!(
+                "#!/bin/sh\nprintf 'numpy==2.1.0\\n' > '{}'\necho 'Python 3.12.0'\n",
+                lock.display()
+            ),
+        );
+        let admission = probe_kernel(&request(&path).with_package_lock(&lock)).unwrap();
+        assert_eq!(
+            reason(&admission).code(),
+            "package_lock_changed_during_probe"
+        );
+        assert!(admission.package_lock_hash.is_empty());
     }
 
     #[test]
