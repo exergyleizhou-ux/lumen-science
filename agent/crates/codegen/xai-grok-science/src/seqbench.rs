@@ -6,7 +6,10 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
 pub const TOOL: &str = "lumen-seqbench";
-pub const TOOL_VERSION: &str = "1.0.0";
+pub const TOOL_VERSION: &str = "1.1.0";
+pub const MOTIF_REPOSITORY: &str = "https://github.com/jvogan/motif.git";
+pub const MOTIF_COMMIT: &str = "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0";
+pub const MOTIF_LICENSE: &str = "MIT";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Record {
@@ -15,6 +18,37 @@ pub struct Record {
     pub description: String,
     pub sequence: String,
     pub kind: String, // dna | rna | protein | unknown
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub gaps_removed: usize,
+}
+
+fn is_zero(value: &usize) -> bool {
+    *value == 0
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NucleotideComposition {
+    #[serde(rename = "A")]
+    pub a: usize,
+    #[serde(rename = "T")]
+    pub t: usize,
+    #[serde(rename = "U")]
+    pub u: usize,
+    #[serde(rename = "G")]
+    pub g: usize,
+    #[serde(rename = "C")]
+    pub c: usize,
+    #[serde(rename = "N")]
+    pub n: usize,
+    pub other: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AlgorithmSource {
+    pub repository: String,
+    pub commit: String,
+    pub license: String,
+    pub components: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -40,8 +74,24 @@ pub struct RecordSummary {
     pub id: String,
     pub kind: String,
     pub length: usize,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub gaps_removed: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nucleotide_composition: Option<NucleotideComposition>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gc_fraction: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gc_percent: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub at_fraction: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_molecular_weight_da: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_melting_temperature_c: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_protein_average_molecular_weight_da: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_protein_monoisotopic_molecular_weight_da: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reverse_complement: Option<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -58,18 +108,25 @@ pub struct Analysis {
     pub tool: String,
     pub tool_version: String,
     pub source_sha256: String,
+    pub algorithm_sources: Vec<AlgorithmSource>,
     pub records: Vec<RecordSummary>,
     pub notes: Vec<String>,
 }
 
 /// Parse multi-FASTA or raw sequence. Fail-closed on empty.
+///
+/// The FASTA record handling is adapted from Motif's `fasta-parser.ts` at
+/// [`MOTIF_COMMIT`]: headers split on the first whitespace (not only a literal
+/// space), NBRF/PIR `;` comments are ignored, only ASCII letters plus the
+/// protein stop glyph survive sequence cleaning, and alignment gaps are
+/// counted before removal so the analysis can disclose degapping.
 pub fn parse_fasta(raw: &str) -> Result<Vec<Record>, String> {
     let raw = raw.trim();
     if raw.is_empty() {
         return Err("empty sequence input".into());
     }
     if !raw.starts_with('>') {
-        let seq = normalize_seq(raw);
+        let (seq, gaps_removed) = normalize_seq_with_gaps(raw);
         if seq.is_empty() {
             return Err("no sequence characters found".into());
         }
@@ -79,17 +136,24 @@ pub fn parse_fasta(raw: &str) -> Result<Vec<Record>, String> {
             description: String::new(),
             sequence: seq,
             kind,
+            gaps_removed,
         }]);
     }
     let mut out = Vec::new();
     let mut cur_id = String::new();
     let mut cur_desc = String::new();
     let mut buf = String::new();
+    let mut gaps_removed = 0usize;
     let mut have = false;
-    let flush = |id: &str, desc: &str, buf: &mut String, out: &mut Vec<Record>| {
-        let seq = normalize_seq(buf);
+    let flush = |id: &str,
+                 desc: &str,
+                 buf: &mut String,
+                 gaps_removed: &mut usize,
+                 out: &mut Vec<Record>| {
+        let (seq, counted_gaps) = normalize_seq_with_gaps(buf);
         buf.clear();
         if seq.is_empty() {
+            *gaps_removed = 0;
             return;
         }
         let kind = detect_kind(&seq);
@@ -102,31 +166,38 @@ pub fn parse_fasta(raw: &str) -> Result<Vec<Record>, String> {
             description: desc.to_string(),
             sequence: seq,
             kind,
+            gaps_removed: (*gaps_removed).max(counted_gaps),
         });
+        *gaps_removed = 0;
     };
     for line in raw.lines() {
-        let line = line.trim_end_matches('\r');
+        let line = line.trim();
+        if line.starts_with(';') {
+            continue;
+        }
         if let Some(header) = line.strip_prefix('>') {
             if have {
-                flush(&cur_id, &cur_desc, &mut buf, &mut out);
+                flush(&cur_id, &cur_desc, &mut buf, &mut gaps_removed, &mut out);
             }
             let header = header.trim();
-            if let Some((id, desc)) = header.split_once(' ') {
-                cur_id = id.to_string();
-                cur_desc = desc.trim().to_string();
+            if let Some((index, ch)) = header.char_indices().find(|(_, ch)| ch.is_whitespace()) {
+                cur_id = header[..index].to_string();
+                cur_desc = header[index + ch.len_utf8()..].trim().to_string();
             } else {
                 cur_id = header.to_string();
                 cur_desc.clear();
             }
+            gaps_removed = 0;
             have = true;
             continue;
         }
-        if have {
+        if have && !line.is_empty() {
+            gaps_removed += line.chars().filter(|ch| matches!(ch, '-' | '.')).count();
             buf.push_str(line);
         }
     }
     if have {
-        flush(&cur_id, &cur_desc, &mut buf, &mut out);
+        flush(&cur_id, &cur_desc, &mut buf, &mut gaps_removed, &mut out);
     }
     if out.is_empty() {
         return Err("no FASTA records parsed".into());
@@ -141,15 +212,29 @@ pub fn analyze(records: &[Record], source_bytes: &[u8]) -> Analysis {
         summaries.push(summarize(r));
     }
     Analysis {
-        schema_version: 1,
+        schema_version: 2,
         tool: TOOL.into(),
         tool_version: TOOL_VERSION.into(),
         source_sha256,
+        algorithm_sources: vec![AlgorithmSource {
+            repository: MOTIF_REPOSITORY.into(),
+            commit: MOTIF_COMMIT.into(),
+            license: MOTIF_LICENSE.into(),
+            components: vec![
+                "src/bio/fasta-parser.ts".into(),
+                "src/bio/gc-content.ts".into(),
+                "src/bio/reverse-complement.ts".into(),
+                "src/bio/translate.ts".into(),
+            ],
+        }],
         records: summaries,
         notes: vec![
             "Deterministic offline analysis. Not a substitute for wet-lab validation.".into(),
             "Restriction sites are recognition-pattern hits only.".into(),
             "ORFs use standard genetic code; min length 30 aa; ATG start.".into(),
+            format!(
+                "FASTA and sequence metrics are adapted from Motif {MOTIF_COMMIT} ({MOTIF_LICENSE})."
+            ),
         ],
     }
 }
@@ -166,8 +251,30 @@ pub fn markdown_report(a: &Analysis, source_label: &str) -> String {
         b.push_str("| field | value |\n|---|---|\n");
         b.push_str(&format!("| kind | {} |\n", r.kind));
         b.push_str(&format!("| length | {} |\n", r.length));
+        if r.gaps_removed > 0 {
+            b.push_str(&format!(
+                "| alignment gaps removed | {} |\n",
+                r.gaps_removed
+            ));
+        }
         if let Some(gc) = r.gc_percent {
             b.push_str(&format!("| GC% | {gc:.2} |\n"));
+        }
+        if let Some(tm) = r.estimated_melting_temperature_c {
+            b.push_str(&format!("| estimated Tm °C | {tm:.2} |\n"));
+        }
+        if let Some(mw) = r.estimated_molecular_weight_da {
+            b.push_str(&format!("| estimated molecular weight Da | {mw:.2} |\n"));
+        }
+        if let Some(mw) = r.estimated_protein_average_molecular_weight_da {
+            b.push_str(&format!(
+                "| estimated protein average molecular weight Da | {mw:.2} |\n"
+            ));
+        }
+        if let Some(mw) = r.estimated_protein_monoisotopic_molecular_weight_da {
+            b.push_str(&format!(
+                "| estimated protein monoisotopic molecular weight Da | {mw:.2} |\n"
+            ));
         }
         b.push('\n');
         if !r.orfs.is_empty() {
@@ -194,7 +301,10 @@ pub fn markdown_report(a: &Analysis, source_label: &str) -> String {
         }
     }
     b.push_str(
-        "## Provenance\n\nGenerated offline by Lumen Science seqbench. Not medical advice.\n",
+        "## Provenance\n\nGenerated offline by Lumen Science seqbench inside the Rust \
+         SessionActor. FASTA parsing and sequence-metric algorithms are adapted from \
+         [jvogan/motif](https://github.com/jvogan/motif) at commit \
+         `876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0` (MIT). Not medical advice.\n",
     );
     b
 }
@@ -210,14 +320,29 @@ fn summarize(r: &Record) -> RecordSummary {
         id: r.id.clone(),
         kind: r.kind.clone(),
         length: r.sequence.len(),
+        gaps_removed: r.gaps_removed,
+        nucleotide_composition: None,
+        gc_fraction: None,
         gc_percent: None,
+        at_fraction: None,
+        estimated_molecular_weight_da: None,
+        estimated_melting_temperature_c: None,
+        estimated_protein_average_molecular_weight_da: None,
+        estimated_protein_monoisotopic_molecular_weight_da: None,
         reverse_complement: None,
         translation_frames: BTreeMap::new(),
         orfs: Vec::new(),
         restriction_hits: Vec::new(),
     };
     if r.kind == "dna" || r.kind == "rna" {
-        s.gc_percent = Some(gc_percent(&r.sequence));
+        let composition = nucleotide_composition(&r.sequence);
+        let gc = gc_fraction_from_composition(&composition);
+        s.nucleotide_composition = Some(composition.clone());
+        s.gc_fraction = Some(gc);
+        s.gc_percent = Some(gc * 100.0);
+        s.at_fraction = Some(at_fraction_from_composition(&composition));
+        s.estimated_molecular_weight_da = Some(molecular_weight(&r.sequence));
+        s.estimated_melting_temperature_c = melting_temperature_from_composition(&composition);
         let rna = r.kind == "rna";
         s.reverse_complement = Some(reverse_complement(&r.sequence, rna));
         for frame in 1..=3 {
@@ -241,70 +366,229 @@ fn summarize(r: &Record) -> RecordSummary {
         if r.kind == "dna" {
             s.restriction_hits = find_restriction_sites(&r.sequence);
         }
+    } else if r.kind == "protein" {
+        s.estimated_protein_average_molecular_weight_da = Some(protein_molecular_weight(
+            &r.sequence,
+            ProteinMassMode::Average,
+        ));
+        s.estimated_protein_monoisotopic_molecular_weight_da = Some(protein_molecular_weight(
+            &r.sequence,
+            ProteinMassMode::Monoisotopic,
+        ));
     }
     s
 }
 
-fn normalize_seq(s: &str) -> String {
-    s.chars()
-        .filter(|c| !c.is_whitespace() && *c != '-' && *c != '.')
-        .map(|c| c.to_ascii_uppercase())
-        .filter(|c| c.is_ascii_alphabetic() || *c == '*')
-        .collect()
+fn normalize_seq_with_gaps(s: &str) -> (String, usize) {
+    let gaps_removed = s.chars().filter(|ch| matches!(ch, '-' | '.')).count();
+    let sequence = s
+        .chars()
+        .map(|ch| ch.to_ascii_uppercase())
+        .filter(|ch| ch.is_ascii_alphabetic() || *ch == '*')
+        .collect();
+    (sequence, gaps_removed)
 }
 
 fn detect_kind(seq: &str) -> String {
-    let mut a = 0usize;
-    let mut c = 0usize;
-    let mut g = 0usize;
+    let mut nucleotide_like = 0usize;
     let mut t = 0usize;
     let mut u = 0usize;
-    let mut aa = 0usize;
+    let mut protein_signal = 0usize;
     for ch in seq.chars() {
+        if matches!(
+            ch,
+            'A' | 'C'
+                | 'G'
+                | 'T'
+                | 'U'
+                | 'N'
+                | 'R'
+                | 'Y'
+                | 'S'
+                | 'W'
+                | 'K'
+                | 'M'
+                | 'B'
+                | 'D'
+                | 'H'
+                | 'V'
+        ) {
+            nucleotide_like += 1;
+        }
         match ch {
-            'A' => a += 1,
-            'C' => c += 1,
-            'G' => g += 1,
             'T' => t += 1,
             'U' => u += 1,
-            'E' | 'F' | 'I' | 'L' | 'P' | 'Q' | '*' => aa += 1,
-            _ => {}
+            'E' | 'F' | 'I' | 'L' | 'P' | 'Q' | 'Z' | 'X' | '*' => protein_signal += 1,
+            _ => (),
         }
     }
     let n = seq.len().max(1);
-    let nt = a + c + g + t + u;
-    if (nt as f64) / (n as f64) >= 0.85 {
+    if (nucleotide_like as f64) / (n as f64) >= 0.8 {
         if u > t {
             return "rna".into();
         }
         return "dna".into();
     }
-    if aa > 0 {
+    if protein_signal > 0 {
         return "protein".into();
     }
     "unknown".into()
 }
 
-fn gc_percent(seq: &str) -> f64 {
-    let mut gc = 0usize;
-    let mut n = 0usize;
+// The following composition, molecular-weight and Tm functions are direct
+// Rust adaptations of Motif's `src/bio/gc-content.ts` at `MOTIF_COMMIT`.
+fn nucleotide_composition(seq: &str) -> NucleotideComposition {
+    let mut composition = NucleotideComposition::default();
     for ch in seq.chars() {
         match ch {
-            'G' | 'C' | 'S' => {
-                gc += 1;
-                n += 1;
-            }
-            'A' | 'T' | 'U' | 'W' => n += 1,
-            _ => {}
+            'A' | 'a' => composition.a += 1,
+            'T' | 't' => composition.t += 1,
+            'U' | 'u' => composition.u += 1,
+            'G' | 'g' => composition.g += 1,
+            'C' | 'c' => composition.c += 1,
+            'N' | 'n' => composition.n += 1,
+            _ => composition.other += 1,
         }
     }
-    if n == 0 {
+    composition
+}
+
+fn canonical_nucleotide_count(composition: &NucleotideComposition) -> usize {
+    composition.a + composition.t + composition.u + composition.g + composition.c
+}
+
+fn gc_fraction_from_composition(composition: &NucleotideComposition) -> f64 {
+    let total = canonical_nucleotide_count(composition);
+    if total == 0 {
         0.0
     } else {
-        100.0 * (gc as f64) / (n as f64)
+        (composition.g + composition.c) as f64 / total as f64
     }
 }
 
+fn at_fraction_from_composition(composition: &NucleotideComposition) -> f64 {
+    let total = canonical_nucleotide_count(composition);
+    if total == 0 {
+        0.0
+    } else {
+        (composition.a + composition.t + composition.u) as f64 / total as f64
+    }
+}
+
+fn molecular_weight(seq: &str) -> f64 {
+    let upper = seq.to_ascii_uppercase().replace('U', "T");
+    if upper.is_empty() {
+        return 0.0;
+    }
+    let mut mass = 0.0;
+    for ch in upper.chars() {
+        mass += match ch {
+            'A' => 313.21,
+            'T' => 304.19,
+            'G' => 329.21,
+            'C' => 289.18,
+            _ => 308.95,
+        };
+    }
+    mass -= (upper.len() - 1) as f64 * 18.02;
+    mass += 17.01 + 79.0;
+    round_hundredths(mass)
+}
+
+fn melting_temperature_from_composition(composition: &NucleotideComposition) -> Option<f64> {
+    let total = canonical_nucleotide_count(composition);
+    if total == 0 {
+        return None;
+    }
+    let at = composition.a + composition.t + composition.u;
+    let gc = composition.g + composition.c;
+    if total <= 20 {
+        Some((2 * at + 4 * gc) as f64)
+    } else {
+        Some(64.9 + 41.0 * (gc as f64 - 16.4) / total as f64)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ProteinMassMode {
+    Average,
+    Monoisotopic,
+}
+
+fn protein_molecular_weight(seq: &str, mode: ProteinMassMode) -> f64 {
+    let residues = seq
+        .chars()
+        .filter(|ch| ch.is_ascii_alphabetic())
+        .map(|ch| ch.to_ascii_uppercase())
+        .collect::<Vec<_>>();
+    if residues.is_empty() {
+        return 0.0;
+    }
+    let mut mass = match mode {
+        ProteinMassMode::Average => 18.015,
+        ProteinMassMode::Monoisotopic => 18.0106,
+    };
+    for residue in residues {
+        mass += amino_acid_residue_mass(residue, mode);
+    }
+    round_hundredths(mass)
+}
+
+fn amino_acid_residue_mass(residue: char, mode: ProteinMassMode) -> f64 {
+    match mode {
+        ProteinMassMode::Average => match residue {
+            'G' => 57.052,
+            'A' => 71.079,
+            'V' => 99.133,
+            'L' | 'I' => 113.160,
+            'P' => 97.117,
+            'F' => 147.177,
+            'W' => 186.213,
+            'M' => 131.199,
+            'S' => 87.078,
+            'T' => 101.105,
+            'C' => 103.145,
+            'Y' => 163.176,
+            'H' => 137.141,
+            'D' => 115.089,
+            'E' => 129.116,
+            'N' => 114.104,
+            'Q' => 128.131,
+            'K' => 128.174,
+            'R' => 156.188,
+            _ => 111.1,
+        },
+        ProteinMassMode::Monoisotopic => match residue {
+            'G' => 57.0215,
+            'A' => 71.0371,
+            'V' => 99.0684,
+            'L' | 'I' => 113.0841,
+            'P' => 97.0528,
+            'F' => 147.0684,
+            'W' => 186.0793,
+            'M' => 131.0405,
+            'S' => 87.0320,
+            'T' => 101.0477,
+            'C' => 103.0092,
+            'Y' => 163.0633,
+            'H' => 137.0589,
+            'D' => 115.0269,
+            'E' => 129.0426,
+            'N' => 114.0429,
+            'Q' => 128.0586,
+            'K' => 128.0949,
+            'R' => 156.1011,
+            _ => 111.1,
+        },
+    }
+}
+
+fn round_hundredths(value: f64) -> f64 {
+    (value * 100.0).round() / 100.0
+}
+
+// IUPAC complement semantics are adapted from Motif's
+// `src/bio/reverse-complement.ts` at `MOTIF_COMMIT`.
 fn reverse_complement(seq: &str, rna: bool) -> String {
     let map = |c: char| -> char {
         match c {
@@ -336,9 +620,17 @@ fn reverse_complement(seq: &str, rna: bool) -> String {
 }
 
 fn to_dna(seq: &str) -> String {
-    seq.replace('U', "T")
+    seq.chars()
+        .map(|ch| match ch.to_ascii_uppercase() {
+            'U' => 'T',
+            upper => upper,
+        })
+        .collect()
 }
 
+// Standard-code frame translation is adapted from Motif's
+// `src/bio/translate.ts` at `MOTIF_COMMIT`. Lumen's public frame labels remain
+// one-based (+1..+3 / -1..-3), so the offset conversion stays at this boundary.
 fn translate(seq: &str, frame: usize) -> String {
     if !(1..=3).contains(&frame) {
         return String::new();
@@ -510,6 +802,80 @@ mod tests {
         assert_eq!(a1.source_sha256, a2.source_sha256);
         assert_eq!(markdown_report(&a1, "a"), markdown_report(&a2, "a"));
     }
+
+    #[test]
+    fn motif_fasta_port_handles_comments_whitespace_headers_and_gap_provenance() {
+        let raw = "  >seq-1\twith description\r\n; legacy PIR comment\r\nAA-TT.GGCCN123?!\r\n";
+        let records = parse_fasta(raw).unwrap();
+
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].id, "seq-1");
+        assert_eq!(records[0].description, "with description");
+        assert_eq!(records[0].sequence, "AATTGGCCN");
+        assert_eq!(records[0].gaps_removed, 2);
+        assert_eq!(records[0].kind, "dna");
+    }
+
+    #[test]
+    fn motif_nucleotide_metrics_match_the_cross_language_reference_values() {
+        let raw = ">seq\nAATTGGCCN\n";
+        let records = parse_fasta(raw).unwrap();
+        let analysis = analyze(&records, raw.as_bytes());
+        let summary = &analysis.records[0];
+        let composition = summary.nucleotide_composition.as_ref().unwrap();
+
+        assert_eq!(analysis.schema_version, 2);
+        assert_eq!(analysis.tool_version, "1.1.0");
+        assert_eq!(analysis.algorithm_sources[0].commit, MOTIF_COMMIT);
+        assert_eq!(
+            composition,
+            &NucleotideComposition {
+                a: 2,
+                t: 2,
+                u: 0,
+                g: 2,
+                c: 2,
+                n: 1,
+                other: 0,
+            }
+        );
+        assert_eq!(summary.gc_fraction, Some(0.5));
+        assert_eq!(summary.gc_percent, Some(50.0));
+        assert_eq!(summary.at_fraction, Some(0.5));
+        assert_eq!(summary.estimated_melting_temperature_c, Some(24.0));
+        assert_eq!(summary.estimated_molecular_weight_da, Some(2732.38));
+    }
+
+    #[test]
+    fn motif_protein_mass_tables_preserve_average_and_monoisotopic_modes() {
+        let raw = ">protein\nACDE\n";
+        let records = parse_fasta(raw).unwrap();
+        assert_eq!(records[0].kind, "protein");
+
+        let summary = &analyze(&records, raw.as_bytes()).records[0];
+        assert_eq!(
+            summary.estimated_protein_average_molecular_weight_da,
+            Some(436.44)
+        );
+        assert_eq!(
+            summary.estimated_protein_monoisotopic_molecular_weight_da,
+            Some(436.13)
+        );
+        assert!(summary.nucleotide_composition.is_none());
+    }
+
+    #[test]
+    fn motif_iupac_reverse_complement_and_rna_translation_match() {
+        assert_eq!(
+            reverse_complement("ACGTRYSWKMBDHVN", false),
+            "NBDHVKMWSRYACGT"
+        );
+        assert_eq!(
+            reverse_complement("ACGURYSWKMBDHVN", true),
+            "NBDHVKMWSRYACGU"
+        );
+        assert_eq!(translate("augugauga", 1), "M**");
+    }
 }
 
 // ── SessionActor-gated run protocol ──────────────────────────────────────────
@@ -655,7 +1021,13 @@ pub fn finish_analysis(
         input_sha256: hex_sha256(source_bytes),
         tool: tool_identity.clone(),
         environment: BTreeMap::from([
-            ("algorithm".into(), "seqbench-v1".into()),
+            ("algorithm".into(), "seqbench-v2".into()),
+            (
+                "algorithm_source_repository".into(),
+                MOTIF_REPOSITORY.into(),
+            ),
+            ("algorithm_source_commit".into(), MOTIF_COMMIT.into()),
+            ("algorithm_source_license".into(), MOTIF_LICENSE.into()),
             ("authority".into(), "SessionActor".into()),
             ("network".into(), "disabled".into()),
         ]),

@@ -387,6 +387,28 @@ def main() -> int:
         "Open Science exact port changed without a new audited mapping",
     )
 
+    seqbench_path = (
+        ROOT / "agent/crates/codegen/xai-grok-science/src/seqbench.rs"
+    )
+
+    def remove_motif_algorithm_commit() -> None:
+        text = seqbench_path.read_text(encoding="utf-8")
+        seqbench_path.write_text(
+            text.replace(
+                'pub const MOTIF_COMMIT: &str = '
+                '"876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0";',
+                'pub const MOTIF_COMMIT: &str = "unattributed";',
+            ),
+            encoding="utf-8",
+        )
+
+    check_file_tamper(
+        "the Rust seqbench cannot lose its exact Motif algorithm source",
+        [seqbench_path],
+        remove_motif_algorithm_commit,
+        "Motif algorithm marker missing",
+    )
+
     copied_protocol = (
         ROOT
         / "third_party/biomni-resource-catalog/protocols/addgene/copied.txt"

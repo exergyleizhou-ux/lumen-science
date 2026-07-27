@@ -3,6 +3,15 @@ Lumen agent runtime is derived from SpaceXAI Grok Build
 See agent/LICENSE and agent/THIRD-PARTY-NOTICES.
 Vertical packs and modifications: Copyright Lumen authors.
 
+Lumen Science adapts deterministic molecular-biology algorithms from Motif at
+commit 876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0, licensed under MIT. The
+FASTA parser, nucleotide/protein metrics, IUPAC reverse-complement, and
+standard-code translation are reworked in Rust behind the Lumen SessionActor.
+See third_party/motif/LICENSE, THIRD_PARTY_NOTICES.md,
+third_party/provenance/motif.md, and
+third_party/provenance/motif-876a-seqbench.md. Motif's MCP server, installer,
+Node execution authority, and external alignment runners are not adopted.
+
 Lumen Science includes a sanitized, non-executable source corpus derived from
 InternScience/SCP at commit
 cea5398564032aea65a78e246d06c30ae945e03f, licensed under MIT.

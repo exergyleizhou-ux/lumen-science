@@ -108,3 +108,26 @@ DS-45D product embed:         ACCEPT (vendored under third_party/motif + static/
 | Not vendored | Claude Science MCP server, config installer |
 
 Still not claimed: Motif as independent session/MCP authority.
+
+## Rust algorithm admission (2026-07-27)
+
+The first deterministic algorithm slice is adapted from the same locked
+`876a4f9e` source into
+`agent/crates/codegen/xai-grok-science/src/seqbench.rs`:
+
+- `src/bio/fasta-parser.ts`
+- `src/bio/gc-content.ts`
+- `src/bio/reverse-complement.ts`
+- `src/bio/translate.ts`
+
+The exact upstream TypeScript was executed locally without a dependency install
+and its parsing, composition, GC, Tm, molecular-mass, IUPAC-complement and RNA
+translation results matched the Rust focused fixtures. `analysis.json` schema
+2 and durable run provenance carry the upstream repository, commit and MIT
+license. Execution stays in the existing Rust SessionActor route; no Motif MCP,
+Node agent, installer, provider or network path is admitted.
+
+See `third_party/provenance/motif-876a-seqbench.md`. A fresh current-source
+`lumen` binary passed all three filtered `seq_analyze` allow/boundary/deny
+product tests, including store-reopen assertions for the new schema-v2 output.
+Exact-head CI remains a separate gate.

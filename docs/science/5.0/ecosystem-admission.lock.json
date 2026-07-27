@@ -181,7 +181,21 @@
       "motif_vendor": {
         "path": "third_party/motif/VENDOR_MANIFEST.json",
         "commit": "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0",
-        "runtime_authority": "none"
+        "runtime_authority": "none",
+        "algorithm_provenance_path": "third_party/provenance/motif-876a-seqbench.md",
+        "algorithm_markers": [
+          {
+            "path": "agent/crates/codegen/xai-grok-science/src/seqbench.rs",
+            "contains": [
+              "pub const TOOL_VERSION: &str = \"1.1.0\"",
+              "pub const MOTIF_COMMIT: &str = \"876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0\"",
+              "schema_version: 2",
+              "\"algorithm_source_commit\".into(), MOTIF_COMMIT.into()",
+              "motif_nucleotide_metrics_match_the_cross_language_reference_values",
+              "motif_iupac_reverse_complement_and_rna_translation_match"
+            ]
+          }
+        ]
       },
       "biomni_tool_catalog": {
         "catalog_path": "packs/science/skills/ecosystem/biomni-tool-catalog.json",
@@ -286,11 +300,27 @@
       "license_file": "LICENSE",
       "license_sha256": "606f9372bf61b63b32725d69f312ead92010afdaeea35befc46dc4db1ed19d49",
       "runtime_authority": "none",
-      "admission_status": "renderer-vendored; algorithm-and-data-delta-audit",
+      "admission_status": "renderer vendored; first FASTA/metrics/reverse-complement/translation Rust algorithm slice actor-adapted; remaining algorithms and data under audit",
       "source_proofs": [
         {
           "path": "THIRD_PARTY_NOTICES.md",
           "sha256": "bd232ce379f02d9dd12bd648be236966a739c5fc7d7f9698dfa533c11a350347"
+        },
+        {
+          "path": "src/bio/fasta-parser.ts",
+          "sha256": "a762b07d0ca099912fe929482dc5054b51ce697abd78f8491472fd9b02b47d3d"
+        },
+        {
+          "path": "src/bio/gc-content.ts",
+          "sha256": "a26ee1474e69db5f9c1846b68746c7cc62ca5bd82f52ab7d212851747592e379"
+        },
+        {
+          "path": "src/bio/reverse-complement.ts",
+          "sha256": "d095df3c7a8d6be3b86fa718b8aaf47ded8608752c34ebaa451eda489d4cb30d"
+        },
+        {
+          "path": "src/bio/translate.ts",
+          "sha256": "91c480612f998383baa7b858a5ca39c9437621576710c829a86dd649aba57fc6"
         }
       ],
       "components": [
@@ -298,7 +328,7 @@
           "path": "src/bio/** and src/plasmid-map/** deterministic functions",
           "disposition": "adopt",
           "license": "MIT",
-          "reason": "Pure parsers, sequence algorithms, layout, and SVG serialization can be vendored with attribution and focused fixtures."
+          "reason": "The first FASTA/metrics/reverse-complement/translation slice is adapted into Rust seqbench with exact source hashes, cross-language fixtures, artifact provenance, and SessionActor authority; remaining pure algorithms stay incremental."
         },
         {
           "path": "src/artifacts/claude-science-analysis-results.ts and workspace envelope",

@@ -11,7 +11,7 @@ absorption:
 | Source | Exact commit | Root license | Current Lumen disposition |
 |---|---|---|---|
 | `snap-stanford/Biomni` | `400c1f366b96a35ca253e13c9b06c5076af41d65` | Apache-2.0 | 224 typed tools plus 273 resource/knowledge records locally cataloged; native adapters pending |
-| `jvogan/motif` | `876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0` | MIT | current upstream already vendored as renderer; algorithm expansion pending |
+| `jvogan/motif` | `876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0` | MIT | renderer vendored; first FASTA/metrics/reverse-complement/translation slice adapted into actor-gated Rust |
 | `aipoch/open-science` | `fd2853f0b9bdb6c063ccc1e741687584ab94bf9a` | Apache-2.0 | 1,082 carried files; 228-file upstream delta under review |
 | `qzzqzzb/OpenClaudeScience` | `4a5f2ab2879ebd4f806155c796e247da94bb1625` | MIT at root, mixed nested licenses | MIT components and catalog may be adapted; four proprietary skill trees rejected |
 | `InternScience/scp` (transitive catalog source) | `cea5398564032aea65a78e246d06c30ae945e03f` | MIT | all 207 skill documents enter quarantine/catalog analysis before tool admission |
@@ -294,7 +294,28 @@ Remaining:
 
 ### Phase 3 — deterministic scientific mechanics
 
-- Admit Motif parsers/algorithms in small, attributed slices.
+Implemented in the first Rust algorithm slice:
+
+- directly adapted Motif FASTA parsing semantics: first-whitespace headers,
+  PIR comments, ASCII-only sequence cleaning, and explicit gap-removal counts;
+- adapted nucleotide composition, GC/AT fraction, Tm and molecular-weight
+  calculations, plus average/monoisotopic protein mass tables;
+- preserved Motif's complete DNA/RNA IUPAC reverse-complement behavior and
+  fixed lowercase RNA normalization before standard-code translation;
+- recorded the exact Motif repository, commit, license, and component paths in
+  both schema-v2 `analysis.json` and durable provenance;
+- executed the exact upstream TypeScript locally and matched the Rust fixture
+  results for parsing, all numeric metrics, IUPAC complements, and translation;
+- retained the existing SessionActor allow/deny/timeout/cancel and
+  owner/project/call artifact boundaries;
+- rebuilt the current `lumen` binary and passed all three filtered
+  `seq_analyze` product tests, including reopening the store-owned
+  `analysis.json` to verify schema 2, Motif commit, composition output, and
+  durable provenance.
+
+Remaining:
+
+- admit additional Motif parsers/algorithms in small, attributed slices;
 - Use independent authoritative fixtures for named biological data.
 - Return all derived output as store-owned, hash-addressed artifacts.
 - Add typed analysis envelopes and dependency/cross-reference validation.
@@ -316,16 +337,19 @@ Remaining:
 
 ## Evidence boundary
 
-Phase 0, the Phase 1 SCP/Biomni catalogs, and the first Phase 2 read-only Skill
-preview/classifier slices currently have source audit, focused test, and
-TypeScript compile evidence. The 704 candidate capabilities are local and
-searchable in the desktop Skills tab, but none of the new 704 entries is
-executable or product-approved. The streaming archive classifier is a tested
-source module, not a product route; SessionActor-bound attachment import remains
-open. A rebuilt packaged application has not yet been used to prove the new
-resource paths and rendered UI. This does not claim that the 224 Biomni tools,
-new connectors, Motif algorithms, or clean-room document features are already
-product-complete.
+Phase 0, the Phase 1 SCP/Biomni catalogs, the first Phase 2 read-only Skill
+preview/classifier slices, and the first Phase 3 Motif-to-Rust algorithm slice
+currently have source audit and focused test evidence. The 704 candidate
+capabilities are local and searchable in the desktop Skills tab, but none of
+the new 704 entries is executable or product-approved. The streaming archive
+classifier is a tested source module, not a product route; SessionActor-bound
+attachment import remains open. Motif sequence metrics do execute only through
+the already actor-gated `seq_analyze` path and produce store-owned hashed
+artifacts. A fresh current-source binary passed the three filtered
+`seq_analyze` allow/boundary/deny product tests, including schema-v2 artifact
+and provenance assertions. This does not claim that the 224 Biomni tools,
+remaining connectors/Motif algorithms, or clean-room document features are
+already product-complete.
 
 For each later slice, report separately:
 

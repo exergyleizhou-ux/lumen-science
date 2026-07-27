@@ -2,9 +2,10 @@ Motif (https://github.com/jvogan/motif)
 Copyright (c) Motif contributors
 License: MIT
 
-This product optionally embeds Motif-derived UI concepts as a
-Lumen-managed renderer. Motif is not an independent execution authority
-inside Lumen.
+This product embeds a Lumen-managed Motif renderer and adapts selected
+deterministic sequence algorithms into the Rust seqbench. Motif is not an
+independent execution authority inside Lumen; the Rust SessionActor remains
+the sole authority for analysis, approval, evidence and artifacts.
 
 Exact commit: 876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0
 
@@ -12,3 +13,6 @@ When a full Motif build is vendored, redistribute:
   - LICENSE
   - THIRD_PARTY_NOTICES.md
   - record-level provenance for any exported HTML/JSON artifacts
+
+Rust algorithm source mapping:
+  - third_party/provenance/motif-876a-seqbench.md

@@ -1394,6 +1394,36 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
                 .expect("read registered artifact");
             assert_eq!(format!("{:x}", Sha256::digest(bytes)), artifact.sha256);
         }
+        let analysis_artifact = durable_artifacts
+            .iter()
+            .find(|artifact| artifact.relative_path == Path::new("analysis.json"))
+            .expect("durable analysis.json artifact");
+        let analysis_bytes = store
+            .artifact_bytes(
+                &project_id,
+                &run_id,
+                "science-owner",
+                &analysis_artifact.relative_path,
+            )
+            .expect("read durable analysis.json");
+        let analysis: serde_json::Value =
+            serde_json::from_slice(&analysis_bytes).expect("parse durable analysis.json");
+        assert_eq!(analysis["schema_version"], 2, "analysis: {analysis}");
+        assert_eq!(analysis["tool_version"], "1.1.0", "analysis: {analysis}");
+        assert_eq!(
+            analysis["algorithm_sources"][0]["commit"],
+            xai_grok_science::seqbench::MOTIF_COMMIT,
+            "analysis: {analysis}"
+        );
+        assert_eq!(
+            analysis["records"][0]["nucleotide_composition"]["A"], 3,
+            "analysis: {analysis}"
+        );
+        assert_eq!(
+            result["provenance"][0]["environment"]["algorithm_source_commit"],
+            xai_grok_science::seqbench::MOTIF_COMMIT,
+            "result: {result}"
+        );
         assert!(
             !artifact_root
                 .join("science-seq-project")

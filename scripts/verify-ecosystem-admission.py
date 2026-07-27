@@ -341,6 +341,26 @@ def verify_carried_ledgers(lock: dict[str, Any], science_repo: Path) -> None:
         motif_ledger["runtime_authority"] == motif_spec["runtime_authority"] == "none",
         "Motif vendor manifest grants runtime authority",
     )
+    motif_provenance_path = motif_spec["algorithm_provenance_path"]
+    require_relative_path(motif_provenance_path, "Motif algorithm provenance path")
+    motif_provenance = (science_repo / motif_provenance_path).read_text(encoding="utf-8")
+    require(
+        motif_spec["commit"] in motif_provenance
+        and "MIT" in motif_provenance
+        and "Rust `SessionActor`" in motif_provenance,
+        "Motif algorithm provenance lost its source, license, or authority boundary",
+    )
+    for index, marker in enumerate(motif_spec["algorithm_markers"]):
+        label = f"motif_vendor.algorithm_markers[{index}]"
+        require_relative_path(marker["path"], f"{label}.path")
+        marker_path = science_repo / marker["path"]
+        require(marker_path.is_file(), f"Motif algorithm file is missing: {marker['path']}")
+        marker_text = marker_path.read_text(encoding="utf-8")
+        for expected in marker["contains"]:
+            require(
+                expected in marker_text,
+                f"Motif algorithm marker missing from {marker['path']}: {expected}",
+            )
 
     biomni_spec = carried["biomni_tool_catalog"]
     biomni_manifest = load_json(
