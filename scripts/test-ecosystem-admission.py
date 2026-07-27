@@ -426,6 +426,23 @@ def main() -> int:
         "Motif algorithm marker missing",
     )
 
+    def remove_restriction_topology_option_binding() -> None:
+        text = seqbench_path.read_text(encoding="utf-8")
+        seqbench_path.write_text(
+            text.replace(
+                "approved_restriction_topology_cannot_be_swapped_before_finish",
+                "restriction_topology_swap_is_unchecked",
+            ),
+            encoding="utf-8",
+        )
+
+    check_file_tamper(
+        "an approved restriction topology cannot lose its anti-swap proof",
+        [seqbench_path],
+        remove_restriction_topology_option_binding,
+        "Motif algorithm marker missing",
+    )
+
     def remove_motif_orf_proof(lock: dict[str, Any]) -> None:
         source = next(item for item in lock["sources"] if item["id"] == "jvogan-motif")
         source["source_proofs"] = [

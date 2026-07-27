@@ -58,6 +58,7 @@ REQUIRED_MOTIF_ALGORITHM_PROOFS = {
     "src/bio/translate.ts",
     "src/bio/codon-tables.ts",
     "src/bio/orf-detection.ts",
+    "src/bio/restriction-sites.ts",
 }
 FORBIDDEN_COPY_PREFIXES = (
     "third_party/openclaudescience/skills/docx/",

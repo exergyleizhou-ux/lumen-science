@@ -1318,7 +1318,7 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
         std::fs::write(
             &source,
             format!(
-                ">seq1 synthetic control fragment\nACGTACGTAC\n\
+                ">seq1 circular restriction control\nAATTCCCCCG\n\
                  >seq2 Motif vertebrate-mitochondrial stop\n{motif_orf}\n"
             ),
         )
@@ -1338,6 +1338,7 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
                     "artifactRoot": artifact_root,
                     "sourcePath": source,
                     "translationTableId": 2,
+                    "topology": "circular",
                     "approvalTimeoutMs": 5_000,
                 }),
             ),
@@ -1410,21 +1411,38 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             .expect("read durable analysis.json");
         let analysis: serde_json::Value =
             serde_json::from_slice(&analysis_bytes).expect("parse durable analysis.json");
-        assert_eq!(analysis["schema_version"], 4, "analysis: {analysis}");
-        assert_eq!(analysis["tool_version"], "1.3.0", "analysis: {analysis}");
+        assert_eq!(analysis["schema_version"], 5, "analysis: {analysis}");
+        assert_eq!(analysis["tool_version"], "1.4.0", "analysis: {analysis}");
         assert_eq!(
             analysis["algorithm_sources"][0]["commit"],
             xai_grok_science::seqbench::MOTIF_COMMIT,
             "analysis: {analysis}"
         );
         assert_eq!(
-            analysis["records"][0]["nucleotide_composition"]["A"], 3,
+            analysis["records"][0]["nucleotide_composition"]["A"], 2,
             "analysis: {analysis}"
         );
         assert_eq!(
             analysis["translation_table"]["id"], 2,
             "analysis: {analysis}"
         );
+        assert_eq!(
+            analysis["restriction_topology"], "circular",
+            "analysis: {analysis}"
+        );
+        assert_eq!(
+            analysis["restriction_enzyme_count"], 30,
+            "analysis: {analysis}"
+        );
+        let circular_eco_ri = analysis["records"][0]["restriction_hits"]
+            .as_array()
+            .expect("seq1 restriction hits")
+            .iter()
+            .find(|hit| hit["enzyme"] == "EcoRI")
+            .expect("origin-spanning EcoRI hit");
+        assert_eq!(circular_eco_ri["position"], 9, "analysis: {analysis}");
+        assert_eq!(circular_eco_ri["cut_position"], 0, "analysis: {analysis}");
+        assert_eq!(circular_eco_ri["strand"], 1, "analysis: {analysis}");
         assert_eq!(
             analysis["translation_table"]["name"],
             "Vertebrate Mitochondrial",
@@ -1455,7 +1473,17 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             "result: {result}"
         );
         assert_eq!(
+            result["provenance"][0]["environment"]["restriction_topology"],
+            "circular",
+            "result: {result}"
+        );
+        assert_eq!(
             result["run"]["context"]["environment"]["translation_table_id"], "2",
+            "result: {result}"
+        );
+        assert_eq!(
+            result["run"]["context"]["environment"]["restriction_topology"],
+            "circular",
             "result: {result}"
         );
         assert!(
@@ -1685,6 +1713,17 @@ async fn test_stdio_science_seq_analyze_boundaries_fail_closed() {
                     "artifactRoot": artifact_root,
                     "sourcePath": source,
                     "translationTableId": 27,
+                }),
+            ),
+            (
+                "unsupported topology",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": "science-seq-project",
+                    "ownerId": "science-owner",
+                    "artifactRoot": artifact_root,
+                    "sourcePath": source,
+                    "topology": "toroidal",
                 }),
             ),
         ] {

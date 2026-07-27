@@ -1060,6 +1060,8 @@ struct SeqAnalyzeParams {
     source_path: PathBuf,
     #[serde(default = "default_translation_table_id")]
     translation_table_id: u8,
+    #[serde(default)]
+    topology: xai_grok_science::seqbench::SequenceTopology,
     #[serde(default = "default_approval_timeout_ms")]
     approval_timeout_ms: u64,
 }
@@ -1108,7 +1110,7 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
         workspace_root: workspace,
         provider: "offline-deterministic".into(),
         approval_policy: "production-session-permission".into(),
-        tool_profile: "science-seqbench-v2".into(),
+        tool_profile: "science-seqbench-v3".into(),
         artifact_root: artifact_root.clone(),
         environment: BTreeMap::from([
             ("network".into(), "disabled".into()),
@@ -1116,6 +1118,10 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
             (
                 "translation_table_id".into(),
                 params.translation_table_id.to_string(),
+            ),
+            (
+                "restriction_topology".into(),
+                params.topology.as_str().into(),
             ),
         ]),
     };
@@ -1126,6 +1132,7 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
             context,
             xai_grok_science::seqbench::SeqAnalyzeOptions {
                 translation_table_id: params.translation_table_id,
+                topology: params.topology,
             },
             source_path,
             bytes,

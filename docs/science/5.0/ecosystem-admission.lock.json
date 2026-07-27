@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "recorded_at": "2026-07-27T23:30:00+08:00",
+  "recorded_at": "2026-07-28T00:28:30+08:00",
   "purpose": "Lock the exact external sources considered for Lumen Science ecosystem absorption, record component-level license and authority dispositions, and prove that the existing SessionActor foundation remains present.",
   "policy": {
     "runtime_authority": "Rust SessionActor",
@@ -187,9 +187,9 @@
           {
             "path": "agent/crates/codegen/xai-grok-science/src/seqbench.rs",
             "contains": [
-              "pub const TOOL_VERSION: &str = \"1.3.0\"",
+              "pub const TOOL_VERSION: &str = \"1.4.0\"",
               "pub const MOTIF_COMMIT: &str = \"876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0\"",
-              "schema_version: 4",
+              "schema_version: 5",
               "\"algorithm_source_commit\".into(), MOTIF_COMMIT.into()",
               "motif_nucleotide_metrics_match_the_cross_language_reference_values",
               "motif_iupac_reverse_complement_and_rna_translation_match",
@@ -198,7 +198,11 @@
               "motif_orf_port_preserves_terminal_orfs_and_reverse_coordinates",
               "SUPPORTED_TRANSLATION_TABLE_IDS",
               "motif_translation_table_registry_is_complete_and_internally_coherent",
-              "approved_translation_table_cannot_be_swapped_before_finish"
+              "approved_translation_table_cannot_be_swapped_before_finish",
+              "src/bio/restriction-sites.ts",
+              "motif_restriction_panel_scans_reverse_type_iis_and_circular_origin",
+              "12598695d6a6476911608991c27370d95969dde13c08e219f941310a221d841a",
+              "approved_restriction_topology_cannot_be_swapped_before_finish"
             ]
           },
           {
@@ -206,14 +210,18 @@
             "contains": [
               "translationTableId must be one of",
               "SeqAnalyzeOptions",
-              "science-seqbench-v2"
+              "science-seqbench-v3",
+              "restriction_topology"
             ]
           },
           {
             "path": "agent/crates/codegen/xai-grok-shell/tests/test_built_binary_e2e.rs",
             "contains": [
               "\"translationTableId\": 2",
+              "\"topology\": \"circular\"",
               "analysis[\"translation_table\"][\"id\"], 2",
+              "analysis[\"restriction_topology\"], \"circular\"",
+              "circular_eco_ri[\"cut_position\"], 0",
               "orf[\"strand\"] == 1",
               "orf[\"start_codon\"] == \"ATG\"",
               "orf[\"stop_codon\"] == \"AGA\"",
@@ -354,6 +362,10 @@
         {
           "path": "src/bio/orf-detection.ts",
           "sha256": "e163ddbb40ca051bdd723f1918588b1c341fec1171fe2572359990e8e1b44c1c"
+        },
+        {
+          "path": "src/bio/restriction-sites.ts",
+          "sha256": "1ffe08381227a498db2ccfd96862e33f0090cf77d35e64e019419d1cfc182fec"
         }
       ],
       "components": [
@@ -361,7 +373,7 @@
           "path": "src/bio/** and src/plasmid-map/** deterministic functions",
           "disposition": "adopt",
           "license": "MIT",
-          "reason": "FASTA/metrics/reverse-complement/translation, ORF detection, and all 24 representable NCBI translation tables are adapted into Rust seqbench with exact source hashes, cross-language fixtures, artifact provenance, and SessionActor authority; remaining pure algorithms stay incremental."
+          "reason": "FASTA/metrics/reverse-complement/translation, ORF detection, all 24 representable NCBI translation tables, and the 30-enzyme restriction-site scanner are adapted into Rust seqbench with exact source hashes, cross-language fixtures, artifact provenance, and SessionActor authority; remaining pure algorithms stay incremental."
         },
         {
           "path": "src/artifacts/claude-science-analysis-results.ts and workspace envelope",

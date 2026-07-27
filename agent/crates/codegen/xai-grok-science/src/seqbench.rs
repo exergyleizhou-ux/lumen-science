@@ -3,10 +3,10 @@
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub const TOOL: &str = "lumen-seqbench";
-pub const TOOL_VERSION: &str = "1.3.0";
+pub const TOOL_VERSION: &str = "1.4.0";
 pub const MOTIF_REPOSITORY: &str = "https://github.com/jvogan/motif.git";
 pub const MOTIF_COMMIT: &str = "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0";
 pub const MOTIF_LICENSE: &str = "MIT";
@@ -58,12 +58,32 @@ pub const SUPPORTED_TRANSLATION_TABLE_IDS: &[u8] = &[
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SeqAnalyzeOptions {
     pub translation_table_id: u8,
+    #[serde(default)]
+    pub topology: SequenceTopology,
 }
 
 impl Default for SeqAnalyzeOptions {
     fn default() -> Self {
         Self {
             translation_table_id: 1,
+            topology: SequenceTopology::Linear,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SequenceTopology {
+    #[default]
+    Linear,
+    Circular,
+}
+
+impl SequenceTopology {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Linear => "linear",
+            Self::Circular => "circular",
         }
     }
 }
@@ -307,8 +327,11 @@ pub struct Orf {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RestrictionHit {
     pub enzyme: String,
-    pub site: String,
+    pub recognition_sequence: String,
     pub position: usize,
+    pub cut_position: isize,
+    pub overhang: String,
+    pub strand: i8,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -342,6 +365,8 @@ pub struct RecordSummary {
     pub orfs: Vec<Orf>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub restriction_hits: Vec<RestrictionHit>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub restriction_hits_truncated: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -352,6 +377,8 @@ pub struct Analysis {
     pub source_sha256: String,
     pub algorithm_sources: Vec<AlgorithmSource>,
     pub translation_table: TranslationTableSummary,
+    pub restriction_topology: SequenceTopology,
+    pub restriction_enzyme_count: usize,
     pub records: Vec<RecordSummary>,
     pub notes: Vec<String>,
 }
@@ -472,10 +499,10 @@ pub fn analyze_with_options(
     let source_sha256 = hex_sha256(source_bytes);
     let mut summaries = Vec::with_capacity(records.len());
     for r in records {
-        summaries.push(summarize(r, table));
+        summaries.push(summarize(r, table, options.topology));
     }
     Ok(Analysis {
-        schema_version: 4,
+        schema_version: 5,
         tool: TOOL.into(),
         tool_version: TOOL_VERSION.into(),
         source_sha256,
@@ -490,16 +517,22 @@ pub fn analyze_with_options(
                 "src/bio/translate.ts".into(),
                 "src/bio/codon-tables.ts".into(),
                 "src/bio/orf-detection.ts".into(),
+                "src/bio/restriction-sites.ts".into(),
             ],
         }],
         translation_table: TranslationTableSummary {
             id: table.id,
             name: table.name.into(),
         },
+        restriction_topology: options.topology,
+        restriction_enzyme_count: RESTRICTION_ENZYMES.len(),
         records: summaries,
         notes: vec![
             "Deterministic offline analysis. Not a substitute for wet-lab validation.".into(),
-            "Restriction sites are recognition-pattern hits only.".into(),
+            format!(
+                "Restriction sites use the {} topology and Motif's 30-enzyme default panel; hits are bounded recognition-pattern predictions only.",
+                options.topology.as_str()
+            ),
             format!(
                 "Translation and ORFs use NCBI translation table {} ({}); ORF min length 30 aa.",
                 table.id, table.name
@@ -520,6 +553,11 @@ pub fn markdown_report(a: &Analysis, source_label: &str) -> String {
     b.push_str(&format!(
         "- NCBI translation table: {} ({})\n",
         a.translation_table.id, a.translation_table.name
+    ));
+    b.push_str(&format!(
+        "- restriction scan: {} topology; {} enzymes\n",
+        a.restriction_topology.as_str(),
+        a.restriction_enzyme_count
     ));
     b.push_str(&format!("- records: {}\n\n", a.records.len()));
     for r in &a.records {
@@ -577,12 +615,23 @@ pub fn markdown_report(a: &Analysis, source_label: &str) -> String {
         }
         if !r.restriction_hits.is_empty() {
             b.push_str("### Restriction sites\n\n");
-            b.push_str("| enzyme | site | position |\n|---|---|---:|\n");
+            b.push_str(
+                "| enzyme | recognition | match | cut | strand | overhang |\n\
+                 |---|---|---:|---:|---:|---|\n",
+            );
             for h in &r.restriction_hits {
                 b.push_str(&format!(
-                    "| {} | `{}` | {} |\n",
-                    h.enzyme, h.site, h.position
+                    "| {} | `{}` | {} | {} | {} | {} |\n",
+                    h.enzyme,
+                    h.recognition_sequence,
+                    h.position,
+                    h.cut_position,
+                    h.strand,
+                    h.overhang
                 ));
+            }
+            if r.restriction_hits_truncated {
+                b.push_str("\n_Result truncated at the Lumen 100-hit safety cap._\n");
             }
             b.push('\n');
         }
@@ -602,7 +651,11 @@ pub fn hex_sha256(bytes: &[u8]) -> String {
     format!("{:x}", h.finalize())
 }
 
-fn summarize(r: &Record, table: TranslationTable) -> RecordSummary {
+fn summarize(
+    r: &Record,
+    table: TranslationTable,
+    restriction_topology: SequenceTopology,
+) -> RecordSummary {
     let mut s = RecordSummary {
         id: r.id.clone(),
         kind: r.kind.clone(),
@@ -620,6 +673,7 @@ fn summarize(r: &Record, table: TranslationTable) -> RecordSummary {
         translation_frames: BTreeMap::new(),
         orfs: Vec::new(),
         restriction_hits: Vec::new(),
+        restriction_hits_truncated: false,
     };
     if r.kind == "dna" || r.kind == "rna" {
         let composition = nucleotide_composition(&r.sequence);
@@ -651,7 +705,9 @@ fn summarize(r: &Record, table: TranslationTable) -> RecordSummary {
         }
         s.orfs = find_orfs_with_table(&r.sequence, 30, table);
         if r.kind == "dna" {
-            s.restriction_hits = find_restriction_sites(&r.sequence);
+            let (hits, truncated) = find_restriction_sites(&r.sequence, restriction_topology);
+            s.restriction_hits = hits;
+            s.restriction_hits_truncated = truncated;
         }
     } else if r.kind == "protein" {
         s.estimated_protein_average_molecular_weight_da = Some(protein_molecular_weight(
@@ -1082,43 +1138,323 @@ fn orfs_in_frame(
     out
 }
 
-const ENZYMES: &[(&str, &str)] = &[
-    ("EcoRI", "GAATTC"),
-    ("BamHI", "GGATCC"),
-    ("HindIII", "AAGCTT"),
-    ("XhoI", "CTCGAG"),
-    ("NotI", "GCGGCCGC"),
-    ("NdeI", "CATATG"),
-    ("NcoI", "CCATGG"),
-    ("SacI", "GAGCTC"),
-    ("KpnI", "GGTACC"),
-    ("PstI", "CTGCAG"),
-    ("SalI", "GTCGAC"),
-    ("XbaI", "TCTAGA"),
-    ("SpeI", "ACTAGT"),
-    ("BglII", "AGATCT"),
-    ("ClaI", "ATCGAT"),
+#[derive(Debug, Clone, Copy)]
+struct RestrictionEnzyme {
+    name: &'static str,
+    recognition_sequence: &'static str,
+    cut_offset: isize,
+    complement_cut_offset: isize,
+    overhang: &'static str,
+}
+
+// Direct data and algorithm adaptation of Motif's default 30-enzyme panel and
+// `findRestrictionSites` scanner in `src/bio/restriction-sites.ts` at
+// `MOTIF_COMMIT`. Lumen keeps a bounded output and does not admit Motif's UI or
+// runtime as an execution authority.
+const RESTRICTION_ENZYMES: &[RestrictionEnzyme] = &[
+    RestrictionEnzyme {
+        name: "EcoRI",
+        recognition_sequence: "GAATTC",
+        cut_offset: 1,
+        complement_cut_offset: 5,
+        overhang: "5prime",
+    },
+    RestrictionEnzyme {
+        name: "BamHI",
+        recognition_sequence: "GGATCC",
+        cut_offset: 1,
+        complement_cut_offset: 5,
+        overhang: "5prime",
+    },
+    RestrictionEnzyme {
+        name: "HindIII",
+        recognition_sequence: "AAGCTT",
+        cut_offset: 1,
+        complement_cut_offset: 5,
+        overhang: "5prime",
+    },
+    RestrictionEnzyme {
+        name: "XbaI",
+        recognition_sequence: "TCTAGA",
+        cut_offset: 1,
+        complement_cut_offset: 5,
+        overhang: "5prime",
+    },
+    RestrictionEnzyme {
+        name: "SalI",
+        recognition_sequence: "GTCGAC",
+        cut_offset: 1,
+        complement_cut_offset: 5,
+        overhang: "5prime",
+    },
+    RestrictionEnzyme {
+        name: "PstI",
+        recognition_sequence: "CTGCAG",
+        cut_offset: 5,
+        complement_cut_offset: 1,
+        overhang: "3prime",
+    },
+    RestrictionEnzyme {
+        name: "NotI",
+        recognition_sequence: "GCGGCCGC",
+        cut_offset: 2,
+        complement_cut_offset: 6,
+        overhang: "5prime",
+    },
+    RestrictionEnzyme {
+        name: "XhoI",
+        recognition_sequence: "CTCGAG",
+        cut_offset: 1,
+        complement_cut_offset: 5,
+        overhang: "5prime",
+    },
+    RestrictionEnzyme {
+        name: "NcoI",
+        recognition_sequence: "CCATGG",
+        cut_offset: 1,
+        complement_cut_offset: 5,
+        overhang: "5prime",
+    },
+    RestrictionEnzyme {
+        name: "NdeI",
+        recognition_sequence: "CATATG",
+        cut_offset: 2,
+        complement_cut_offset: 4,
+        overhang: "5prime",
+    },
+    RestrictionEnzyme {
+        name: "SpeI",
+        recognition_sequence: "ACTAGT",
+        cut_offset: 1,
+        complement_cut_offset: 5,
+        overhang: "5prime",
+    },
+    RestrictionEnzyme {
+        name: "KpnI",
+        recognition_sequence: "GGTACC",
+        cut_offset: 5,
+        complement_cut_offset: 1,
+        overhang: "3prime",
+    },
+    RestrictionEnzyme {
+        name: "SacI",
+        recognition_sequence: "GAGCTC",
+        cut_offset: 5,
+        complement_cut_offset: 1,
+        overhang: "3prime",
+    },
+    RestrictionEnzyme {
+        name: "SmaI",
+        recognition_sequence: "CCCGGG",
+        cut_offset: 3,
+        complement_cut_offset: 3,
+        overhang: "blunt",
+    },
+    RestrictionEnzyme {
+        name: "BglII",
+        recognition_sequence: "AGATCT",
+        cut_offset: 1,
+        complement_cut_offset: 5,
+        overhang: "5prime",
+    },
+    RestrictionEnzyme {
+        name: "ClaI",
+        recognition_sequence: "ATCGAT",
+        cut_offset: 2,
+        complement_cut_offset: 4,
+        overhang: "5prime",
+    },
+    RestrictionEnzyme {
+        name: "EcoRV",
+        recognition_sequence: "GATATC",
+        cut_offset: 3,
+        complement_cut_offset: 3,
+        overhang: "blunt",
+    },
+    RestrictionEnzyme {
+        name: "AgeI",
+        recognition_sequence: "ACCGGT",
+        cut_offset: 1,
+        complement_cut_offset: 5,
+        overhang: "5prime",
+    },
+    RestrictionEnzyme {
+        name: "NheI",
+        recognition_sequence: "GCTAGC",
+        cut_offset: 1,
+        complement_cut_offset: 5,
+        overhang: "5prime",
+    },
+    RestrictionEnzyme {
+        name: "MluI",
+        recognition_sequence: "ACGCGT",
+        cut_offset: 1,
+        complement_cut_offset: 5,
+        overhang: "5prime",
+    },
+    RestrictionEnzyme {
+        name: "BsaI",
+        recognition_sequence: "GGTCTC",
+        cut_offset: 7,
+        complement_cut_offset: 11,
+        overhang: "5prime",
+    },
+    RestrictionEnzyme {
+        name: "BbsI",
+        recognition_sequence: "GAAGAC",
+        cut_offset: 8,
+        complement_cut_offset: 12,
+        overhang: "5prime",
+    },
+    RestrictionEnzyme {
+        name: "ScaI",
+        recognition_sequence: "AGTACT",
+        cut_offset: 3,
+        complement_cut_offset: 3,
+        overhang: "blunt",
+    },
+    RestrictionEnzyme {
+        name: "ApaI",
+        recognition_sequence: "GGGCCC",
+        cut_offset: 5,
+        complement_cut_offset: 1,
+        overhang: "3prime",
+    },
+    RestrictionEnzyme {
+        name: "SphI",
+        recognition_sequence: "GCATGC",
+        cut_offset: 5,
+        complement_cut_offset: 1,
+        overhang: "3prime",
+    },
+    RestrictionEnzyme {
+        name: "AluI",
+        recognition_sequence: "AGCT",
+        cut_offset: 2,
+        complement_cut_offset: 2,
+        overhang: "blunt",
+    },
+    RestrictionEnzyme {
+        name: "HaeIII",
+        recognition_sequence: "GGCC",
+        cut_offset: 2,
+        complement_cut_offset: 2,
+        overhang: "blunt",
+    },
+    RestrictionEnzyme {
+        name: "TaqI",
+        recognition_sequence: "TCGA",
+        cut_offset: 1,
+        complement_cut_offset: 3,
+        overhang: "5prime",
+    },
+    RestrictionEnzyme {
+        name: "HpaII",
+        recognition_sequence: "CCGG",
+        cut_offset: 1,
+        complement_cut_offset: 3,
+        overhang: "5prime",
+    },
+    RestrictionEnzyme {
+        name: "MspI",
+        recognition_sequence: "CCGG",
+        cut_offset: 1,
+        complement_cut_offset: 3,
+        overhang: "5prime",
+    },
 ];
 
-fn find_restriction_sites(seq: &str) -> Vec<RestrictionHit> {
+const MAX_RESTRICTION_HITS: usize = 100;
+
+fn iupac_recognition_matches(
+    dna: &[u8],
+    recognition: &[u8],
+    position: usize,
+    topology: SequenceTopology,
+) -> bool {
+    if dna.is_empty() {
+        return false;
+    }
+    let virtual_len = match topology {
+        SequenceTopology::Linear => dna.len(),
+        SequenceTopology::Circular if recognition.len().saturating_sub(1) < dna.len() => {
+            dna.len() + recognition.len().saturating_sub(1)
+        }
+        SequenceTopology::Circular => dna.len().saturating_mul(2),
+    };
+    if position.saturating_add(recognition.len()) > virtual_len {
+        return false;
+    }
+    recognition.iter().enumerate().all(|(offset, expected)| {
+        let actual = dna[(position + offset) % dna.len()];
+        match *expected {
+            b'A' => actual == b'A',
+            b'C' => actual == b'C',
+            b'G' => actual == b'G',
+            b'T' => actual == b'T',
+            b'R' => matches!(actual, b'A' | b'G'),
+            b'Y' => matches!(actual, b'C' | b'T'),
+            b'S' => matches!(actual, b'G' | b'C'),
+            b'W' => matches!(actual, b'A' | b'T'),
+            b'K' => matches!(actual, b'G' | b'T'),
+            b'M' => matches!(actual, b'A' | b'C'),
+            b'B' => matches!(actual, b'C' | b'G' | b'T'),
+            b'D' => matches!(actual, b'A' | b'G' | b'T'),
+            b'H' => matches!(actual, b'A' | b'C' | b'T'),
+            b'V' => matches!(actual, b'A' | b'C' | b'G'),
+            b'N' => matches!(actual, b'A' | b'C' | b'G' | b'T'),
+            _ => false,
+        }
+    })
+}
+
+fn find_restriction_sites(seq: &str, topology: SequenceTopology) -> (Vec<RestrictionHit>, bool) {
     let dna = to_dna(seq);
+    let dna_bytes = dna.as_bytes();
     let mut hits = Vec::new();
-    for (name, site) in ENZYMES {
-        let mut start = 0;
-        while let Some(pos) = dna[start..].find(site) {
-            let abs = start + pos;
-            hits.push(RestrictionHit {
-                enzyme: (*name).into(),
-                site: (*site).into(),
-                position: abs,
-            });
-            start = abs + 1;
-            if hits.len() >= 100 {
-                return hits;
+
+    for enzyme in RESTRICTION_ENZYMES {
+        let recognition = enzyme.recognition_sequence.as_bytes();
+        let reverse = reverse_complement(enzyme.recognition_sequence, false);
+        let palindrome = reverse == enzyme.recognition_sequence;
+        let mut seen_positions = BTreeSet::new();
+
+        for (pattern, strand) in [(recognition, 1_i8), (reverse.as_bytes(), -1_i8)] {
+            if strand == -1 && palindrome {
+                continue;
+            }
+            for position in 0..dna_bytes.len() {
+                if !iupac_recognition_matches(dna_bytes, pattern, position, topology)
+                    || !seen_positions.insert(position)
+                {
+                    continue;
+                }
+                if hits.len() == MAX_RESTRICTION_HITS {
+                    hits.sort_by_key(|hit: &RestrictionHit| hit.position);
+                    return (hits, true);
+                }
+                let raw_cut = if strand == 1 {
+                    position as isize + enzyme.cut_offset
+                } else {
+                    position as isize + recognition.len() as isize - enzyme.complement_cut_offset
+                };
+                let cut_position = match topology {
+                    SequenceTopology::Linear => raw_cut,
+                    SequenceTopology::Circular => raw_cut.rem_euclid(dna_bytes.len() as isize),
+                };
+                hits.push(RestrictionHit {
+                    enzyme: enzyme.name.into(),
+                    recognition_sequence: enzyme.recognition_sequence.into(),
+                    position,
+                    cut_position,
+                    overhang: enzyme.overhang.into(),
+                    strand,
+                });
             }
         }
     }
-    hits
+    hits.sort_by_key(|hit| hit.position);
+    (hits, false)
 }
 
 #[cfg(test)]
@@ -1176,8 +1512,8 @@ mod tests {
         let summary = &analysis.records[0];
         let composition = summary.nucleotide_composition.as_ref().unwrap();
 
-        assert_eq!(analysis.schema_version, 4);
-        assert_eq!(analysis.tool_version, "1.3.0");
+        assert_eq!(analysis.schema_version, 5);
+        assert_eq!(analysis.tool_version, "1.4.0");
         assert_eq!(analysis.algorithm_sources[0].commit, MOTIF_COMMIT);
         assert_eq!(analysis.translation_table.id, 1);
         assert_eq!(analysis.translation_table.name, "Standard");
@@ -1361,6 +1697,74 @@ mod tests {
     }
 
     #[test]
+    fn motif_restriction_panel_scans_reverse_type_iis_and_circular_origin() {
+        assert_eq!(RESTRICTION_ENZYMES.len(), 30);
+        let catalog_fingerprint = RESTRICTION_ENZYMES
+            .iter()
+            .map(|enzyme| {
+                format!(
+                    "{}|{}|{}|{}|{}\n",
+                    enzyme.name,
+                    enzyme.recognition_sequence,
+                    enzyme.cut_offset,
+                    enzyme.complement_cut_offset,
+                    enzyme.overhang
+                )
+            })
+            .collect::<String>();
+        assert_eq!(
+            hex_sha256(catalog_fingerprint.as_bytes()),
+            "12598695d6a6476911608991c27370d95969dde13c08e219f941310a221d841a"
+        );
+
+        let (reverse_hits, reverse_truncated) =
+            find_restriction_sites("AAAAAAGAGACCTTTTT", SequenceTopology::Linear);
+        let bsai = reverse_hits
+            .iter()
+            .find(|hit| hit.enzyme == "BsaI")
+            .expect("reverse BsaI site");
+        assert_eq!(bsai.position, 6);
+        assert_eq!(bsai.cut_position, 1);
+        assert_eq!(bsai.strand, -1);
+        assert_eq!(bsai.recognition_sequence, "GGTCTC");
+        assert!(!reverse_truncated);
+
+        let (linear_hits, _) = find_restriction_sites("AATTCCCCCG", SequenceTopology::Linear);
+        assert!(!linear_hits.iter().any(|hit| hit.enzyme == "EcoRI"));
+        let (circular_hits, circular_truncated) =
+            find_restriction_sites("AATTCCCCCG", SequenceTopology::Circular);
+        let eco_ri = circular_hits
+            .iter()
+            .find(|hit| hit.enzyme == "EcoRI")
+            .expect("origin-spanning EcoRI site");
+        assert_eq!(eco_ri.position, 9);
+        assert_eq!(eco_ri.cut_position, 0);
+        assert_eq!(eco_ri.strand, 1);
+        assert!(!circular_truncated);
+    }
+
+    #[test]
+    fn motif_restriction_iupac_matching_and_lumen_hit_cap_are_explicit() {
+        assert!(iupac_recognition_matches(
+            b"AGATCC",
+            b"RGATCY",
+            0,
+            SequenceTopology::Linear
+        ));
+        assert!(!iupac_recognition_matches(
+            b"NGATCC",
+            b"RGATCY",
+            0,
+            SequenceTopology::Linear
+        ));
+
+        let repeated = "GAATTC".repeat(MAX_RESTRICTION_HITS + 1);
+        let (hits, truncated) = find_restriction_sites(&repeated, SequenceTopology::Linear);
+        assert_eq!(hits.len(), MAX_RESTRICTION_HITS);
+        assert!(truncated);
+    }
+
+    #[test]
     fn unsupported_translation_table_fails_closed() {
         let raw = ">seq\nATGAAATAA\n";
         let records = parse_fasta(raw).unwrap();
@@ -1369,6 +1773,7 @@ mod tests {
             raw.as_bytes(),
             &SeqAnalyzeOptions {
                 translation_table_id: 27,
+                topology: SequenceTopology::Linear,
             },
         )
         .unwrap_err();
@@ -1425,6 +1830,10 @@ pub fn begin_analysis_with_options(
     context
         .environment
         .insert("translation_table_name".into(), table.name.into());
+    context.environment.insert(
+        "restriction_topology".into(),
+        options.topology.as_str().into(),
+    );
     let ticket = ScienceRunTicket {
         project_id: context.project_id.clone(),
         run_id: context.run_id.clone(),
@@ -1440,6 +1849,7 @@ pub fn begin_analysis_with_options(
             "kind": "seq_analyze",
             "translation_table_id": table.id,
             "translation_table_name": table.name,
+            "restriction_topology": options.topology,
         }),
     )?;
     store.request_approval(Approval {
@@ -1516,6 +1926,8 @@ pub fn finish_analysis_with_options(
     if run.context.environment.get("translation_table_id")
         != Some(&options.translation_table_id.to_string())
         || run.context.environment.get("translation_table_name") != Some(&table.name.to_string())
+        || run.context.environment.get("restriction_topology")
+            != Some(&options.topology.as_str().to_string())
     {
         let error = "seq analysis options do not match the durably approved run".to_string();
         let _ = store.transition(&ticket.run_id, RunState::Failed, Some(error.clone()));
@@ -1580,7 +1992,7 @@ pub fn finish_analysis_with_options(
         input_sha256: hex_sha256(source_bytes),
         tool: tool_identity.clone(),
         environment: BTreeMap::from([
-            ("algorithm".into(), "seqbench-v4".into()),
+            ("algorithm".into(), "seqbench-v5".into()),
             (
                 "algorithm_source_repository".into(),
                 MOTIF_REPOSITORY.into(),
@@ -1594,6 +2006,10 @@ pub fn finish_analysis_with_options(
                 options.translation_table_id.to_string(),
             ),
             ("translation_table_name".into(), table.name.into()),
+            (
+                "restriction_topology".into(),
+                options.topology.as_str().into(),
+            ),
         ]),
     })?;
     store.add_evidence(Evidence {
@@ -1615,6 +2031,7 @@ pub fn finish_analysis_with_options(
             "records": analysis.records.len(),
             "translation_table_id": table.id,
             "translation_table_name": table.name,
+            "restriction_topology": options.topology,
             "artifacts": [
                 analysis_artifact.sha256,
                 report_artifact.sha256,
@@ -1778,6 +2195,7 @@ mod protocol_tests {
         let store = ScienceStore::new(temp.path().join("science-store"));
         let approved = SeqAnalyzeOptions {
             translation_table_id: 2,
+            topology: SequenceTopology::Linear,
         };
         let ticket = begin_analysis_with_options(
             &store,
@@ -1789,6 +2207,47 @@ mod protocol_tests {
 
         let swapped = SeqAnalyzeOptions {
             translation_table_id: 1,
+            topology: SequenceTopology::Linear,
+        };
+        let error = finish_analysis_with_options(
+            &store,
+            ticket.clone(),
+            Path::new("input.fa"),
+            FASTA,
+            &swapped,
+        )
+        .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("options do not match the durably approved run"));
+        assert_eq!(
+            store.load_run(&ticket.run_id).unwrap().state,
+            RunState::Failed
+        );
+        assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
+        assert!(store.evidence(&ticket.run_id).unwrap().is_empty());
+        assert!(store.provenance(&ticket.run_id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn approved_restriction_topology_cannot_be_swapped_before_finish() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path().join("science-store"));
+        let approved = SeqAnalyzeOptions {
+            translation_table_id: 1,
+            topology: SequenceTopology::Circular,
+        };
+        let ticket = begin_analysis_with_options(
+            &store,
+            context(temp.path(), "project-a", "alice"),
+            &approved,
+        )
+        .unwrap();
+        crate::csv::mark_allowed(&store, &ticket).unwrap();
+
+        let swapped = SeqAnalyzeOptions {
+            translation_table_id: 1,
+            topology: SequenceTopology::Linear,
         };
         let error = finish_analysis_with_options(
             &store,
@@ -1816,6 +2275,7 @@ mod protocol_tests {
         let store = ScienceStore::new(temp.path().join("science-store"));
         let options = SeqAnalyzeOptions {
             translation_table_id: 2,
+            topology: SequenceTopology::Circular,
         };
         let ticket = begin_analysis_with_options(
             &store,
@@ -1835,6 +2295,10 @@ mod protocol_tests {
         .unwrap();
 
         assert_eq!(result.analysis.translation_table.id, 2);
+        assert_eq!(
+            result.analysis.restriction_topology,
+            SequenceTopology::Circular
+        );
         assert_eq!(result.analysis.records[0].orfs[0].stop_codon, "AGA");
         assert_eq!(
             result.provenance[0]
@@ -1842,6 +2306,13 @@ mod protocol_tests {
                 .get("translation_table_id")
                 .map(String::as_str),
             Some("2")
+        );
+        assert_eq!(
+            result.provenance[0]
+                .environment
+                .get("restriction_topology")
+                .map(String::as_str),
+            Some("circular")
         );
     }
 }

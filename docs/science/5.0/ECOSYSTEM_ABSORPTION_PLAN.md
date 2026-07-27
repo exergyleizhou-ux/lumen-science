@@ -294,7 +294,7 @@ Remaining:
 
 ### Phase 3 — deterministic scientific mechanics
 
-Implemented in the first three Rust algorithm slices:
+Implemented in the first four Rust algorithm slices:
 
 - directly adapted Motif FASTA parsing semantics: first-whitespace headers,
   PIR comments, ASCII-only sequence cleaning, and explicit gap-removal counts;
@@ -302,8 +302,8 @@ Implemented in the first three Rust algorithm slices:
   calculations, plus average/monoisotopic protein mass tables;
 - preserved Motif's complete DNA/RNA IUPAC reverse-complement behavior and
   fixed lowercase RNA normalization before standard-code translation;
-- recorded the exact Motif repository, commit, license, and component paths in
-  both schema-v4 `analysis.json` and durable provenance;
+- recorded the exact Motif repository, commit and license in both schema-v5
+  `analysis.json` and durable provenance, with component paths in the analysis;
 - executed the exact upstream TypeScript locally and matched the Rust fixture
   results for parsing, all numeric metrics, IUPAC complements, and translation;
 - retained the existing SessionActor allow/deny/timeout/cancel and
@@ -315,7 +315,7 @@ Implemented in the first three Rust algorithm slices:
 - directly adapted Motif's standard-table ORF scanner: `TTG`/`CTG`/`ATG`
   initiators, nested starts, implicit terminal ORFs, six-frame scanning,
   reverse-strand coordinate mapping, and length ordering now land in
-  schema-v4 output with an explicit 50-record Lumen cap;
+  schema-v5 output with an explicit 50-record Lumen cap;
 - executed the exact Motif ORF source locally and matched Rust on nested,
   terminal, and reverse-strand fixtures;
 - directly adapted all 24 single-valued NCBI translation tables Motif ships,
@@ -327,6 +327,14 @@ Implemented in the first three Rust algorithm slices:
   fail terminally without artifacts, evidence, or provenance;
 - executed the exact Motif registry, translation, and table-aware ORF sources
   locally and matched all IDs/names plus tables 2, 15, and 32 fixtures.
+- directly adapted Motif's complete 30-enzyme default restriction panel and
+  scanner, including overlapping recognition, both strands, mirrored Type IIS
+  cuts and circular-origin hits, with an explicit 100-hit Lumen cap;
+- froze `topology` into the durable run before approval and made a post-Allow
+  linear/circular swap fail terminally without artifacts, evidence or
+  provenance;
+- executed the exact upstream TypeScript locally and matched the full catalog
+  fingerprint, reverse BsaI, circular EcoRI and IUPAC fixtures.
 
 Remaining:
 
@@ -363,7 +371,10 @@ the already actor-gated `seq_analyze` path and produce store-owned hashed
 artifacts. A fresh current-source binary passed the three filtered
 `seq_analyze` allow/boundary/deny product tests for the schema-v4 table-aware
 route; the allow case selected table 2 and the negative cases produced no
-unauthorized output. This does not claim that the 224 Biomni tools,
+unauthorized output. A fresh schema-v5 run passed the same three product tests
+with circular restriction scanning: the allow case verified the 30-enzyme
+panel and origin-spanning EcoRI cut, while invalid topology and deny produced
+no unauthorized output. This does not claim that the 224 Biomni tools,
 remaining connectors/Motif algorithms, or clean-room document features are
 already product-complete.
 

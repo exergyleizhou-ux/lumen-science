@@ -8,7 +8,7 @@
 | license | MIT |
 | role in Lumen | Optional molecular-biology renderer plus attributed Rust sequence algorithms |
 | runtime authority | none |
-| admission | renderer vendored; three Rust algorithm slices admitted |
+| admission | renderer vendored; four Rust algorithm slices admitted |
 
 ## Integration contract
 
@@ -18,8 +18,9 @@
 - Upstream Motif MCP server, Claude Science installer, and external MSA CLIs are **not** wired.
 - FASTA parsing, sequence metrics, IUPAC reverse-complement, all 24
   single-valued NCBI translation tables, and table-aware six-frame ORF
-  detection are adapted into Rust `seqbench` and still execute only inside the
-  SessionActor approval protocol.
+  detection, plus the 30-enzyme restriction-site scanner with frozen
+  linear/circular topology, are adapted into Rust `seqbench` and still execute
+  only inside the SessionActor approval protocol.
 
 ## Notices
 
