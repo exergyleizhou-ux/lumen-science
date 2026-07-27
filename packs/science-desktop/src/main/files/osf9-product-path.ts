@@ -90,16 +90,17 @@ export async function runOsf9ProductPath(opts?: {
     return { path: full, sha256: createHash('sha256').update(body).digest('hex') }
   }
   const arts = [
-    { id: 'art-lit-1', ...writeFixture('lit/pubmed.json', '{"pmid": "fixture"}\n'), label: 'literature' },
-    { id: 'art-db-1', ...writeFixture('db/uniprot.fa', '>fixture\nMKV\n'), label: 'uniprot_protein' },
-    { id: 'art-nb-1', ...writeFixture('nb/out.csv', 'col\n1\n'), label: 'notebook_output' },
-  ]
+    { ...writeFixture('lit/pubmed.json', '{"pmid": "fixture"}\n'), label: 'literature' },
+    { ...writeFixture('db/uniprot.fa', '>fixture\nMKV\n'), label: 'uniprot_protein' },
+    { ...writeFixture('nb/out.csv', 'col\n1\n'), label: 'notebook_output' },
+  ].map((artifact) => ({ ...artifact, id: artifact.sha256 }))
   for (const a of arts) {
     store.put(a.id, {
       path: a.path,
       sha256: a.sha256,
       ownerId,
       projectId: project.id,
+      runId: 'offline-fixture-run',
     })
   }
   push('seed-artifacts', true, `${arts.length} artifacts`)
@@ -107,14 +108,14 @@ export async function runOsf9ProductPath(opts?: {
   // Preview by artifact_id
   setTrustedPreviewContext({ ownerId, projectId: project.id })
   const prev = await loadArtifactPreview(
-    { artifactId: 'art-lit-1', expectedSha256: arts[0].sha256 },
+    { artifactId: arts[0].id, expectedSha256: arts[0].sha256 },
     { store },
   )
   push('preview-by-artifact', prev.access.ok === true, prev.path)
 
   // Adversarial: path-style / wrong project
   const cross = await resolvePreview(
-    { artifactId: 'art-lit-1' },
+    { artifactId: arts[0].id },
     store,
     { ownerId: 'attacker', projectId: project.id },
   )
@@ -147,21 +148,37 @@ export async function runOsf9ProductPath(opts?: {
 
   // Review
   const review = createReviewService({
-    acpCall: async () => ({
-      report: {
-        outcome: 'pass',
-        summary: 'fixture review',
-        artifacts: arts.map((a) => ({
-          artifact_id: a.id,
-          passed: true,
-          reason: 'ok',
-          expected_sha256: a.sha256,
+    acpCall: async (_tool, args) => ({
+      operationId: args.operationId,
+      kind: 'review_record',
+      projectId: args.projectId,
+      replayed: false,
+      runtimeAuthority: 'SessionActor-gated ACP adapter',
+      result: {
+        review_id: args.operationId,
+        operation_id: args.operationId,
+        reviewer_id: args.reviewerId,
+        owner_id: args.ownerId,
+        verdict: 'pass',
+        summary: args.summary,
+        project_id: args.projectId,
+        source_run_id: args.runId,
+        authority_run_id: 'osf9-review-authority-run',
+        evidence_fingerprint: createHash('sha256')
+          .update((args.artifactSha256s as string[]).join('|'))
+          .digest('hex'),
+        artifacts: (args.artifactSha256s as string[]).map((sha256) => ({
+          source_run_id: args.runId,
+          sha256,
         })),
       },
     }),
     previewStore: store,
   })
   const rev = await review.submit({
+    runId: 'offline-fixture-run',
+    verdict: 'pass',
+    summary: 'Offline OSF-9 fixture artifacts match the fixture review rubric.',
     artifacts: arts.map((a) => ({
       artifactId: a.id,
       expectedSha256: a.sha256,
@@ -202,7 +219,7 @@ export async function runOsf9ProductPath(opts?: {
   // Office fail-closed
   const office = assertOfficePreviewAdmission({
     format: 'docx',
-    artifactId: 'art-lit-1',
+    artifactId: arts[0].id,
     expectedSha256: arts[0].sha256,
   })
   push('office-fail-closed', office.ok === false)
@@ -231,7 +248,7 @@ export async function runOsf9ProductPath(opts?: {
   push('restart-rebind', rebind.ok === true)
   setTrustedPreviewContext({ ownerId, projectId: project.id })
   const prev2 = await loadArtifactPreview(
-    { artifactId: 'art-db-1', expectedSha256: arts[1].sha256 },
+    { artifactId: arts[1].id, expectedSha256: arts[1].sha256 },
     { store },
   )
   push('restart-preview', prev2.access.ok === true)

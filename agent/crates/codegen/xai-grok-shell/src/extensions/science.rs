@@ -618,7 +618,7 @@ async fn run_project_mutation(
     operation_id: String,
     expected_revision: Option<String>,
     approval_timeout_ms: u64,
-    mutation: xai_grok_science::project::ProjectMutation,
+    mut mutation: xai_grok_science::project::ProjectMutation,
 ) -> Result<xai_grok_science::project::MutationOutcome, acp::Error> {
     if owner_id.is_empty() {
         return Err(acp::Error::invalid_params().data("ownerId is required"));
@@ -658,8 +658,16 @@ async fn run_project_mutation(
         .target_project()
         .map(|project_id| project_id.0.clone())
         .unwrap_or_else(|| format!("pending-{operation_id}"));
+    let authority_run_id = RunId::new_v7();
+    if let xai_grok_science::project::ProjectMutation::ReviewRecord {
+        authority_run_id: bound_run_id,
+        ..
+    } = &mut mutation
+    {
+        *bound_run_id = authority_run_id.0.clone();
+    }
     let context = RunContext {
-        run_id: RunId::new_v7(),
+        run_id: authority_run_id,
         project_id: ProjectId::new(run_project),
         session_id: session_id.0.to_string(),
         owner_id: owner_id.clone(),
@@ -1961,13 +1969,66 @@ async fn handle_multimodal_index(agent: &MvpAgent, args: &acp::ExtRequest) -> Ex
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct ReviewRecParams2 { session_id: String, store_root: PathBuf, project_id: String, reviewer_id: String, verdict: String, #[serde(default)] claim_id: Option<String> }
+struct ReviewRecordParams {
+    session_id: String,
+    store_root: PathBuf,
+    project_id: String,
+    owner_id: String,
+    reviewer_id: String,
+    verdict: String,
+    summary: String,
+    run_id: String,
+    artifact_sha256s: Vec<String>,
+    operation_id: String,
+    #[serde(default)]
+    claim_id: Option<String>,
+    #[serde(default)]
+    expected_revision: Option<String>,
+    #[serde(default)]
+    artifact_root: Option<PathBuf>,
+    #[serde(default = "default_approval_timeout_ms")]
+    approval_timeout_ms: u64,
+}
 
 async fn handle_review_record(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
-    let params: ReviewRecParams2 = parse_params(args)?;
-    store_handler(agent, &params.session_id, params.store_root, move |s| s.create_review_record(
-        &xai_grok_science::project::ProjectId(params.project_id), params.reviewer_id, params.verdict, params.claim_id,
-    )).await
+    let params: ReviewRecordParams = parse_params(args)?;
+    if params.project_id.is_empty()
+        || params.owner_id.is_empty()
+        || params.reviewer_id.is_empty()
+        || params.summary.trim().is_empty()
+        || params.run_id.is_empty()
+        || params.artifact_sha256s.is_empty()
+    {
+        return Err(acp::Error::invalid_params().data(
+            "projectId, ownerId, reviewerId, summary, runId and artifactSha256s are required",
+        ));
+    }
+    let verdict = xai_grok_science::project::ReviewVerdict::parse(&params.verdict)
+        .map_err(internal)?;
+    let outcome = run_project_mutation(
+        agent,
+        params.session_id,
+        params.owner_id,
+        params.store_root,
+        params.artifact_root,
+        params.operation_id,
+        params.expected_revision,
+        params.approval_timeout_ms,
+        xai_grok_science::project::ProjectMutation::ReviewRecord {
+            project_id: xai_grok_science::project::ProjectId(params.project_id),
+            reviewer_id: params.reviewer_id,
+            verdict,
+            summary: params.summary,
+            claim_id: params.claim_id,
+            source_run_id: params.run_id,
+            // Overwritten inside `run_project_mutation` with the actor's
+            // freshly generated durable authority run id.
+            authority_run_id: String::new(),
+            artifact_sha256s: params.artifact_sha256s,
+        },
+    )
+    .await?;
+    mutation_response(outcome)
 }
 
 #[derive(Debug, Deserialize)]

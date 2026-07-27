@@ -3634,6 +3634,396 @@ async fn test_stdio_science_project_migrate_refusal_writes_no_project() {
     .await;
 }
 
+/// The shipped review endpoint must not be a preview echo. It reopens a
+/// succeeded source run after permission, hashes the registered bytes, writes
+/// one durable project review, and commits a manifest/evidence/provenance
+/// chain in the actor's own run. Replaying the operation prompts and writes
+/// nothing a second time.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_review_record_is_actor_gated_artifact_bound_and_idempotent() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let workspace = std::fs::canonicalize(workdir.path()).expect("canonical workspace");
+        let store_root = workspace.join("science-review-store");
+        let client = GrokStdioClient::spawn(&server, &workspace).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(&workspace).await;
+
+        let created: serde_json::Value = serde_json::from_str(
+            client
+                .ext_method(
+                    "x.ai/science/project_create",
+                    serde_json::json!({
+                        "sessionId": session_id.0.as_ref(),
+                        "ownerId": "review-owner",
+                        "storeRoot": store_root,
+                        "title": "Artifact-bound review",
+                        "researchQuestion": "Do these exact bytes support the result?",
+                        "operationId": "op-review-project-create",
+                        "approvalTimeoutMs": 5_000,
+                    }),
+                )
+                .await
+                .expect("create review project")
+                .0
+                .get(),
+        )
+        .expect("project create JSON");
+        let project_id = created["projectId"].as_str().expect("project id").to_owned();
+
+        // Seed a genuine succeeded ScienceStore run. The review request cites
+        // only its run id + digest; Rust must resolve and rehash the bytes.
+        let science_store = xai_grok_science::ScienceStore::new(&store_root);
+        let source_run = xai_grok_science::RunId::new("review-source-run-1");
+        science_store
+            .create_run(xai_grok_science::RunContext {
+                run_id: source_run.clone(),
+                project_id: xai_grok_science::ProjectId::new(project_id.clone()),
+                session_id: session_id.0.to_string(),
+                owner_id: "review-owner".into(),
+                workspace_root: workspace.clone(),
+                provider: "offline-test".into(),
+                approval_policy: "fixture".into(),
+                tool_profile: "review-source-fixture".into(),
+                artifact_root: store_root.join("runs"),
+                environment: std::collections::BTreeMap::new(),
+            })
+            .expect("create source run");
+        let source_artifact = science_store
+            .put_artifact(
+                &xai_grok_science::ProjectId::new(project_id.clone()),
+                &source_run,
+                "review-owner",
+                xai_grok_science::CallId::new("source-call"),
+                Path::new("result.json"),
+                br#"{"answer":"supported"}"#,
+                "application/json",
+                "review source",
+            )
+            .expect("put source artifact");
+        science_store
+            .transition(&source_run, xai_grok_science::RunState::Succeeded, None)
+            .expect("finish source run");
+
+        let params = || {
+            serde_json::json!({
+                "sessionId": session_id.0.as_ref(),
+                "ownerId": "review-owner",
+                "storeRoot": store_root,
+                "projectId": project_id,
+                "reviewerId": "review-owner",
+                "verdict": "pass",
+                "summary": "The exact source bytes support the recorded fixture conclusion.",
+                "runId": source_run.0,
+                "artifactSha256s": [source_artifact.sha256],
+                "operationId": "op-review-record-0001",
+                "approvalTimeoutMs": 5_000,
+            })
+        };
+        let run_names = || {
+            std::fs::read_dir(store_root.join("runs"))
+                .expect("read runs")
+                .map(|entry| {
+                    entry
+                        .expect("run entry")
+                        .file_name()
+                        .to_string_lossy()
+                        .into_owned()
+                })
+                .collect::<std::collections::BTreeSet<_>>()
+        };
+
+        let runs_before_forged_reviewer = run_names();
+        let permissions_before_forged_reviewer = client.permission_request_count();
+        let mut forged_reviewer = params();
+        forged_reviewer["reviewerId"] = serde_json::json!("Nature-Reviewer-2");
+        assert!(
+            client
+                .ext_method("x.ai/science/review_record", forged_reviewer)
+                .await
+                .is_err(),
+            "untrusted reviewer attribution was accepted"
+        );
+        assert_eq!(
+            client.permission_request_count(),
+            permissions_before_forged_reviewer,
+            "an impossible reviewer identity reached the permission prompt"
+        );
+        assert_eq!(
+            run_names(),
+            runs_before_forged_reviewer,
+            "forged reviewer identity opened an authority run"
+        );
+
+        let before = run_names();
+        let permissions_before = client.permission_request_count();
+        let response: serde_json::Value = serde_json::from_str(
+            client
+                .ext_method("x.ai/science/review_record", params())
+                .await
+                .expect("review_record failed")
+                .0
+                .get(),
+        )
+        .expect("review response JSON");
+        assert_eq!(response["runtimeAuthority"], "SessionActor-gated ACP adapter");
+        assert_eq!(response["kind"], "review_record");
+        assert_eq!(response["replayed"], false);
+        assert_eq!(response["result"]["project_id"], project_id);
+        assert_eq!(response["result"]["source_run_id"], source_run.0);
+        assert_eq!(
+            response["result"]["artifacts"][0]["sha256"],
+            source_artifact.sha256
+        );
+        assert_eq!(
+            client.permission_request_count(),
+            permissions_before + 1,
+            "review must ask exactly once"
+        );
+
+        let project_store = xai_grok_science::project::ProjectStore::new(&store_root);
+        let project_id_typed =
+            xai_grok_science::project::ProjectId(project_id.clone());
+        let reviews = project_store
+            .list_reviews(&project_id_typed)
+            .expect("reopen reviews");
+        assert_eq!(reviews.len(), 1);
+        assert_eq!(reviews[0].operation_id, "op-review-record-0001");
+
+        let after = run_names();
+        let review_runs: Vec<_> = after.difference(&before).cloned().collect();
+        assert_eq!(review_runs.len(), 1, "review must open one authority run");
+        let authority_run = xai_grok_science::RunId::new(review_runs[0].clone());
+        assert_eq!(
+            response["result"]["authority_run_id"],
+            authority_run.0,
+            "review record must bind the actor run that authorized it"
+        );
+        assert_eq!(
+            reviews[0].authority_run_id, authority_run.0,
+            "reopened review lost its authority-run binding"
+        );
+        assert_eq!(
+            science_store
+                .load_run(&authority_run)
+                .expect("load authority run")
+                .state,
+            xai_grok_science::RunState::Succeeded
+        );
+        assert_eq!(
+            science_store.approvals(&authority_run).expect("approval")[0].decision,
+            xai_grok_science::ApprovalDecision::Allow
+        );
+        let manifests = science_store.artifacts(&authority_run).expect("manifest");
+        assert_eq!(manifests.len(), 1);
+        assert_eq!(manifests[0].relative_path, Path::new("review_record.json"));
+        assert_eq!(science_store.evidence(&authority_run).unwrap().len(), 1);
+        assert_eq!(science_store.provenance(&authority_run).unwrap().len(), 1);
+        let verified = xai_grok_science::review::verify_for_goal_completion(
+            &science_store,
+            &authority_run,
+        )
+        .expect("host-verify review authority run");
+        assert_eq!(verified.artifact_count, 1);
+        assert_eq!(verified.evidence_count, 1);
+        assert_eq!(verified.provenance_count, 1);
+        let manifest_bytes = science_store
+            .artifact_bytes(
+                &xai_grok_science::ProjectId::new(project_id.clone()),
+                &authority_run,
+                "review-owner",
+                Path::new("review_record.json"),
+            )
+            .expect("reopen manifest bytes");
+        assert_eq!(
+            format!("{:x}", Sha256::digest(&manifest_bytes)),
+            manifests[0].sha256
+        );
+
+        let permissions_after = client.permission_request_count();
+        let runs_after = run_names();
+        let replay: serde_json::Value = serde_json::from_str(
+            client
+                .ext_method("x.ai/science/review_record", params())
+                .await
+                .expect("review replay failed")
+                .0
+                .get(),
+        )
+        .expect("review replay JSON");
+        assert_eq!(replay["replayed"], true);
+        assert_eq!(client.permission_request_count(), permissions_after);
+        assert_eq!(run_names(), runs_after, "review replay opened another run");
+        assert_eq!(
+            project_store.list_reviews(&project_id_typed).unwrap().len(),
+            1,
+            "review replay duplicated the ledger"
+        );
+
+        // A new operation against tampered source bytes reaches Allow but must
+        // fail the actor run and leave the review ledger unchanged.
+        std::fs::write(
+            store_root
+                .join("runs")
+                .join(&source_run.0)
+                .join("artifacts/result.json"),
+            b"tampered",
+        )
+        .expect("tamper source bytes");
+        let mut tampered = params();
+        tampered["operationId"] = serde_json::json!("op-review-record-tampered");
+        let before_failed = run_names();
+        assert!(
+            client
+                .ext_method("x.ai/science/review_record", tampered)
+                .await
+                .is_err(),
+            "tampered source bytes produced a review"
+        );
+        assert!(
+            project_store.list_reviews(&project_id_typed).is_err(),
+            "a review over tampered source bytes remained readable as valid"
+        );
+        let review_files = std::fs::read_dir(
+            store_root
+                .join("projects")
+                .join(&project_id)
+                .join("reviews"),
+        )
+        .expect("read review ledger")
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().extension().and_then(|ext| ext.to_str()) == Some("json"))
+        .count();
+        assert_eq!(
+            review_files, 1,
+            "tampered retry wrote a duplicate project review"
+        );
+        let after_failed = run_names();
+        let failed_runs: Vec<_> = after_failed.difference(&before_failed).cloned().collect();
+        assert_eq!(failed_runs.len(), 1);
+        let failed_run = xai_grok_science::RunId::new(failed_runs[0].clone());
+        assert_eq!(
+            science_store.load_run(&failed_run).unwrap().state,
+            xai_grok_science::RunState::Failed
+        );
+        assert!(science_store.artifacts(&failed_run).unwrap().is_empty());
+    })
+    .await;
+}
+
+/// A production refusal is durable, but it must not create a review,
+/// operation ledger entry, manifest, evidence, or provenance.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_review_record_denied_writes_no_review_or_artifact() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let workspace = std::fs::canonicalize(workdir.path()).expect("canonical workspace");
+        let store_root = workspace.join("science-review-denied-store");
+        let client = GrokStdioClient::spawn_with_permission_response(
+            &server,
+            &workspace,
+            PermissionResponse::Reject,
+        )
+        .await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(&workspace).await;
+
+        let project_store = xai_grok_science::project::ProjectStore::new(&store_root);
+        let project = project_store
+            .create_project("review-owner", "Denied review", "Must it write nothing?")
+            .expect("seed project");
+        let science_store = xai_grok_science::ScienceStore::new(&store_root);
+        let source_run = xai_grok_science::RunId::new("review-denied-source");
+        science_store
+            .create_run(xai_grok_science::RunContext {
+                run_id: source_run.clone(),
+                project_id: xai_grok_science::ProjectId::new(project.project_id.0.clone()),
+                session_id: session_id.0.to_string(),
+                owner_id: "review-owner".into(),
+                workspace_root: workspace.clone(),
+                provider: "offline-test".into(),
+                approval_policy: "fixture".into(),
+                tool_profile: "review-source-fixture".into(),
+                artifact_root: store_root.join("runs"),
+                environment: std::collections::BTreeMap::new(),
+            })
+            .unwrap();
+        let artifact = science_store
+            .put_artifact(
+                &xai_grok_science::ProjectId::new(project.project_id.0.clone()),
+                &source_run,
+                "review-owner",
+                xai_grok_science::CallId::new("source-call"),
+                Path::new("result.txt"),
+                b"source bytes",
+                "text/plain",
+                "source",
+            )
+            .unwrap();
+        science_store
+            .transition(&source_run, xai_grok_science::RunState::Succeeded, None)
+            .unwrap();
+
+        let denied = client
+            .ext_method(
+                "x.ai/science/review_record",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "ownerId": "review-owner",
+                    "storeRoot": store_root,
+                    "projectId": project.project_id.0,
+                    "reviewerId": "review-owner",
+                    "verdict": "pass",
+                    "summary": "This request must be denied before any review evidence is written.",
+                    "runId": source_run.0,
+                    "artifactSha256s": [artifact.sha256],
+                    "operationId": "op-review-denied-0001",
+                    "approvalTimeoutMs": 5_000,
+                }),
+            )
+            .await;
+        assert!(denied.is_err(), "denied review returned success: {denied:?}");
+        assert!(
+            project_store
+                .list_reviews(&project.project_id)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            project_store
+                .lookup_operation("op-review-denied-0001")
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(client.permission_request_count(), 1);
+
+        let run_ids: Vec<_> = std::fs::read_dir(store_root.join("runs"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|id| id != &source_run.0)
+            .collect();
+        assert_eq!(run_ids.len(), 1, "denial must have one durable authority run");
+        let denied_run = xai_grok_science::RunId::new(run_ids[0].clone());
+        let denied_record = science_store.load_run(&denied_run).unwrap();
+        assert!(matches!(
+            denied_record.state,
+            xai_grok_science::RunState::Denied | xai_grok_science::RunState::Cancelled
+        ));
+        assert!(science_store.artifacts(&denied_run).unwrap().is_empty());
+        assert!(science_store.evidence(&denied_run).unwrap().is_empty());
+        assert!(science_store.provenance(&denied_run).unwrap().is_empty());
+    })
+    .await;
+}
+
 // ============================================================================
 // LS5-K8: workflow execution over stdio ACP
 //

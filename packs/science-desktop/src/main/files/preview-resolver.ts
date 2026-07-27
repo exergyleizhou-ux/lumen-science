@@ -42,6 +42,8 @@ export interface PreviewFileRecord {
   sha256: string
   ownerId: string
   projectId: string
+  /** Durable run that registered these bytes. Required for review evidence. */
+  runId?: string
 }
 
 export interface PreviewFileStore {

@@ -23,6 +23,7 @@ import { bindTrustedSession } from './session-binding'
 
 export type DossierFixture = {
   projectId: string
+  runId: string
   question: string
   plan: string
   ownerId: string
@@ -116,6 +117,7 @@ export async function runDossierGoldPath(
       sha256: art.sha256,
       ownerId: fixture.ownerId,
       projectId,
+      runId: fixture.runId,
     })
   }
   addStep('seed', true, { count: fixture.artifacts.length })
@@ -151,6 +153,9 @@ export async function runDossierGoldPath(
 
   // 8. Review: plan + submit via shipped reviewService
   const reviewPlanResult = planReview({
+    runId: fixture.runId,
+    verdict: 'pass',
+    summary: 'Offline dossier fixture artifacts were reviewed against the fixture rubric.',
     artifacts: fixture.artifacts.map((a) => ({
       artifactId: a.artifactId,
       expectedSha256: a.sha256,
@@ -167,6 +172,9 @@ export async function runDossierGoldPath(
   if (!('ok' in reviewPlanResult)) {
     // Submit via review service with store for hash validation
     const reviewResult = await deps.reviewService.submit({
+      runId: fixture.runId,
+      verdict: 'pass',
+      summary: 'Offline dossier fixture artifacts were reviewed against the fixture rubric.',
       artifacts: fixture.artifacts.map((a) => ({
         artifactId: a.artifactId,
         expectedSha256: a.sha256,

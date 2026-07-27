@@ -1,8 +1,8 @@
 /**
  * OSF-4 Reviewer plan — pure module (no Electron, no fix-loop spawn).
  *
- * Builds a review request that can only be fulfilled by Lumen ACP
- * start_review / review_status. TypeScript orchestrator stays stubbed.
+ * Builds an artifact-bound request that can only be committed by the Rust
+ * `review_record` mutation. TypeScript reviewer orchestration stays stubbed.
  */
 
 import { createHash, randomUUID } from 'node:crypto'
@@ -22,9 +22,14 @@ export type ReviewEvidence = {
 
 export type ReviewRequest = {
   artifacts: ReviewEvidence[]
+  /** Succeeded ScienceStore run that registered every reviewed artifact. */
+  runId: string
+  /** Explicit reviewer judgment; never inferred from hash integrity. */
+  verdict: VerdictOutcome
+  /** Human rationale for the judgment, persisted by Rust. */
+  summary: string
   rubricVersion?: string
   projectId?: string
-  runId?: string
   /** Claim this review supports/contradicts, when the reviewer names one. */
   claimId?: string
 }
@@ -35,9 +40,12 @@ export type ReviewPlan = {
   artifactCount: number
   artifactIds: string[]
   hashes: string[]
+  sourceRunId: string
+  verdict: VerdictOutcome
+  summary: string
   rubricVersion: string
-  tool: 'start_review'
-  authority: 'SessionActor/EvidenceGraph'
+  tool: 'review_record'
+  authority: 'SessionActor/ReviewLedger'
   requiresTrustedSession: true
   createdAt: number
   evidenceFingerprint: string
@@ -64,7 +72,8 @@ export type ReviewVerdictProjection = {
 
 export type ReviewFinding = {
   artifactId: string
-  passed: boolean
+  /** Scientific support judgment, when explicitly supplied; null means only integrity was checked. */
+  passed: boolean | null
   reason: string
   expectedSha256: string
   actualSha256?: string
@@ -81,6 +90,15 @@ export function hashEvidenceFingerprint(artifacts: ReviewEvidence[]): string {
 }
 
 export function planReview(req: ReviewRequest): ReviewPlan | { ok: false; reason: string } {
+  if (!req.runId || !/^[A-Za-z0-9_-]{1,128}$/.test(req.runId)) {
+    return { ok: false, reason: 'a valid source runId is required' }
+  }
+  if (!['pass', 'warn', 'fail', 'needs_revision', 'inconclusive'].includes(req.verdict)) {
+    return { ok: false, reason: 'an explicit valid review verdict is required' }
+  }
+  if (!req.summary?.trim() || req.summary.length > 16_384) {
+    return { ok: false, reason: 'a non-empty review summary is required' }
+  }
   if (!req.artifacts || req.artifacts.length === 0) {
     return { ok: false, reason: 'at least one artifact is required' }
   }
@@ -88,9 +106,12 @@ export function planReview(req: ReviewRequest): ReviewPlan | { ok: false; reason
     if (!a.artifactId || !a.expectedSha256) {
       return { ok: false, reason: 'artifact_id and expected_sha256 are required for each artifact' }
     }
-    if (a.expectedSha256.length < 16) {
-      return { ok: false, reason: 'expected_sha256 too short' }
+    if (!/^[a-f0-9]{64}$/.test(a.expectedSha256) || a.artifactId !== a.expectedSha256) {
+      return { ok: false, reason: 'artifact_id must equal its canonical lowercase SHA-256' }
     }
+  }
+  if (new Set(req.artifacts.map((artifact) => artifact.artifactId)).size !== req.artifacts.length) {
+    return { ok: false, reason: 'review artifacts must be unique' }
   }
   return {
     planId: randomUUID(),
@@ -98,9 +119,12 @@ export function planReview(req: ReviewRequest): ReviewPlan | { ok: false; reason
     artifactCount: req.artifacts.length,
     artifactIds: req.artifacts.map((a) => a.artifactId),
     hashes: req.artifacts.map((a) => a.expectedSha256),
+    sourceRunId: req.runId,
+    verdict: req.verdict,
+    summary: req.summary,
     rubricVersion: req.rubricVersion || DEFAULT_RUBRIC,
-    tool: 'start_review',
-    authority: 'SessionActor/EvidenceGraph',
+    tool: 'review_record',
+    authority: 'SessionActor/ReviewLedger',
     requiresTrustedSession: true,
     createdAt: Date.now(),
     evidenceFingerprint: hashEvidenceFingerprint(req.artifacts),
@@ -120,7 +144,7 @@ export function assertReviewAccess(
       reason: 'no trusted session — open a project before submitting review',
     }
   }
-  if (plan.authority !== 'SessionActor/EvidenceGraph') {
+  if (plan.authority !== 'SessionActor/ReviewLedger') {
     return { ok: false, reason: 'invalid authority claim' }
   }
   return { ok: true }
@@ -169,17 +193,16 @@ export function isVerdictStale(
 }
 
 /**
- * Build the ACP start_review payload: project, run, and every artifact hash.
+ * Build the durable review payload: project, run, and every artifact hash.
  */
 export function buildReviewAcpPayload(
   plan: ReviewPlan,
   artifacts: ReviewEvidence[],
   trusted: TrustedPreviewContext,
-  runId?: string,
 ): { project_id: string; run_id: string; plan_id: string; artifacts: { artifact_id: string; expected_sha256: string }[] } {
   return {
     project_id: trusted.projectId,
-    run_id: runId || 'default',
+    run_id: plan.sourceRunId,
     plan_id: plan.planId,
     artifacts: artifacts.map((a) => ({
       artifact_id: a.artifactId,
@@ -218,8 +241,8 @@ export function normalizeReviewResult(
     evidenceReferences: [],
     findings: plan.artifactIds.map((id, i) => ({
       artifactId: id,
-      passed: false,
-      reason: 'raw result unparseable',
+      passed: null,
+      reason: 'no per-artifact scientific judgment was recorded',
       expectedSha256: plan.hashes[i] ?? '',
     })),
     supportCount: 0,
@@ -250,9 +273,10 @@ export function normalizeReviewResult(
   let contradictCount = 0
 
   for (const fa of artifacts) {
-    const passed = Boolean(fa.passed ?? fa.ok ?? (outcome === 'pass'))
-    if (passed) supportCount++
-    else contradictCount++
+    const rawPassed = fa.passed ?? fa.ok
+    const passed = typeof rawPassed === 'boolean' ? rawPassed : null
+    if (passed === true) supportCount++
+    else if (passed === false) contradictCount++
     findings.push({
       artifactId: String(fa.artifact_id ?? fa.artifactId ?? ''),
       passed,

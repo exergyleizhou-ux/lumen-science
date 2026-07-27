@@ -5,6 +5,7 @@
 //!   graph.json
 //!   artifacts.json
 //!   claims/{claim_id}.json
+//!   reviews/{operation_id}.json
 //!
 //! Records only — SessionActor remains sole execution authority.
 
@@ -12,7 +13,7 @@ use super::claim::{Claim, ClaimStatus};
 use super::evidence_graph::{
     EdgeKind, EvidenceEdge, EvidenceGraph, EvidenceNode, NodeId, NodeKind, validate_sha256_hex,
 };
-use super::model::{OwnerId, ProjectId, ProjectStatus, ResearchProject};
+use super::model::{OwnerId, ProjectId, ProjectStatus, ResearchProject, validate_project_id};
 use crate::features::{FeatureGates, ScienceFeature};
 use crate::{Result, ScienceError};
 use chrono::{DateTime, Utc};
@@ -133,7 +134,11 @@ impl ProjectStore {
         &mut self.gates
     }
 
-    fn project_dir(&self, id: &ProjectId) -> PathBuf {
+    pub(crate) fn root(&self) -> &Path {
+        &self.root
+    }
+
+    pub(super) fn project_dir(&self, id: &ProjectId) -> PathBuf {
         self.root.join("projects").join(&id.0)
     }
 
@@ -268,6 +273,7 @@ impl ProjectStore {
 
     pub fn load_project(&self, project_id: &ProjectId) -> Result<ResearchProject> {
         self.gates.require(ScienceFeature::ResearchProject)?;
+        validate_project_id(&project_id.0)?;
         let path = self.project_dir(project_id).join("project.json");
         if !path.is_file() {
             return Err(ScienceError::Invalid(format!(
@@ -292,6 +298,7 @@ impl ProjectStore {
 
     pub fn load_graph(&self, project_id: &ProjectId) -> Result<EvidenceGraph> {
         self.gates.require(ScienceFeature::EvidenceGraph)?;
+        validate_project_id(&project_id.0)?;
         let path = self.project_dir(project_id).join("graph.json");
         if !path.is_file() {
             return Ok(EvidenceGraph::new(project_id.clone()));
@@ -320,6 +327,7 @@ impl ProjectStore {
     /// by a path that predates this API.
     pub fn project_revision(&self, project_id: &ProjectId) -> Result<String> {
         use sha2::{Digest, Sha256};
+        validate_project_id(&project_id.0)?;
         let dir = self.project_dir(project_id);
         if !dir.join("project.json").is_file() {
             return Err(ScienceError::Invalid(format!(
@@ -339,23 +347,28 @@ impl ProjectStore {
                 Err(error) => return Err(error.into()),
             }
         }
-        // Claim files, in a deterministic order.
-        let claims_dir = dir.join("claims");
-        let mut claim_paths: Vec<PathBuf> = Vec::new();
-        if claims_dir.is_dir() {
-            for entry in fs::read_dir(&claims_dir)? {
-                let path = entry?.path();
-                if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
-                    claim_paths.push(path);
+        // Child records, in a deterministic order. Reviews must move the
+        // project revision just like claims; otherwise a review could be
+        // appended behind a caller's compare-and-swap token without conflict.
+        for child_name in ["claims", "reviews"] {
+            let child_dir = dir.join(child_name);
+            let mut child_paths: Vec<PathBuf> = Vec::new();
+            if child_dir.is_dir() {
+                for entry in fs::read_dir(&child_dir)? {
+                    let path = entry?.path();
+                    if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
+                        child_paths.push(path);
+                    }
                 }
             }
-        }
-        claim_paths.sort();
-        for path in claim_paths {
-            if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
-                hasher.update(name.as_bytes());
+            child_paths.sort();
+            for path in child_paths {
+                hasher.update(child_name.as_bytes());
+                if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
+                    hasher.update(name.as_bytes());
+                }
+                hasher.update(fs::read(&path)?);
             }
-            hasher.update(fs::read(&path)?);
         }
         Ok(format!("{:x}", hasher.finalize()))
     }
@@ -407,6 +420,7 @@ impl ProjectStore {
         &self,
         project_id: &ProjectId,
     ) -> Result<BTreeMap<String, RegisteredArtifact>> {
+        validate_project_id(&project_id.0)?;
         let path = self.artifacts_path(project_id);
         if !path.is_file() {
             return Ok(BTreeMap::new());
@@ -818,7 +832,8 @@ impl ProjectStore {
             )));
         }
         report.stale_temp_files_removed = Self::sweep_temp_files(&dir)?
-            + Self::sweep_temp_files(&dir.join("claims"))?;
+            + Self::sweep_temp_files(&dir.join("claims"))?
+            + Self::sweep_temp_files(&dir.join("reviews"))?;
 
         let claims = self.list_claims(project_id)?;
         let mut graph = self.load_graph(project_id)?;

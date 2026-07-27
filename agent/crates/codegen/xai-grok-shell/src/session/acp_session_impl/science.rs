@@ -829,6 +829,46 @@ impl SessionActor {
                 return Err(xai_grok_science::ScienceError::Ownership);
             }
         }
+        if let xai_grok_science::project::ProjectMutation::ReviewRecord {
+            source_run_id,
+            reviewer_id,
+            ..
+        } = &request.mutation
+        {
+            if reviewer_id != &request.owner_id {
+                return Err(xai_grok_science::ScienceError::Ownership);
+            }
+            if source_run_id.is_empty()
+                || source_run_id.len() > 128
+                || !source_run_id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+            {
+                return Err(xai_grok_science::ScienceError::Invalid(
+                    "review source run id is invalid".into(),
+                ));
+            }
+            let source = store.load_run(&xai_grok_science::RunId::new(source_run_id))?;
+            if source.state != xai_grok_science::RunState::Succeeded {
+                return Err(xai_grok_science::ScienceError::Invalid(
+                    "review source run must be succeeded".into(),
+                ));
+            }
+            if source.context.project_id.0 != context.project_id.0
+                || source.context.owner_id != context.owner_id
+                || source.context.session_id != context.session_id
+            {
+                return Err(xai_grok_science::ScienceError::Ownership);
+            }
+            if source.context.workspace_root != context.workspace_root
+                || source.context.artifact_root != context.artifact_root
+                || source.context.artifact_root != project_root.join("runs")
+            {
+                return Err(xai_grok_science::ScienceError::Invalid(
+                    "review source run is outside this SessionActor workspace/store".into(),
+                ));
+            }
+        }
 
         let target = match request.mutation.target_project() {
             Some(project_id) => format!("{}/projects/{}", project_root.display(), project_id.0),
@@ -847,6 +887,15 @@ impl SessionActor {
                     record.kind,
                     request.mutation.kind()
                 )));
+            }
+            if record.kind == "review_record" {
+                let review: xai_grok_science::project::ReviewRecord =
+                    serde_json::from_value(record.result.clone())?;
+                validate_review_replay_request(&request, &review)?;
+                if project_store.verify_review_record(&review).is_err() {
+                    recover_interrupted_review_commit(&store, &project_store, &record, &review)?;
+                }
+                project_store.verify_review_record(&review)?;
             }
             return Ok(PreparedScienceProjectMutation {
                 store,
@@ -873,7 +922,12 @@ impl SessionActor {
             });
         }
 
-        let ticket = begin_project_mutation_run(&store, context, request.mutation.kind())?;
+        let ticket = begin_project_mutation_run(
+            &store,
+            context,
+            request.mutation.kind(),
+            &request.operation_id,
+        )?;
         Ok(PreparedScienceProjectMutation {
             store,
             project_root,
@@ -923,23 +977,35 @@ impl SessionActor {
                 return Err(error);
             }
         };
-        prepared.store.append_event(
-            &prepared.ticket.run_id,
-            "SessionActor",
-            "project.mutation.applied",
-            serde_json::json!({
-                "operation_id": outcome.operation_id,
-                "kind": outcome.kind,
-                "project_id": outcome.project_id.0,
-                "revision": outcome.revision,
-                "replayed": outcome.replayed,
-            }),
-        )?;
+        let review =
+            match persist_review_mutation_evidence(&prepared.store, &prepared.ticket, &outcome) {
+                Ok(review) => review,
+                Err(error) => {
+                    // Once a review + operation ledger exists, the run must stay
+                    // Running: a retry can then reopen that exact record and
+                    // idempotently finish its manifest/evidence/provenance. Marking
+                    // it Failed here would permanently poison the operation id.
+                    let _ = prepared.store.append_event(
+                        &prepared.ticket.run_id,
+                        "SessionActor",
+                        "review.commit.interrupted",
+                        serde_json::json!({
+                            "operation_id": outcome.operation_id,
+                            "reason": error.to_string(),
+                        }),
+                    );
+                    return Err(error);
+                }
+            };
+        append_project_mutation_applied_once(&prepared.store, &prepared.ticket.run_id, &outcome)?;
         prepared.store.transition(
             &prepared.ticket.run_id,
             xai_grok_science::RunState::Succeeded,
             None,
         )?;
+        if let Some(review) = review {
+            project_store.verify_review_record(&review)?;
+        }
         Ok(outcome)
     }
 
@@ -1434,6 +1500,7 @@ fn begin_project_mutation_run(
     store: &xai_grok_science::ScienceStore,
     context: xai_grok_science::RunContext,
     kind: &str,
+    operation_id: &str,
 ) -> xai_grok_science::Result<xai_grok_science::csv::ScienceRunTicket> {
     let ticket = xai_grok_science::csv::ScienceRunTicket {
         project_id: context.project_id.clone(),
@@ -1446,7 +1513,10 @@ fn begin_project_mutation_run(
         &ticket.run_id,
         "SessionActor",
         "run.created",
-        serde_json::json!({"mutation": kind}),
+        serde_json::json!({
+            "mutation": kind,
+            "operation_id": operation_id,
+        }),
     )?;
     store.request_approval(xai_grok_science::Approval {
         project_id: ticket.project_id.clone(),
@@ -1462,6 +1532,206 @@ fn begin_project_mutation_run(
         None,
     )?;
     Ok(ticket)
+}
+
+/// A review is itself evidence. Alongside the project review ledger, keep an
+/// immutable manifest artifact plus Evidence/Provenance rows in the actor's
+/// approval run. Host verification can therefore re-open the exact record
+/// bytes and correlate them to the operation id and source-artifact
+/// fingerprint. Other project mutations remain record-only.
+fn persist_review_mutation_evidence(
+    store: &xai_grok_science::ScienceStore,
+    ticket: &xai_grok_science::csv::ScienceRunTicket,
+    outcome: &xai_grok_science::project::MutationOutcome,
+) -> xai_grok_science::Result<Option<xai_grok_science::project::ReviewRecord>> {
+    if outcome.kind != "review_record" {
+        return Ok(None);
+    }
+    let review: xai_grok_science::project::ReviewRecord =
+        serde_json::from_value(outcome.result.clone())?;
+    if review.operation_id != outcome.operation_id
+        || review.project_id != outcome.project_id
+        || review.project_id.0 != ticket.project_id.0
+        || review.owner_id != ticket.owner_id
+        || review.authority_run_id != ticket.run_id.0
+    {
+        return Err(xai_grok_science::ScienceError::Ownership);
+    }
+    if review.evidence_fingerprint.len() != 64
+        || !review
+            .evidence_fingerprint
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err(xai_grok_science::ScienceError::Invalid(
+            "durable review record has a malformed evidence fingerprint".into(),
+        ));
+    }
+    let manifest = serde_json::to_vec_pretty(&review)?;
+    let existing_artifacts = store.artifacts(&ticket.run_id)?;
+    let artifact = match existing_artifacts.as_slice() {
+        [] => store.put_artifact(
+            &ticket.project_id,
+            &ticket.run_id,
+            &ticket.owner_id,
+            ticket.call_id.clone(),
+            std::path::Path::new("review_record.json"),
+            &manifest,
+            "application/json",
+            "actor-owned durable review record",
+        )?,
+        [artifact]
+            if artifact.call_id == ticket.call_id
+                && artifact.relative_path == std::path::Path::new("review_record.json")
+                && artifact.sha256 == format!("{:x}", sha2::Sha256::digest(&manifest))
+                && artifact.bytes == manifest.len() as u64
+                && artifact.mime == "application/json"
+                && artifact.preview == "actor-owned durable review record" =>
+        {
+            let reopened = store.artifact_bytes(
+                &ticket.project_id,
+                &ticket.run_id,
+                &ticket.owner_id,
+                &artifact.relative_path,
+            )?;
+            if reopened != manifest {
+                return Err(xai_grok_science::ScienceError::Invalid(
+                    "existing review manifest bytes do not match the operation record".into(),
+                ));
+            }
+            artifact.clone()
+        }
+        _ => {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "review authority run contains a conflicting manifest set".into(),
+            ));
+        }
+    };
+
+    let expected_evidence = review.expected_evidence(artifact.sha256.clone());
+    match store.evidence(&ticket.run_id)?.as_slice() {
+        [] => store.add_evidence(expected_evidence)?,
+        [existing] if existing == &expected_evidence => {}
+        _ => {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "review authority run contains conflicting evidence".into(),
+            ));
+        }
+    }
+    let expected_provenance = review.expected_provenance();
+    match store.provenance(&ticket.run_id)?.as_slice() {
+        [] => store.add_provenance(expected_provenance)?,
+        [existing] if existing == &expected_provenance => {}
+        _ => {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "review authority run contains conflicting provenance".into(),
+            ));
+        }
+    }
+    Ok(Some(review))
+}
+
+fn validate_review_replay_request(
+    request: &xai_grok_science::project::MutationRequest,
+    record: &xai_grok_science::project::ReviewRecord,
+) -> xai_grok_science::Result<()> {
+    let xai_grok_science::project::ProjectMutation::ReviewRecord {
+        project_id,
+        reviewer_id,
+        verdict,
+        summary,
+        claim_id,
+        source_run_id,
+        artifact_sha256s,
+        ..
+    } = &request.mutation
+    else {
+        return Err(xai_grok_science::ScienceError::Invalid(
+            "review operation replayed with a non-review mutation".into(),
+        ));
+    };
+    let mut requested = artifact_sha256s.clone();
+    requested.sort();
+    let mut recorded: Vec<_> = record
+        .artifacts
+        .iter()
+        .map(|artifact| artifact.sha256.clone())
+        .collect();
+    recorded.sort();
+    if request.operation_id != record.operation_id
+        || request.session_id != record.session_id
+        || request.owner_id != record.owner_id
+        || project_id != &record.project_id
+        || reviewer_id != &record.reviewer_id
+        || verdict != &record.verdict
+        || summary != &record.summary
+        || claim_id != &record.claim_id
+        || source_run_id != &record.source_run_id
+        || requested != recorded
+    {
+        return Err(xai_grok_science::ScienceError::Invalid(
+            "review operation replay does not match its original request".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn append_project_mutation_applied_once(
+    store: &xai_grok_science::ScienceStore,
+    run_id: &xai_grok_science::RunId,
+    outcome: &xai_grok_science::project::MutationOutcome,
+) -> xai_grok_science::Result<()> {
+    let payload = serde_json::json!({
+        "operation_id": outcome.operation_id,
+        "kind": outcome.kind,
+        "project_id": outcome.project_id.0,
+        "revision": outcome.revision,
+        "replayed": outcome.replayed,
+    });
+    let events = store.events_after(run_id, 0, 1_000)?;
+    if events
+        .iter()
+        .any(|event| event.kind == "project.mutation.applied" && event.payload == payload)
+    {
+        return Ok(());
+    }
+    if events.iter().any(|event| {
+        event.kind == "project.mutation.applied"
+            && event.payload["operation_id"] == outcome.operation_id
+    }) {
+        return Err(xai_grok_science::ScienceError::Invalid(
+            "project mutation applied event conflicts with its operation record".into(),
+        ));
+    }
+    store.append_event(run_id, "SessionActor", "project.mutation.applied", payload)?;
+    Ok(())
+}
+
+fn recover_interrupted_review_commit(
+    store: &xai_grok_science::ScienceStore,
+    project_store: &xai_grok_science::project::ProjectStore,
+    operation: &xai_grok_science::project::OperationRecord,
+    review: &xai_grok_science::project::ReviewRecord,
+) -> xai_grok_science::Result<()> {
+    project_store.verify_pending_review_record(review)?;
+    let ticket = xai_grok_science::csv::ScienceRunTicket {
+        project_id: xai_grok_science::ProjectId::new(review.project_id.0.clone()),
+        run_id: xai_grok_science::RunId::new(&review.authority_run_id),
+        owner_id: review.owner_id.clone(),
+        call_id: xai_grok_science::CallId::new("science_project_mutation"),
+    };
+    let outcome = xai_grok_science::project::MutationOutcome {
+        operation_id: operation.operation_id.clone(),
+        kind: operation.kind.clone(),
+        project_id: operation.project_id.clone(),
+        revision: operation.revision.clone(),
+        result: operation.result.clone(),
+        replayed: false,
+    };
+    persist_review_mutation_evidence(store, &ticket, &outcome)?;
+    append_project_mutation_applied_once(store, &ticket.run_id, &outcome)?;
+    store.transition(&ticket.run_id, xai_grok_science::RunState::Succeeded, None)?;
+    project_store.verify_review_record(review)
 }
 
 #[cfg(test)]
@@ -1558,6 +1828,135 @@ mod actor_root_tests {
                 .next()
                 .is_none(),
             "root validation wrote inside the durable run root"
+        );
+    }
+
+    #[test]
+    fn interrupted_review_commit_recovers_same_run_without_duplicate_evidence() {
+        let root = tempfile::tempdir().unwrap();
+        let workspace = dunce::canonicalize(root.path()).unwrap();
+        let store_root = workspace.join("science-store");
+        let project_store = xai_grok_science::project::ProjectStore::new(&store_root);
+        let project = project_store
+            .create_project("owner-1", "Recover review", "Can this commit resume?")
+            .unwrap();
+        let store = xai_grok_science::ScienceStore::new(&store_root);
+        let source_run = xai_grok_science::RunId::new("source-run-recover");
+        store
+            .create_run(xai_grok_science::RunContext {
+                run_id: source_run.clone(),
+                project_id: xai_grok_science::ProjectId::new(project.project_id.0.clone()),
+                session_id: "session-1".into(),
+                owner_id: "owner-1".into(),
+                workspace_root: workspace.clone(),
+                provider: "offline-test".into(),
+                approval_policy: "test".into(),
+                tool_profile: "review-source".into(),
+                artifact_root: store_root.join("runs"),
+                environment: BTreeMap::new(),
+            })
+            .unwrap();
+        let source_artifact = store
+            .put_artifact(
+                &xai_grok_science::ProjectId::new(project.project_id.0.clone()),
+                &source_run,
+                "owner-1",
+                xai_grok_science::CallId::new("source-call"),
+                std::path::Path::new("result.json"),
+                br#"{"result":"recoverable"}"#,
+                "application/json",
+                "source",
+            )
+            .unwrap();
+        store
+            .transition(&source_run, xai_grok_science::RunState::Succeeded, None)
+            .unwrap();
+
+        let authority_run = xai_grok_science::RunId::new("review-run-recover");
+        store
+            .create_run(xai_grok_science::RunContext {
+                run_id: authority_run.clone(),
+                project_id: xai_grok_science::ProjectId::new(project.project_id.0.clone()),
+                session_id: "session-1".into(),
+                owner_id: "owner-1".into(),
+                workspace_root: workspace,
+                provider: "offline-test".into(),
+                approval_policy: "test".into(),
+                tool_profile: "science-project-mutation-v1".into(),
+                artifact_root: store_root.join("runs"),
+                environment: BTreeMap::new(),
+            })
+            .unwrap();
+        let call_id = xai_grok_science::CallId::new("science_project_mutation");
+        store
+            .request_approval(xai_grok_science::Approval {
+                project_id: xai_grok_science::ProjectId::new(project.project_id.0.clone()),
+                run_id: authority_run.clone(),
+                call_id: call_id.clone(),
+                owner_id: "owner-1".into(),
+                decision: xai_grok_science::ApprovalDecision::Pending,
+                decided_at: None,
+            })
+            .unwrap();
+        store
+            .decide_approval(
+                &xai_grok_science::ProjectId::new(project.project_id.0.clone()),
+                &authority_run,
+                "owner-1",
+                &call_id,
+                xai_grok_science::ApprovalDecision::Allow,
+            )
+            .unwrap();
+        store
+            .transition(&authority_run, xai_grok_science::RunState::Running, None)
+            .unwrap();
+
+        let request = xai_grok_science::project::MutationRequest {
+            operation_id: "op-review-recover".into(),
+            session_id: "session-1".into(),
+            owner_id: "owner-1".into(),
+            expected_revision: Some(project_store.project_revision(&project.project_id).unwrap()),
+            mutation: xai_grok_science::project::ProjectMutation::ReviewRecord {
+                project_id: project.project_id.clone(),
+                reviewer_id: "owner-1".into(),
+                verdict: xai_grok_science::project::ReviewVerdict::Pass,
+                summary: "The exact source bytes support this recovery fixture.".into(),
+                claim_id: None,
+                source_run_id: source_run.0,
+                authority_run_id: authority_run.0.clone(),
+                artifact_sha256s: vec![source_artifact.sha256],
+            },
+        };
+        let first = project_store.apply_mutation(&request).unwrap();
+        let operation = project_store
+            .lookup_operation(&request.operation_id)
+            .unwrap()
+            .unwrap();
+        let review: xai_grok_science::project::ReviewRecord =
+            serde_json::from_value(first.result).unwrap();
+        assert!(project_store.verify_review_record(&review).is_err());
+        assert_eq!(
+            store.load_run(&authority_run).unwrap().state,
+            xai_grok_science::RunState::Running
+        );
+
+        recover_interrupted_review_commit(&store, &project_store, &operation, &review).unwrap();
+        assert_eq!(
+            store.load_run(&authority_run).unwrap().state,
+            xai_grok_science::RunState::Succeeded
+        );
+        project_store.verify_review_record(&review).unwrap();
+        assert_eq!(store.artifacts(&authority_run).unwrap().len(), 1);
+        assert_eq!(store.evidence(&authority_run).unwrap().len(), 1);
+        assert_eq!(store.provenance(&authority_run).unwrap().len(), 1);
+        assert_eq!(
+            store
+                .events_after(&authority_run, 0, 1_000)
+                .unwrap()
+                .iter()
+                .filter(|event| event.kind == "project.mutation.applied")
+                .count(),
+            1
         );
     }
 

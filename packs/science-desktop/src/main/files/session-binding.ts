@@ -120,12 +120,15 @@ export function seedPreviewStoreFromList(
 
     const itemOwner = item.owner_id ?? item.ownerId
     if (itemOwner && itemOwner !== ownership.ownerId) continue
+    const runId = String(item.run_id ?? item.runId ?? '')
+    if (!runId) continue
 
     store.put(artifactId, {
       path,
       sha256,
       ownerId: ownership.ownerId,
       projectId: ownership.projectId,
+      runId,
     })
     n++
   }
