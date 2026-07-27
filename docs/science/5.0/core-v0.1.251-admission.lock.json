@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "recorded_at": "2026-07-27T20:12:03+08:00",
+  "recorded_at": "2026-07-27T20:27:22+08:00",
   "purpose": "Record selective Lumen core v0.1.251 admission into Lumen Science without claiming full source or release parity.",
   "policy": {
     "source_of_truth": "lumen",
@@ -58,6 +58,20 @@
       ],
       "adaptation": "Selected coherent hunks were applied to the Science fork; this is not a claim that the complete Lumen commit was copied byte-for-byte.",
       "status": "admitted"
+    },
+    {
+      "name": "hermetic Claude permission discovery tests",
+      "science_commit": "75d7251b625ddff19745e9cde6910b36a7df5c89",
+      "lumen_commits": [
+        "c81345a169eae42cbfef7525724bd3588c04570d"
+      ],
+      "coverage": [
+        "unit tests do not read the developer's real global Claude settings by default",
+        "integration and production builds retain global settings discovery",
+        "explicit isolated opt-in remains available"
+      ],
+      "adaptation": "Only the hermetic global-settings discovery portion was admitted; unrelated permission and policy hunks from the source commit were already present or separately reviewed.",
+      "status": "admitted"
     }
   ],
   "comparison": {
@@ -85,6 +99,13 @@
         "passed": 378,
         "failed": 0,
         "ignored": 8,
+        "exit_code": 0
+      },
+      {
+        "command": "xai_grok_workspace test binary --format=terse",
+        "passed": 1414,
+        "failed": 0,
+        "ignored": 0,
         "exit_code": 0
       }
     ],

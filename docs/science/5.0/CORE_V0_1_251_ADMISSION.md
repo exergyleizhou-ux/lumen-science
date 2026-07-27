@@ -45,12 +45,15 @@ fixes. The v0.1.251 sync then admitted:
 - isolated-stack cancellation fixtures;
 - typed verify-after-edit outcomes;
 - SessionActor delivery only after an explicit typed pass;
-- dead ChatState recovery as an ACP error instead of a process panic.
+- dead ChatState recovery as an ACP error instead of a process panic;
+- hermetic unit-test discovery that cannot silently import the developer's real
+  global Claude permission settings.
 
-The two v0.1.251 Science commits are:
+The v0.1.251 Science commits are:
 
 - `188a88a45b89866f44b9dc95aacc02504a0ef4a0`
 - `58783fc25ec7297e50f40a3f8ed653e4f82d05f4`
+- `75d7251b625ddff19745e9cde6910b36a7df5c89`
 
 ## Current evidence
 
@@ -59,6 +62,7 @@ At Science code head `58783fc`:
 - `cargo test -p lumen-verify`: 29 passed, 0 failed.
 - `cargo test -p xai-grok-science`: 378 passed, 0 failed, 8 explicit live
   network probes ignored.
+- `xai-grok-workspace` test binary: 1,414 passed, 0 failed.
 - Exact-head `lumen` binary SHA-256:
   `33dc60ac77fa13e18b908c1c0a7c78ae5c1eea840949aef9c5b9cee8526a1f64`.
 - Built-binary OSF9: 17 steps and 5 assertions passed, 0 failures.
