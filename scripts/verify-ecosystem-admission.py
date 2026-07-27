@@ -254,6 +254,28 @@ def verify_carried_ledgers(lock: dict[str, Any], science_repo: Path) -> None:
         and "Rust `SessionActor`; unchanged" in preview_provenance,
         "Open Science preview provenance lost its source, license, or authority boundary",
     )
+    for index, port in enumerate(preview_spec["exact_ports"]):
+        label = f"open_science_skill_preview.exact_ports[{index}]"
+        require_relative_path(port["upstream_path"], f"{label}.upstream_path")
+        require_relative_path(port["local_path"], f"{label}.local_path")
+        local_path = science_repo / port["local_path"]
+        require(local_path.is_file(), f"Open Science exact port is missing: {port['local_path']}")
+        local_bytes = local_path.read_bytes()
+        require(
+            hashlib.sha256(local_bytes).hexdigest() == port["local_sha256"],
+            f"Open Science exact port changed without a new audited mapping: {port['local_path']}",
+        )
+        prefix = port["attribution_prefix"].encode("utf-8")
+        require(
+            local_bytes.startswith(prefix),
+            f"Open Science exact port lost attribution: {port['local_path']}",
+        )
+        require(
+            hashlib.sha256(local_bytes[len(prefix):]).hexdigest()
+            == port["upstream_sha256"],
+            f"Open Science exact port is no longer byte-equal after attribution: "
+            f"{port['local_path']}",
+        )
     for index, marker in enumerate(preview_spec["required_markers"]):
         label = f"open_science_skill_preview.required_markers[{index}]"
         require_relative_path(marker["path"], f"{label}.path")

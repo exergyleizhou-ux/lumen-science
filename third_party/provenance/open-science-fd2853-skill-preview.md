@@ -22,6 +22,7 @@ authority boundary:
 - `packs/science-desktop/src/shared/settings.ts`
 - `packs/science-desktop/src/main/skills/frontmatter.ts`
 - `packs/science-desktop/src/main/skills/skill-bundle-paths.ts`
+- `packs/science-desktop/src/main/skills/skill-archive-sniffer.ts`
 - `packs/science-desktop/src/main/skills/github-import.ts`
 - `packs/science-desktop/src/main/skills/user-skill-repository.ts`
 - `packs/science-desktop/src/main/settings/service.ts`
@@ -50,6 +51,7 @@ The direct upstream-to-Lumen mappings are:
 | `src/shared/skill-frontmatter.ts` | `packs/science-desktop/src/shared/skill-frontmatter.ts` | Direct port plus source attribution |
 | `src/shared/skill-import-limits.ts` | `packs/science-desktop/src/shared/skill-import-limits.ts` | Direct limit-field port into the existing Lumen limits object |
 | `src/main/skills/skill-bundle-paths.ts` | `packs/science-desktop/src/main/skills/skill-bundle-paths.ts` | Direct port with Lumen type/style integration |
+| `src/main/skills/skill-archive-sniffer.ts` | `packs/science-desktop/src/main/skills/skill-archive-sniffer.ts` | Direct 860-line port plus source attribution; intentionally not wired to the stubbed desktop ACP runtime |
 | `src/main/skills/github-import.ts` | `packs/science-desktop/src/main/skills/github-import.ts` | Direct port of bounded preview fetching into Lumen's existing proxy-aware fetch seam |
 | `src/main/skills/user-skill-repository.ts` | `packs/science-desktop/src/main/skills/user-skill-repository.ts` | Upstream preview and metadata-preservation flow adapted into Lumen's existing repository |
 | `src/main/settings/service.ts` | `packs/science-desktop/src/main/settings/service.ts` | Upstream preview service adapted with a sanitized public source label |
@@ -65,6 +67,9 @@ The direct upstream-to-Lumen mappings are:
 Tests follow the same source mapping. Lumen-only negative cases additionally
 prove that a preview cannot fetch remote media, exceed its byte budget, select
 an import candidate, or turn preview into approval or execution.
+The ecosystem lock records both upstream and vendored SHA-256 values for the
+archive classifier and its tests; the verifier removes only the attribution
+line and then requires byte-for-byte upstream equality.
 
 ## Preserved security behavior
 
@@ -76,6 +81,13 @@ an import candidate, or turn preview into approval or execution.
 - opening untrusted Markdown disables network-fetching media elements;
 - late/failed preview responses are isolated by a generation token;
 - preview does not select a candidate, import it, or grant runtime authority.
+- archive classification streams central records and entry bodies under
+  file/count/depth/total/inflate budgets instead of loading the whole upload;
+- unsafe paths, unsupported compression, malformed local/central records,
+  decompression overruns, ambiguous roots, and nested-archive inconsistencies
+  fail closed;
+- the upstream 707-line, 28-case sniffer suite is ported with the
+  implementation and checks parity with the existing full preview extractor.
 
 ## Explicitly not adopted in this slice
 
@@ -84,4 +96,5 @@ broker, and agent-runtime attachment authority are not wired into Lumen. Those
 would compete with the Rust `SessionActor` boundary. A later implementation
 must bind attachment bytes, session, turn, owner, project, SHA-256, approval,
 terminal state, and durable quarantine evidence through Lumen's existing
-authority path.
+authority path. Consequently, the archive classifier in this slice is
+source/test proof only, not a product-import or built-binary claim.

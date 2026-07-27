@@ -278,11 +278,15 @@ Implemented in the first preview slice:
   while asset names remain relative metadata;
 - disabled network-fetching media elements for untrusted preview Markdown;
 - kept preview separate from selection, import, approval, and execution.
+- directly ported the 860-line streaming ZIP classifier and its 707-line,
+  28-case adversarial parity suite from the exact `fd2853` source;
+- kept that classifier source-only until a SessionActor-owned attachment
+  import route exists; the stubbed desktop ACP runtime remains unchanged.
 
 Remaining:
 
-- port the streaming bounded archive sniffer for prompt-time local attachment
-  classification;
+- connect the bounded archive classifier to a Rust-authorized attachment
+  import route without restoring the rejected desktop ACP runtime;
 - Bind imports to current session/turn/attachment bytes and SHA-256.
 - Persist quarantine records through the Lumen authority path.
 - Add negative fixtures for ZIP traversal, decompression bombs, nested
@@ -313,14 +317,15 @@ Remaining:
 ## Evidence boundary
 
 Phase 0, the Phase 1 SCP/Biomni catalogs, and the first Phase 2 read-only Skill
-preview slice currently have source audit, focused test, and TypeScript compile
-evidence. The 704 candidate capabilities are local and searchable in the
-desktop Skills tab, but none of the new 704 entries is executable or
-product-approved. The streaming archive sniffer and SessionActor-bound
-attachment import remain open. A rebuilt packaged application has not yet been
-used to prove the new resource paths and rendered UI. This does not claim that
-the 224 Biomni tools, new connectors, Motif algorithms, or clean-room document
-features are already product-complete.
+preview/classifier slices currently have source audit, focused test, and
+TypeScript compile evidence. The 704 candidate capabilities are local and
+searchable in the desktop Skills tab, but none of the new 704 entries is
+executable or product-approved. The streaming archive classifier is a tested
+source module, not a product route; SessionActor-bound attachment import remains
+open. A rebuilt packaged application has not yet been used to prove the new
+resource paths and rendered UI. This does not claim that the 224 Biomni tools,
+new connectors, Motif algorithms, or clean-room document features are already
+product-complete.
 
 For each later slice, report separately:
 

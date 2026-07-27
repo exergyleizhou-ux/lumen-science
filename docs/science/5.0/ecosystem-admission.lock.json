@@ -116,6 +116,22 @@
       "open_science_skill_preview": {
         "provenance_path": "third_party/provenance/open-science-fd2853-skill-preview.md",
         "commit": "fd2853f0b9bdb6c063ccc1e741687584ab94bf9a",
+        "exact_ports": [
+          {
+            "upstream_path": "src/main/skills/skill-archive-sniffer.ts",
+            "upstream_sha256": "0c9fecfc7e9b0af0e25f57244a8a60e5e127d790c739e8970f65b63712392386",
+            "local_path": "packs/science-desktop/src/main/skills/skill-archive-sniffer.ts",
+            "local_sha256": "816395fc90e48f4e1d76c0f7eee1531fe339661a549eab9e7fb935df328cdf6f",
+            "attribution_prefix": "// Adapted from Open Science at fd2853f0b9bdb6c063ccc1e741687584ab94bf9a.\n"
+          },
+          {
+            "upstream_path": "src/main/skills/skill-archive-sniffer.test.ts",
+            "upstream_sha256": "f44889d74110bb5940c942f4c3b00e21fb48b7fd08b035e981058ec16ffa70fa",
+            "local_path": "packs/science-desktop/src/main/skills/skill-archive-sniffer.test.ts",
+            "local_sha256": "bb9a43b5560a823f3aaa4387c3c2a97a57f47b9e978325efa4b7a5e96ec71124",
+            "attribution_prefix": "// Adapted from Open Science at fd2853f0b9bdb6c063ccc1e741687584ab94bf9a.\n"
+          }
+        ],
         "required_markers": [
           {
             "path": "packs/science-desktop/src/shared/skill-import-limits.ts",
@@ -140,6 +156,15 @@
             "contains": [
               "async previewGitHubSkill",
               "previewContentBytes + skillMd.content.length"
+            ]
+          },
+          {
+            "path": "packs/science-desktop/src/main/skills/skill-archive-sniffer.ts",
+            "contains": [
+              "Adapted from Open Science at fd2853f0b9bdb6c063ccc1e741687584ab94bf9a",
+              "const inspectOuterArchive",
+              "const isImportableSkillArchivePath",
+              "maxAttemptedInflateBytes"
             ]
           }
         ]
@@ -311,11 +336,15 @@
       "license_file": "LICENSE",
       "license_sha256": "b038148f912bdd6e61e33e56214d02c4d8a9640f7a637e21dfcf939332816979",
       "runtime_authority": "none",
-      "admission_status": "1082 shipped files carried; fd2853 bounded Skill metadata/preview slice adapted; remaining upstream delta under review",
+      "admission_status": "1082 shipped files carried; fd2853 bounded Skill metadata/preview and source-only streaming archive classifier adapted; SessionActor-bound import remains pending",
       "source_proofs": [
         {
           "path": "src/main/skills/skill-archive-sniffer.ts",
           "sha256": "0c9fecfc7e9b0af0e25f57244a8a60e5e127d790c739e8970f65b63712392386"
+        },
+        {
+          "path": "src/main/skills/skill-archive-sniffer.test.ts",
+          "sha256": "f44889d74110bb5940c942f4c3b00e21fb48b7fd08b035e981058ec16ffa70fa"
         },
         {
           "path": "src/main/skills/conversation-import.ts",

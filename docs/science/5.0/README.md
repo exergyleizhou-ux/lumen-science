@@ -77,7 +77,10 @@ surface contains 207 SCP skill documents, 224 Biomni tool descriptors, and 273
 Biomni data/software/protocol/knowledge records: 704 searchable candidates,
 zero newly approved. The first Open Science `fd2853` delta is also adapted:
 local/GitHub Skill candidates now have a bounded, media-disabled, read-only
-preview that preserves flat YAML metadata before any explicit import. See
+preview that preserves flat YAML metadata before any explicit import. Its
+streaming ZIP classifier and 28-case adversarial parity suite are also
+source-adapted, but remain disconnected from product import until a Rust
+SessionActor route owns approval and persistence. See
 [`open-science-fd2853-skill-preview.md`](../../../third_party/provenance/open-science-fd2853-skill-preview.md).
 
 ## Quick start (WP-2～8 CLI surface)

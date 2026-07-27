@@ -368,6 +368,25 @@ def main() -> int:
         "Open Science preview marker missing",
     )
 
+    archive_sniffer_path = (
+        ROOT
+        / "packs/science-desktop/src/main/skills/skill-archive-sniffer.ts"
+    )
+
+    def remove_archive_inflate_budget() -> None:
+        text = archive_sniffer_path.read_text(encoding="utf-8")
+        archive_sniffer_path.write_text(
+            text.replace("maxAttemptedInflateBytes", "unboundedAttemptedInflateBytes"),
+            encoding="utf-8",
+        )
+
+    check_file_tamper(
+        "the Open Science archive classifier cannot lose its inflate budget",
+        [archive_sniffer_path],
+        remove_archive_inflate_budget,
+        "Open Science exact port changed without a new audited mapping",
+    )
+
     copied_protocol = (
         ROOT
         / "third_party/biomni-resource-catalog/protocols/addgene/copied.txt"
