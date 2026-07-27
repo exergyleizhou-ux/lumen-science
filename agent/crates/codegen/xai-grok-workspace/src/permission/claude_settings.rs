@@ -372,6 +372,13 @@ pub fn find_claude_settings_paths(cwd: &Path) -> Vec<PathBuf> {
 /// so a path returned here reliably tests as global in the import scanner's
 /// `is_global` check.
 fn global_claude_settings_paths() -> Vec<PathBuf> {
+    // Unit tests must not silently import the developer's real Claude settings.
+    // Integration tests link the non-test build and retain product coverage;
+    // the opt-in exists for a unit test that deliberately exercises user-tier
+    // discovery under an isolated HOME.
+    if cfg!(test) && std::env::var_os("LUMEN_TEST_REAL_GLOBAL_CLAUDE").is_none() {
+        return Vec::new();
+    }
     let mut paths = Vec::new();
     if let Some(home) = dirs::home_dir() {
         let global = home.join(".claude");
@@ -551,4 +558,14 @@ pub(crate) fn is_claude_import_marked_with_log(gate_name: &'static str) -> bool 
         });
     }
     marked
+}
+
+#[cfg(test)]
+mod tests {
+    use super::global_claude_settings_paths;
+
+    #[test]
+    fn unit_tests_do_not_read_real_global_claude_settings_by_default() {
+        assert!(global_claude_settings_paths().is_empty());
+    }
 }
