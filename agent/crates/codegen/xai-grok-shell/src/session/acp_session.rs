@@ -599,6 +599,9 @@ pub(crate) struct SessionActor {
     /// or the attribution emit.
     pub(crate) auth_manager: Option<Arc<AuthManager>>,
     pub(crate) state: TokioMutex<State>,
+    /// Sole-authority Science gate snapshot. Captured by the composition root
+    /// at session creation and inherited unchanged by subagents.
+    pub(crate) science_feature_gates: xai_grok_science::features::FeatureGates,
     /// Notification transport: gateway, persistence channel, replay buffer.
     pub(crate) notifications: NotificationSender,
     pub(crate) permissions: PermissionHandle,

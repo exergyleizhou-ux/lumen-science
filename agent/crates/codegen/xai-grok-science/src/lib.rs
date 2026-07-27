@@ -212,6 +212,13 @@ impl ScienceStore {
         }
     }
 
+    /// Durable root owned by this store. Product adapters use this only to
+    /// prove the store they hand to a SessionActor is the same confined root
+    /// recorded in the run context; callers still cannot construct run paths.
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
     pub fn create_run(&self, context: RunContext) -> Result<RunRecord> {
         validate_context(&context)?;
         let record = RunRecord {

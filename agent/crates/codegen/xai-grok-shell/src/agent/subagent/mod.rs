@@ -165,6 +165,9 @@ pub(crate) struct SubagentSpawnContext {
     pub auth: Option<crate::auth::GrokAuth>,
     pub parent_cwd: PathBuf,
     pub parent_session_id: String,
+    /// The parent SessionActor's immutable Science gate snapshot. A child
+    /// inherits it verbatim so subagents cannot gain capabilities by spawning.
+    pub science_feature_gates: xai_grok_science::features::FeatureGates,
     pub yolo_mode: bool,
     pub subagent_event_tx: mpsc::UnboundedSender<SubagentEvent>,
     pub parent_depth: u32,

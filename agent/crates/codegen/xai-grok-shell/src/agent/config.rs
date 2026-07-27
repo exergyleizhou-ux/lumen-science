@@ -1275,6 +1275,12 @@ pub struct PermissionKnownKeys {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
     pub features: Features,
+    /// Operator-controlled Science capability states.
+    ///
+    /// These overrides are validated at config load and resolved into one
+    /// immutable `FeatureGates` snapshot when a session is spawned.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub science_features: std::collections::BTreeMap<String, xai_grok_science::features::GateState>,
     /// `[goal]` section: canonical `/goal` configuration. See [`GoalConfig`].
     #[serde(default)]
     pub goal: GoalConfig,
@@ -1716,6 +1722,7 @@ impl Default for Config {
         let endpoints = EndpointsConfig::default();
         let mut cfg = Self {
             features: Features::default(),
+            science_features: std::collections::BTreeMap::new(),
             goal: GoalConfig::default(),
             expert: ExpertConfig::default(),
             doom_loop_recovery: crate::util::config::DoomLoopRecoverySettings::default(),
@@ -1874,6 +1881,8 @@ impl Config {
         crate::config::deep_merge_toml(&mut base, &raw_without_model_sections);
         let (mut config, user_unused) =
             Self::deserialize_collecting_unrecognized(base, &raw_without_model_sections)?;
+        xai_grok_science::features::FeatureGates::from_overrides(&config.science_features)
+            .map_err(|error| format!("invalid [science_features] config: {error}"))?;
         if !user_unused.is_empty() {
             let keys = user_unused.join(", ");
             tracing::warn!(
@@ -11666,5 +11675,49 @@ default = "grok-4.5"
         let r = resolve_mcp_recursive_config_watch(None, None, None, None, Some(false));
         assert!(!r.value);
         assert_eq!(r.source, ConfigSource::Remote);
+    }
+
+    #[test]
+    fn science_feature_overrides_parse_and_unknown_keys_fail_closed() {
+        let raw: toml::Value = toml::from_str(
+            r#"
+            [science_features]
+            research_project = "disabled"
+            workflow_dag = "stable"
+            "#,
+        )
+        .unwrap();
+        let config = Config::new_from_toml_cfg(&raw).expect("science feature config should parse");
+        let gates =
+            xai_grok_science::features::FeatureGates::from_overrides(&config.science_features)
+                .unwrap();
+        assert_eq!(
+            gates.get(xai_grok_science::features::ScienceFeature::ResearchProject),
+            xai_grok_science::features::GateState::Disabled
+        );
+        assert_eq!(
+            gates.get(xai_grok_science::features::ScienceFeature::WorkflowDag),
+            xai_grok_science::features::GateState::Stable
+        );
+
+        let typo: toml::Value = toml::from_str(
+            r#"
+            [science_features]
+            research_projet = "stable"
+            "#,
+        )
+        .unwrap();
+        let error = Config::new_from_toml_cfg(&typo).unwrap_err();
+        assert!(error.contains("unknown science feature gate"));
+
+        let invalid_state: toml::Value = toml::from_str(
+            r#"
+            [science_features]
+            research_project = "enabled"
+            "#,
+        )
+        .unwrap();
+        let error = Config::new_from_toml_cfg(&invalid_state).unwrap_err();
+        assert!(error.contains("unknown variant"));
     }
 }

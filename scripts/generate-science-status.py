@@ -472,11 +472,21 @@ def collect_authority() -> dict[str, Any]:
             {
                 "id": "AUTH-7",
                 "summary": (
-                    "artifact_list, notebook_execute and start_review are Go MCP tools, "
-                    "not Rust ACP methods; their desktop call sites fail explicitly "
-                    "pending a Go MCP client"
+                    "Former Go-only desktop call sites now remain on the single Rust "
+                    "ACP transport: workflow_execute, review_record and artifact_list"
                 ),
                 "path": "packs/science-desktop/src/main/science-method-registry.ts",
+                "status": "closed",
+                "note": (
+                    "artifact_list is a read-only Rust ScienceStore query bound to the "
+                    "current session, owner, project, run and workspace. It requires a "
+                    "Succeeded run and re-hashes every artifact before returning any "
+                    "preview path. The session's frozen research_project gate is checked "
+                    "before filesystem access, and the desktop rejects malformed or "
+                    "identity-mismatched rows instead of treating them as an empty list. "
+                    "Notebook and review call sites already route through workflow_execute "
+                    "and review_record; no Go/HTTP client was added."
+                ),
             },
             {
                 "id": "AUTH-8",
@@ -497,25 +507,51 @@ def collect_authority() -> dict[str, Any]:
             {
                 "id": "AUTH-3",
                 "summary": (
-                    "seq_analyze writes artifacts from the ACP request task with no "
-                    "permission request and no durable run record"
+                    "seq_analyze routes through SessionActor begin/permission/finish "
+                    "and commits only store-owned hashed artifacts"
                 ),
-                "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs:536",
+                "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs",
+                "status": "closed",
                 "note": (
-                    "Its false 'SessionActor-gated' claim has been removed and it now "
-                    "reports 'ACP request task (not actor-gated)'."
+                    "The ACP task only confines and reads the source. SessionActor owns "
+                    "the durable run, Pending/Allow/Deny/Timeout/Cancel transitions, "
+                    "analysis, artifacts, evidence and provenance. Built-binary tests "
+                    "falsify direct writes, boundary forgery and refused-run artifacts."
                 ),
             },
             {
                 "id": "AUTH-6",
-                "summary": "project_migrate still mutates via a directly constructed ProjectStore",
-                "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs:981",
-                "note": "Marked KNOWN BYPASS in source; makes no authority claim.",
+                "summary": (
+                    "project_migrate is a typed, idempotent project mutation owned by "
+                    "the SessionActor"
+                ),
+                "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs",
+                "status": "closed",
+                "note": (
+                    "Migration now uses the existing project-mutation Begin/permission/"
+                    "Finish protocol. Actor-side workspace/store/run-root validation "
+                    "precedes durable admission; refusal creates no project or operation "
+                    "record."
+                ),
             },
             {
                 "id": "AUTH-4",
-                "summary": "FeatureGates is in-memory only; rebuilt from Default on every request, no operator control surface",
-                "path": "agent/crates/codegen/xai-grok-science/src/features.rs:122",
+                "summary": (
+                    "Operator Science feature gates are validated from config and "
+                    "captured as one immutable SessionActor authority snapshot"
+                ),
+                "path": "agent/crates/codegen/xai-grok-shell/src/agent/config.rs",
+                "status": "closed",
+                "note": (
+                    "Unknown feature names fail config load. Main sessions resolve "
+                    "[science_features] once; subagents inherit the parent's snapshot. "
+                    "Read-only ACP ProjectStore routes use that same snapshot, while "
+                    "project mutations and workflow execution re-check it inside "
+                    "SessionActor before durable admission or permission. A rebuilt-"
+                    "binary negative test proves disabled read/write, zero permission "
+                    "requests, zero runs/projects, and no mid-session widening after "
+                    "the config file is changed."
+                ),
             },
         ],
     }

@@ -1183,6 +1183,7 @@ pub(crate) async fn handle_subagent_request(
             std::mem::take(&mut ctx.laziness_debug_log),
             ctx.parent_terminal_backend.clone(),
             ctx.parent_scheduler_handle.clone(),
+            ctx.science_feature_gates.clone(),
             subagent_max_turns,
             forked_tool_override,
         )

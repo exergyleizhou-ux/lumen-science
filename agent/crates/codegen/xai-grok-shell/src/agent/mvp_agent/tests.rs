@@ -1139,6 +1139,7 @@ fn make_test_handle(
             id: acp::SessionId::new("test"),
             cwd: "/tmp".to_string(),
         },
+        science_feature_gates: xai_grok_science::features::FeatureGates::default(),
         max_turns: None,
         hunk_tracker_handle,
         chat_state_handle: xai_chat_state::ChatStateHandle::noop(),

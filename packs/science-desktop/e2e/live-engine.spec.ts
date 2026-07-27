@@ -251,9 +251,9 @@ test('the run\'s artifacts are previewable and reviewable — the evidence chain
   // End of the chain the product exists for: a cell ran in the engine, the
   // engine committed hashed outputs, and now (a) the Evidence tab resolves one
   // of those hashes to a real local file and (b) a review of those exact bytes
-  // is recorded under actor authority. Before this branch, the store could
-  // never be seeded (artifact_list is a Go MCP tool this bridge cannot call),
-  // so both halves were structurally dead while every unit suite was green.
+  // is recorded under actor authority. Workflow outputs are seeded from the
+  // actor-owned commit report; durable ScienceStore runs are seeded through
+  // the Rust artifact_list query.
   const report = (await page.locator('#panel-notebook pre').textContent()) ?? ''
   // The manifest maps relative path → content hash; stdout.txt always exists
   // for a cell that printed.

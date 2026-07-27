@@ -72,6 +72,7 @@ pub(crate) fn ctx_with_toggle(toggle: HashMap<String, bool>) -> SubagentSpawnCon
         auth: None,
         parent_cwd: PathBuf::from("/tmp"),
         parent_session_id: "test-parent".into(),
+        science_feature_gates: xai_grok_science::features::FeatureGates::default(),
         yolo_mode: false,
         subagent_event_tx: tx,
         hunk_tracker_handle: xai_hunk_tracker::HunkTrackerHandle::noop(),

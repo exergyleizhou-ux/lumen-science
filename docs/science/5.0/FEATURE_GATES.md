@@ -1,13 +1,14 @@
 # Lumen Science 5.0 Feature Gates
 
-**Status**: SPEC v1
+**Status**: IMPLEMENTED v1
 **Date**: 2026-07-25
 **Milestone**: LS5-5
 
 ## Design
 
-All V2-V5 features are behind explicit feature gates. Default stable users
-cannot accidentally access incomplete or dangerous capabilities.
+All V2-V5 features have typed feature gates. Preview capabilities retain their
+compiled preview defaults for compatibility; device execution remains disabled.
+An operator can override any state in Lumen's primary `config.toml`.
 
 ```rust
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,10 +95,29 @@ Stable          → fully tested, documented, default behavior
 }
 ```
 
+## Operator Configuration
+
+Lumen reads the primary product config from `$LUMEN_HOME/config.toml` (or
+`~/.lumen/config.toml`):
+
+```toml
+[science_features]
+research_project = "disabled"
+workflow_dag = "beta"
+real_device = "disabled"
+```
+
+Unknown feature names and invalid states reject the config instead of being
+ignored. Omitted entries inherit the compiled defaults above.
+
 ## Gate Enforcement
 
-- SessionActor checks feature gate before routing to any V2+ code path
-- Disabled features return `ScienceError::FeatureDisabled`
-- Preview features log a warning on first use per session
-- Device features (command, HIL, real) require additional operator confirmation
-  beyond the feature gate
+- The composition root resolves one complete gate snapshot when a main session
+  is created.
+- A subagent inherits its parent session's snapshot unchanged.
+- Read-only Science ACP routes and the SessionActor use the same snapshot.
+- Project mutations and workflow execution are re-checked by SessionActor
+  before a durable run or permission request is created.
+- Editing `config.toml` does not widen an existing session; the next session
+  receives the new validated snapshot.
+- Disabled features return `ScienceError::FeatureDisabled`.

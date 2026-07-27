@@ -165,6 +165,9 @@ pub fn test_env_cmd_tokio(
         // prompt (the windows-x86_64 lifecycle "prompt timed out" failure).
         // Mirrors `leader.rs` and the pty-harness `env_for_pager`.
         .env("GROK_HOME", home.join(".grok"))
+        // Lumen owns the primary product config. Isolate it alongside the
+        // legacy Grok home so a test cannot read the developer's real config.
+        .env("LUMEN_HOME", home.join(".lumen"))
         .env("GROK_CLI_CHAT_PROXY_BASE_URL", mock_url)
         .env("GROK_XAI_API_BASE_URL", mock_url)
         .env("XAI_API_KEY", "test-key-for-ci")

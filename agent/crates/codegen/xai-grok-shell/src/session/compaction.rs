@@ -2207,6 +2207,7 @@ mod inline_auto_compact_flow_tests {
             attribution_callback: None,
             auth_manager: None,
             state,
+            science_feature_gates: xai_grok_science::features::FeatureGates::default(),
             notifications: NotificationSender {
                 gateway: GatewaySender::new(gateway_tx),
                 gateway_enabled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),

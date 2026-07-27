@@ -281,6 +281,12 @@ impl ProjectStore {
     pub fn save_project(&self, project: &ResearchProject) -> Result<()> {
         self.gates.require(ScienceFeature::ResearchProject)?;
         let _guard = self.write_guard()?;
+        self.save_project_inner(project)
+    }
+
+    /// Caller must hold the write guard.
+    pub(super) fn save_project_inner(&self, project: &ResearchProject) -> Result<()> {
+        self.gates.require(ScienceFeature::ResearchProject)?;
         self.write_project_file(project)
     }
 

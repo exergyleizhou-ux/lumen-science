@@ -53,6 +53,8 @@ export type ArtifactListItem = {
   digest?: string
   project_id?: string
   projectId?: string
+  run_id?: string
+  runId?: string
   owner_id?: string
   ownerId?: string
 }

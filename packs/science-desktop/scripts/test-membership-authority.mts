@@ -21,7 +21,10 @@ import {
   createAcpAuthoritativeMembershipAsserter,
   createOfflineCatalogMembershipAsserter
 } from '../src/main/files/hybrid-membership.js'
-import { createAcpMembershipAsserter } from '../src/main/files/acp-membership.js'
+import {
+  createAcpMembershipAsserter,
+  listArtifactsViaAcp,
+} from '../src/main/files/acp-membership.js'
 import type { MembershipAsserter, MembershipResult } from '../src/main/files/session-binding.js'
 
 let passed = 0
@@ -167,6 +170,86 @@ console.log('test-membership-authority')
     'empty response classifies as unavailable',
     result.ok === false && result.failure === 'unavailable'
   )
+}
+
+// ── artifact-list authority binding ─────────────────────────────
+
+{
+  let calledMethod = ''
+  let calledArgs: Record<string, unknown> = {}
+  const items = await listArtifactsViaAcp(
+    async (method, args) => {
+      calledMethod = method
+      calledArgs = args
+      return {
+        artifacts: [
+          {
+            artifact_id: 'a'.repeat(64),
+            path: '/bound/workspace/science-store/runs/run-1/artifacts/report.md',
+            sha256: 'a'.repeat(64),
+            owner_id: 'owner-a',
+            project_id: 'project-1',
+            run_id: 'run-1',
+          },
+        ],
+      }
+    },
+    { ownerId: 'owner-a', projectId: 'project-1', runId: 'run-1' },
+  )
+  check('artifact listing uses the Rust artifact_list method', calledMethod === 'artifact_list')
+  check(
+    'artifact listing binds owner/project/run and confined store root',
+    JSON.stringify(calledArgs) ===
+      JSON.stringify({
+        ownerId: 'owner-a',
+        projectId: 'project-1',
+        runId: 'run-1',
+        storeRoot: 'science-store',
+      }),
+  )
+  check('artifact listing preserves the verified engine row', items.length === 1)
+}
+
+{
+  for (const [label, response] of [
+    ['non-array response', { ok: true }],
+    [
+      'owner mismatch',
+      [
+        {
+          artifact_id: 'a'.repeat(64),
+          path: '/bound/workspace/report.md',
+          sha256: 'a'.repeat(64),
+          owner_id: 'other-owner',
+          project_id: 'project-1',
+          run_id: 'run-1',
+        },
+      ],
+    ],
+    [
+      'hash mismatch',
+      [
+        {
+          artifact_id: 'a'.repeat(64),
+          path: '/bound/workspace/report.md',
+          sha256: 'b'.repeat(64),
+          owner_id: 'owner-a',
+          project_id: 'project-1',
+          run_id: 'run-1',
+        },
+      ],
+    ],
+  ] as const) {
+    try {
+      await listArtifactsViaAcp(
+        async () => response,
+        { ownerId: 'owner-a', projectId: 'project-1', runId: 'run-1' },
+      )
+      check(`artifact listing rejects ${label}`, false)
+    } catch {
+      check(`artifact listing rejects ${label}`, true)
+    }
+  }
 }
 
 // ── the offline asserter is honestly scoped ──────────────────────

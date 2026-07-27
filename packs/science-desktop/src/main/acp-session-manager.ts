@@ -163,7 +163,7 @@ export class AcpSessionManager {
   ): Promise<unknown> {
     const resolved = resolveScienceMethod(method)
     const ready = await this.requireReady()
-    // Every one of the 24 handlers takes `sessionId` and the param structs are
+    // Every handler takes `sessionId` and the param structs are
     // `deny_unknown_fields`, so filling it in when absent is required, and
     // overwriting a caller-supplied one would be wrong.
     const payload: Record<string, unknown> =

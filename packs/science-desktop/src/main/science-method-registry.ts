@@ -7,7 +7,7 @@
  * names (`project_assert_membership`, `artifact_resolve`, `compute_plan`) look
  * like transport problems for as long as the transport was broken.
  *
- * The real science surface is the 24 `x.ai/science/*` ACP extension methods
+ * The real science surface is the `x.ai/science/*` ACP extension methods
  * dispatched by
  * agent/crates/codegen/xai-grok-shell/src/extensions/science.rs:109-139.
  * This module is the single place that decides whether a name may go on the
@@ -35,7 +35,7 @@ export const SCIENCE_METHOD_NAMESPACE = 'x.ai/science/'
 export const ACP_EXT_WIRE_PREFIX = '_'
 
 /**
- * The 24 methods the Rust engine dispatches. Order and spelling mirror
+ * The methods the Rust engine dispatches. Order and spelling mirror
  * extensions/science.rs; a name absent from that match arm must be absent
  * here, or the desktop would claim a capability the engine does not have.
  */
@@ -46,6 +46,7 @@ export const SCIENCE_METHODS = [
   'ssh_scp_fixture',
   'goal_host_verify',
   'seq_analyze',
+  'artifact_list',
   'project_create',
   'project_get',
   // Implemented in LS5-K18. It was on the invented list for as long as the
@@ -102,7 +103,6 @@ const NONEXISTENT_METHODS: Record<string, string> = {
  * rejected here with the distinction spelled out.
  */
 const GO_MCP_TOOLS: Record<string, string> = {
-  artifact_list: 'Go MCP tool, not a Rust ACP extension method',
   notebook_execute: 'Go MCP tool, not a Rust ACP extension method',
   start_review: 'Go MCP tool, not a Rust ACP extension method',
 }

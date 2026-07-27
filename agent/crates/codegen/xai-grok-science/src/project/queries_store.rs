@@ -80,6 +80,19 @@ impl ProjectStore {
         title: impl Into<String>,
         question: impl Into<String>,
     ) -> crate::Result<super::migration::MigrationResult> {
+        let _guard = self.write_guard()?;
+        self.migrate_v1_to_v2_inner(run_id, owner_id, title, question)
+    }
+
+    /// Caller must hold the project-store write guard. This is the mutation
+    /// primitive used by the SessionActor-gated operation ledger.
+    pub(super) fn migrate_v1_to_v2_inner(
+        &self,
+        run_id: impl Into<String>,
+        owner_id: impl Into<String>,
+        title: impl Into<String>,
+        question: impl Into<String>,
+    ) -> crate::Result<super::migration::MigrationResult> {
         self.gates()
             .require(crate::features::ScienceFeature::MigrationChain)?;
         let owner = super::model::OwnerId(owner_id.into());
@@ -92,7 +105,7 @@ impl ProjectStore {
             question,
             vec![run_str.clone()],
         );
-        self.save_project(&project)?;
+        self.save_project_inner(&project)?;
         let hash_ok =
             super::migration::V1ToV2Migration::verify_artifact_hash("same-hash", "same-hash");
         Ok(super::migration::MigrationResult {

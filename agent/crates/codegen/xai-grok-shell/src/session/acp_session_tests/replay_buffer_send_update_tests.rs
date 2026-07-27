@@ -82,6 +82,7 @@ pub(super) async fn make_replay_send_update_fixture() -> ReplaySendUpdateFixture
         attribution_callback: None,
         auth_manager: None,
         state,
+        science_feature_gates: xai_grok_science::features::FeatureGates::default(),
         notifications: NotificationSender {
             gateway,
             gateway_enabled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),

@@ -377,6 +377,10 @@ impl MvpAgent {
                 )
             })
         }?;
+        let parent_science_feature_gates = {
+            let sessions = self.sessions.borrow();
+            sessions.get(&parent_sid)?.science_feature_gates.clone()
+        };
         let available_models = self.models_manager.models();
         let parent_lsp = {
             let sessions = self.sessions.borrow();
@@ -454,6 +458,7 @@ impl MvpAgent {
             auth: self.current_or_buffered_auth(),
             parent_cwd: parent_cwd.clone(),
             parent_session_id: parent_session_id.to_string(),
+            science_feature_gates: parent_science_feature_gates,
             yolo_mode,
             subagent_event_tx: self.subagent_event_tx.clone(),
             parent_depth,

@@ -18,6 +18,7 @@
 use super::claim::Claim;
 use super::model::{ProjectId, ProjectStatus, ResearchProject};
 use super::store::ProjectStore;
+use crate::features::ScienceFeature;
 use crate::{Result, ScienceError};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -27,6 +28,11 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ProjectMutation {
     ProjectCreate {
+        title: String,
+        research_question: String,
+    },
+    ProjectMigrate {
+        source_run_id: String,
         title: String,
         research_question: String,
     },
@@ -64,6 +70,7 @@ impl ProjectMutation {
     pub fn kind(&self) -> &'static str {
         match self {
             Self::ProjectCreate { .. } => "project_create",
+            Self::ProjectMigrate { .. } => "project_migrate",
             Self::ProjectTransition { .. } => "project_transition",
             Self::QuestionUpdate { .. } => "question_update",
             Self::ClaimPropose { .. } => "claim_propose",
@@ -74,11 +81,25 @@ impl ProjectMutation {
     /// The project this mutation targets, or `None` when it creates one.
     pub fn target_project(&self) -> Option<&ProjectId> {
         match self {
-            Self::ProjectCreate { .. } => None,
+            Self::ProjectCreate { .. } | Self::ProjectMigrate { .. } => None,
             Self::ProjectTransition { project_id, .. }
             | Self::QuestionUpdate { project_id, .. }
             | Self::ClaimPropose { project_id, .. }
             | Self::EvidenceAttach { project_id, .. } => Some(project_id),
+        }
+    }
+
+    /// Capabilities that must all be enabled before the SessionActor may
+    /// create a durable run or ask the operator to approve this mutation.
+    pub fn required_features(&self) -> &'static [ScienceFeature] {
+        use ScienceFeature::{ClaimLifecycle, EvidenceGraph, MigrationChain, ResearchProject};
+        match self {
+            Self::ProjectCreate { .. }
+            | Self::ProjectTransition { .. }
+            | Self::QuestionUpdate { .. } => &[ResearchProject],
+            Self::ProjectMigrate { .. } => &[ResearchProject, MigrationChain],
+            Self::ClaimPropose { .. } => &[ResearchProject, ClaimLifecycle, EvidenceGraph],
+            Self::EvidenceAttach { .. } => &[ResearchProject, EvidenceGraph, ClaimLifecycle],
         }
     }
 }
@@ -158,11 +179,13 @@ impl ProjectStore {
                 "mutation requires a session id and owner id".into(),
             ));
         }
-        if matches!(request.mutation, ProjectMutation::ProjectCreate { .. })
-            && request.expected_revision.is_some()
+        if matches!(
+            request.mutation,
+            ProjectMutation::ProjectCreate { .. } | ProjectMutation::ProjectMigrate { .. }
+        ) && request.expected_revision.is_some()
         {
             return Err(ScienceError::Invalid(
-                "project_create cannot carry an expectedRevision".into(),
+                "project creation cannot carry an expectedRevision".into(),
             ));
         }
 
@@ -254,6 +277,26 @@ impl ProjectStore {
                 let id = project.project_id.clone();
                 Ok((id, serde_json::to_value(project)?))
             }
+            ProjectMutation::ProjectMigrate {
+                source_run_id,
+                title,
+                research_question,
+            } => {
+                if source_run_id.is_empty() || title.is_empty() || research_question.is_empty() {
+                    return Err(ScienceError::Invalid(
+                        "project_migrate requires a source run, title, and research question"
+                            .into(),
+                    ));
+                }
+                let migration = self.migrate_v1_to_v2_inner(
+                    source_run_id.clone(),
+                    request.owner_id.clone(),
+                    title.clone(),
+                    research_question.clone(),
+                )?;
+                let id = migration.target_project_id.clone();
+                Ok((id, serde_json::to_value(migration)?))
+            }
             ProjectMutation::ProjectTransition { project_id, status } => {
                 let project = self.transition_project_inner(
                     project_id,
@@ -343,6 +386,38 @@ mod tests {
     }
 
     #[test]
+    fn compound_mutations_declare_every_required_feature() {
+        use ScienceFeature::{ClaimLifecycle, EvidenceGraph, MigrationChain, ResearchProject};
+
+        assert_eq!(
+            create_request("op-features-create")
+                .mutation
+                .required_features(),
+            &[ResearchProject]
+        );
+        let migrate = ProjectMutation::ProjectMigrate {
+            source_run_id: "run-1".into(),
+            title: "Migrated".into(),
+            research_question: "Question?".into(),
+        };
+        assert_eq!(
+            migrate.required_features(),
+            &[ResearchProject, MigrationChain]
+        );
+        let evidence = ProjectMutation::EvidenceAttach {
+            project_id: ProjectId("project-1".into()),
+            claim_id: "claim-1".into(),
+            artifact_sha256: "a".repeat(64),
+            label: "artifact".into(),
+            run_id: None,
+        };
+        assert_eq!(
+            evidence.required_features(),
+            &[ResearchProject, EvidenceGraph, ClaimLifecycle]
+        );
+    }
+
+    #[test]
     fn create_is_idempotent_under_one_operation_id() {
         let dir = tempdir().unwrap();
         let store = ProjectStore::new(dir.path());
@@ -354,6 +429,38 @@ mod tests {
         assert!(second.replayed, "retry created a second project");
         assert_eq!(first.project_id, second.project_id);
         assert_eq!(first.revision, second.revision);
+        assert_eq!(store.list_projects().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn migration_is_a_typed_idempotent_mutation() {
+        let dir = tempdir().unwrap();
+        let store = ProjectStore::new(dir.path());
+        let request = MutationRequest {
+            operation_id: "op-migrate-0001".into(),
+            session_id: "session-1".into(),
+            owner_id: "owner-1".into(),
+            expected_revision: None,
+            mutation: ProjectMutation::ProjectMigrate {
+                source_run_id: "v1-run-42".into(),
+                title: "Migrated study".into(),
+                research_question: "What survived migration?".into(),
+            },
+        };
+
+        let first = store.apply_mutation(&request).unwrap();
+        assert_eq!(first.kind, "project_migrate");
+        let migration: super::super::migration::MigrationResult =
+            serde_json::from_value(first.result.clone()).unwrap();
+        assert_eq!(migration.source_run_id, "v1-run-42");
+        assert_eq!(migration.target_project_id, first.project_id);
+        let project = store.load_project(&first.project_id).unwrap();
+        assert_eq!(project.owner_id.0, "owner-1");
+        assert!(project.sessions.contains(&"v1-run-42".to_string()));
+
+        let replay = store.apply_mutation(&request).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.project_id, first.project_id);
         assert_eq!(store.list_projects().unwrap().len(), 1);
     }
 

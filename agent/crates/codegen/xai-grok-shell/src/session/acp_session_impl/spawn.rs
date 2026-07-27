@@ -193,6 +193,7 @@ pub(crate) async fn spawn_session_actor(
     parent_scheduler_handle: Option<
         xai_grok_tools::implementations::grok_build::scheduler::types::SchedulerHandle,
     >,
+    science_feature_gates: xai_grok_science::features::FeatureGates,
     max_turns: Option<usize>,
     forked_tool_override: Option<Vec<ToolSpec>>,
 ) -> Result<
@@ -1121,6 +1122,7 @@ pub(crate) async fn spawn_session_actor(
         attribution_callback,
         auth_manager,
         state,
+        science_feature_gates: science_feature_gates.clone(),
         notifications: NotificationSender {
             gateway: gateway.clone(),
             gateway_enabled: gateway_enabled.clone(),
@@ -1604,6 +1606,7 @@ pub(crate) async fn spawn_session_actor(
             current_prompt_id,
             pending_interactions,
             info: session_info,
+            science_feature_gates,
             max_turns,
             hunk_tracker_handle,
             chat_state_handle: chat_state_handle_for_handle,
@@ -1777,6 +1780,7 @@ pub(crate) async fn spawn_session_on_thread(
     parent_scheduler_handle: Option<
         xai_grok_tools::implementations::grok_build::scheduler::types::SchedulerHandle,
     >,
+    science_feature_gates: xai_grok_science::features::FeatureGates,
     max_turns: Option<usize>,
     forked_tool_override: Option<Vec<ToolSpec>>,
 ) -> Result<
@@ -1935,6 +1939,7 @@ pub(crate) async fn spawn_session_on_thread(
                         laziness_debug_log,
                         parent_terminal_backend,
                         parent_scheduler_handle,
+                        science_feature_gates,
                         max_turns,
                         forked_tool_override,
                     )

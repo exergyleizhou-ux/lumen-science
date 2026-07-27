@@ -61,6 +61,7 @@ export type SafeHandleFn = (
 ) => void
 
 export type ListArtifactsFn = (args: {
+  ownerId: string
   projectId: string
   runId: string
 }) => Promise<ArtifactListItem[]>
@@ -239,6 +240,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     if (deps.listArtifacts && p.runId && 'put' in previewStore) {
       try {
         const items = await deps.listArtifacts({
+          ownerId: bound.ownerId,
           projectId: bound.projectId,
           runId: p.runId,
         })
@@ -402,6 +404,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     if (deps.listArtifacts && 'put' in previewStore) {
       try {
         const items = await deps.listArtifacts({
+          ownerId: bound.ownerId,
           projectId: bound.projectId,
           runId,
         })
@@ -485,12 +488,10 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
 
     // Register the run's committed artifacts for preview and review.
     //
-    // This is the seeding that `artifact_list` was supposed to provide and
-    // structurally cannot (Go MCP tool; this bridge speaks Rust ACP) — which
-    // left the preview store permanently empty, the Evidence tab inert, and
-    // every review submission fail-closed on a store miss. The workflow report
-    // carries the same facts from a better source: the engine's own commit
-    // records, hashed by the executor rather than trusted from the cell.
+    // Workflow outputs use the executor's commit store, not ScienceStore's
+    // run-artifact registry served by `artifact_list`. Seed them directly from
+    // the engine's commit report: those are the authoritative hashes and paths
+    // for this just-completed workflow.
     //
     // Artifact ids are the content hashes themselves. Content addressing means
     // a re-run that produces identical output re-seeds the same id — no
