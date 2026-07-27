@@ -136,6 +136,17 @@
         "required_database_tools": 40,
         "approved": 0
       },
+      "biomni_resource_catalog": {
+        "catalog_path": "packs/science/skills/ecosystem/biomni-resource-catalog.json",
+        "vendor_manifest_path": "third_party/biomni-resource-catalog/VENDOR_MANIFEST.json",
+        "commit": "400c1f366b96a35ca253e13c9b06c5076af41d65",
+        "required_data": 76,
+        "required_software": 113,
+        "required_protocol_references": 82,
+        "required_knowledge_documents": 2,
+        "required_total": 273,
+        "approved": 0
+      },
       "scp_quarantine_catalog": {
         "catalog_path": "packs/science/skills/ecosystem/scp-catalog.json",
         "vendor_manifest_path": "third_party/internscience-scp/VENDOR_MANIFEST.json",

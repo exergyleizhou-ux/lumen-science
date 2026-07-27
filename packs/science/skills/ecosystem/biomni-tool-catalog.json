@@ -3,6 +3,7 @@
   "generated_at": "2026-07-27",
   "source": {
     "id": "snap-stanford-biomni",
+    "catalog_kind": "tool-descriptors",
     "repository": "https://github.com/snap-stanford/Biomni.git",
     "exact_commit": "400c1f366b96a35ca253e13c9b06c5076af41d65",
     "root_license": "Apache-2.0",

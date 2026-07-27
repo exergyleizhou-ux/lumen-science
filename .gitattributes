@@ -2,3 +2,5 @@
 # corpus. Its original bytes are provenance evidence, not executable Lumen code.
 third_party/internscience-scp/skills/**/SKILL.md -whitespace
 third_party/biomni-tool-descriptions/tool-descriptions/*.py -whitespace
+third_party/biomni-resource-catalog/catalog-source/*.py -whitespace
+third_party/biomni-resource-catalog/knowledge/*.md -whitespace

@@ -31,7 +31,13 @@ export type EcosystemSkillCandidate = {
   displayName: string
   description: string
   discipline: string
-  sourceKind: 'skill-document' | 'tool-descriptor'
+  sourceKind:
+    | 'skill-document'
+    | 'tool-descriptor'
+    | 'data-resource'
+    | 'software-resource'
+    | 'protocol-reference'
+    | 'knowledge-document'
   sourceRepository: string
   exactCommit: string
   sourceSha256: string
@@ -133,6 +139,7 @@ export function createSkillService(opts: {
         schema_version?: number
         source?: {
           id?: string
+          catalog_kind?: string
           repository?: string
           exact_commit?: string
         }
@@ -180,16 +187,32 @@ export function createSkillService(opts: {
         sourceId === 'internscience-scp-skills'
           ? {
               repository: 'https://github.com/InternScience/scp.git',
-              sourceKind: 'skill-document' as const,
+              sourceKinds: ['skill-document'] as const,
               network: 'denied-until-per-skill-admission',
+              extendedMetadata: false,
             }
-          : sourceId === 'snap-stanford-biomni'
+          : sourceId === 'snap-stanford-biomni' &&
+              raw.source?.catalog_kind === 'tool-descriptors'
             ? {
                 repository: 'https://github.com/snap-stanford/Biomni.git',
-                sourceKind: 'tool-descriptor' as const,
+                sourceKinds: ['tool-descriptor'] as const,
                 network: 'denied-until-per-tool-admission',
+                extendedMetadata: true,
               }
-            : undefined
+            : sourceId === 'snap-stanford-biomni' &&
+                raw.source?.catalog_kind === 'resource-inventory'
+              ? {
+                  repository: 'https://github.com/snap-stanford/Biomni.git',
+                  sourceKinds: [
+                    'data-resource',
+                    'software-resource',
+                    'protocol-reference',
+                    'knowledge-document',
+                  ] as const,
+                  network: 'denied-until-per-resource-admission',
+                  extendedMetadata: true,
+                }
+              : undefined
       const directCallsDenied =
         (sourceId === 'internscience-scp-skills' &&
           authority?.direct_scp_hub_calls_admitted === false) ||
@@ -215,6 +238,7 @@ export function createSkillService(opts: {
       const ids = new Set<string>()
       const candidates = skills.map((skill): EcosystemSkillCandidate => {
         const permissions = skill.runtime_permissions
+        const sourceKind = skill.source_kind ?? 'skill-document'
         if (
           !skill.skill_id ||
           ids.has(skill.skill_id) ||
@@ -223,8 +247,9 @@ export function createSkillService(opts: {
           skill.source_repository !== sourceProfile.repository ||
           skill.exact_commit !== raw.source?.exact_commit ||
           !/^[0-9a-f]{64}$/.test(skill.source_sha256 ?? '') ||
-          (sourceProfile.sourceKind === 'tool-descriptor'
-            ? skill.source_kind !== 'tool-descriptor' ||
+          !(sourceProfile.sourceKinds as readonly string[]).includes(sourceKind) ||
+          (sourceProfile.extendedMetadata
+            ? !skill.source_kind ||
               !Array.isArray(skill.parameter_contract?.required) ||
               !Array.isArray(skill.parameter_contract.optional) ||
               !Array.isArray(skill.risk_flags) ||
@@ -239,7 +264,7 @@ export function createSkillService(opts: {
           permissions.network !== sourceProfile.network ||
           permissions.shell !== 'denied' ||
           permissions.filesystem !== 'denied' ||
-          (sourceProfile.sourceKind === 'tool-descriptor' &&
+          (sourceProfile.extendedMetadata &&
             permissions.device !== 'denied') ||
           !Array.isArray(permissions.controlled_tools) ||
           permissions.controlled_tools.length !== 0
@@ -252,7 +277,7 @@ export function createSkillService(opts: {
           displayName: skill.display_name,
           description: skill.description,
           discipline: skill.discipline || 'unclassified',
-          sourceKind: sourceProfile.sourceKind,
+          sourceKind: sourceKind as EcosystemSkillCandidate['sourceKind'],
           sourceRepository: skill.source_repository,
           exactCommit: skill.exact_commit!,
           sourceSha256: skill.source_sha256!,

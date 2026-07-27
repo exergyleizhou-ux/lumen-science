@@ -328,6 +328,57 @@ def main() -> int:
         "no longer one inert literal assignment",
     )
 
+    resource_catalog_path = (
+        ROOT / "packs/science/skills/ecosystem/biomni-resource-catalog.json"
+    )
+
+    def approve_biomni_resource() -> None:
+        catalog = json.loads(resource_catalog_path.read_text(encoding="utf-8"))
+        catalog["summary"]["approved"] = 1
+        catalog["skills"][0]["final_disposition"] = "approved"
+        resource_catalog_path.write_text(
+            json.dumps(catalog, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+    check_file_tamper(
+        "a Biomni data or knowledge record cannot silently become approved",
+        [resource_catalog_path],
+        approve_biomni_resource,
+        "unreviewed approval",
+    )
+
+    copied_protocol = (
+        ROOT
+        / "third_party/biomni-resource-catalog/protocols/addgene/copied.txt"
+    )
+    try:
+        copied_protocol.parent.mkdir(parents=True, exist_ok=True)
+        copied_protocol.write_text(
+            "unreviewed publisher protocol body\n", encoding="utf-8"
+        )
+        proc = run_real_verifier()
+        output = proc.stdout + proc.stderr
+        good = (
+            proc.returncode == 1
+            and "protocol bodies were copied" in output
+        )
+        results.append(
+            (
+                "unreviewed Biomni protocol bodies cannot enter the vendor tree",
+                good,
+                ""
+                if good
+                else f"exit={proc.returncode}; output={output.strip()[:240]!r}",
+            )
+        )
+    finally:
+        if copied_protocol.exists():
+            copied_protocol.unlink()
+        for directory in [copied_protocol.parent, copied_protocol.parent.parent]:
+            if directory.exists() and not any(directory.iterdir()):
+                directory.rmdir()
+
     print("test-ecosystem-admission")
     passed = 0
     for name, good, detail in results:

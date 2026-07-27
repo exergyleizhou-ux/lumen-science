@@ -36,6 +36,8 @@ extraResources:
     to: science/ecosystem-skill-catalog.json
   - from: ../../packs/science/skills/ecosystem/biomni-tool-catalog.json
     to: science/biomni-tool-catalog.json
+  - from: ../../packs/science/skills/ecosystem/biomni-resource-catalog.json
+    to: science/biomni-resource-catalog.json
   - from: ../../docs/science/fusion-sources.lock.json
     to: science/fusion-sources.lock.json
 

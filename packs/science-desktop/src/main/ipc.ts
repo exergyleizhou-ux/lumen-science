@@ -193,12 +193,17 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
       ? [
           join(process.resourcesPath, 'science', 'ecosystem-skill-catalog.json'),
           join(process.resourcesPath, 'science', 'biomni-tool-catalog.json'),
+          join(process.resourcesPath, 'science', 'biomni-resource-catalog.json'),
         ]
       : [
           join(__dirname, '../../../../packs/science/skills/ecosystem/scp-catalog.json'),
           join(
             __dirname,
             '../../../../packs/science/skills/ecosystem/biomni-tool-catalog.json',
+          ),
+          join(
+            __dirname,
+            '../../../../packs/science/skills/ecosystem/biomni-resource-catalog.json',
           ),
         ],
     connectorLockPath: app.isPackaged

@@ -25,6 +25,15 @@ type UiProject = {
   defaultRunId: string
 }
 
+const ECOSYSTEM_SOURCE_LABELS = {
+  'skill-document': 'SCP 技能文档',
+  'tool-descriptor': 'Biomni 工具描述',
+  'data-resource': 'Biomni 数据资源',
+  'software-resource': 'Biomni 科研软件',
+  'protocol-reference': 'Biomni 协议索引',
+  'knowledge-document': 'Biomni 知识文档',
+} as const
+
 type TabId =
   | 'question'
   | 'plan'
@@ -814,9 +823,12 @@ export const ResearchShell = (): React.JSX.Element => {
                               </div>
                               <div className={cx.muted} style={{ marginTop: 4 }}>
                                 {candidate.discipline} ·{' '}
+                                {ECOSYSTEM_SOURCE_LABELS[candidate.sourceKind]}
                                 {candidate.sourceKind === 'tool-descriptor'
-                                  ? `Biomni 工具描述 · ${candidate.parameterCount} 个参数`
-                                  : `SCP 技能文档 · 上游工具引用 ${candidate.requiredUpstreamToolCount}`}
+                                  ? ` · ${candidate.parameterCount} 个参数`
+                                  : candidate.sourceKind === 'skill-document'
+                                    ? ` · 上游工具引用 ${candidate.requiredUpstreamToolCount}`
+                                    : ' · 只读资源元数据'}
                               </div>
                               <p style={{ margin: '8px 0 0' }}>{candidate.description}</p>
                               <div className={cx.muted} style={{ marginTop: 8 }}>

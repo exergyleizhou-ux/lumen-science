@@ -363,6 +363,11 @@ def verify_carried_ledgers(lock: dict[str, Any], science_repo: Path) -> None:
     biomni_catalog = load_json(
         science_repo / biomni_spec["catalog_path"], "Biomni tool candidate catalog"
     )
+    require(
+        biomni_catalog["source"]["catalog_kind"] == "tool-descriptors"
+        and biomni_catalog["source"]["exact_commit"] == biomni_spec["commit"],
+        "Biomni tool catalog source identity changed",
+    )
     biomni_authority = biomni_catalog["authority"]
     require(
         biomni_authority["runtime_authority"] == "Rust SessionActor"
@@ -454,6 +459,10 @@ def verify_carried_ledgers(lock: dict[str, Any], science_repo: Path) -> None:
     require(
         biomni_descriptor_paths == set(biomni_source_files),
         "Biomni catalog does not cover every vendored descriptor module",
+    )
+
+    verify_biomni_resource_catalog(
+        carried["biomni_resource_catalog"], science_repo
     )
 
     scp_spec = carried["scp_quarantine_catalog"]
@@ -594,6 +603,204 @@ def verify_carried_ledgers(lock: dict[str, Any], science_repo: Path) -> None:
     )
 
 
+def verify_biomni_resource_catalog(
+    spec: dict[str, Any], science_repo: Path
+) -> None:
+    manifest = load_json(
+        science_repo / spec["vendor_manifest_path"],
+        "Biomni resource vendor manifest",
+    )
+    require(
+        manifest["commit"] == spec["commit"],
+        "Biomni resource source commit changed unexpectedly",
+    )
+    require(
+        manifest["runtime_authority"] == "none",
+        "Biomni resource manifest grants runtime authority",
+    )
+    expected_counts = {
+        "data_records": spec["required_data"],
+        "software_records": spec["required_software"],
+        "protocol_references": spec["required_protocol_references"],
+        "knowledge_documents": spec["required_knowledge_documents"],
+    }
+    for key, expected in expected_counts.items():
+        require(
+            manifest[key] == expected,
+            f"Biomni resource manifest count regressed: {key}",
+        )
+
+    vendor_root = science_repo / "third_party/biomni-resource-catalog"
+    for relative, expected in manifest["vendored_files"].items():
+        require_relative_path(relative, f"Biomni resource vendor file {relative}")
+        require(
+            SHA256_RE.fullmatch(expected) is not None,
+            f"Biomni resource vendor hash is malformed: {relative}",
+        )
+        path = vendor_root / relative
+        require(path.is_file(), f"Biomni resource vendor file is missing: {relative}")
+        require(
+            sha256(path) == expected,
+            f"Biomni resource vendor hash drifted: {relative}",
+        )
+
+    protocol_inventory = manifest["protocol_source_inventory"]
+    knowledge_inventory = manifest["knowledge_source_inventory"]
+    require(
+        len(protocol_inventory) == spec["required_protocol_references"],
+        "Biomni protocol source inventory regressed",
+    )
+    require(
+        len(knowledge_inventory) == spec["required_knowledge_documents"],
+        "Biomni knowledge source inventory regressed",
+    )
+    for relative, digest in {**protocol_inventory, **knowledge_inventory}.items():
+        require_relative_path(relative, f"Biomni source inventory path {relative}")
+        require(
+            SHA256_RE.fullmatch(digest) is not None,
+            f"Biomni source inventory hash is malformed: {relative}",
+        )
+    require(
+        not list(vendor_root.glob("protocols/**/*.txt")),
+        "Biomni protocol bodies were copied despite unresolved publisher licenses",
+    )
+
+    catalog = load_json(
+        science_repo / spec["catalog_path"], "Biomni resource candidate catalog"
+    )
+    require(
+        catalog["source"]["catalog_kind"] == "resource-inventory"
+        and catalog["source"]["exact_commit"] == spec["commit"],
+        "Biomni resource catalog source identity changed",
+    )
+    authority = catalog["authority"]
+    require(
+        authority["runtime_authority"] == "Rust SessionActor"
+        and authority["source_runtime_authority"] == "none"
+        and authority["catalog_is_executable"] is False
+        and authority["direct_upstream_calls_admitted"] is False
+        and authority["bulk_auto_approval"] is False,
+        "Biomni resource catalog grants execution, direct calls, or bulk approval",
+    )
+    summary = catalog["summary"]
+    candidates = catalog["skills"]
+    require(
+        summary["total"] == spec["required_total"] == len(candidates),
+        "Biomni resource catalog total regressed or disagrees with entries",
+    )
+    require(
+        summary["approved"] == spec["approved"] == 0
+        and summary["quarantined"] == len(candidates),
+        "Biomni resource catalog contains an unreviewed approval",
+    )
+    expected_kinds = {
+        "data-resource": spec["required_data"],
+        "software-resource": spec["required_software"],
+        "protocol-reference": spec["required_protocol_references"],
+        "knowledge-document": spec["required_knowledge_documents"],
+    }
+    require(
+        all(summary[kind] == count for kind, count in expected_kinds.items()),
+        "Biomni resource kind counts disagree with the lock",
+    )
+
+    ids: set[str] = set()
+    kind_counts = {kind: 0 for kind in expected_kinds}
+    protocol_entries: dict[str, str] = {}
+    knowledge_entries: dict[str, str] = {}
+    env_hash = manifest["vendored_files"]["catalog-source/env_desc.py"]
+    for candidate in candidates:
+        skill_id = candidate["skill_id"]
+        source_kind = candidate["source_kind"]
+        require(skill_id not in ids, f"Biomni resource id repeats: {skill_id}")
+        ids.add(skill_id)
+        require(
+            source_kind in expected_kinds,
+            f"Biomni resource kind is unknown: {source_kind}",
+        )
+        kind_counts[source_kind] += 1
+        require(
+            candidate["exact_commit"] == spec["commit"]
+            and SHA256_RE.fullmatch(candidate["source_sha256"]) is not None,
+            f"Biomni resource provenance is malformed: {skill_id}",
+        )
+        require(
+            candidate["final_disposition"] == "quarantined"
+            and candidate["prompt_injection_audit"]["status"] == "pending",
+            f"Biomni resource bypassed quarantine or audit: {skill_id}",
+        )
+        permissions = candidate["runtime_permissions"]
+        require(
+            permissions["session_actor_required"] is True
+            and permissions["may_call_lumen_tools_only"] is True
+            and permissions["controlled_tools"] == []
+            and permissions["independent_execution_authority"] is False
+            and permissions["network"] == "denied-until-per-resource-admission"
+            and permissions["shell"] == "denied"
+            and permissions["filesystem"] == "denied"
+            and permissions["device"] == "denied",
+            f"Biomni resource has capability before admission: {skill_id}",
+        )
+        require(
+            candidate["parameter_contract"] == {"required": [], "optional": []},
+            f"Biomni resource smuggles an executable parameter contract: {skill_id}",
+        )
+        if source_kind == "data-resource":
+            require(
+                candidate["source_path"] == "biomni/env_desc.py"
+                and candidate["source_sha256"] == env_hash
+                and candidate["content_vendored"] is False
+                and candidate["scientific_truth"] is False,
+                f"Biomni dataset bypassed source/truth boundary: {skill_id}",
+            )
+            require(
+                candidate["license_review"]["commercial_status"],
+                f"Biomni dataset lacks license status: {skill_id}",
+            )
+        elif source_kind == "software-resource":
+            require(
+                candidate["source_path"] == "biomni/env_desc.py"
+                and candidate["source_sha256"] == env_hash
+                and candidate["content_vendored"] is False
+                and candidate["version"] is None
+                and candidate["upstream_repository"] is None,
+                f"Biomni software inventory implies a verified dependency: {skill_id}",
+            )
+        elif source_kind == "protocol-reference":
+            require(
+                candidate["content_vendored"] is False
+                and candidate["scientific_truth"] is False
+                and "publisher-license-unverified" in candidate["risk_flags"],
+                f"Biomni protocol bypassed license/safety quarantine: {skill_id}",
+            )
+            protocol_entries[candidate["source_path"]] = candidate["source_sha256"]
+        elif source_kind == "knowledge-document":
+            vendored_relative = candidate["vendored_path"]
+            require(
+                candidate["content_vendored"] is True
+                and candidate["scientific_truth"] is False
+                and candidate["license_review"]["license"] == "CC BY 4.0"
+                and vendored_relative.startswith("knowledge/"),
+                f"Biomni knowledge document lacks CC BY/truth boundary: {skill_id}",
+            )
+            knowledge_entries[candidate["source_path"]] = candidate["source_sha256"]
+            require(
+                manifest["vendored_files"][vendored_relative]
+                == candidate["source_sha256"],
+                f"Biomni knowledge hash disagrees with vendor manifest: {skill_id}",
+            )
+
+    require(kind_counts == expected_kinds, "Biomni resource entry counts drifted")
+    require(
+        protocol_entries == protocol_inventory,
+        "Biomni protocol catalog and source inventory disagree",
+    )
+    require(
+        knowledge_entries == knowledge_inventory,
+        "Biomni knowledge catalog and source inventory disagree",
+    )
+
+
 def verify_no_proprietary_copy(science_repo: Path) -> None:
     tracked = run_git(science_repo, "ls-files").splitlines()
     violations = [
@@ -684,6 +891,33 @@ def verify_local_source(source: dict[str, Any], root: Path) -> None:
             database_count == inventory["database_tools"],
             f"{label} has {database_count} database tools, expected "
             f"{inventory['database_tools']}",
+        )
+        env_tree = ast.parse((root / "biomni/env_desc.py").read_text(encoding="utf-8"))
+        env_values = {
+            node.targets[0].id: ast.literal_eval(node.value)
+            for node in env_tree.body
+            if isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+        }
+        require(
+            len(env_values["data_lake_dict"]) == inventory["data_lake_entries"],
+            f"{label} data-lake inventory count changed",
+        )
+        require(
+            len(env_values["library_content_dict"])
+            == inventory["software_catalog_entries"],
+            f"{label} software inventory count changed",
+        )
+        protocol_count = len(list((root / "biomni/tool/protocols").glob("*/*.txt")))
+        require(
+            protocol_count == inventory["local_protocols"],
+            f"{label} has {protocol_count} protocol files, expected "
+            f"{inventory['local_protocols']}",
+        )
+        require(
+            len(list((root / "biomni/know_how").glob("*.md"))) == 2,
+            f"{label} know-how document count changed",
         )
     if source["id"] == "qzzqzzb-openclaudescience":
         catalog = (root / "ui/src/app/skills/science-skill-catalog.ts").read_text(

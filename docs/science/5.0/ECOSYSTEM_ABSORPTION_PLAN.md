@@ -10,7 +10,7 @@ absorption:
 
 | Source | Exact commit | Root license | Current Lumen disposition |
 |---|---|---|---|
-| `snap-stanford/Biomni` | `400c1f366b96a35ca253e13c9b06c5076af41d65` | Apache-2.0 | 224 typed tool descriptors locally cataloged; native adapters and knowledge admission pending |
+| `snap-stanford/Biomni` | `400c1f366b96a35ca253e13c9b06c5076af41d65` | Apache-2.0 | 224 typed tools plus 273 resource/knowledge records locally cataloged; native adapters pending |
 | `jvogan/motif` | `876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0` | MIT | current upstream already vendored as renderer; algorithm expansion pending |
 | `aipoch/open-science` | `fd2853f0b9bdb6c063ccc1e741687584ab94bf9a` | Apache-2.0 | 1,082 carried files; 228-file upstream delta under review |
 | `qzzqzzb/OpenClaudeScience` | `4a5f2ab2879ebd4f806155c796e247da94bb1625` | MIT at root, mixed nested licenses | MIT components and catalog may be adapted; four proprietary skill trees rejected |
@@ -228,7 +228,7 @@ Implemented:
   from the document title;
 - added one-to-one source/catalog/hash and secret-tamper gates;
 - added a desktop fail-closed test proving that a catalog entry cannot be
-  relabelled as approved and still appear in the product.
+  relabelled as approved and still appear in the product;
 - preserved Biomni's 22 Apache-2.0 literal tool-description modules without
   importing or executing Python;
 - generated all 224 Biomni tool candidates, including their typed parameter
@@ -243,13 +243,20 @@ Implemented:
 - added one-to-one descriptor/source/hash checks and a negative test proving
   that matching manifest hashes cannot turn an inert descriptor into
   executable Python;
-- combined the 207 SCP documents and 224 Biomni tool descriptions into one
-  searchable 431-item desktop capability view.
+- cataloged all 76 Biomni data references with the licenses/access restrictions
+  reported by Biomni and whether they remain in its commercial-mode subset;
+- cataloged all 113 software identities while explicitly retaining unknown
+  version, repository, and license fields instead of implying installation;
+- cataloged all 82 protocol references with source hashes but did not copy
+  their Addgene/Thermo Fisher bodies because publisher licenses are unresolved;
+- preserved the two know-how documents that explicitly declare CC BY 4.0,
+  including their source/vendored hashes, while keeping their instructions and
+  executable examples quarantined;
+- combined the 207 SCP documents, 224 Biomni tool descriptions, and 273 Biomni
+  resources into one searchable 704-item desktop capability view.
 
 Remaining:
 
-- catalog Biomni's 76 data-lake entries, 113 software records, 82 local
-  protocols, and know-how documents with per-resource license/citation status;
 - admit controlled adapters individually; a catalog mapping is not execution
   proof.
 
@@ -287,8 +294,8 @@ Remaining:
 
 Phase 0 and the Phase 1 SCP/Biomni catalogs currently have source audit,
 focused verifier evidence, desktop service tests, and TypeScript compile
-evidence. The 431 candidate capabilities are local and searchable in the
-desktop Skills tab, but none of the new 431 entries is executable or
+evidence. The 704 candidate capabilities are local and searchable in the
+desktop Skills tab, but none of the new 704 entries is executable or
 product-approved. A rebuilt packaged application has not yet been used to prove
 the new resource paths and rendered UI. This does not claim that the 224
 Biomni tools, new connectors, Motif algorithms, or clean-room document features

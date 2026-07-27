@@ -73,8 +73,9 @@ InternScience/SCP skill catalog are admitted through the component-level
 preserves the existing Science authority foundation, pins exact source and
 license hashes, rejects peer runtimes and restricted nested licenses, and
 keeps all unreviewed skills/data quarantined. The current local discovery
-surface contains 207 SCP skill documents plus 224 Biomni tool descriptors:
-431 searchable candidates, zero newly approved.
+surface contains 207 SCP skill documents, 224 Biomni tool descriptors, and 273
+Biomni data/software/protocol/knowledge records: 704 searchable candidates,
+zero newly approved.
 
 ## Quick start (WP-2～8 CLI surface)
 

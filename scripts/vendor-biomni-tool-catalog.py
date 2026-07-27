@@ -400,6 +400,7 @@ provenance, terminal-state, and replay authority.
         "generated_at": "2026-07-27",
         "source": {
             "id": SOURCE_ID,
+            "catalog_kind": "tool-descriptors",
             "repository": source["repository"],
             "exact_commit": source["exact_commit"],
             "root_license": source["root_license"],

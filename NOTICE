@@ -16,3 +16,10 @@ License 2.0. See third_party/biomni-tool-descriptions/LICENSE, NOTICE.md,
 VENDOR_MANIFEST.json, and third_party/provenance/biomni-tool-descriptions.md.
 The Biomni agent runtime, Python/R/Bash execution, downloaded datasets,
 pickled schemas, and device control are not included or authorized.
+
+Lumen Science also preserves Biomni's Apache-2.0 literal resource catalogs and
+two know-how documents that explicitly declare CC BY 4.0, at the same exact
+commit. See third_party/biomni-resource-catalog and
+third_party/provenance/biomni-resource-catalog.md. Underlying datasets,
+software packages, CRISPick/Addgene resources, and 82 publisher protocol
+bodies are not copied or authorized by this catalog.

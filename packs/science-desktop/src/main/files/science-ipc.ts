@@ -599,6 +599,10 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
             process.cwd(),
             '../../packs/science/skills/ecosystem/biomni-tool-catalog.json',
           ),
+          path.resolve(
+            process.cwd(),
+            '../../packs/science/skills/ecosystem/biomni-resource-catalog.json',
+          ),
         ],
     })
 

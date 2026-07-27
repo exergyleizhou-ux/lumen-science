@@ -3,7 +3,13 @@ export type EcosystemSkillCandidate = {
   displayName: string
   description: string
   discipline: string
-  sourceKind: 'skill-document' | 'tool-descriptor'
+  sourceKind:
+    | 'skill-document'
+    | 'tool-descriptor'
+    | 'data-resource'
+    | 'software-resource'
+    | 'protocol-reference'
+    | 'knowledge-document'
   sourceRepository: string
   exactCommit: string
   sourceSha256: string
@@ -82,7 +88,14 @@ export function parseEcosystemSkillInventory(value: unknown): EcosystemInventory
       typeof item.displayName !== 'string' ||
       typeof item.description !== 'string' ||
       typeof item.discipline !== 'string' ||
-      !['skill-document', 'tool-descriptor'].includes(String(item.sourceKind)) ||
+      ![
+        'skill-document',
+        'tool-descriptor',
+        'data-resource',
+        'software-resource',
+        'protocol-reference',
+        'knowledge-document',
+      ].includes(String(item.sourceKind)) ||
       typeof item.sourceRepository !== 'string' ||
       typeof item.exactCommit !== 'string' ||
       !/^[0-9a-f]{40}$/.test(item.exactCommit) ||
