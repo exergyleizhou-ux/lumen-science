@@ -30,6 +30,11 @@ pub enum ProjectMutation {
         title: String,
         research_question: String,
     },
+    ProjectMigrate {
+        source_run_id: String,
+        title: String,
+        research_question: String,
+    },
     ProjectTransition {
         project_id: ProjectId,
         status: ProjectStatus,
@@ -64,6 +69,7 @@ impl ProjectMutation {
     pub fn kind(&self) -> &'static str {
         match self {
             Self::ProjectCreate { .. } => "project_create",
+            Self::ProjectMigrate { .. } => "project_migrate",
             Self::ProjectTransition { .. } => "project_transition",
             Self::QuestionUpdate { .. } => "question_update",
             Self::ClaimPropose { .. } => "claim_propose",
@@ -74,7 +80,7 @@ impl ProjectMutation {
     /// The project this mutation targets, or `None` when it creates one.
     pub fn target_project(&self) -> Option<&ProjectId> {
         match self {
-            Self::ProjectCreate { .. } => None,
+            Self::ProjectCreate { .. } | Self::ProjectMigrate { .. } => None,
             Self::ProjectTransition { project_id, .. }
             | Self::QuestionUpdate { project_id, .. }
             | Self::ClaimPropose { project_id, .. }
@@ -158,11 +164,13 @@ impl ProjectStore {
                 "mutation requires a session id and owner id".into(),
             ));
         }
-        if matches!(request.mutation, ProjectMutation::ProjectCreate { .. })
-            && request.expected_revision.is_some()
+        if matches!(
+            request.mutation,
+            ProjectMutation::ProjectCreate { .. } | ProjectMutation::ProjectMigrate { .. }
+        ) && request.expected_revision.is_some()
         {
             return Err(ScienceError::Invalid(
-                "project_create cannot carry an expectedRevision".into(),
+                "project creation cannot carry an expectedRevision".into(),
             ));
         }
 
@@ -253,6 +261,26 @@ impl ProjectStore {
                 )?;
                 let id = project.project_id.clone();
                 Ok((id, serde_json::to_value(project)?))
+            }
+            ProjectMutation::ProjectMigrate {
+                source_run_id,
+                title,
+                research_question,
+            } => {
+                if source_run_id.is_empty() || title.is_empty() || research_question.is_empty() {
+                    return Err(ScienceError::Invalid(
+                        "project_migrate requires a source run, title, and research question"
+                            .into(),
+                    ));
+                }
+                let migration = self.migrate_v1_to_v2_inner(
+                    source_run_id.clone(),
+                    request.owner_id.clone(),
+                    title.clone(),
+                    research_question.clone(),
+                )?;
+                let id = migration.target_project_id.clone();
+                Ok((id, serde_json::to_value(migration)?))
             }
             ProjectMutation::ProjectTransition { project_id, status } => {
                 let project = self.transition_project_inner(
@@ -354,6 +382,38 @@ mod tests {
         assert!(second.replayed, "retry created a second project");
         assert_eq!(first.project_id, second.project_id);
         assert_eq!(first.revision, second.revision);
+        assert_eq!(store.list_projects().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn migration_is_a_typed_idempotent_mutation() {
+        let dir = tempdir().unwrap();
+        let store = ProjectStore::new(dir.path());
+        let request = MutationRequest {
+            operation_id: "op-migrate-0001".into(),
+            session_id: "session-1".into(),
+            owner_id: "owner-1".into(),
+            expected_revision: None,
+            mutation: ProjectMutation::ProjectMigrate {
+                source_run_id: "v1-run-42".into(),
+                title: "Migrated study".into(),
+                research_question: "What survived migration?".into(),
+            },
+        };
+
+        let first = store.apply_mutation(&request).unwrap();
+        assert_eq!(first.kind, "project_migrate");
+        let migration: super::super::migration::MigrationResult =
+            serde_json::from_value(first.result.clone()).unwrap();
+        assert_eq!(migration.source_run_id, "v1-run-42");
+        assert_eq!(migration.target_project_id, first.project_id);
+        let project = store.load_project(&first.project_id).unwrap();
+        assert_eq!(project.owner_id.0, "owner-1");
+        assert!(project.sessions.contains(&"v1-run-42".to_string()));
+
+        let replay = store.apply_mutation(&request).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.project_id, first.project_id);
         assert_eq!(store.list_projects().unwrap().len(), 1);
     }
 

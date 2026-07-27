@@ -3,7 +3,7 @@
 use super::*;
 use crate::session::commands::{
     PreparedScienceCsv, PreparedScienceFetch, PreparedScienceImport,
-    PreparedScienceProjectMutation, PreparedScienceSshScpAdmission,
+    PreparedScienceProjectMutation, PreparedScienceSeqAnalyze, PreparedScienceSshScpAdmission,
     PreparedScienceWorkflowExecution,
 };
 use sha2::Digest as _;
@@ -60,6 +60,30 @@ fn quote(value: &str) -> xai_grok_science::Result<String> {
     shlex::try_quote(value)
         .map(|quoted| quoted.into_owned())
         .map_err(|_| xai_grok_science::ScienceError::Invalid("NUL in science tool path".into()))
+}
+
+fn validate_project_mutation_actor_roots(
+    actor_workspace: &std::path::Path,
+    store: &xai_grok_science::ScienceStore,
+    project_root: &std::path::Path,
+    context: &xai_grok_science::RunContext,
+) -> xai_grok_science::Result<()> {
+    let actor_workspace = dunce::canonicalize(actor_workspace)?;
+    let project_root_canonical = dunce::canonicalize(project_root)?;
+    let store_root = dunce::canonicalize(store.root())?;
+    let artifact_root = dunce::canonicalize(&context.artifact_root)?;
+    if context.workspace_root != actor_workspace
+        || project_root != project_root_canonical
+        || project_root_canonical != store_root
+        || !project_root_canonical.starts_with(&actor_workspace)
+        || context.artifact_root != artifact_root
+        || artifact_root != project_root_canonical.join("runs")
+    {
+        return Err(xai_grok_science::ScienceError::Invalid(
+            "project mutation store or paths do not belong to this SessionActor workspace".into(),
+        ));
+    }
+    Ok(())
 }
 
 impl SessionActor {
@@ -245,6 +269,80 @@ impl SessionActor {
             command,
             output_path,
         })
+    }
+
+    /// Admit deterministic sequence analysis inside the sole SessionActor.
+    /// The adapter may resolve and read a confined source, but it cannot open
+    /// a durable run or commit output. Those authorities start here.
+    pub(super) fn prepare_science_seq_analyze(
+        &self,
+        store: xai_grok_science::ScienceStore,
+        context: xai_grok_science::RunContext,
+        source_path: std::path::PathBuf,
+        source_bytes: Vec<u8>,
+    ) -> xai_grok_science::Result<PreparedScienceSeqAnalyze> {
+        let actor_session = self.session_info.id.0.as_ref();
+        let actor_workspace = dunce::canonicalize(&self.session_info.cwd)?;
+        let canonical_source = dunce::canonicalize(&source_path)?;
+        if context.session_id != actor_session {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "sequence analysis session does not match this SessionActor".into(),
+            ));
+        }
+        if context.workspace_root != actor_workspace
+            || canonical_source != source_path
+            || !canonical_source.starts_with(&actor_workspace)
+            || !canonical_source.is_file()
+            || !context.artifact_root.starts_with(&actor_workspace)
+            || dunce::canonicalize(store.root())? != context.artifact_root
+        {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "sequence analysis store or paths do not belong to this SessionActor workspace"
+                    .into(),
+            ));
+        }
+        let ticket = xai_grok_science::seqbench::begin_analysis(&store, context.clone())?;
+        let target = context
+            .artifact_root
+            .join("runs")
+            .join(&ticket.run_id.0)
+            .join("artifacts")
+            .display()
+            .to_string();
+        Ok(PreparedScienceSeqAnalyze {
+            store,
+            ticket,
+            source_path,
+            source_bytes,
+            target,
+        })
+    }
+
+    pub(super) fn finish_science_seq_analyze(
+        &self,
+        prepared: PreparedScienceSeqAnalyze,
+        decision: xai_grok_science::ApprovalDecision,
+        reason: String,
+    ) -> xai_grok_science::Result<xai_grok_science::seqbench::SeqAnalyzeResult> {
+        if decision != xai_grok_science::ApprovalDecision::Allow {
+            let terminal = xai_grok_science::csv::finish_without_execution(
+                &prepared.store,
+                &prepared.ticket,
+                decision,
+                reason,
+            )?;
+            return Err(xai_grok_science::ScienceError::Invalid(format!(
+                "science run {} finished {:?}",
+                prepared.ticket.run_id.0, terminal.state
+            )));
+        }
+        xai_grok_science::csv::mark_allowed(&prepared.store, &prepared.ticket)?;
+        xai_grok_science::seqbench::finish_analysis(
+            &prepared.store,
+            prepared.ticket,
+            &prepared.source_path,
+            &prepared.source_bytes,
+        )
     }
 
     pub(super) async fn finish_science_import(
@@ -664,6 +762,12 @@ impl SessionActor {
                 "science mutation owner does not match its run context".into(),
             ));
         }
+        validate_project_mutation_actor_roots(
+            std::path::Path::new(&self.session_info.cwd),
+            &store,
+            &project_root,
+            &context,
+        )?;
         let project_store = xai_grok_science::project::ProjectStore::new(&project_root);
 
         // Project binding: the run context must name the project actually
@@ -689,6 +793,14 @@ impl SessionActor {
         if let Some(record) = project_store.lookup_operation(&request.operation_id)? {
             if record.session_id != request.session_id || record.owner_id != request.owner_id {
                 return Err(xai_grok_science::ScienceError::Ownership);
+            }
+            if record.kind != request.mutation.kind() {
+                return Err(xai_grok_science::ScienceError::Invalid(format!(
+                    "operation {} was already applied as {}, not {}",
+                    request.operation_id,
+                    record.kind,
+                    request.mutation.kind()
+                )));
             }
             return Ok(PreparedScienceProjectMutation {
                 store,
@@ -1164,4 +1276,102 @@ fn begin_project_mutation_run(
         None,
     )?;
     Ok(ticket)
+}
+
+#[cfg(test)]
+mod actor_root_tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    fn context(
+        workspace: &std::path::Path,
+        project_root: &std::path::Path,
+    ) -> xai_grok_science::RunContext {
+        xai_grok_science::RunContext {
+            run_id: xai_grok_science::RunId::new_v7(),
+            project_id: xai_grok_science::ProjectId::new("pending-op-root-test"),
+            session_id: "session-root-test".into(),
+            owner_id: "owner-root-test".into(),
+            workspace_root: workspace.to_path_buf(),
+            provider: "offline-deterministic".into(),
+            approval_policy: "production-session-permission".into(),
+            tool_profile: "science-project-mutation-v1".into(),
+            artifact_root: project_root.join("runs"),
+            environment: BTreeMap::from([("network".into(), "disabled".into())]),
+        }
+    }
+
+    #[test]
+    fn project_mutation_roots_are_rechecked_at_the_actor_boundary() {
+        let workspace = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let workspace = dunce::canonicalize(workspace.path()).unwrap();
+        let outside = dunce::canonicalize(outside.path()).unwrap();
+        let project_root = workspace.join("science-store");
+        std::fs::create_dir_all(project_root.join("runs")).unwrap();
+        let store = xai_grok_science::ScienceStore::new(&project_root);
+        let good = context(&workspace, &project_root);
+        validate_project_mutation_actor_roots(&workspace, &store, &project_root, &good).unwrap();
+
+        let outside_root = outside.join("science-store");
+        std::fs::create_dir_all(outside_root.join("runs")).unwrap();
+        let outside_store = xai_grok_science::ScienceStore::new(&outside_root);
+        assert!(
+            validate_project_mutation_actor_roots(
+                &workspace,
+                &outside_store,
+                &outside_root,
+                &context(&workspace, &outside_root),
+            )
+            .is_err(),
+            "actor accepted a project store outside its workspace"
+        );
+
+        let other_root = workspace.join("other-store");
+        std::fs::create_dir_all(other_root.join("runs")).unwrap();
+        let other_store = xai_grok_science::ScienceStore::new(&other_root);
+        assert!(
+            validate_project_mutation_actor_roots(
+                &workspace,
+                &other_store,
+                &project_root,
+                &good,
+            )
+            .is_err(),
+            "actor accepted mismatched ScienceStore and ProjectStore roots"
+        );
+
+        let mut forged_workspace = good.clone();
+        forged_workspace.workspace_root = outside.clone();
+        assert!(
+            validate_project_mutation_actor_roots(
+                &workspace,
+                &store,
+                &project_root,
+                &forged_workspace,
+            )
+            .is_err(),
+            "actor accepted a forged RunContext workspace"
+        );
+
+        let mut forged_artifact_root = good;
+        forged_artifact_root.artifact_root = other_root.join("runs");
+        assert!(
+            validate_project_mutation_actor_roots(
+                &workspace,
+                &store,
+                &project_root,
+                &forged_artifact_root,
+            )
+            .is_err(),
+            "actor accepted an artifact root unrelated to the project store"
+        );
+        assert!(
+            std::fs::read_dir(project_root.join("runs"))
+                .unwrap()
+                .next()
+                .is_none(),
+            "root validation wrote inside the durable run root"
+        );
+    }
 }

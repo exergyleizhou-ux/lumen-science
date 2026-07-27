@@ -140,6 +140,32 @@ pub struct FinishScienceImport {
         oneshot::Sender<xai_grok_science::Result<xai_grok_science::import::ImportResult>>,
 }
 
+/// A deterministic sequence analysis admitted by the owning SessionActor and
+/// waiting on the production permission decision. The source bytes are
+/// immutable request input; only the actor may compute and commit outputs.
+pub struct PreparedScienceSeqAnalyze {
+    pub(crate) store: xai_grok_science::ScienceStore,
+    pub(crate) ticket: xai_grok_science::csv::ScienceRunTicket,
+    pub(crate) source_path: std::path::PathBuf,
+    pub(crate) source_bytes: Vec<u8>,
+    /// Store-owned artifact target shown in the permission prompt.
+    pub(crate) target: String,
+}
+pub struct BeginScienceSeqAnalyze {
+    pub(crate) store: xai_grok_science::ScienceStore,
+    pub(crate) context: xai_grok_science::RunContext,
+    pub(crate) source_path: std::path::PathBuf,
+    pub(crate) source_bytes: Vec<u8>,
+    pub(crate) respond_to: oneshot::Sender<xai_grok_science::Result<PreparedScienceSeqAnalyze>>,
+}
+pub struct FinishScienceSeqAnalyze {
+    pub(crate) prepared: PreparedScienceSeqAnalyze,
+    pub(crate) decision: xai_grok_science::ApprovalDecision,
+    pub(crate) reason: String,
+    pub(crate) respond_to:
+        oneshot::Sender<xai_grok_science::Result<xai_grok_science::seqbench::SeqAnalyzeResult>>,
+}
+
 /// A connector fetch that has begun a durable run inside the session actor
 /// and awaits the production permission decision. `requests` are the
 /// policy-validated connector exchanges; `fixture_bytes` stand in for the
@@ -346,6 +372,11 @@ pub enum SessionCommand {
     /// session's production permission manager.
     BeginScienceImport(Box<BeginScienceImport>),
     FinishScienceImport(Box<FinishScienceImport>),
+    /// Deterministic sequence analysis still writes durable records and
+    /// artifacts, so it uses the same actor-owned begin/permission/finish
+    /// protocol as every other Science mutation.
+    BeginScienceSeqAnalyze(Box<BeginScienceSeqAnalyze>),
+    FinishScienceSeqAnalyze(Box<FinishScienceSeqAnalyze>),
     /// S3 phase one: begin a durable connector fetch run before the caller
     /// awaits this session's production permission manager.
     BeginScienceFetch(Box<BeginScienceFetch>),

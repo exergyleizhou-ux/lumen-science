@@ -497,20 +497,32 @@ def collect_authority() -> dict[str, Any]:
             {
                 "id": "AUTH-3",
                 "summary": (
-                    "seq_analyze writes artifacts from the ACP request task with no "
-                    "permission request and no durable run record"
+                    "seq_analyze routes through SessionActor begin/permission/finish "
+                    "and commits only store-owned hashed artifacts"
                 ),
-                "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs:536",
+                "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs",
+                "status": "closed",
                 "note": (
-                    "Its false 'SessionActor-gated' claim has been removed and it now "
-                    "reports 'ACP request task (not actor-gated)'."
+                    "The ACP task only confines and reads the source. SessionActor owns "
+                    "the durable run, Pending/Allow/Deny/Timeout/Cancel transitions, "
+                    "analysis, artifacts, evidence and provenance. Built-binary tests "
+                    "falsify direct writes, boundary forgery and refused-run artifacts."
                 ),
             },
             {
                 "id": "AUTH-6",
-                "summary": "project_migrate still mutates via a directly constructed ProjectStore",
-                "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs:981",
-                "note": "Marked KNOWN BYPASS in source; makes no authority claim.",
+                "summary": (
+                    "project_migrate is a typed, idempotent project mutation owned by "
+                    "the SessionActor"
+                ),
+                "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs",
+                "status": "closed",
+                "note": (
+                    "Migration now uses the existing project-mutation Begin/permission/"
+                    "Finish protocol. Actor-side workspace/store/run-root validation "
+                    "precedes durable admission; refusal creates no project or operation "
+                    "record."
+                ),
             },
             {
                 "id": "AUTH-4",

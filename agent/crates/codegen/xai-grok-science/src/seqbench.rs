@@ -86,10 +86,7 @@ pub fn parse_fasta(raw: &str) -> Result<Vec<Record>, String> {
     let mut cur_desc = String::new();
     let mut buf = String::new();
     let mut have = false;
-    let flush = |id: &str,
-                 desc: &str,
-                 buf: &mut String,
-                 out: &mut Vec<Record>| {
+    let flush = |id: &str, desc: &str, buf: &mut String, out: &mut Vec<Record>| {
         let seq = normalize_seq(buf);
         buf.clear();
         if seq.is_empty() {
@@ -196,7 +193,9 @@ pub fn markdown_report(a: &Analysis, source_label: &str) -> String {
             b.push('\n');
         }
     }
-    b.push_str("## Provenance\n\nGenerated offline by Lumen Science seqbench. Not medical advice.\n");
+    b.push_str(
+        "## Provenance\n\nGenerated offline by Lumen Science seqbench. Not medical advice.\n",
+    );
     b
 }
 
@@ -228,8 +227,7 @@ fn summarize(r: &Record) -> RecordSummary {
             } else {
                 pep
             };
-            s.translation_frames
-                .insert(format!("+{frame}"), short);
+            s.translation_frames.insert(format!("+{frame}"), short);
             let rc = reverse_complement(&r.sequence, rna);
             let pep_n = translate(&rc, frame);
             let short_n = if pep_n.len() > 80 {
@@ -237,8 +235,7 @@ fn summarize(r: &Record) -> RecordSummary {
             } else {
                 pep_n
             };
-            s.translation_frames
-                .insert(format!("-{frame}"), short_n);
+            s.translation_frames.insert(format!("-{frame}"), short_n);
         }
         s.orfs = find_orfs(&r.sequence, rna, 30);
         if r.kind == "dna" {
@@ -512,5 +509,328 @@ mod tests {
         let a2 = analyze(&r, raw.as_bytes());
         assert_eq!(a1.source_sha256, a2.source_sha256);
         assert_eq!(markdown_report(&a1, "a"), markdown_report(&a2, "a"));
+    }
+}
+
+// ── SessionActor-gated run protocol ──────────────────────────────────────────
+//
+// `seq_analyze` used to parse, analyse and `std::fs::write` two files straight
+// from the ACP request task: no permission prompt, no durable run record, no
+// ownership check, and artifacts that existed on disk with no store entry
+// claiming them. Every other science mutation goes through the actor's
+// begin/decide/finish protocol; this one did not, so the sentence "the
+// SessionActor is the sole execution authority" was not true.
+//
+// The two halves below close that. Analysis itself is pure and offline, so —
+// unlike the csv and import paths — there is no external tool to drive: the
+// actor decides, then computes and commits inside `finish_analysis`.
+
+use crate::csv::ScienceRunTicket;
+use crate::{
+    Approval, ApprovalDecision, Artifact, CallId, Evidence, Provenance, RunContext, RunRecord,
+    RunState, ScienceError, ScienceStore,
+};
+use chrono::Utc;
+use std::path::Path;
+
+/// Phase one: create the durable run and its pending approval BEFORE the
+/// permission manager is awaited, so every allow/deny/timeout/cancel has a
+/// record to finish rather than vanishing.
+pub fn begin_analysis(
+    store: &ScienceStore,
+    context: RunContext,
+) -> crate::Result<ScienceRunTicket> {
+    let ticket = ScienceRunTicket {
+        project_id: context.project_id.clone(),
+        run_id: context.run_id.clone(),
+        owner_id: context.owner_id.clone(),
+        call_id: CallId::new("science_seq_analyze"),
+    };
+    store.create_run(context)?;
+    store.append_event(
+        &ticket.run_id,
+        "SessionActor",
+        "run.created",
+        serde_json::json!({ "kind": "seq_analyze" }),
+    )?;
+    store.request_approval(Approval {
+        project_id: ticket.project_id.clone(),
+        run_id: ticket.run_id.clone(),
+        call_id: ticket.call_id.clone(),
+        owner_id: ticket.owner_id.clone(),
+        decision: ApprovalDecision::Pending,
+        decided_at: None,
+    })?;
+    store.transition(&ticket.run_id, RunState::AwaitingApproval, None)?;
+    Ok(ticket)
+}
+
+/// What an allowed analysis produced, all of it store-committed.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SeqAnalyzeResult {
+    pub run: RunRecord,
+    pub analysis: Analysis,
+    pub artifacts: Vec<Artifact>,
+    pub evidence: Vec<Evidence>,
+    pub provenance: Vec<Provenance>,
+    pub approvals: Vec<Approval>,
+    pub records: usize,
+    pub replay_after: u64,
+}
+
+/// Phase two, on an allowed run: compute, commit both outputs as ARTIFACTS
+/// (hashed and owned by the store, not loose files), record provenance, and
+/// land the run in a terminal state.
+pub fn finish_analysis(
+    store: &ScienceStore,
+    ticket: ScienceRunTicket,
+    source_path: &Path,
+    source_bytes: &[u8],
+) -> crate::Result<SeqAnalyzeResult> {
+    // The same guard the csv path uses: only an allowed, running run may
+    // commit output. Without it a caller could finish a run it never got
+    // permission for.
+    let run = store.load_run(&ticket.run_id)?;
+    if run.state != RunState::Running
+        || store
+            .approvals(&ticket.run_id)?
+            .iter()
+            .find(|approval| approval.call_id == ticket.call_id)
+            .is_none_or(|approval| approval.decision != ApprovalDecision::Allow)
+    {
+        return Err(ScienceError::Invalid(
+            "seq analysis output requires an allowed running run".into(),
+        ));
+    }
+
+    let text = String::from_utf8_lossy(source_bytes);
+    let records = match parse_fasta(&text) {
+        Ok(records) => records,
+        Err(error) => {
+            // A malformed input is a FAILED run, not a silent error: the run
+            // record must say what happened to the permission that was granted.
+            let _ = store.transition(&ticket.run_id, RunState::Failed, Some(error.clone()));
+            return Err(ScienceError::Invalid(error));
+        }
+    };
+    let analysis = analyze(&records, source_bytes);
+    let report = markdown_report(
+        &analysis,
+        source_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("input.fa"),
+    );
+    let analysis_json = serde_json::to_vec_pretty(&analysis)?;
+
+    let analysis_artifact = store.put_artifact(
+        &ticket.project_id,
+        &ticket.run_id,
+        &ticket.owner_id,
+        ticket.call_id.clone(),
+        Path::new("analysis.json"),
+        &analysis_json,
+        "application/json",
+        "table",
+    )?;
+    let report_artifact = store.put_artifact(
+        &ticket.project_id,
+        &ticket.run_id,
+        &ticket.owner_id,
+        ticket.call_id,
+        Path::new("report.md"),
+        report.as_bytes(),
+        "text/markdown",
+        "document",
+    )?;
+
+    let tool_identity = format!("{TOOL} {TOOL_VERSION} inside SessionActor");
+    store.add_provenance(Provenance {
+        run_id: ticket.run_id.clone(),
+        source_uri: format!("file://{}", source_path.display()),
+        source_commit: None,
+        source_path: Some(source_path.display().to_string()),
+        license: "caller-supplied input".into(),
+        retrieved_at: Utc::now(),
+        input_sha256: hex_sha256(source_bytes),
+        tool: tool_identity.clone(),
+        environment: BTreeMap::from([
+            ("algorithm".into(), "seqbench-v1".into()),
+            ("authority".into(), "SessionActor".into()),
+            ("network".into(), "disabled".into()),
+        ]),
+    })?;
+    store.add_evidence(Evidence {
+        run_id: ticket.run_id.clone(),
+        claim: format!(
+            "analyzed {} sequence record(s) with {TOOL} {TOOL_VERSION}",
+            analysis.records.len()
+        ),
+        source: source_path.display().to_string(),
+        artifact_sha256: Some(analysis_artifact.sha256.clone()),
+        verified_at: Utc::now(),
+    })?;
+    store.append_event(
+        &ticket.run_id,
+        "SessionActor",
+        "analysis.completed",
+        serde_json::json!({
+            "tool": tool_identity,
+            "records": analysis.records.len(),
+            "artifacts": [
+                analysis_artifact.sha256,
+                report_artifact.sha256,
+            ],
+        }),
+    )?;
+    let run = store.transition(&ticket.run_id, RunState::Succeeded, None)?;
+    store.append_event(
+        &ticket.run_id,
+        "HostVerification",
+        "run.succeeded",
+        serde_json::json!({}),
+    )?;
+    let events = store.events_after(&ticket.run_id, 0, 1_000)?;
+
+    Ok(SeqAnalyzeResult {
+        records: analysis.records.len(),
+        artifacts: store.artifacts(&ticket.run_id)?,
+        evidence: store.evidence(&ticket.run_id)?,
+        provenance: store.provenance(&ticket.run_id)?,
+        approvals: store.approvals(&ticket.run_id)?,
+        replay_after: events.last().map_or(0, |event| event.seq),
+        run,
+        analysis,
+    })
+}
+
+#[cfg(test)]
+mod protocol_tests {
+    use super::*;
+    use crate::{ProjectId, RunId};
+
+    const FASTA: &[u8] = b">seq1\nACGTACGT\n>seq2\nGAATTC\n";
+
+    fn context(root: &Path, project: &str, owner: &str) -> RunContext {
+        RunContext {
+            run_id: RunId::new_v7(),
+            project_id: ProjectId::new(project),
+            session_id: "session-seq".into(),
+            owner_id: owner.into(),
+            workspace_root: root.to_path_buf(),
+            provider: "offline-deterministic".into(),
+            approval_policy: "production-session-permission".into(),
+            tool_profile: "science-seqbench-v1".into(),
+            artifact_root: root.join("science-store"),
+            environment: BTreeMap::from([("network".into(), "disabled".into())]),
+        }
+    }
+
+    #[test]
+    fn begin_is_durable_and_finish_requires_allow() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path().join("science-store"));
+        let ticket = begin_analysis(&store, context(temp.path(), "project-a", "alice")).unwrap();
+
+        let run = store.load_run(&ticket.run_id).unwrap();
+        assert_eq!(run.state, RunState::AwaitingApproval);
+        assert_eq!(
+            store.approvals(&ticket.run_id).unwrap()[0].decision,
+            ApprovalDecision::Pending
+        );
+        assert!(
+            finish_analysis(&store, ticket.clone(), Path::new("input.fa"), FASTA).is_err(),
+            "finish without Allow must fail"
+        );
+        assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
+        assert!(store.evidence(&ticket.run_id).unwrap().is_empty());
+        assert!(store.provenance(&ticket.run_id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn non_allow_terminals_never_create_artifacts() {
+        for (decision, state) in [
+            (ApprovalDecision::Deny, RunState::Denied),
+            (ApprovalDecision::Timeout, RunState::TimedOut),
+            (ApprovalDecision::Cancel, RunState::Cancelled),
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let store = ScienceStore::new(temp.path().join("science-store"));
+            let ticket =
+                begin_analysis(&store, context(temp.path(), "project-a", "alice")).unwrap();
+            crate::csv::finish_without_execution(
+                &store,
+                &ticket,
+                decision,
+                "focused protocol test",
+            )
+            .unwrap();
+
+            assert_eq!(store.load_run(&ticket.run_id).unwrap().state, state);
+            assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
+            assert!(store.evidence(&ticket.run_id).unwrap().is_empty());
+            assert!(store.provenance(&ticket.run_id).unwrap().is_empty());
+        }
+    }
+
+    #[test]
+    fn allow_commits_only_store_owned_hashed_artifacts_and_audit_chain() {
+        let temp = tempfile::tempdir().unwrap();
+        let store_root = temp.path().join("science-store");
+        let store = ScienceStore::new(&store_root);
+        let ticket = begin_analysis(&store, context(temp.path(), "project-a", "alice")).unwrap();
+        crate::csv::mark_allowed(&store, &ticket).unwrap();
+        let result = finish_analysis(&store, ticket.clone(), Path::new("input.fa"), FASTA).unwrap();
+
+        assert_eq!(result.run.state, RunState::Succeeded);
+        assert_eq!(result.records, 2);
+        assert_eq!(result.artifacts.len(), 2);
+        assert_eq!(result.evidence.len(), 1);
+        assert_eq!(result.provenance.len(), 1);
+        assert_eq!(result.approvals[0].decision, ApprovalDecision::Allow);
+        assert_eq!(
+            result.evidence[0].artifact_sha256.as_deref(),
+            Some(result.artifacts[0].sha256.as_str())
+        );
+        for artifact in &result.artifacts {
+            let bytes = store
+                .artifact_bytes(
+                    &ticket.project_id,
+                    &ticket.run_id,
+                    &ticket.owner_id,
+                    &artifact.relative_path,
+                )
+                .unwrap();
+            assert_eq!(hex_sha256(&bytes), artifact.sha256);
+        }
+        assert!(
+            !store_root.join("project-a").join("seqbench").exists(),
+            "the legacy loose artifact path must not be written"
+        );
+    }
+
+    #[test]
+    fn owner_project_and_call_boundaries_fail_closed() {
+        for mutate in ["owner", "project", "call"] {
+            let temp = tempfile::tempdir().unwrap();
+            let store = ScienceStore::new(temp.path().join("science-store"));
+            let mut ticket =
+                begin_analysis(&store, context(temp.path(), "project-a", "alice")).unwrap();
+            crate::csv::mark_allowed(&store, &ticket).unwrap();
+            match mutate {
+                "owner" => ticket.owner_id = "mallory".into(),
+                "project" => ticket.project_id = ProjectId::new("project-b"),
+                "call" => ticket.call_id = CallId::new("forged-call"),
+                _ => unreachable!(),
+            }
+
+            assert!(
+                finish_analysis(&store, ticket.clone(), Path::new("input.fa"), FASTA).is_err(),
+                "{mutate} boundary was bypassed"
+            );
+            assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
+            assert!(store.evidence(&ticket.run_id).unwrap().is_empty());
+            assert!(store.provenance(&ticket.run_id).unwrap().is_empty());
+        }
     }
 }

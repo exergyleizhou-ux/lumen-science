@@ -29,12 +29,91 @@ fn internal(error: impl std::fmt::Display) -> acp::Error {
 }
 
 fn canonical_dir_within(path: PathBuf, workspace: &std::path::Path) -> Result<PathBuf, acp::Error> {
+    use std::path::Component;
+
+    if path
+        .components()
+        .any(|part| matches!(part, Component::CurDir | Component::ParentDir))
+    {
+        return Err(acp::Error::invalid_params()
+            .data("science path must contain no dot components"));
+    }
+    let workspace = std::fs::canonicalize(workspace).map_err(internal)?;
+    let path = if path.is_absolute() {
+        path
+    } else {
+        workspace.join(path)
+    };
+    let mut existing = path.as_path();
+    while !existing.exists() {
+        existing = existing.parent().ok_or_else(|| {
+            acp::Error::invalid_params().data("science path has no existing ancestor")
+        })?;
+    }
+    let existing = std::fs::canonicalize(existing).map_err(internal)?;
+    if !existing.starts_with(&workspace) {
+        return Err(acp::Error::invalid_params().data("science path must be inside session cwd"));
+    }
     std::fs::create_dir_all(&path).map_err(internal)?;
     let canonical = std::fs::canonicalize(path).map_err(internal)?;
-    if !canonical.starts_with(workspace) {
+    if !canonical.starts_with(&workspace) {
         return Err(acp::Error::invalid_params().data("science path must be inside session cwd"));
     }
     Ok(canonical)
+}
+
+#[cfg(test)]
+mod canonical_dir_tests {
+    use super::canonical_dir_within;
+    use std::path::PathBuf;
+
+    #[test]
+    fn directory_confinement_checks_before_creating() {
+        let workspace = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let workspace = std::fs::canonicalize(workspace.path()).unwrap();
+        let outside = std::fs::canonicalize(outside.path()).unwrap();
+
+        let inside = workspace.join("science-store").join("runs");
+        assert_eq!(
+            canonical_dir_within(inside.clone(), &workspace).unwrap(),
+            inside
+        );
+        assert!(inside.is_dir());
+
+        let outside_target = outside.join("must-not-be-created").join("runs");
+        assert!(canonical_dir_within(outside_target.clone(), &workspace).is_err());
+        assert!(
+            !outside_target.exists(),
+            "rejected outside path was created before confinement failed"
+        );
+
+        let dotted = workspace.join("nested").join("..").join("escaped");
+        assert!(canonical_dir_within(dotted.clone(), &workspace).is_err());
+        assert!(
+            !workspace.join("escaped").exists(),
+            "dot-component path created state"
+        );
+
+        let relative = canonical_dir_within(PathBuf::from("relative-store"), &workspace).unwrap();
+        assert_eq!(relative, workspace.join("relative-store"));
+        assert!(relative.is_dir());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn directory_confinement_rejects_an_existing_symlink_escape() {
+        let workspace = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let workspace = std::fs::canonicalize(workspace.path()).unwrap();
+        let outside = std::fs::canonicalize(outside.path()).unwrap();
+        let link = workspace.join("outside-link");
+        std::os::unix::fs::symlink(&outside, &link).unwrap();
+        let target = link.join("must-not-be-created");
+
+        assert!(canonical_dir_within(target.clone(), &workspace).is_err());
+        assert!(!outside.join("must-not-be-created").exists());
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -186,10 +265,26 @@ async fn run_project_mutation(
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
     let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
     let project_root = canonical_dir_within(store_root, &workspace)?;
-    let artifact_root = match artifact_root {
-        Some(root) => canonical_dir_within(root, &workspace)?,
-        None => canonical_dir_within(project_root.join("runs"), &workspace)?,
-    };
+    let run_root = canonical_dir_within(project_root.join("runs"), &workspace)?;
+    if let Some(root) = artifact_root {
+        use std::path::Component;
+        if root
+            .components()
+            .any(|part| matches!(part, Component::CurDir | Component::ParentDir))
+        {
+            return Err(acp::Error::invalid_params()
+                .data("artifactRoot for a project mutation must contain no dot components"));
+        }
+        let requested = if root.is_absolute() {
+            root
+        } else {
+            workspace.join(root)
+        };
+        if requested != run_root {
+            return Err(acp::Error::invalid_params()
+                .data("artifactRoot for a project mutation must equal storeRoot/runs"));
+        }
+    }
     // The run record is bound to the project being mutated; a create has no
     // project id yet, so the run is filed under the operation that makes one.
     let run_project = mutation
@@ -205,7 +300,7 @@ async fn run_project_mutation(
         provider: "offline-deterministic".into(),
         approval_policy: "production-session-permission".into(),
         tool_profile: "science-project-mutation-v1".into(),
-        artifact_root,
+        artifact_root: run_root,
         environment: BTreeMap::from([
             ("network".into(), "disabled".into()),
             ("locale".into(), "C".into()),
@@ -581,12 +676,17 @@ struct SeqAnalyzeParams {
     owner_id: String,
     artifact_root: PathBuf,
     source_path: PathBuf,
+    #[serde(default = "default_approval_timeout_ms")]
+    approval_timeout_ms: u64,
 }
 
 async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: SeqAnalyzeParams = parse_params(args)?;
     if params.project_id.is_empty() || params.owner_id.is_empty() {
         return Err(acp::Error::invalid_params().data("projectId and ownerId are required"));
+    }
+    if !(1..=300_000).contains(&params.approval_timeout_ms) {
+        return Err(acp::Error::invalid_params().data("approvalTimeoutMs must be in 1..=300000"));
     }
     let session_id = acp::SessionId::new(params.session_id);
     let handle = agent
@@ -604,48 +704,43 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
     if bytes.len() > 32 * 1024 * 1024 {
         return Err(acp::Error::invalid_params().data("source exceeds 32 MiB cap"));
     }
-    let text = String::from_utf8_lossy(&bytes);
-    let records = xai_grok_science::seqbench::parse_fasta(&text)
-        .map_err(|e| acp::Error::invalid_params().data(e))?;
-    let analysis = xai_grok_science::seqbench::analyze(&records, &bytes);
-    let report = xai_grok_science::seqbench::markdown_report(
-        &analysis,
-        source_path
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("input.fa"),
-    );
-    let analysis_json = serde_json::to_vec_pretty(&analysis).map_err(internal)?;
-    let out_dir = artifact_root
-        .join(&params.project_id)
-        .join("seqbench");
-    std::fs::create_dir_all(&out_dir).map_err(internal)?;
-    let analysis_path = out_dir.join("analysis.json");
-    let report_path = out_dir.join("report.md");
-    std::fs::write(&analysis_path, &analysis_json).map_err(internal)?;
-    std::fs::write(&report_path, report.as_bytes()).map_err(internal)?;
-    let analysis_sha = xai_grok_science::seqbench::hex_sha256(&analysis_json);
-    let report_sha = xai_grok_science::seqbench::hex_sha256(report.as_bytes());
+    let context = RunContext {
+        run_id: RunId::new_v7(),
+        project_id: ProjectId::new(params.project_id),
+        session_id: session_id.0.to_string(),
+        owner_id: params.owner_id,
+        workspace_root: workspace,
+        provider: "offline-deterministic".into(),
+        approval_policy: "production-session-permission".into(),
+        tool_profile: "science-seqbench-v1".into(),
+        artifact_root: artifact_root.clone(),
+        environment: BTreeMap::from([
+            ("network".into(), "disabled".into()),
+            ("locale".into(), "C".into()),
+        ]),
+    };
+    let result = agent
+        .run_science_seq_analyze(
+            &session_id,
+            ScienceStore::new(artifact_root),
+            context,
+            source_path,
+            bytes,
+            Duration::from_millis(params.approval_timeout_ms),
+        )
+        .await
+        .map_err(internal)?;
     to_raw_response(&serde_json::json!({
-        "projectId": params.project_id,
-        "ownerId": params.owner_id,
-        "sessionId": session_id.0,
-        "sourcePath": source_path,
-        "sourceSha256": analysis.source_sha256,
-        "recordCount": records.len(),
-        "analysisPath": analysis_path,
-        "analysisSha256": analysis_sha,
-        "reportPath": report_path,
-        "reportSha256": report_sha,
-        "tool": analysis.tool,
-        "toolVersion": analysis.tool_version,
+        "run": result.run,
+        "analysis": result.analysis,
+        "artifacts": result.artifacts,
+        "evidence": result.evidence,
+        "provenance": result.provenance,
+        "approvals": result.approvals,
+        "recordCount": result.records,
+        "replayAfter": result.replay_after,
+        "runtimeAuthority": "SessionActor-gated ACP adapter",
         "network": "disabled",
-        // NOT SessionActor-gated. This handler still writes artifacts from the
-        // ACP request task with no SessionCommand, no permission request and
-        // no durable run record. The previous "SessionActor-gated ACP adapter"
-        // claim here was false; do not restore it until seq_analyze routes
-        // through the actor the way the WP-2 mutations now do.
-        "runtimeAuthority": "ACP request task (not actor-gated)",
     }))
 }
 
@@ -1085,23 +1180,66 @@ async fn handle_evidence_reproduction(agent: &MvpAgent, args: &acp::ExtRequest) 
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct ProjectMigrateParams { session_id: String, store_root: PathBuf, run_id: String, owner_id: String, title: String, question: String }
+struct ProjectMigrateParams {
+    session_id: String,
+    store_root: PathBuf,
+    run_id: String,
+    owner_id: String,
+    title: String,
+    question: String,
+    operation_id: String,
+    #[serde(default)]
+    artifact_root: Option<PathBuf>,
+    #[serde(default = "default_approval_timeout_ms")]
+    approval_timeout_ms: u64,
+}
 
-/// KNOWN BYPASS: unlike the four WP-2 mutations above, this still constructs a
-/// ProjectStore on the ACP request task and writes a project record with no
-/// SessionCommand, no permission request and no durable run record. It makes
-/// no `runtimeAuthority` claim for that reason. Route it through
-/// `run_project_mutation` when the migration gains a typed mutation variant.
+/// Migrate a V1 run through the same typed SessionActor mutation protocol as
+/// project creation. The ACP request task resolves only paths and parameters;
+/// permission, the durable run and the project-store write all remain actor
+/// owned.
 async fn handle_project_migrate(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: ProjectMigrateParams = parse_params(args)?;
-    let session_id = acp::SessionId::new(params.session_id);
-    let handle = agent.get_session_handle(&session_id)
-        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
-    let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root);
-    let result = store.migrate_v1_to_v2(params.run_id, params.owner_id, params.title, params.question).map_err(internal)?;
-    to_raw_response(&result)
+    if params.run_id.is_empty() {
+        return Err(acp::Error::invalid_params().data("runId is required"));
+    }
+    if params.title.is_empty() {
+        return Err(acp::Error::invalid_params().data("title is required"));
+    }
+    if params.question.is_empty() {
+        return Err(acp::Error::invalid_params().data("question is required"));
+    }
+    let outcome = run_project_mutation(
+        agent,
+        params.session_id,
+        params.owner_id,
+        params.store_root,
+        params.artifact_root,
+        params.operation_id,
+        None,
+        params.approval_timeout_ms,
+        xai_grok_science::project::ProjectMutation::ProjectMigrate {
+            source_run_id: params.run_id,
+            title: params.title,
+            research_question: params.question,
+        },
+    )
+    .await?;
+
+    // Preserve the legacy migration fields at the top level while adding the
+    // actor proof carried by every typed project mutation response.
+    let mut response = outcome.result;
+    let fields = response
+        .as_object_mut()
+        .ok_or_else(|| internal("project migration returned a non-object result"))?;
+    fields.insert("operationId".into(), outcome.operation_id.into());
+    fields.insert("revision".into(), outcome.revision.into());
+    fields.insert("replayed".into(), outcome.replayed.into());
+    fields.insert(
+        "runtimeAuthority".into(),
+        "SessionActor-gated ACP adapter".into(),
+    );
+    to_raw_response(&response)
 }
 
 // ── WP-4/5/6/7/8 preview handlers ────────────────────────────────

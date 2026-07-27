@@ -370,6 +370,99 @@ impl SessionHandle {
             .map_err(|_| xai_grok_science::ScienceError::Invalid("session actor stopped".into()))?
     }
 
+    /// Deterministic sequence analysis still produces durable artifacts. Begin
+    /// and finish therefore run in the SessionActor, with the existing
+    /// production permission manager between them.
+    pub async fn run_science_seq_analyze_with_approval_timeout(
+        &self,
+        store: xai_grok_science::ScienceStore,
+        context: xai_grok_science::RunContext,
+        source_path: std::path::PathBuf,
+        source_bytes: Vec<u8>,
+        approval_timeout: std::time::Duration,
+    ) -> xai_grok_science::Result<xai_grok_science::seqbench::SeqAnalyzeResult> {
+        use xai_grok_workspace::permission::{AccessKind, Decision};
+        let (begin_tx, begin_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SessionCommand::BeginScienceSeqAnalyze(Box::new(
+                crate::session::commands::BeginScienceSeqAnalyze {
+                    store,
+                    context,
+                    source_path,
+                    source_bytes,
+                    respond_to: begin_tx,
+                },
+            )))
+            .map_err(|_| {
+                xai_grok_science::ScienceError::Invalid("session actor unavailable".into())
+            })?;
+        let prepared = begin_rx.await.map_err(|_| {
+            xai_grok_science::ScienceError::Invalid("session actor stopped".into())
+        })??;
+        let call_id = acp::ToolCallId::new(std::sync::Arc::from(format!(
+            "science-seq-analyze-{}",
+            prepared.ticket.run_id.0
+        )));
+        let update = acp::ToolCallUpdate::new(
+            call_id,
+            acp::ToolCallUpdateFields::new()
+                .kind(Some(acp::ToolKind::Other))
+                .title(Some("Lumen Science sequence analysis".into())),
+        );
+        let permission = tokio::time::timeout(
+            approval_timeout,
+            self.permission_handle.request(
+                AccessKind::Edit(prepared.target.clone()),
+                update,
+                Some(self.info.id.0.to_string()),
+                None,
+                None,
+            ),
+        )
+        .await;
+        let (decision, reason) = match permission {
+            Err(_) => (
+                xai_grok_science::ApprovalDecision::Timeout,
+                format!(
+                    "permission request timed out after {} ms",
+                    approval_timeout.as_millis()
+                ),
+            ),
+            Ok(Decision::Allow) => (xai_grok_science::ApprovalDecision::Allow, String::new()),
+            Ok(Decision::Ask) => (
+                xai_grok_science::ApprovalDecision::Deny,
+                "permission manager returned unresolved Ask".into(),
+            ),
+            Ok(Decision::Reject(reason)) | Ok(Decision::PolicyDeny(reason)) => {
+                (xai_grok_science::ApprovalDecision::Deny, reason)
+            }
+            Ok(Decision::Cancelled) => (
+                xai_grok_science::ApprovalDecision::Cancel,
+                "permission request cancelled".into(),
+            ),
+            Ok(Decision::FollowupMessage(message)) => (
+                xai_grok_science::ApprovalDecision::Deny,
+                format!("permission requires follow-up: {message}"),
+            ),
+        };
+        let (respond_to, response) = oneshot::channel();
+        self.cmd_tx
+            .send(SessionCommand::FinishScienceSeqAnalyze(Box::new(
+                crate::session::commands::FinishScienceSeqAnalyze {
+                    prepared,
+                    decision,
+                    reason,
+                    respond_to,
+                },
+            )))
+            .map_err(|_| {
+                xai_grok_science::ScienceError::Invalid("session actor unavailable".into())
+            })?;
+        response
+            .await
+            .map_err(|_| xai_grok_science::ScienceError::Invalid("session actor stopped".into()))?
+    }
+
     /// S3 connector fetch: begins a durable run inside this session actor,
     /// awaits the production permission bridge, then finishes through the
     /// actor so the offline response bytes transit the formal workspace

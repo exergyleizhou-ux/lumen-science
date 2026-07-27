@@ -1300,6 +1300,262 @@ async fn test_stdio_science_import_csv_fasta_product_path() {
     .await;
 }
 
+/// `seq_analyze` must cross the real SessionActor permission seam and commit
+/// only store-owned, hash-addressed artifacts. This test specifically rejects
+/// the former ACP-task `std::fs::write(artifactRoot/project/seqbench/...)`
+/// implementation: that loose directory must not exist.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let artifact_root = workdir.path().join("science-seq-store");
+        let source = workdir.path().join("micro.fasta");
+        std::fs::copy(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../xai-grok-science/fixtures/micro.fasta"
+            ),
+            &source,
+        )
+        .expect("copy fixed sequence fixture");
+
+        let client = GrokStdioClient::spawn(&server, workdir.path()).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+        let response = tokio::time::timeout(
+            Duration::from_secs(30),
+            client.ext_method(
+                "x.ai/science/seq_analyze",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": "science-seq-project",
+                    "ownerId": "science-owner",
+                    "artifactRoot": artifact_root,
+                    "sourcePath": source,
+                    "approvalTimeoutMs": 5_000,
+                }),
+            ),
+        )
+        .await
+        .expect("seq_analyze timed out")
+        .unwrap_or_else(|error| {
+            panic!(
+                "seq_analyze failed: {error:?}\nstderr:\n{}",
+                client.stderr()
+            )
+        });
+        let result: serde_json::Value =
+            serde_json::from_str(response.0.get()).expect("seq_analyze returned JSON");
+
+        assert_eq!(result["runtimeAuthority"], "SessionActor-gated ACP adapter");
+        assert_eq!(result["run"]["state"], "succeeded", "result: {result}");
+        assert_eq!(result["recordCount"], 2, "result: {result}");
+        let artifacts = result["artifacts"].as_array().expect("artifacts array");
+        assert_eq!(artifacts.len(), 2, "result: {result}");
+        assert_eq!(
+            result["approvals"][0]["decision"], "allow",
+            "result: {result}"
+        );
+        assert_eq!(
+            result["evidence"].as_array().map(Vec::len),
+            Some(1),
+            "result: {result}"
+        );
+        assert_eq!(
+            result["provenance"].as_array().map(Vec::len),
+            Some(1),
+            "result: {result}"
+        );
+
+        let run_id = xai_grok_science::RunId::new(
+            result["run"]["context"]["run_id"]
+                .as_str()
+                .expect("durable run id"),
+        );
+        let project_id = xai_grok_science::ProjectId::new("science-seq-project");
+        let store = xai_grok_science::ScienceStore::new(&artifact_root);
+        assert_eq!(
+            store.load_run(&run_id).expect("reopen durable run").state,
+            xai_grok_science::RunState::Succeeded
+        );
+        for artifact in store.artifacts(&run_id).expect("reopen artifacts") {
+            let bytes = store
+                .artifact_bytes(
+                    &project_id,
+                    &run_id,
+                    "science-owner",
+                    &artifact.relative_path,
+                )
+                .expect("read registered artifact");
+            assert_eq!(format!("{:x}", Sha256::digest(bytes)), artifact.sha256);
+        }
+        assert!(
+            !artifact_root
+                .join("science-seq-project")
+                .join("seqbench")
+                .exists(),
+            "legacy ACP-task loose artifact directory was written"
+        );
+    })
+    .await;
+}
+
+/// Owner/session/workspace checks must fail before a sequence run is opened.
+/// An endpoint that merely checks the source in the UI layer would accept at
+/// least one of these forged requests.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_seq_analyze_boundaries_fail_closed() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let artifact_root = workdir.path().join("science-seq-store");
+        let source = workdir.path().join("inside.fasta");
+        std::fs::write(&source, b">inside\nACGT\n").expect("write inside fixture");
+        let outside = tempfile::NamedTempFile::new().expect("outside fixture");
+        std::fs::write(outside.path(), b">outside\nACGT\n").expect("write outside fixture");
+
+        let client = GrokStdioClient::spawn(&server, workdir.path()).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+
+        for (label, params) in [
+            (
+                "empty owner",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": "science-seq-project",
+                    "ownerId": "",
+                    "artifactRoot": artifact_root,
+                    "sourcePath": source,
+                }),
+            ),
+            (
+                "unknown session",
+                serde_json::json!({
+                    "sessionId": "forged-session",
+                    "projectId": "science-seq-project",
+                    "ownerId": "science-owner",
+                    "artifactRoot": artifact_root,
+                    "sourcePath": source,
+                }),
+            ),
+            (
+                "outside workspace",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": "science-seq-project",
+                    "ownerId": "science-owner",
+                    "artifactRoot": artifact_root,
+                    "sourcePath": outside.path(),
+                }),
+            ),
+        ] {
+            assert!(
+                client
+                    .ext_method("x.ai/science/seq_analyze", params)
+                    .await
+                    .is_err(),
+                "{label} request was accepted"
+            );
+        }
+        assert!(
+            !artifact_root.join("runs").exists(),
+            "rejected boundary requests opened durable runs"
+        );
+    })
+    .await;
+}
+
+/// A production permission refusal closes the durable run but must not create
+/// an artifact, evidence, provenance, or the legacy loose output.
+///
+/// The stdio harness' `PermissionResponse::Reject` becomes
+/// `RequestPermissionOutcome::Cancelled` in the ACP bridge, so this product
+/// seam exercises the Cancelled terminal. The protocol tests separately prove
+/// the Denied terminal has the same no-output invariant.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_seq_analyze_denied_writes_nothing() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let artifact_root = workdir.path().join("science-seq-store");
+        let source = workdir.path().join("micro.fasta");
+        std::fs::copy(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../xai-grok-science/fixtures/micro.fasta"
+            ),
+            &source,
+        )
+        .expect("copy fixed sequence fixture");
+
+        let client = GrokStdioClient::spawn_with_permission_response(
+            &server,
+            workdir.path(),
+            PermissionResponse::Reject,
+        )
+        .await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+        let denied = client
+            .ext_method(
+                "x.ai/science/seq_analyze",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": "science-seq-project",
+                    "ownerId": "science-owner",
+                    "artifactRoot": artifact_root,
+                    "sourcePath": source,
+                    "approvalTimeoutMs": 5_000,
+                }),
+            )
+            .await;
+        assert!(
+            denied.is_err(),
+            "denied analysis returned success: {denied:?}"
+        );
+
+        let runs = std::fs::read_dir(artifact_root.join("runs"))
+            .expect("denied request must leave a durable run")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("read durable runs");
+        assert_eq!(runs.len(), 1, "denied request opened multiple runs");
+        let run_id = xai_grok_science::RunId::new(
+            runs[0]
+                .file_name()
+                .to_str()
+                .expect("UTF-8 run id")
+                .to_owned(),
+        );
+        let store = xai_grok_science::ScienceStore::new(&artifact_root);
+        assert_eq!(
+            store.load_run(&run_id).expect("reopen denied run").state,
+            xai_grok_science::RunState::Cancelled
+        );
+        assert!(store.artifacts(&run_id).expect("artifacts").is_empty());
+        assert!(store.evidence(&run_id).expect("evidence").is_empty());
+        assert!(store.provenance(&run_id).expect("provenance").is_empty());
+        assert!(
+            !artifact_root
+                .join("science-seq-project")
+                .join("seqbench")
+                .exists(),
+            "denied request wrote the legacy loose artifact directory"
+        );
+    })
+    .await;
+}
+
 /// Science GC2 product proof: PubMed (two-exchange protocol), ChEMBL,
 /// Crossref, UniProt, Europe PMC, and OpenAlex (single-exchange) fetches run through the SessionActor
 /// product path with offline fixtures as mock transport. Each run persists raw response
@@ -2606,10 +2862,118 @@ async fn test_stdio_science_project_mutation_fails_closed() {
             "mutation with an unknown session was accepted: {wrong_session:?}"
         );
 
+        // 3. Confinement must happen before directory creation. The old helper
+        //    called create_dir_all first and only then noticed the path was
+        //    outside the session workspace.
+        let outside = tempfile::tempdir().expect("outside root");
+        let outside_store = outside.path().join("must-not-be-created");
+        let outside_request = client
+            .ext_method(
+                "x.ai/science/project_create",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "ownerId": "science-owner",
+                    "storeRoot": outside_store,
+                    "title": "Outside workspace",
+                    "researchQuestion": "?",
+                    "operationId": "op-outside-root",
+                }),
+            )
+            .await;
+        assert!(
+            outside_request.is_err(),
+            "mutation with an outside store root was accepted: {outside_request:?}"
+        );
+        assert!(
+            !outside_store.exists(),
+            "outside store root was created before the request failed"
+        );
+
+        // 4. Project mutations have one actual durable run root:
+        //    storeRoot/runs. A different artifactRoot would make RunContext
+        //    claim one location while ScienceStore writes another.
+        let unrelated_artifacts = workdir.path().join("unrelated-artifacts");
+        let mismatched_artifact_root = client
+            .ext_method(
+                "x.ai/science/project_create",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "ownerId": "science-owner",
+                    "storeRoot": store_root,
+                    "artifactRoot": unrelated_artifacts,
+                    "title": "Mismatched roots",
+                    "researchQuestion": "?",
+                    "operationId": "op-mismatched-roots",
+                }),
+            )
+            .await;
+        assert!(
+            mismatched_artifact_root.is_err(),
+            "mutation with mismatched store/artifact roots was accepted: {mismatched_artifact_root:?}"
+        );
+        assert!(
+            !unrelated_artifacts.exists(),
+            "rejected artifact root was created"
+        );
+        assert_eq!(
+            std::fs::read_dir(store_root.join("runs"))
+                .expect("empty canonical run root")
+                .count(),
+            0,
+            "root validation opened a durable run"
+        );
+
         assert!(
             !store_root.join("projects").exists(),
             "a rejected mutation created durable state"
         );
+    })
+    .await;
+}
+
+/// The desktop intentionally sends `storeRoot: "science-store"`. A safe
+/// relative path binds to the session workspace; rejecting every relative path
+/// would make source-level confinement green while breaking the real product.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_project_mutation_relative_store_is_workspace_bound() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let client = GrokStdioClient::spawn(&server, workdir.path()).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+
+        let response: serde_json::Value = serde_json::from_str(
+            client
+                .ext_method(
+                    "x.ai/science/project_create",
+                    serde_json::json!({
+                        "sessionId": session_id.0.as_ref(),
+                        "ownerId": "science-owner",
+                        "storeRoot": "science-store",
+                        "title": "Relative desktop store",
+                        "researchQuestion": "Is this bound to the session workspace?",
+                        "operationId": "op-relative-store",
+                        "approvalTimeoutMs": 5_000,
+                    }),
+                )
+                .await
+                .expect("safe relative project mutation failed")
+                .0
+                .get(),
+        )
+        .expect("relative project mutation returned JSON");
+        assert_eq!(
+            response["runtimeAuthority"],
+            "SessionActor-gated ACP adapter"
+        );
+        let store = xai_grok_science::project::ProjectStore::new(
+            workdir.path().join("science-store"),
+        );
+        assert_eq!(store.list_projects().expect("relative store projects").len(), 1);
     })
     .await;
 }
@@ -2661,6 +3025,198 @@ async fn test_stdio_science_project_mutation_denied_writes_nothing() {
             projects.is_empty(),
             "denied mutation persisted {} project(s)",
             projects.len()
+        );
+    })
+    .await;
+}
+
+/// The legacy migration endpoint must use the typed project-mutation seam:
+/// one permission, one durable run, one idempotent project-store mutation.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_project_migrate_is_actor_gated_and_idempotent() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let store_root = workdir.path().join("science-migration-store");
+
+        let client = GrokStdioClient::spawn(&server, workdir.path()).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+        let params = || {
+            serde_json::json!({
+                "sessionId": session_id.0.as_ref(),
+                "ownerId": "science-owner",
+                "storeRoot": store_root,
+                "runId": "legacy-run-42",
+                "title": "Migrated restriction study",
+                "question": "Which V1 evidence remains valid?",
+                "operationId": "op-migrate-0001",
+                "approvalTimeoutMs": 5_000,
+            })
+        };
+
+        let first: serde_json::Value = serde_json::from_str(
+            client
+                .ext_method("x.ai/science/project_migrate", params())
+                .await
+                .expect("project_migrate failed")
+                .0
+                .get(),
+        )
+        .expect("project_migrate returned JSON");
+        assert_eq!(
+            first["runtimeAuthority"], "SessionActor-gated ACP adapter",
+            "response: {first}"
+        );
+        assert_eq!(first["source_run_id"], "legacy-run-42");
+        assert_eq!(first["replayed"], false);
+        let project_id = xai_grok_science::project::ProjectId(
+            first["target_project_id"]
+                .as_str()
+                .expect("target project id")
+                .to_owned(),
+        );
+
+        let project_store = xai_grok_science::project::ProjectStore::new(&store_root);
+        let project = project_store
+            .load_project(&project_id)
+            .expect("reopen migrated project");
+        assert_eq!(project.owner_id.0, "science-owner");
+        assert!(project.sessions.contains(&"legacy-run-42".to_string()));
+        assert_eq!(project_store.list_projects().unwrap().len(), 1);
+
+        let runs = std::fs::read_dir(store_root.join("runs"))
+            .expect("durable migration run")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("read migration runs");
+        assert_eq!(runs.len(), 1);
+        let run_id = xai_grok_science::RunId::new(
+            runs[0]
+                .file_name()
+                .to_str()
+                .expect("UTF-8 run id")
+                .to_owned(),
+        );
+        let science_store = xai_grok_science::ScienceStore::new(&store_root);
+        assert_eq!(
+            science_store.load_run(&run_id).expect("load run").state,
+            xai_grok_science::RunState::Succeeded
+        );
+        assert_eq!(
+            science_store.approvals(&run_id).expect("approval")[0].decision,
+            xai_grok_science::ApprovalDecision::Allow
+        );
+
+        let replay: serde_json::Value = serde_json::from_str(
+            client
+                .ext_method("x.ai/science/project_migrate", params())
+                .await
+                .expect("migration replay failed")
+                .0
+                .get(),
+        )
+        .expect("migration replay returned JSON");
+        assert_eq!(replay["replayed"], true);
+        assert_eq!(replay["target_project_id"], first["target_project_id"]);
+        assert_eq!(project_store.list_projects().unwrap().len(), 1);
+        assert_eq!(
+            std::fs::read_dir(store_root.join("runs"))
+                .expect("migration runs after replay")
+                .count(),
+            1,
+            "idempotent replay opened a second durable run"
+        );
+    })
+    .await;
+}
+
+/// A refused migration may record the refusal, but it cannot create a project
+/// or burn the operation id.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_project_migrate_refusal_writes_no_project() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let store_root = workdir.path().join("science-migration-store");
+        let client = GrokStdioClient::spawn_with_permission_response(
+            &server,
+            workdir.path(),
+            PermissionResponse::Reject,
+        )
+        .await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+
+        let missing_operation = client
+            .ext_method(
+                "x.ai/science/project_migrate",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "ownerId": "science-owner",
+                    "storeRoot": store_root,
+                    "runId": "legacy-run-unkeyed",
+                    "title": "Must not exist",
+                    "question": "Where is the idempotency key?",
+                }),
+            )
+            .await;
+        assert!(
+            missing_operation.is_err(),
+            "migration without operationId succeeded: {missing_operation:?}"
+        );
+        assert!(
+            !store_root.join("runs").exists(),
+            "unkeyed migration opened a durable run"
+        );
+
+        let refused = client
+            .ext_method(
+                "x.ai/science/project_migrate",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "ownerId": "science-owner",
+                    "storeRoot": store_root,
+                    "runId": "legacy-run-denied",
+                    "title": "Must not exist",
+                    "question": "Was this denied?",
+                    "operationId": "op-migrate-denied",
+                    "approvalTimeoutMs": 5_000,
+                }),
+            )
+            .await;
+        assert!(refused.is_err(), "refused migration succeeded: {refused:?}");
+
+        let project_store = xai_grok_science::project::ProjectStore::new(&store_root);
+        assert!(project_store.list_projects().unwrap_or_default().is_empty());
+        assert!(
+            !store_root.join("operations").exists(),
+            "refused migration burned its operation id"
+        );
+        let runs = std::fs::read_dir(store_root.join("runs"))
+            .expect("refusal must be durable")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("read refused migration runs");
+        assert_eq!(runs.len(), 1);
+        let run_id = xai_grok_science::RunId::new(
+            runs[0]
+                .file_name()
+                .to_str()
+                .expect("UTF-8 run id")
+                .to_owned(),
+        );
+        let science_store = xai_grok_science::ScienceStore::new(&store_root);
+        assert_eq!(
+            science_store
+                .load_run(&run_id)
+                .expect("load refused run")
+                .state,
+            xai_grok_science::RunState::Cancelled
         );
     })
     .await;

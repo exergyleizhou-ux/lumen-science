@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "generator": "scripts/generate-science-status.py",
   "doc": "Machine-generated product status. Derived from the source tree and git only. Prose documents must point here rather than restate status. Regenerate with: python3 scripts/generate-science-status.py",
-  "sourceCommit": "140acc4279998b26a1fbc5db1b41b73f15338eb0",
-  "sourceCommitEpoch": 1785092860,
-  "sourceCommitIso": "2026-07-27T03:07:40+08:00",
+  "sourceCommit": "d0746ce5612a53732228b627fd44e26d48f32116",
+  "sourceCommitEpoch": 1785113447,
+  "sourceCommitIso": "2026-07-27T08:50:47+08:00",
   "gateVocabulary": {
     "states": [
       "pass",
@@ -175,7 +175,7 @@
         "usesVerifyTag": false,
         "sourceDateEpochFromCommit": false,
         "sourceDateEpochFromWallClock": false,
-        "lineCount": 284
+        "lineCount": 299
       }
     },
     "desktopCiAllowsTypecheckFailure": false
@@ -318,15 +318,17 @@
       },
       {
         "id": "AUTH-3",
-        "summary": "seq_analyze writes artifacts from the ACP request task with no permission request and no durable run record",
-        "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs:536",
-        "note": "Its false 'SessionActor-gated' claim has been removed and it now reports 'ACP request task (not actor-gated)'."
+        "summary": "seq_analyze routes through SessionActor begin/permission/finish and commits only store-owned hashed artifacts",
+        "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs",
+        "status": "closed",
+        "note": "The ACP task only confines and reads the source. SessionActor owns the durable run, Pending/Allow/Deny/Timeout/Cancel transitions, analysis, artifacts, evidence and provenance. Built-binary tests falsify direct writes, boundary forgery and refused-run artifacts."
       },
       {
         "id": "AUTH-6",
-        "summary": "project_migrate still mutates via a directly constructed ProjectStore",
-        "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs:981",
-        "note": "Marked KNOWN BYPASS in source; makes no authority claim."
+        "summary": "project_migrate is a typed, idempotent project mutation owned by the SessionActor",
+        "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs",
+        "status": "closed",
+        "note": "Migration now uses the existing project-mutation Begin/permission/Finish protocol. Actor-side workspace/store/run-root validation precedes durable admission; refusal creates no project or operation record."
       },
       {
         "id": "AUTH-4",

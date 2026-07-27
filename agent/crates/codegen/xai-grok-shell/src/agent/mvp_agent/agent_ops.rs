@@ -2076,6 +2076,37 @@ impl MvpAgent {
             .await
     }
 
+    /// Route deterministic sequence analysis through the owning SessionActor.
+    /// This facade verifies the session binding and adds no execution or store
+    /// authority of its own.
+    pub async fn run_science_seq_analyze(
+        &self,
+        session_id: &acp::SessionId,
+        store: xai_grok_science::ScienceStore,
+        context: xai_grok_science::RunContext,
+        source_path: PathBuf,
+        source_bytes: Vec<u8>,
+        approval_timeout: std::time::Duration,
+    ) -> xai_grok_science::Result<xai_grok_science::seqbench::SeqAnalyzeResult> {
+        if context.session_id != session_id.0.as_ref() {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "science context session does not match target SessionActor".into(),
+            ));
+        }
+        let handle = self.get_session_handle(session_id).ok_or_else(|| {
+            xai_grok_science::ScienceError::Invalid("science session not found".into())
+        })?;
+        handle
+            .run_science_seq_analyze_with_approval_timeout(
+                store,
+                context,
+                source_path,
+                source_bytes,
+                approval_timeout,
+            )
+            .await
+    }
+
     /// S3 connector fetch entry: verifies the science context targets this
     /// SessionActor and delegates to the session handle's
     /// begin/permission/finish protocol.
