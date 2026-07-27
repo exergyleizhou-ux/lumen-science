@@ -89,7 +89,7 @@
     "patch-package": "^8.0.1",
     "prettier": "^3.3.0",
     "tailwindcss": "^4.3.3",
-    "typescript": "^5.5.0",
+    "typescript": "^7.0.2",
     "vite": "^6.4.3",
     "vitest": "^3.2.7"
   },
