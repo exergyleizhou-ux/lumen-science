@@ -17,6 +17,7 @@
 
 use super::claim::Claim;
 use super::model::{ProjectId, ProjectStatus, ResearchProject};
+use super::review_store::ReviewVerdict;
 use super::store::ProjectStore;
 use crate::features::ScienceFeature;
 use crate::{Result, ScienceError};
@@ -63,6 +64,16 @@ pub enum ProjectMutation {
         label: String,
         run_id: Option<String>,
     },
+    ReviewRecord {
+        project_id: ProjectId,
+        reviewer_id: String,
+        verdict: ReviewVerdict,
+        summary: String,
+        claim_id: Option<String>,
+        source_run_id: String,
+        authority_run_id: String,
+        artifact_sha256s: Vec<String>,
+    },
 }
 
 impl ProjectMutation {
@@ -75,6 +86,7 @@ impl ProjectMutation {
             Self::QuestionUpdate { .. } => "question_update",
             Self::ClaimPropose { .. } => "claim_propose",
             Self::EvidenceAttach { .. } => "evidence_attach",
+            Self::ReviewRecord { .. } => "review_record",
         }
     }
 
@@ -85,14 +97,18 @@ impl ProjectMutation {
             Self::ProjectTransition { project_id, .. }
             | Self::QuestionUpdate { project_id, .. }
             | Self::ClaimPropose { project_id, .. }
-            | Self::EvidenceAttach { project_id, .. } => Some(project_id),
+            | Self::EvidenceAttach { project_id, .. }
+            | Self::ReviewRecord { project_id, .. } => Some(project_id),
         }
     }
 
     /// Capabilities that must all be enabled before the SessionActor may
     /// create a durable run or ask the operator to approve this mutation.
     pub fn required_features(&self) -> &'static [ScienceFeature] {
-        use ScienceFeature::{ClaimLifecycle, EvidenceGraph, MigrationChain, ResearchProject};
+        use ScienceFeature::{
+            ClaimLifecycle, Collaboration, EvidenceGraph, MigrationChain, ResearchProject,
+            ReviewPackage,
+        };
         match self {
             Self::ProjectCreate { .. }
             | Self::ProjectTransition { .. }
@@ -100,6 +116,13 @@ impl ProjectMutation {
             Self::ProjectMigrate { .. } => &[ResearchProject, MigrationChain],
             Self::ClaimPropose { .. } => &[ResearchProject, ClaimLifecycle, EvidenceGraph],
             Self::EvidenceAttach { .. } => &[ResearchProject, EvidenceGraph, ClaimLifecycle],
+            Self::ReviewRecord { .. } => &[
+                ResearchProject,
+                EvidenceGraph,
+                ClaimLifecycle,
+                Collaboration,
+                ReviewPackage,
+            ],
         }
     }
 }
@@ -204,6 +227,11 @@ impl ProjectStore {
                     record.kind,
                     request.mutation.kind()
                 )));
+            }
+            if record.kind == "review_record" {
+                let review: super::review_store::ReviewRecord =
+                    serde_json::from_value(record.result.clone())?;
+                self.verify_review_record(&review)?;
             }
             return Ok(MutationOutcome {
                 operation_id: record.operation_id,
@@ -363,6 +391,31 @@ impl ProjectStore {
                     }),
                 ))
             }
+            ProjectMutation::ReviewRecord {
+                project_id,
+                reviewer_id,
+                verdict,
+                summary,
+                claim_id,
+                source_run_id,
+                authority_run_id,
+                artifact_sha256s,
+            } => {
+                let review = self.record_review_inner(
+                    &request.operation_id,
+                    &request.session_id,
+                    &request.owner_id,
+                    project_id,
+                    reviewer_id,
+                    *verdict,
+                    summary,
+                    claim_id.clone(),
+                    source_run_id,
+                    authority_run_id,
+                    artifact_sha256s,
+                )?;
+                Ok((project_id.clone(), serde_json::to_value(review)?))
+            }
         }
     }
 }
@@ -387,7 +440,10 @@ mod tests {
 
     #[test]
     fn compound_mutations_declare_every_required_feature() {
-        use ScienceFeature::{ClaimLifecycle, EvidenceGraph, MigrationChain, ResearchProject};
+        use ScienceFeature::{
+            ClaimLifecycle, Collaboration, EvidenceGraph, MigrationChain, ResearchProject,
+            ReviewPackage,
+        };
 
         assert_eq!(
             create_request("op-features-create")
@@ -414,6 +470,26 @@ mod tests {
         assert_eq!(
             evidence.required_features(),
             &[ResearchProject, EvidenceGraph, ClaimLifecycle]
+        );
+        let review = ProjectMutation::ReviewRecord {
+            project_id: ProjectId("project-1".into()),
+            reviewer_id: "reviewer-1".into(),
+            verdict: ReviewVerdict::Pass,
+            summary: "Reviewed exact bytes.".into(),
+            claim_id: None,
+            source_run_id: "run-1".into(),
+            authority_run_id: "authority-run-1".into(),
+            artifact_sha256s: vec!["a".repeat(64)],
+        };
+        assert_eq!(
+            review.required_features(),
+            &[
+                ResearchProject,
+                EvidenceGraph,
+                ClaimLifecycle,
+                Collaboration,
+                ReviewPackage,
+            ]
         );
     }
 

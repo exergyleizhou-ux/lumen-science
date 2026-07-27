@@ -13,6 +13,20 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ProjectId(pub String);
 
+pub fn validate_project_id(project_id: &str) -> crate::Result<()> {
+    if project_id.is_empty()
+        || project_id.len() > 128
+        || !project_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    {
+        return Err(crate::ScienceError::Invalid(
+            "projectId must be 1..=128 [A-Za-z0-9_-] characters".into(),
+        ));
+    }
+    Ok(())
+}
+
 impl std::fmt::Display for ProjectId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)

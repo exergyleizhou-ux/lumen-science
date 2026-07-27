@@ -26,15 +26,6 @@ mod renderer {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReviewRecord {
-    pub reviewer_id: String,
-    pub verdict: String,
-    pub project_id: ProjectId,
-    pub claim_id: Option<String>,
-    pub notes: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollaborationRecord {
     pub project_id: ProjectId,
     pub collaborators: Vec<OwnerId>,
@@ -100,24 +91,6 @@ impl ProjectStore {
     }
 
     // ── WP-7: Review + Collaboration ──────────────────────────────
-    pub fn create_review_record(
-        &self,
-        project_id: &ProjectId,
-        reviewer_id: impl Into<String>,
-        verdict: impl Into<String>,
-        claim_id: Option<String>,
-    ) -> crate::Result<ReviewRecord> {
-        self.gates()
-            .require(ScienceFeature::Collaboration)?;
-        Ok(ReviewRecord {
-            reviewer_id: reviewer_id.into(),
-            verdict: verdict.into(),
-            project_id: project_id.clone(),
-            claim_id,
-            notes: vec!["Reviewer operates under SessionActor authority only.".into()],
-        })
-    }
-
     pub fn collaboration_invite(
         &self,
         project_id: &ProjectId,
@@ -180,10 +153,6 @@ mod tests {
         let p = store.create_project("o", "t", "q").unwrap();
         let idx = store.multimodal_index(&p.project_id).unwrap();
         assert!(!idx.parsers.is_empty());
-        let rev = store
-            .create_review_record(&p.project_id, "r1", "supported", None)
-            .unwrap();
-        assert_eq!(rev.verdict, "supported");
         let collab = store
             .collaboration_invite(&p.project_id, "o", "c1")
             .unwrap();

@@ -35,6 +35,12 @@ import { createOfflineCatalogMembershipAsserter } from '../src/main/files/hybrid
 import { AcpPreviewStore } from '../src/main/files/acp-preview-store.js'
 import { createNotebookService } from '../src/main/files/notebook-service.js'
 
+const A_HASH = 'a'.repeat(64)
+const B_HASH = 'b'.repeat(64)
+const C_HASH = 'c'.repeat(64)
+const SOURCE_RUN = 'review-source-run-1'
+const REVIEW_SUMMARY = 'The cited artifact bytes satisfy the explicit fixture review rubric.'
+
 let failures = 0
 function test(name: string, fn: () => void | Promise<void>) {
   return Promise.resolve()
@@ -53,33 +59,49 @@ const safeHandle: SafeHandleFn = (ipc, ch, h) => {
 
 async function run() {
   // ── Pure plan ────────────────────────────────────────────────
-  const empty = planReview({ artifacts: [] })
+  const empty = planReview({
+    runId: SOURCE_RUN,
+    verdict: 'pass',
+    summary: REVIEW_SUMMARY,
+    artifacts: [],
+  })
   await test('plan rejects empty artifacts', () => {
     ok('ok' in empty && empty.ok === false)
   })
 
-  const badHash = planReview({ artifacts: [{ artifactId: 'a1', expectedSha256: 'short' }] })
+  const badHash = planReview({
+    runId: SOURCE_RUN,
+    verdict: 'pass',
+    summary: REVIEW_SUMMARY,
+    artifacts: [{ artifactId: 'a1', expectedSha256: 'short' }],
+  })
   await test('plan rejects short sha256', () => {
     ok('ok' in badHash && badHash.ok === false)
   })
 
   const good = planReview({
+    runId: SOURCE_RUN,
+    verdict: 'pass',
+    summary: REVIEW_SUMMARY,
     artifacts: [
-      { artifactId: 'a1', expectedSha256: 'abc123def4567890abc123def4567890abc123de' },
-      { artifactId: 'a2', expectedSha256: 'xyz789abc1234567xyz789abc1234567xyz789ab' },
+      { artifactId: A_HASH, expectedSha256: A_HASH },
+      { artifactId: B_HASH, expectedSha256: B_HASH },
     ],
   })
   await test('plan accepts valid evidence', () => {
     ok(!('ok' in good))
     const p = good as { artifactCount: number; authority: string }
     strictEqual(p.artifactCount, 2)
-    strictEqual(p.authority, 'SessionActor/EvidenceGraph')
+    strictEqual(p.authority, 'SessionActor/ReviewLedger')
   })
 
   // ── Access gate ──────────────────────────────────────────────
   clearTrustedPreviewContext()
   const plan = planReview({
-    artifacts: [{ artifactId: 'a1', expectedSha256: 'abc123def4567890abc123def4567890abc123de' }],
+    runId: SOURCE_RUN,
+    verdict: 'pass',
+    summary: REVIEW_SUMMARY,
+    artifacts: [{ artifactId: A_HASH, expectedSha256: A_HASH }],
   }) as ReviewPlanFromTest
   const denied = assertReviewAccess(
     makeFullPlan(plan),
@@ -146,14 +168,14 @@ async function run() {
   setTrustedPreviewContext({ ownerId: 'o1', projectId: 'p1' })
   const acpP = buildReviewAcpPayload(
     makeFullPlan(plan),
-    [{ artifactId: 'a1', expectedSha256: 'abc123def4567890abc123def4567890abc123de' }],
+    [{ artifactId: A_HASH, expectedSha256: A_HASH }],
     { ownerId: 'o1', projectId: 'p1' },
-    'run-1',
   )
   await test('acp payload has artifacts', () => {
     strictEqual(acpP.artifacts.length, 1)
-    strictEqual(acpP.artifacts[0].artifact_id, 'a1')
-    strictEqual(acpP.artifacts[0].expected_sha256, 'abc123def4567890abc123def4567890abc123de')
+    strictEqual(acpP.run_id, SOURCE_RUN)
+    strictEqual(acpP.artifacts[0].artifact_id, A_HASH)
+    strictEqual(acpP.artifacts[0].expected_sha256, A_HASH)
   })
 
   // ── normOutcome: warn → warn ─────────────────────────────────
@@ -166,12 +188,18 @@ async function run() {
   // ── Service submit with store hash validation ────────────────
   let acpCalls = 0
   const store = new AcpPreviewStore()
-  store.put('a1', { path: '/s/a1', sha256: 'abc123def4567890abc123def4567890abc123de', ownerId: 'o1', projectId: 'p1' })
+  store.put(A_HASH, {
+    path: '/s/a1',
+    sha256: A_HASH,
+    ownerId: 'o1',
+    projectId: 'p1',
+    runId: SOURCE_RUN,
+  })
 
   // The mock asserts the REAL contract. `start_review` is a Go MCP tool the
   // registry rejects — the old mock accepted it, so this suite stayed green
-  // while no submission had ever reached an engine. `review_record` RECORDS a
-  // desktop-verified verdict under actor authority; it does not judge.
+  // while no submission had ever reached an engine. The current contract
+  // returns the typed mutation envelope and exact rehashed artifact set.
   const recorded: Record<string, unknown>[] = []
   const svc = createReviewService({
     acpCall: async (tool, args) => {
@@ -179,10 +207,27 @@ async function run() {
       strictEqual(tool, 'review_record')
       recorded.push(args)
       return {
-        reviewer_id: args.reviewerId,
-        verdict: args.verdict,
-        project_id: args.projectId,
-        notes: ['Reviewer operates under SessionActor authority only.'],
+        operationId: args.operationId,
+        kind: 'review_record',
+        projectId: args.projectId,
+        replayed: false,
+        runtimeAuthority: 'SessionActor-gated ACP adapter',
+        result: {
+          review_id: args.operationId,
+          operation_id: args.operationId,
+          reviewer_id: args.reviewerId,
+          owner_id: args.ownerId,
+          verdict: args.verdict,
+          summary: args.summary,
+          project_id: args.projectId,
+          source_run_id: args.runId,
+          authority_run_id: 'review-authority-run-1',
+          evidence_fingerprint: C_HASH,
+          artifacts: (args.artifactSha256s as string[]).map((sha256) => ({
+            source_run_id: args.runId,
+            sha256,
+          })),
+        },
       }
     },
     previewStore: store,
@@ -191,16 +236,30 @@ async function run() {
 
   clearTrustedPreviewContext()
   const noSess = await svc.submit({
-    artifacts: [{ artifactId: 'a1', expectedSha256: 'abc123def4567890abc123def4567890abc123de' }],
+    runId: SOURCE_RUN,
+    verdict: 'pass',
+    summary: REVIEW_SUMMARY,
+    artifacts: [{ artifactId: A_HASH, expectedSha256: A_HASH }],
   })
   await test('submit fails without session', () => {
     ok((noSess as { ok?: boolean }).ok === false)
   })
 
-  // Hash mismatch: store has abc* but client sends wrong hash
+  // Hash mismatch: the content-addressed index key claims A but its record
+  // claims B. The desktop catches this early; Rust rehashes again after Allow.
   setTrustedPreviewContext({ ownerId: 'o1', projectId: 'p1' })
+  store.put(A_HASH, {
+    path: '/s/a1',
+    sha256: B_HASH,
+    ownerId: 'o1',
+    projectId: 'p1',
+    runId: SOURCE_RUN,
+  })
   const badSubmit = await svc.submit({
-    artifacts: [{ artifactId: 'a1', expectedSha256: 'wrong1234567890123456789012345678xx' }],
+    runId: SOURCE_RUN,
+    verdict: 'pass',
+    summary: REVIEW_SUMMARY,
+    artifacts: [{ artifactId: A_HASH, expectedSha256: A_HASH }],
   })
   await test('submit rejects hash mismatch via store', () => {
     ok((badSubmit as { ok?: boolean }).ok === false)
@@ -209,8 +268,18 @@ async function run() {
     )
   })
 
+  store.put(A_HASH, {
+    path: '/s/a1',
+    sha256: A_HASH,
+    ownerId: 'o1',
+    projectId: 'p1',
+    runId: SOURCE_RUN,
+  })
   const submit = await svc.submit({
-    artifacts: [{ artifactId: 'a1', expectedSha256: 'abc123def4567890abc123def4567890abc123de' }],
+    runId: SOURCE_RUN,
+    verdict: 'pass',
+    summary: REVIEW_SUMMARY,
+    artifacts: [{ artifactId: A_HASH, expectedSha256: A_HASH }],
   })
   await test('submit succeeds with valid store hash', () => {
     ok((submit as { ok?: boolean }).ok)
@@ -219,10 +288,53 @@ async function run() {
     // before anything is recorded, so the only verdict that can reach the
     // engine is one whose validation succeeded.
     strictEqual(svc.latest()!.outcome, 'pass')
-    const sent = recorded[0] as { verdict?: string; reviewerId?: string; projectId?: string }
+    strictEqual(svc.latest()!.supportCount, 0)
+    strictEqual(svc.latest()!.contradictCount, 0)
+    strictEqual(svc.latest()!.findings[0]?.passed, null)
+    const sent = recorded[0] as {
+      verdict?: string
+      reviewerId?: string
+      projectId?: string
+      ownerId?: string
+      runId?: string
+      artifactSha256s?: string[]
+      operationId?: string
+      summary?: string
+    }
     strictEqual(sent.verdict, 'pass')
     strictEqual(sent.reviewerId, 'o1')
+    strictEqual(sent.ownerId, 'o1')
     strictEqual(sent.projectId, 'p1')
+    strictEqual(sent.runId, SOURCE_RUN)
+    strictEqual(sent.summary, REVIEW_SUMMARY)
+    strictEqual(sent.artifactSha256s?.[0], A_HASH)
+    ok(Boolean(sent.operationId))
+  })
+
+  const looseResponseService = createReviewService({
+    acpCall: async (_tool, args) => ({
+      runtimeAuthority: 'SessionActor-gated ACP adapter',
+      kind: 'review_record',
+      result: {
+        project_id: args.projectId,
+        owner_id: args.ownerId,
+        reviewer_id: args.reviewerId,
+        verdict: args.verdict,
+        summary: args.summary,
+        source_run_id: args.runId,
+        artifacts: (args.artifactSha256s as string[]).map((sha256) => ({ sha256 })),
+      },
+    }),
+    previewStore: store,
+  })
+  const looseResponse = await looseResponseService.submit({
+    runId: SOURCE_RUN,
+    verdict: 'pass',
+    summary: REVIEW_SUMMARY,
+    artifacts: [{ artifactId: A_HASH, expectedSha256: A_HASH }],
+  })
+  await test('submit rejects legacy loose review response', () => {
+    strictEqual((looseResponse as { ok?: boolean }).ok, false)
   })
 
   // ── Dossier export projection ────────────────────────────────
@@ -234,20 +346,21 @@ async function run() {
     ok(d.verdictRefs.length >= 1)
     ok(d.planRefs.length >= 1)
     ok(d.artifacts.length >= 1)
-    strictEqual(d.artifacts[0].artifactId, 'a1')
-    strictEqual(d.artifacts[0].sha256, 'abc123def4567890abc123def4567890abc123de')
+    strictEqual(d.artifacts[0].artifactId, A_HASH)
+    strictEqual(d.artifacts[0].sha256, A_HASH)
   })
 
   // ── Dossier gold path (shipped surfaces) ─────────────────────
   const fixture: DossierFixture = {
     projectId: 'dossier-gold-p1',
+    runId: SOURCE_RUN,
     question: 'Given disease X and target Y, generate a reproducible research dossier',
     plan: '1. Literature → 2. DB query → 3. Notebook → 4. Review → 5. Export',
     ownerId: 'local-user',
     artifacts: [
-      { artifactId: 'lit-1', path: '/data/pubmed/41234568.json', sha256: 'lit1hash0123456789abcdef0123456789abc', ownerId: 'local-user', projectId: 'dossier-gold-p1', label: 'literature' },
-      { artifactId: 'db-1', path: '/data/uniprot/P04637.fa', sha256: 'db1hash0123456789abcdef0123456789abc', ownerId: 'local-user', projectId: 'dossier-gold-p1', label: 'uniprot_protein' },
-      { artifactId: 'nb-1', path: '/data/notebook/output.csv', sha256: 'nb1hash0123456789abcdef0123456789abc', ownerId: 'local-user', projectId: 'dossier-gold-p1', label: 'notebook_output' },
+      { artifactId: A_HASH, path: '/data/pubmed/41234568.json', sha256: A_HASH, ownerId: 'local-user', projectId: 'dossier-gold-p1', label: 'literature' },
+      { artifactId: B_HASH, path: '/data/uniprot/P04637.fa', sha256: B_HASH, ownerId: 'local-user', projectId: 'dossier-gold-p1', label: 'uniprot_protein' },
+      { artifactId: C_HASH, path: '/data/notebook/output.csv', sha256: C_HASH, ownerId: 'local-user', projectId: 'dossier-gold-p1', label: 'notebook_output' },
     ],
   }
 
@@ -256,13 +369,39 @@ async function run() {
   // Override id for fixture match
   const dsStore = new AcpPreviewStore()
   for (const a of fixture.artifacts) {
-    dsStore.put(a.artifactId, { path: a.path, sha256: a.sha256, ownerId: a.ownerId, projectId: a.projectId })
+    dsStore.put(a.artifactId, {
+      path: a.path,
+      sha256: a.sha256,
+      ownerId: a.ownerId,
+      projectId: a.projectId,
+      runId: SOURCE_RUN,
+    })
   }
 
   // Use seeder store for submission
   const dsReviewSvc = createReviewService({
-    acpCall: async () => ({
-      report: { outcome: 'pass', artifacts: fixture.artifacts.map((a) => ({ artifact_id: a.artifactId, passed: true, reason: 'ok', expected_sha256: a.sha256 })), summary: 'all checks pass' },
+    acpCall: async (_tool, args) => ({
+      operationId: args.operationId,
+      kind: 'review_record',
+      projectId: args.projectId,
+      replayed: false,
+      runtimeAuthority: 'SessionActor-gated ACP adapter',
+      result: {
+        review_id: args.operationId,
+        operation_id: args.operationId,
+        reviewer_id: args.reviewerId,
+        owner_id: args.ownerId,
+        verdict: 'pass',
+        summary: args.summary,
+        project_id: args.projectId,
+        source_run_id: args.runId,
+        authority_run_id: 'review-authority-run-2',
+        evidence_fingerprint: C_HASH,
+        artifacts: (args.artifactSha256s as string[]).map((sha256) => ({
+          source_run_id: args.runId,
+          sha256,
+        })),
+      },
     }),
     previewStore: dsStore,
   })
@@ -322,13 +461,22 @@ async function run() {
 }
 
 // Helper types
-type ReviewPlanFromTest = { planId: string; reviewId: string; artifactCount: number; evidenceFingerprint: string }
+type ReviewPlanFromTest = {
+  planId: string
+  reviewId: string
+  artifactCount: number
+  evidenceFingerprint: string
+  sourceRunId?: string
+  verdict?: 'pass'
+  summary?: string
+}
 function makeFullPlan(p: ReviewPlanFromTest) {
   return {
     planId: p.planId, reviewId: p.reviewId, artifactCount: p.artifactCount,
-    artifactIds: ['a1'], hashes: ['abc123def4567890abc123def4567890abc123de'],
-    rubricVersion: 'lumen-v1.0', tool: 'start_review' as const,
-    authority: 'SessionActor/EvidenceGraph' as const, requiresTrustedSession: true as const,
+    artifactIds: [A_HASH], hashes: [A_HASH], sourceRunId: p.sourceRunId ?? SOURCE_RUN,
+    verdict: p.verdict ?? 'pass', summary: p.summary ?? REVIEW_SUMMARY,
+    rubricVersion: 'lumen-v1.0', tool: 'review_record' as const,
+    authority: 'SessionActor/ReviewLedger' as const, requiresTrustedSession: true as const,
     createdAt: 0, evidenceFingerprint: p.evidenceFingerprint,
   }
 }

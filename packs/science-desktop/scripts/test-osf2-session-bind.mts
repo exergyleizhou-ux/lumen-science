@@ -103,11 +103,13 @@ async function run() {
       path: OUT_CSV,
       sha256: OUT_SHA,
       project_id: 'p1',
+      run_id: 'run-1',
     },
     {
       artifact_id: 'art-2',
       path: '/data/p1/run1/seq.fa',
       sha256: 'hash2',
+      run_id: 'run-1',
     },
   ]
   const seeded = seedPreviewStoreFromList(store, items, {
@@ -187,6 +189,7 @@ async function run() {
           path: IPC_CSV,
           sha256: IPC_SHA,
           project_id: 'p1',
+          run_id: 'run-1',
         },
       ]
     },
