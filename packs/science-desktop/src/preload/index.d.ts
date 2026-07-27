@@ -1,3 +1,6 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import type {
   AcpCancelPromptRequest,
   AcpConnectRequest,
@@ -557,6 +560,24 @@ interface OpenScienceAPI {
       expectedSha256?: string
       mimeType?: string
     }): Promise<unknown>
+    /**
+     * Permission asks initiated by the ENGINE. The renderer can only answer
+     * one, never raise one, and the request id it answers with is the one main
+     * issued. Returns an unsubscribe so a remount cannot answer the same ask
+     * twice.
+     */
+    onPermissionAsk(
+      listener: (ask: {
+        requestId: string
+        operation: string
+        target: string
+        detail?: string
+      }) => void,
+    ): () => void
+    respondToPermission(
+      requestId: string,
+      decision: 'allow_once' | 'reject',
+    ): Promise<unknown>
     listUiProjects(): Promise<unknown>
     createUiProject(request: {
       name: string
@@ -569,6 +590,8 @@ interface OpenScienceAPI {
       runId?: string
     }): Promise<unknown>
     deleteUiProject(request: { projectId: string }): Promise<unknown>
+    updateQuestion(request: { researchQuestion: string }): Promise<unknown>
+    saveExport(request: { suggestedName: string; contents: string }): Promise<unknown>
     notebookPlanCell(request: {
       language?: 'python' | 'r'
       code: string

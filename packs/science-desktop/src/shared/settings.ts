@@ -1,3 +1,6 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 // Shared model-settings & onboarding types crossing the main <-> renderer IPC boundary.
 //
 // The main process owns settings.json and all secret material. The renderer only ever receives the
@@ -252,7 +255,44 @@ export const providerValidationFailed = (provider: {
 
 // The agent backends the app can drive over ACP. Persisted settings and the UI reference these ids;
 // the main-process AgentFramework registry is keyed by the same union.
-export type AgentFrameworkId = 'claude-code' | 'opencode' | 'codex'
+// LS5-D1-02: the Lumen absorb removed execution authority from the Open Science
+// agent-framework module — Claude Code / OpenCode / Codex are no longer peer
+// runtimes, only controlled adapters behind the ACP bridge. The stubs in
+// main/agent-framework/index.ts therefore report `*-stubbed` ids, but this union
+// was never updated to admit them, so every consumer failed to typecheck.
+//
+// The union is additive rather than replaced: the three original ids are still
+// written into persisted settings and referenced as literals throughout the
+// settings layer, so dropping them breaks more than it fixes. The `*-stubbed`
+// ids are what the stub module reports today.
+export type AgentFrameworkId =
+  | 'claude-code'
+  | 'opencode'
+  | 'codex'
+  | 'lumen-stubbed'
+  | 'claude-code-stubbed'
+  | 'opencode-stubbed'
+  | 'codex-stubbed'
+
+// LS5-D1-02: the ids that name a REAL host runtime the app can detect, install and probe on npm.
+// Widening AgentFrameworkId above broke every `Record<AgentFrameworkId, …>` in the settings layer,
+// because those maps were never about all ids — they are about the three managed runtimes, and the
+// `*-stubbed` ids have no binary, no npm package and no readiness to report. Keying those maps by
+// this narrower union states that, instead of forcing four invented entries into each of them.
+// Callers that hold an AgentFrameworkId narrow with isManagedAgentFrameworkId first; a stub id
+// legitimately has no entry, and every such lookup site fails closed.
+export type ManagedAgentFrameworkId = 'claude-code' | 'opencode' | 'codex'
+
+export const MANAGED_AGENT_FRAMEWORK_IDS: readonly ManagedAgentFrameworkId[] = [
+  'claude-code',
+  'opencode',
+  'codex'
+]
+
+export const isManagedAgentFrameworkId = (
+  id: AgentFrameworkId
+): id is ManagedAgentFrameworkId =>
+  (MANAGED_AGENT_FRAMEWORK_IDS as readonly AgentFrameworkId[]).includes(id)
 
 // How much reasoning effort the user asks the agent to spend. 'default' means "don't override": the
 // agent keeps its own default and nothing is sent. The concrete levels form a relative scale
@@ -296,7 +336,7 @@ export type AppIconVariantInfo = {
 // The ordered icon variants shown in Settings. The default (light) leads.
 export const APP_ICON_VARIANT_INFOS: readonly AppIconVariantInfo[] = [
   { id: 'light', label: 'Light', description: 'The current light dotted mark.' },
-  { id: 'dark', label: 'Dark', description: 'The original Open Science icon.' }
+  { id: 'dark', label: 'Dark', description: 'The original Lumen Science icon.' }
 ]
 
 // Renderer-facing descriptor for one selectable agent framework (built from the main registry).

@@ -26,6 +26,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::time::Duration;
 
+use agent_client_protocol as acp;
 use base64::Engine;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -2434,4 +2435,650 @@ fn test_connector_registry_active_40_inventory_42() {
     // Rejected must not be runtime-resolvable
     assert!(xai_grok_science::connectors::descriptor("biogrid").is_none());
     assert!(xai_grok_science::connectors::descriptor("kegg").is_none());
+}
+
+// ============================================================================
+// WP-2 project mutations over stdio ACP (LS5-P2-03 E4 proof)
+//
+// LS5-P2-03 routed project_create / project_transition / claim_propose /
+// evidence_attach through the SessionActor, but nothing exercised that route:
+// the science-crate unit tests cover the mutation semantics without the actor,
+// and every ACP-level science test needs a pre-built binary. Routing a mutation
+// through the actor and PROVING it goes through the actor are different claims,
+// so the status file deliberately stayed at E2.
+//
+// These close that gap. They drive the rebuilt binary over the real protocol,
+// so they cannot pass unless the shell wiring, the permission bridge and the
+// durable ledger all actually work.
+// ============================================================================
+
+/// A project mutation is actor-gated end to end, and replaying one operation
+/// id returns the first outcome instead of applying it twice.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_project_mutation_is_actor_gated_and_idempotent() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let store_root = workdir.path().join("science-store");
+
+        let client = GrokStdioClient::spawn(&server, workdir.path()).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+
+        let create = |operation_id: &str| {
+            serde_json::json!({
+                "sessionId": session_id.0.as_ref(),
+                "ownerId": "science-owner",
+                "storeRoot": store_root,
+                "title": "Restriction mapping",
+                "researchQuestion": "Where does EcoRI cut?",
+                "operationId": operation_id,
+                "approvalTimeoutMs": 5_000,
+            })
+        };
+
+        let first: serde_json::Value = serde_json::from_str(
+            tokio::time::timeout(
+                Duration::from_secs(30),
+                client.ext_method("x.ai/science/project_create", create("op-create-1")),
+            )
+            .await
+            .expect("project_create timed out")
+            .unwrap_or_else(|error| {
+                panic!(
+                    "project_create failed: {error:?}\nstderr:\n{}",
+                    client.stderr()
+                )
+            })
+            .0
+            .get(),
+        )
+        .expect("project_create returned JSON");
+
+        // The authority claim is only true because the mutation took the actor
+        // route; asserting it here is what stops the string drifting back into
+        // decoration.
+        assert_eq!(
+            first["runtimeAuthority"], "SessionActor-gated ACP adapter",
+            "response: {first}"
+        );
+        assert_eq!(first["replayed"], false, "first apply must not be a replay");
+        let project_id = first["projectId"].as_str().expect("projectId").to_owned();
+        assert!(!project_id.is_empty());
+
+        // Replaying the same operation id must return the SAME project rather
+        // than creating a second one. Without the durable operation ledger a
+        // retried request silently forks the store.
+        let replay: serde_json::Value = serde_json::from_str(
+            client
+                .ext_method("x.ai/science/project_create", create("op-create-1"))
+                .await
+                .expect("replay failed")
+                .0
+                .get(),
+        )
+        .expect("replay returned JSON");
+        assert_eq!(replay["replayed"], true, "replay: {replay}");
+        assert_eq!(replay["projectId"], project_id, "replay created a new project");
+
+        // A different operation id is a different mutation and must create a
+        // second project — otherwise the check above would pass trivially.
+        let second: serde_json::Value = serde_json::from_str(
+            client
+                .ext_method("x.ai/science/project_create", create("op-create-2"))
+                .await
+                .expect("second create failed")
+                .0
+                .get(),
+        )
+        .expect("second returned JSON");
+        assert_ne!(second["projectId"], serde_json::Value::String(project_id));
+
+        // Reopen the durable store from the test process and confirm exactly
+        // two projects exist — the replay must not have left a third.
+        let store = xai_grok_science::project::ProjectStore::new(&store_root);
+        let projects = store.list_projects().expect("list projects");
+        assert_eq!(
+            projects.len(),
+            2,
+            "expected 2 projects after create+replay+create, got {}",
+            projects.len()
+        );
+    })
+    .await;
+}
+
+/// `operationId` is required, and a denied permission leaves the store empty.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_project_mutation_fails_closed() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let store_root = workdir.path().join("science-store");
+
+        // 1. Missing operationId must be rejected. Without an idempotency key
+        //    a retry cannot be distinguished from a second intentional
+        //    mutation, so the field is mandatory rather than defaulted.
+        let client = GrokStdioClient::spawn(&server, workdir.path()).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+
+        let missing_op = client
+            .ext_method(
+                "x.ai/science/project_create",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "ownerId": "science-owner",
+                    "storeRoot": store_root,
+                    "title": "No operation id",
+                    "researchQuestion": "?",
+                }),
+            )
+            .await;
+        assert!(
+            missing_op.is_err(),
+            "project_create without operationId was accepted: {missing_op:?}"
+        );
+
+        // 2. A mutation into a session that does not exist must not reach the
+        //    store, even with a well-formed request.
+        let wrong_session = client
+            .ext_method(
+                "x.ai/science/project_create",
+                serde_json::json!({
+                    "sessionId": "not-a-real-session",
+                    "ownerId": "science-owner",
+                    "storeRoot": store_root,
+                    "title": "Forged session",
+                    "researchQuestion": "?",
+                    "operationId": "op-forged",
+                }),
+            )
+            .await;
+        assert!(
+            wrong_session.is_err(),
+            "mutation with an unknown session was accepted: {wrong_session:?}"
+        );
+
+        assert!(
+            !store_root.join("projects").exists(),
+            "a rejected mutation created durable state"
+        );
+    })
+    .await;
+}
+
+/// A denied permission must abort the mutation and leave no project behind.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_project_mutation_denied_writes_nothing() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let store_root = workdir.path().join("science-store");
+
+        let client = GrokStdioClient::spawn_with_permission_response(
+            &server,
+            workdir.path(),
+            PermissionResponse::Reject,
+        )
+        .await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+
+        let denied = client
+            .ext_method(
+                "x.ai/science/project_create",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "ownerId": "science-owner",
+                    "storeRoot": store_root,
+                    "title": "Denied",
+                    "researchQuestion": "?",
+                    "operationId": "op-denied",
+                    "approvalTimeoutMs": 5_000,
+                }),
+            )
+            .await;
+
+        assert!(
+            denied.is_err(),
+            "a denied permission still returned success: {denied:?}"
+        );
+        // The point of routing through the actor is that the permission
+        // decision gates the WRITE, not just the response.
+        let store = xai_grok_science::project::ProjectStore::new(&store_root);
+        let projects = store.list_projects().unwrap_or_default();
+        assert!(
+            projects.is_empty(),
+            "denied mutation persisted {} project(s)",
+            projects.len()
+        );
+    })
+    .await;
+}
+
+// ============================================================================
+// LS5-K8: workflow execution over stdio ACP
+//
+// A previous attempt at this endpoint was declined, and correctly: with no
+// `StepRunner` implementation every step would have failed with
+// `NoStepRunnerBound`, and an endpoint that cannot succeed is worse than none.
+// `PythonLoopRunner` closed that gap, so the endpoint can now be proven rather
+// than asserted.
+//
+// These drive the REAL binary over the real protocol against a REAL python3.
+// They cannot pass unless the ACP adapter, the SessionCommand seam, the
+// permission bridge, the kernel probe, the exec-loop driver and the durable
+// ledger all work together — which is the whole claim.
+// ============================================================================
+
+/// A real python3, or the test does not run. A stub interpreter would prove
+/// only that a stub was called.
+fn workflow_python3() -> Option<PathBuf> {
+    let out = Command::new("sh")
+        .args(["-c", "command -v python3"])
+        .output()
+        .ok()?;
+    let path = PathBuf::from(String::from_utf8(out.stdout).ok()?.trim());
+    path.is_absolute().then_some(path)
+}
+
+const WORKFLOW_CELL: &str = "import os\n\
+     p = os.path.join(os.environ['LUMEN_KERNEL_OUTPUT_DIR'], 'result.json')\n\
+     open(p, 'w').write('{\"mean\": 1.5}')\n\
+     print('acp-computed')\n";
+
+fn workflow_spec(workflow_id: &str, cell: &str) -> Value {
+    serde_json::json!({
+        "workflow_id": workflow_id,
+        "project_id": "proj-acp-workflow",
+        "name": "acp workflow execution",
+        "steps": [{
+            "step_id": "compute",
+            "kind": "NotebookCell",
+            "connector_id": null,
+            "notebook_cell": cell,
+            "inputs": [],
+            "parameters": {},
+            "timeout_secs": 120,
+            "retry_policy": null,
+            "cache_policy": "NoCache",
+            "acceptance_rules": []
+        }],
+        "parameters": {},
+        "permissions": [],
+        "resources": {
+            "max_concurrent_steps": 1,
+            "max_total_duration_secs": 3600,
+            "max_memory_mb": 1024,
+            "max_disk_mb": 1024
+        },
+        "schema_version": 1
+    })
+}
+
+/// Per-attempt output directories under `<outputs>/<runId>/<stepId>`. One
+/// directory means the kernel ran once — the most direct physical evidence
+/// there is that a replay did not execute a second time.
+fn attempt_dirs(output_root: &Path, run_id: &str, step_id: &str) -> Vec<String> {
+    let dir = output_root.join(run_id).join(step_id);
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+    let mut names: Vec<String> = entries
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.path().is_dir())
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+/// A workflow executes through the SessionActor, and replaying its operation
+/// id returns the recorded outcome without running the kernel a second time.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_workflow_execute_is_actor_gated_and_idempotent() {
+    let Some(python) = workflow_python3() else {
+        panic!("no python3 on PATH: this test proves a real interpreter runs, so it cannot be skipped into a pass");
+    };
+    with_local_set(|| async move {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let store_root = workdir.path().join("science-store");
+
+        let client = GrokStdioClient::spawn(&server, workdir.path()).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+
+        let params = |operation_id: &str| {
+            serde_json::json!({
+                "sessionId": session_id.0.as_ref(),
+                "ownerId": "science-owner",
+                "storeRoot": store_root,
+                "operationId": operation_id,
+                "workflowSpec": workflow_spec("wf-acp-exec", WORKFLOW_CELL),
+                "interpreterPath": python,
+                "kernelId": "py-acp-exec",
+                // The opt-in that `ExecutionPolicy::default()` deliberately
+                // withholds. Visible in the request, exactly as intended.
+                "allowKernelSteps": true,
+                "probeTimeoutMs": 60_000,
+                "approvalTimeoutMs": 30_000,
+            })
+        };
+
+        let first: Value = serde_json::from_str(
+            tokio::time::timeout(
+                Duration::from_secs(120),
+                client.ext_method("x.ai/science/workflow_execute", params("op-wf-exec-1")),
+            )
+            .await
+            .expect("workflow_execute timed out")
+            .unwrap_or_else(|error| {
+                panic!(
+                    "workflow_execute failed: {error:?}\nstderr:\n{}",
+                    client.stderr()
+                )
+            })
+            .0
+            .get(),
+        )
+        .expect("workflow_execute returned JSON");
+
+        // 1. It succeeded, and it says by whose authority.
+        assert_eq!(
+            first["runtimeAuthority"], "SessionActor-gated ACP adapter",
+            "response: {first}"
+        );
+        assert_eq!(
+            first["state"], "succeeded",
+            "workflow did not succeed: {first}"
+        );
+        assert_eq!(first["replayed"], false, "first run must not be a replay");
+        assert_eq!(
+            first["artifactsCommitted"], 1,
+            "expected one first-time commit: {first}"
+        );
+
+        // The committed manifest must contain the bytes the cell actually
+        // wrote. Recomputed here, not read back from the record claiming it.
+        let expected_stdout = format!("{:x}", Sha256::digest(b"acp-computed\n"));
+        let manifest = first["commits"][0]["outputManifest"]
+            .as_object()
+            .unwrap_or_else(|| panic!("no commit manifest: {first}"));
+        assert!(
+            manifest.values().any(|d| d == &Value::String(expected_stdout.clone())),
+            "stdout not committed with its true digest: {manifest:?}"
+        );
+        assert!(
+            manifest.keys().any(|k| k.ends_with("result.json")),
+            "the file the cell wrote is missing: {manifest:?}"
+        );
+
+        let run_id = first["runId"].as_str().expect("runId").to_owned();
+        let attempt_id = first["attempts"][0]["attemptId"]
+            .as_str()
+            .expect("attemptId")
+            .to_owned();
+        let output_root = store_root.join("workflow-outputs");
+        assert_eq!(
+            attempt_dirs(&output_root, &run_id, "compute"),
+            vec![attempt_id.clone()],
+            "expected exactly one kernel attempt on disk"
+        );
+
+        // 2. Replay: same operation id, recorded outcome, no second execution.
+        let replay: Value = serde_json::from_str(
+            tokio::time::timeout(
+                Duration::from_secs(120),
+                client.ext_method("x.ai/science/workflow_execute", params("op-wf-exec-1")),
+            )
+            .await
+            .expect("replay timed out")
+            .expect("replay failed")
+            .0
+            .get(),
+        )
+        .expect("replay returned JSON");
+
+        assert_eq!(replay["replayed"], true, "replay: {replay}");
+        assert_eq!(replay["runId"], run_id, "replay reported a different run");
+        assert_eq!(replay["state"], "succeeded", "replay: {replay}");
+        assert_eq!(
+            replay["attempts"].as_array().map(Vec::len),
+            Some(1),
+            "replay recorded a second attempt: {replay}"
+        );
+        assert_eq!(
+            replay["attempts"][0]["attemptId"], attempt_id,
+            "replay produced a new attempt id: {replay}"
+        );
+        // The decisive one: the kernel writes a fresh directory per attempt, so
+        // a second execution could not be hidden.
+        assert_eq!(
+            attempt_dirs(&output_root, &run_id, "compute"),
+            vec![attempt_id],
+            "replay executed the kernel a second time"
+        );
+
+        // A different operation id IS a second execution — without this the
+        // replay assertions above could pass on an endpoint that never runs
+        // anything at all.
+        let second: Value = serde_json::from_str(
+            tokio::time::timeout(
+                Duration::from_secs(120),
+                client.ext_method("x.ai/science/workflow_execute", params("op-wf-exec-2")),
+            )
+            .await
+            .expect("second execution timed out")
+            .expect("second execution failed")
+            .0
+            .get(),
+        )
+        .expect("second returned JSON");
+        assert_eq!(second["replayed"], false, "second: {second}");
+        assert_eq!(second["state"], "succeeded", "second: {second}");
+        assert_ne!(second["runId"], Value::String(run_id), "second run reused the first run id");
+        // Content-addressed commits: the same cell with the same inputs commits
+        // once, so the second run REUSES rather than duplicating the artifact.
+        assert_eq!(
+            second["artifactsCommitted"], 0,
+            "an identical step committed a second artifact: {second}"
+        );
+    })
+    .await;
+}
+
+/// `operationId` is required, and a denied permission executes nothing.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_workflow_execute_fails_closed() {
+    let Some(python) = workflow_python3() else {
+        panic!("no python3 on PATH: this test proves a real interpreter runs, so it cannot be skipped into a pass");
+    };
+    with_local_set(|| async move {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let store_root = workdir.path().join("science-store");
+
+        // 3. Missing operationId. Without an idempotency key a retry cannot be
+        //    told apart from a second intentional execution, so the field is
+        //    mandatory rather than defaulted.
+        let client = GrokStdioClient::spawn(&server, workdir.path()).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+
+        let missing_op = client
+            .ext_method(
+                "x.ai/science/workflow_execute",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "ownerId": "science-owner",
+                    "storeRoot": store_root,
+                    "workflowSpec": workflow_spec("wf-no-op", WORKFLOW_CELL),
+                    "interpreterPath": python,
+                    "allowKernelSteps": true,
+                }),
+            )
+            .await;
+        let missing_op = missing_op
+            .expect_err("workflow_execute without operationId was accepted");
+        // Not merely "an error": a binary with no `workflow_execute` at all
+        // would also error, and this test would then pass while proving
+        // nothing. The refusal must come from parameter validation.
+        assert_ne!(
+            missing_op.code,
+            acp::ErrorCode::MethodNotFound,
+            "workflow_execute is not wired into this binary: {missing_op:?}"
+        );
+
+        // A forged session must not reach an executor either.
+        let wrong_session = client
+            .ext_method(
+                "x.ai/science/workflow_execute",
+                serde_json::json!({
+                    "sessionId": "not-a-real-session",
+                    "ownerId": "science-owner",
+                    "storeRoot": store_root,
+                    "operationId": "op-wf-forged",
+                    "workflowSpec": workflow_spec("wf-forged", WORKFLOW_CELL),
+                    "interpreterPath": python,
+                    "allowKernelSteps": true,
+                }),
+            )
+            .await;
+        let wrong_session = wrong_session
+            .expect_err("workflow_execute with an unknown session was accepted");
+        assert_ne!(
+            wrong_session.code,
+            acp::ErrorCode::MethodNotFound,
+            "workflow_execute is not wired into this binary: {wrong_session:?}"
+        );
+
+        assert!(
+            !store_root.join("workflow-runs").exists(),
+            "a rejected request created a durable workflow run"
+        );
+        assert!(
+            !store_root.join("workflow-commits").exists(),
+            "a rejected request committed an artifact"
+        );
+    })
+    .await;
+}
+
+/// A denied permission must abort before anything runs: no kernel process, no
+/// attempt, no commit, and no operation id burned.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_workflow_execute_denied_runs_nothing() {
+    let Some(python) = workflow_python3() else {
+        panic!("no python3 on PATH: this test proves a real interpreter runs, so it cannot be skipped into a pass");
+    };
+    with_local_set(|| async move {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let store_root = workdir.path().join("science-store");
+
+        let client = GrokStdioClient::spawn_with_permission_response(
+            &server,
+            workdir.path(),
+            PermissionResponse::Reject,
+        )
+        .await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+
+        let denied = tokio::time::timeout(
+            Duration::from_secs(120),
+            client.ext_method(
+                "x.ai/science/workflow_execute",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "ownerId": "science-owner",
+                    "storeRoot": store_root,
+                    "operationId": "op-wf-denied",
+                    "workflowSpec": workflow_spec("wf-denied", WORKFLOW_CELL),
+                    "interpreterPath": python,
+                    "allowKernelSteps": true,
+                    "probeTimeoutMs": 60_000,
+                    "approvalTimeoutMs": 30_000,
+                }),
+            ),
+        )
+        .await
+        .expect("denied workflow_execute timed out");
+
+        assert!(
+            denied.is_err(),
+            "a denied permission still returned success: {denied:?}"
+        );
+
+        // 4. The decision gates the EXECUTION, not just the response.
+        assert!(
+            !store_root.join("workflow-commits").exists(),
+            "denied execution committed an artifact"
+        );
+        assert!(
+            !store_root.join("workflow-runs").exists(),
+            "denied execution wrote a workflow run record"
+        );
+        assert!(
+            !store_root.join("workflow-operations").exists(),
+            "denied execution burned the operation id"
+        );
+        // Cell staging, driver materialisation and per-attempt output all live
+        // behind the gate, so their directories exist (the adapter created
+        // them) and are empty.
+        for name in ["workflow-cells", "workflow-runtime", "workflow-outputs"] {
+            let dir = store_root.join(name);
+            let count = std::fs::read_dir(&dir).map(Iterator::count).unwrap_or(0);
+            assert_eq!(count, 0, "denied execution left {count} entry/entries in {name}");
+        }
+
+        // The durable Science run exists and records the refusal — a request
+        // that was not granted is evidence, not silence.
+        //
+        // NOTE on which refusal: this harness answers a permission request with
+        // `RequestPermissionOutcome::Cancelled`, which the bridge maps to
+        // `ApprovalDecision::Cancel` and `RunState::Cancelled`. A user-pressed
+        // "reject" would land on `Denied` instead. Both take the same
+        // not-Allow branch in `finish_science_workflow_execution`, so what is
+        // proven here is that permission-not-granted executes nothing; the
+        // `Denied` spelling specifically is not what this harness produces.
+        let run_id = std::fs::read_dir(store_root.join("runs"))
+            .expect("durable refused run directory")
+            .next()
+            .expect("one refused run")
+            .expect("run directory entry")
+            .file_name()
+            .to_string_lossy()
+            .to_string();
+        let store = xai_grok_science::ScienceStore::new(&store_root);
+        let run = store
+            .load_run(&xai_grok_science::RunId::new(run_id))
+            .expect("load refused run");
+        assert_eq!(run.state, xai_grok_science::RunState::Cancelled);
+        assert_eq!(
+            store.approvals(&run.context.run_id).unwrap()[0].decision,
+            xai_grok_science::ApprovalDecision::Cancel
+        );
+    })
+    .await;
 }

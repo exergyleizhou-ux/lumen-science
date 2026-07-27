@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 // Unified composer menu: per-session agent controls (permission profile + auto-review) and
 // compute host selection, behind a single icon trigger. Replaces the earlier split into
 // ComposerPermissionProfilePicker, ComposerAutoReviewToggle, and ComputeHostSelector.
@@ -286,7 +292,7 @@ const ComposerAgentControlsMenu = ({
               })}
               {profile === 'auto' && profileState?.autoReviewStrategy === 'conservative' ? (
                 <div className="mx-1 mt-1 rounded-md bg-bg-200 px-2 py-1.5 text-[11px] leading-4 text-text-200">
-                  This agent has no native auto mode. Open Science auto-approves only edits to files
+                  This agent has no native auto mode. Lumen Science auto-approves only edits to files
                   inside the workspace — commands, network, and MCP tools still ask.
                 </div>
               ) : null}

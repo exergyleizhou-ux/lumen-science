@@ -1,103 +1,168 @@
 /**
- * Lumen ACP Bridge — Electron main → Rust Lumen binary.
+ * Lumen ACP Bridge — Electron main → Rust Lumen binary, over ACP stdio.
  *
- * Replaces the Open Science agent-framework execution authority.
- * All science operations go through the Rust SessionActor via ACP.
- * Electron main process is ONLY responsible for window/tray/updater.
+ * All science operations go through the Rust SessionActor via ACP. The Electron
+ * main process is ONLY responsible for window/tray/updater. This file is not an
+ * execution path for science tools, notebooks, or reviewers.
  *
- * NOT an execution path for science tools, notebooks, or reviewers.
+ * WHAT THIS FILE USED TO DO, AND WHY IT NEVER WORKED
+ *
+ * Despite its name it spoke HTTP. It spawned
+ * `lumen-science serve --interface loopback --port 17000`, polled
+ * `GET /health`, and POSTed to `/tools/call` — and never wrote a byte to the
+ * child's stdin. No such subcommand and no such port exist in either engine:
+ * the Go CLI (packs/science/standalone/cmd/science/main.go) has no `serve`, and
+ * the Rust binary exposes the 24 `x.ai/science/*` methods only over
+ * `lumen agent stdio`. So the child died at once, `startLumen()` always
+ * rejected, index.ts logged and swallowed it, and every `acpCall` returned
+ * ECONNREFUSED. The desktop had never talked to an engine.
+ *
+ * It now runs the real protocol — spawn → initialize → authenticate →
+ * session/new → `_x.ai/science/*` — split across four modules:
+ *
+ *   lumen-process-manager.ts    spawn, hash-pin, stderr capture, SIGTERM/KILL
+ *   acp-stdio-transport.ts      NDJSON framing, id correlation, bounded frames
+ *   acp-session-manager.ts      handshake, session lifecycle, engine state
+ *   science-method-registry.ts  the allowlist of methods that actually exist
  *
  * Apache-2.0. Adapted from Open Science (d8f11e34) and modified for
  * Lumen Science Desktop authority model.
  */
 
-import { ChildProcess, spawn } from 'child_process';
-import { type IpcMain, app } from 'electron';
-import { validateIpcChannel } from './lumen-authority-policy';
-import path from 'path';
-import fs from 'fs';
-import crypto from 'crypto';
+import { type IpcMain, app } from 'electron'
+import { validateIpcChannel } from './lumen-authority-policy'
+// Type-only import: erased at build time, so this does NOT make the bridge depend on the science
+// IPC surface at runtime. The contract is owned by the consumer because that module must stay
+// Electron-free to remain testable; the bridge conforms to it.
+import type { IpcMainLike } from './files/science-ipc'
+import { AcpSessionManager, type EngineState } from './acp-session-manager'
+import { PermissionBroker, type AskHuman } from './permission-broker'
+import { ENGINE_APPROVAL_TIMEOUT_MS } from './files/science-ipc'
+import { listScienceMethods } from './science-method-registry'
 
-// ── Binary discovery ─────────────────────────────────────────────
+// ── Engine singleton ─────────────────────────────────────────────
 
-function lumenBinaryPath(): string {
-  // 1. BUNDLED_LUMEN env override (dev/testing)
-  if (process.env.LUMEN_BINARY) {
-    return process.env.LUMEN_BINARY;
-  }
-  // 2. App resources (production packaging)
-  const resourcesDir = path.join(process.resourcesPath || app.getAppPath(), 'bin');
-  const platform = process.platform;
-  const ext = platform === 'win32' ? '.exe' : '';
-  const candidate = path.join(resourcesDir, `lumen-science${ext}`);
-  if (fs.existsSync(candidate)) {
-    return candidate;
-  }
-  // 3. PATH fallback (development)
-  return `lumen-science${ext}`;
+let manager: AcpSessionManager | null = null
+let broker: PermissionBroker | null = null
+
+/**
+ * How a permission ask reaches a person. Installed by the IPC layer once a
+ * window exists.
+ *
+ * Absent until then, and absence DENIES rather than allows: an engine request
+ * arriving before the UI is ready must not be auto-approved just because no
+ * one could be asked yet.
+ */
+let askHuman: AskHuman | null = null
+
+export function setPermissionPrompt(ask: AskHuman | null): void {
+  askHuman = ask
 }
 
-// ── Lumen process lifecycle ──────────────────────────────────────
+/** Deny anything still waiting, for shutdown. Returns how many were denied. */
+export function denyPendingPermissions(reason?: string): number {
+  return broker?.denyAllPending(reason) ?? 0
+}
+let lastState: EngineState = { status: 'stopped' }
 
-let lumenProcess: ChildProcess | null = null;
-let binaryHash: string | null = null;
-
-export function getLumenBinaryHash(): string | null {
-  return binaryHash;
+/**
+ * Session workspace for the engine.
+ *
+ * Science store paths are pinned inside the session cwd by the Rust adapter
+ * (`canonical_dir_within`), so this is the root every project store must live
+ * under. userData keeps it per-install and writable in a packaged app.
+ */
+function sessionWorkspace(): string {
+  return app.getPath('userData')
 }
 
-export async function startLumen(): Promise<void> {
-  const bin = lumenBinaryPath();
+let permissionSeq = 0
 
-  // Compute binary hash for attestation
-  if (fs.existsSync(bin)) {
-    const buf = fs.readFileSync(bin);
-    binaryHash = crypto.createHash('sha256').update(buf).digest('hex');
-  }
-
-  lumenProcess = spawn(bin, ['serve', '--interface', 'loopback', '--port', '17000'], {
-    stdio: ['pipe', 'pipe', 'pipe'],
-    env: {
-      ...process.env,
-      LUMEN_DESKTOP: '1',
-      LUMEN_NO_BROWSER: '1',
+function ensureBroker(): PermissionBroker {
+  if (broker) return broker
+  broker = new PermissionBroker({
+    // Strictly shorter than the engine's approval window. If the prompt
+    // outlived it, a user could click Allow, watch the dialog close, and have
+    // the engine already have abandoned the run — the worst kind of failure,
+    // because it looks like success.
+    timeoutMs: ENGINE_APPROVAL_TIMEOUT_MS - 10_000,
+    ask: async (request) => {
+      if (!askHuman) {
+        // No UI is listening. Refusing is the only honest answer: nobody
+        // declined, but nobody approved either, and only an approval may
+        // proceed.
+        throw new Error('no permission UI is available to ask')
+      }
+      return askHuman(request)
     },
-  });
-
-  lumenProcess.on('exit', (code) => {
-    console.log(`Lumen binary exited with code ${code}`);
-    lumenProcess = null;
-  });
-
-  lumenProcess.stderr?.on('data', (data: Buffer) => {
-    console.error(`[lumen] ${data.toString().trim()}`);
-  });
-
-  // Wait for ACP handshake readiness
-  await waitForAcpReady();
+    onDenied: (request, reason) => {
+      console.warn(`[lumen] permission denied for ${request.operation}: ${reason}`)
+    },
+  })
+  return broker
 }
 
-export function stopLumen(): void {
-  if (lumenProcess) {
-    lumenProcess.kill('SIGTERM');
-    setTimeout(() => {
-      if (lumenProcess) lumenProcess.kill('SIGKILL');
-    }, 5000);
-  }
+function ensureManager(): AcpSessionManager {
+  if (manager) return manager
+  manager = new AcpSessionManager({
+    cwd: sessionWorkspace(),
+    clientVersion: app.getVersion(),
+    process: {
+      // process.resourcesPath is only defined in a packaged app; undefined
+      // here simply means the bundled candidate is skipped.
+      resourcesPath: process.resourcesPath,
+      childEnv: {
+        LUMEN_DESKTOP: '1',
+        LUMEN_NO_BROWSER: '1',
+      },
+    },
+    // The engine asks before anything consequential. Without this handler the
+    // transport answered -32601 and every approval-requiring mutation failed.
+    onServerRequest: async (method, params) => {
+      if (method !== 'session/request_permission') {
+        // Unknown server-initiated methods are refused, not guessed at.
+        throw new Error(`unsupported server request: ${method}`)
+      }
+      const requestId = `perm-${++permissionSeq}`
+      return ensureBroker().handle(requestId, params)
+    },
+    onStateChange: (state) => {
+      lastState = state
+    },
+    log: {
+      info: (message, meta) => console.log(`[lumen] ${message}`, meta ?? ''),
+      warn: (message, meta) => console.warn(`[lumen] ${message}`, meta ?? ''),
+      error: (message, meta) => console.error(`[lumen] ${message}`, meta ?? ''),
+    },
+  })
+  return manager
 }
 
-async function waitForAcpReady(timeoutMs = 30000): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const resp = await fetch('http://127.0.0.1:17000/health');
-      if (resp.ok) return;
-    } catch {
-      // Not ready yet
-    }
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  throw new Error('Lumen binary did not become ready within timeout');
+/** SHA-256 of the binary actually executed, or null before it is resolved. */
+export function getLumenBinaryHash(): string | null {
+  return manager?.getBinaryHash() ?? null
+}
+
+/**
+ * Engine state for diagnostics surfaces. `unavailable` always carries a reason;
+ * callers must render it rather than substituting a placeholder.
+ */
+export function getLumenEngineState(): EngineState {
+  return manager?.getState() ?? lastState
+}
+
+/** Spawn the engine and complete the ACP handshake. Rejects on failure. */
+export async function startLumen(): Promise<void> {
+  await ensureManager().start()
+}
+
+/** Graceful shutdown: close the transport, SIGTERM, then SIGKILL. */
+export async function stopLumen(): Promise<void> {
+  const current = manager
+  manager = null
+  if (!current) return
+  lastState = { status: 'stopped' }
+  await current.stop()
 }
 
 // ── Authority boundary enforcement ───────────────────────────────
@@ -108,9 +173,16 @@ async function waitForAcpReady(timeoutMs = 30000): Promise<void> {
  * registration must go through this function.
  *
  * Returns the original handler if allowed, or a rejection handler.
+ *
+ * Takes IpcMainLike, not Electron's IpcMain. files/science-ipc.ts publishes SafeHandleFn over that
+ * minimal shape so its registration site can be exercised without booting Electron (see
+ * scripts/test-register-ipc-mock.mts), and this function is the ONLY production value passed for
+ * it — so demanding the full IpcMain here made the real implementation unassignable to the very
+ * contract it exists to satisfy. `handle` is the entire surface used below, so the narrow type is
+ * also the accurate one; the real ipcMain still satisfies it at the call site in ipc.ts.
  */
 export function safeHandle(
-  ipcMain: IpcMain,
+  ipcMain: IpcMainLike,
   channel: string,
   handler: (_event: unknown, ...args: unknown[]) => Promise<unknown>,
 ): void {
@@ -129,20 +201,57 @@ export function safeHandle(
 
 // ── ACP proxy (renderer -> Electron main -> Rust Lumen) ──────────
 
-export async function acpCall(toolName: string, args: Record<string, unknown>): Promise<unknown> {
-  const resp = await fetch('http://127.0.0.1:17000/tools/call', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: toolName, arguments: args }),
-  });
-  return resp.json();
+/**
+ * Call one science method on the Rust engine.
+ *
+ * `toolName` is a science method name — the registry decides whether it may go
+ * on the wire. Three names this pack has been sending exist in neither engine
+ * (`project_assert_membership`, `artifact_resolve`, `compute_plan`) and three
+ * more are Go MCP tools rather than Rust ACP methods (`artifact_list`,
+ * `notebook_execute`, `start_review`); all six are rejected here, by name, with
+ * the reason. That rejection is deliberate and load-bearing: while the
+ * transport was fictional those calls failed with ECONNREFUSED, which read as
+ * "engine down" instead of "this method does not exist".
+ *
+ * Throws when the engine is unavailable. It never resolves with a mock or a
+ * stale value — the caller must surface the failure.
+ */
+export async function acpCall(
+  toolName: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  return ensureManager().callScience(toolName, args ?? {})
+}
+
+/**
+ * The science methods this engine can serve.
+ *
+ * Replaces `acpToolsFetch`, an adapter that accepted a fake `/tools/call`
+ * Request and unpacked it back into a method name and arguments. That shim
+ * existed only because science-ipc.ts modelled the transport as HTTP; with that
+ * signature reworked to a typed call, nothing needs to build or parse a fake
+ * Request, and the last place the desktop pretended to speak HTTP is gone.
+ */
+export async function listScienceTools(): Promise<unknown> {
+  return {
+    tools: listScienceMethods().map((m) => ({
+      name: m.name,
+      method: m.qualified,
+      transport: 'acp-stdio',
+    })),
+    authority: 'rust-acp-extension-methods',
+  }
 }
 
 // ── Wire into Electron IPC ───────────────────────────────────────
 
 let _guardInstalled = false
 
-export function installIpcGuard(ipcMain: IpcMain): void {
+// The IpcMain handle is deliberately unused: this guard must NOT raw-register any channel (asserted
+// by scripts/test-ipc-handlers.mts). It stays in the signature because callers pass it and because
+// re-acquiring the authority to register would be a one-line change here — keeping the parameter
+// makes that boundary explicit rather than implying the guard has no access to IPC at all.
+export function installIpcGuard(_ipcMain: IpcMain): void {
   if (_guardInstalled) return
   _guardInstalled = true
   // Channel registration is done by registerIpcHandlers via safeHandle.

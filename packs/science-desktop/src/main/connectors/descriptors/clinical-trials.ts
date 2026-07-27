@@ -1,3 +1,7 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: quotePhrase escapes backslashes before quotes, so a phrase ending in `\` cannot break out of its quoting into the Essie expression.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import type { ToolContext, ToolDescriptor } from '../types'
 
 // ClinicalTrials.gov API v2. Read-only; the engine paces and retries 429/5xx. Each tool is
@@ -135,7 +139,12 @@ function normalizeNct(id: unknown): string {
 
 // ── Essie expression builders (query.term / filter.advanced) ─────────────────
 
-const quotePhrase = (text: string): string => '"' + text.replace(/"/g, '\\"') + '"'
+// Backslashes FIRST, then quotes. Escaping only the quote leaves `\` intact,
+// so an input ending in a backslash turns the appended closing `"` into an
+// escaped one — the phrase breaks out of its quoting and the remainder is
+// interpreted as Essie expression syntax (CodeQL js/incomplete-sanitization).
+const quotePhrase = (text: string): string =>
+  '"' + text.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'
 const areaPhrase = (area: string, phrase: string): string => `AREA[${area}]${quotePhrase(phrase)}`
 const areaTerm = (area: string, term: string): string => `AREA[${area}]${term}`
 const areaRange = (area: string, lo: string | null, hi: string | null): string =>

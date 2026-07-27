@@ -31,7 +31,7 @@ import {
 } from '../src/main/files/science-ipc.js'
 import { validateIpcChannel } from '../src/main/lumen-authority-policy.js'
 import { LocalProjectCatalog } from '../src/main/files/local-project-catalog.js'
-import { createHybridMembershipAsserter } from '../src/main/files/hybrid-membership.js'
+import { createOfflineCatalogMembershipAsserter } from '../src/main/files/hybrid-membership.js'
 import { AcpPreviewStore } from '../src/main/files/acp-preview-store.js'
 import { createNotebookService } from '../src/main/files/notebook-service.js'
 
@@ -168,21 +168,25 @@ async function run() {
   const store = new AcpPreviewStore()
   store.put('a1', { path: '/s/a1', sha256: 'abc123def4567890abc123def4567890abc123de', ownerId: 'o1', projectId: 'p1' })
 
+  // The mock asserts the REAL contract. `start_review` is a Go MCP tool the
+  // registry rejects — the old mock accepted it, so this suite stayed green
+  // while no submission had ever reached an engine. `review_record` RECORDS a
+  // desktop-verified verdict under actor authority; it does not judge.
+  const recorded: Record<string, unknown>[] = []
   const svc = createReviewService({
     acpCall: async (tool, args) => {
       acpCalls++
-      strictEqual(tool, 'start_review')
+      strictEqual(tool, 'review_record')
+      recorded.push(args)
       return {
-        report: {
-          outcome: 'warn',
-          artifacts: [
-            { artifact_id: 'a1', passed: true, reason: 'ok', expected_sha256: 'abc123def4567890abc123def4567890abc123de' },
-          ],
-          summary: 'evidence partially verified',
-        },
+        reviewer_id: args.reviewerId,
+        verdict: args.verdict,
+        project_id: args.projectId,
+        notes: ['Reviewer operates under SessionActor authority only.'],
       }
     },
     previewStore: store,
+    storeRoot: 'science-store',
   })
 
   clearTrustedPreviewContext()
@@ -211,7 +215,14 @@ async function run() {
   await test('submit succeeds with valid store hash', () => {
     ok((submit as { ok?: boolean }).ok)
     strictEqual(acpCalls, 1)
-    strictEqual(svc.latest()!.outcome, 'warn')
+    // 'pass' is EARNED, not asserted: a hash miss or mismatch fails closed
+    // before anything is recorded, so the only verdict that can reach the
+    // engine is one whose validation succeeded.
+    strictEqual(svc.latest()!.outcome, 'pass')
+    const sent = recorded[0] as { verdict?: string; reviewerId?: string; projectId?: string }
+    strictEqual(sent.verdict, 'pass')
+    strictEqual(sent.reviewerId, 'o1')
+    strictEqual(sent.projectId, 'p1')
   })
 
   // ── Dossier export projection ────────────────────────────────
@@ -298,7 +309,7 @@ async function run() {
   const ipc: IpcMainLike = { handle(ch, h) { if (handlers.has(ch)) throw new Error(`dup ${ch}`); handlers.set(ch, h) } }
   registerScienceIpcHandlers(ipc, {
     safeHandle, getLumenBinaryHash: () => 'h', previewStore: dsStore,
-    assertMembership: createHybridMembershipAsserter({ catalog }),
+    assertMembership: createOfflineCatalogMembershipAsserter({ catalog }),
     projectCatalog: catalog, reviewService: svc,
   })
   await test('ipc registers review channels', () => {

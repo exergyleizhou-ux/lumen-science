@@ -116,8 +116,14 @@ pub async fn handle(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
         "x.ai/science/seq_analyze" => handle_seq_analyze(agent, args).await,
         "x.ai/science/project_create" => handle_project_create(agent, args).await,
         "x.ai/science/project_get" => handle_project_get(agent, args).await,
+        "x.ai/science/project_assert_membership" => {
+            handle_project_assert_membership(agent, args).await
+        }
         "x.ai/science/project_list" => handle_project_list(agent, args).await,
         "x.ai/science/project_transition" => handle_project_transition(agent, args).await,
+        "x.ai/science/project_update_question" => {
+            handle_project_update_question(agent, args).await
+        }
         "x.ai/science/claim_propose" => handle_claim_propose(agent, args).await,
         "x.ai/science/evidence_attach" => handle_evidence_attach(agent, args).await,
         // WP-3 evidence queries
@@ -129,6 +135,7 @@ pub async fn handle(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
         // WP-4/5/6/7/8 preview
         "x.ai/science/workflow_validate" => handle_workflow_validate(agent, args).await,
         "x.ai/science/workflow_dry_run" => handle_workflow_dry_run(agent, args).await,
+        "x.ai/science/workflow_execute" => handle_workflow_execute(agent, args).await,
         "x.ai/science/kernel_admission" => handle_kernel_admission(agent, args).await,
         "x.ai/science/multimodal_index" => handle_multimodal_index(agent, args).await,
         "x.ai/science/review_record" => handle_review_record(agent, args).await,
@@ -139,6 +146,104 @@ pub async fn handle(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
 }
 
 // ── WP-2 product path: ResearchProject + EvidenceGraph + Claims ──
+//
+// Every mutating entry here routes through the SessionActor
+// (`MvpAgent::run_science_project_mutation`), which owns the permission
+// request, the durable run record, and the record write. None of them may
+// construct a ProjectStore and mutate it on this request task: that would put
+// execution authority in the ACP adapter, which is exactly the seam this
+// product path exists to keep closed. Read-only entries below still build a
+// store directly, which is fine — they take no authority.
+
+/// Shared driver for the four mutating WP-2 entries.
+///
+/// Resolves the session, pins the store roots inside its workspace, builds the
+/// run context, and hands the typed mutation to the actor. `operationId` is
+/// the caller's idempotency key: replaying one returns the first outcome
+/// instead of applying the mutation twice. `expectedRevision` is a
+/// compare-and-swap against `ProjectStore::project_revision`; omit it only
+/// when the caller accepts last-writer-wins.
+async fn run_project_mutation(
+    agent: &MvpAgent,
+    session_id: String,
+    owner_id: String,
+    store_root: PathBuf,
+    artifact_root: Option<PathBuf>,
+    operation_id: String,
+    expected_revision: Option<String>,
+    approval_timeout_ms: u64,
+    mutation: xai_grok_science::project::ProjectMutation,
+) -> Result<xai_grok_science::project::MutationOutcome, acp::Error> {
+    if owner_id.is_empty() {
+        return Err(acp::Error::invalid_params().data("ownerId is required"));
+    }
+    if !(1..=300_000).contains(&approval_timeout_ms) {
+        return Err(acp::Error::invalid_params().data("approvalTimeoutMs must be in 1..=300000"));
+    }
+    let session_id = acp::SessionId::new(session_id);
+    let handle = agent
+        .get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let project_root = canonical_dir_within(store_root, &workspace)?;
+    let artifact_root = match artifact_root {
+        Some(root) => canonical_dir_within(root, &workspace)?,
+        None => canonical_dir_within(project_root.join("runs"), &workspace)?,
+    };
+    // The run record is bound to the project being mutated; a create has no
+    // project id yet, so the run is filed under the operation that makes one.
+    let run_project = mutation
+        .target_project()
+        .map(|project_id| project_id.0.clone())
+        .unwrap_or_else(|| format!("pending-{operation_id}"));
+    let context = RunContext {
+        run_id: RunId::new_v7(),
+        project_id: ProjectId::new(run_project),
+        session_id: session_id.0.to_string(),
+        owner_id: owner_id.clone(),
+        workspace_root: workspace,
+        provider: "offline-deterministic".into(),
+        approval_policy: "production-session-permission".into(),
+        tool_profile: "science-project-mutation-v1".into(),
+        artifact_root,
+        environment: BTreeMap::from([
+            ("network".into(), "disabled".into()),
+            ("locale".into(), "C".into()),
+        ]),
+    };
+    let request = xai_grok_science::project::MutationRequest {
+        operation_id,
+        session_id: session_id.0.to_string(),
+        owner_id,
+        expected_revision,
+        mutation,
+    };
+    agent
+        .run_science_project_mutation(
+            &session_id,
+            ScienceStore::new(project_root.clone()),
+            project_root,
+            context,
+            request,
+            Duration::from_millis(approval_timeout_ms),
+        )
+        .await
+        .map_err(internal)
+}
+
+fn mutation_response(
+    outcome: xai_grok_science::project::MutationOutcome,
+) -> ExtResult {
+    to_raw_response(&serde_json::json!({
+        "operationId": outcome.operation_id,
+        "kind": outcome.kind,
+        "projectId": outcome.project_id.0,
+        "revision": outcome.revision,
+        "replayed": outcome.replayed,
+        "result": outcome.result,
+        "runtimeAuthority": "SessionActor-gated ACP adapter",
+    }))
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -148,32 +253,82 @@ struct ProjectCreateParams {
     store_root: PathBuf,
     title: String,
     research_question: String,
+    operation_id: String,
+    #[serde(default)]
+    artifact_root: Option<PathBuf>,
+    #[serde(default = "default_approval_timeout_ms")]
+    approval_timeout_ms: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct QuestionUpdateParams {
+    session_id: String,
+    owner_id: String,
+    store_root: PathBuf,
+    project_id: String,
+    research_question: String,
+    operation_id: String,
+    #[serde(default)]
+    expected_revision: Option<String>,
+    #[serde(default)]
+    artifact_root: Option<PathBuf>,
+    #[serde(default = "default_approval_timeout_ms")]
+    approval_timeout_ms: u64,
+}
+
+/// Refine an existing project's research question.
+///
+/// Same SessionActor route as every other record mutation — permission prompt,
+/// idempotent operation id, optional revision CAS. The alternative was the
+/// desktop keeping edits in component state, where the question a user spent
+/// an hour refining vanished on tab switch and the durable record silently
+/// disagreed with the screen.
+async fn handle_project_update_question(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: QuestionUpdateParams = parse_params(args)?;
+    if params.research_question.is_empty() {
+        return Err(acp::Error::invalid_params().data("researchQuestion is required"));
+    }
+    let outcome = run_project_mutation(
+        agent,
+        params.session_id,
+        params.owner_id,
+        params.store_root,
+        params.artifact_root,
+        params.operation_id,
+        params.expected_revision,
+        params.approval_timeout_ms,
+        xai_grok_science::project::ProjectMutation::QuestionUpdate {
+            project_id: xai_grok_science::project::ProjectId(params.project_id),
+            research_question: params.research_question,
+        },
+    )
+    .await?;
+    mutation_response(outcome)
 }
 
 async fn handle_project_create(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: ProjectCreateParams = parse_params(args)?;
-    if params.owner_id.is_empty() || params.title.is_empty() {
-        return Err(acp::Error::invalid_params().data("ownerId and title are required"));
+    if params.title.is_empty() {
+        return Err(acp::Error::invalid_params().data("title is required"));
     }
-    let session_id = acp::SessionId::new(params.session_id);
-    let handle = agent
-        .get_session_handle(&session_id)
-        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
-    let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root);
-    let project = store
-        .create_project(&params.owner_id, params.title, params.research_question)
-        .map_err(internal)?;
-    to_raw_response(&serde_json::json!({
-        "projectId": project.project_id.0,
-        "ownerId": project.owner_id.0,
-        "title": project.title,
-        "status": format!("{:?}", project.status),
-        "evidenceGraphId": project.evidence_graph_id,
-        "featureGate": "research_project=preview",
-        "runtimeAuthority": "SessionActor-gated ACP adapter",
-    }))
+    let outcome = run_project_mutation(
+        agent,
+        params.session_id,
+        params.owner_id,
+        params.store_root,
+        params.artifact_root,
+        params.operation_id,
+        // A create has no prior revision to compare against.
+        None,
+        params.approval_timeout_ms,
+        xai_grok_science::project::ProjectMutation::ProjectCreate {
+            title: params.title,
+            research_question: params.research_question,
+        },
+    )
+    .await?;
+    mutation_response(outcome)
 }
 
 #[derive(Debug, Deserialize)]
@@ -196,6 +351,61 @@ async fn handle_project_get(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
     let pid = xai_grok_science::project::ProjectId(params.project_id);
     let bundle = store.load_bundle(&pid).map_err(internal)?;
     to_raw_response(&bundle)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ProjectAssertMembershipParams {
+    session_id: String,
+    store_root: PathBuf,
+    project_id: String,
+    owner_id: String,
+}
+
+/// Answer whether an owner may act on a project.
+///
+/// The desktop has always called `project_assert_membership`; it existed in
+/// neither engine, so the method registry refused it and every attempt to open
+/// a project failed closed. That was the correct failure — the desktop had
+/// invented the name — but it left the entire workspace unreachable.
+///
+/// Read-only on purpose, so it stays a plain query rather than taking the
+/// SessionActor route a mutation needs. It answers from the durable record: the
+/// project's stored owner is compared to the claimed one, and no other source
+/// participates.
+///
+/// A missing project is reported as NOT a member rather than as an error. A
+/// caller learning "this project does not exist" versus "you are not its owner"
+/// is a probe for which projects exist, and the honest answer to both is the
+/// same: you may not act on it.
+async fn handle_project_assert_membership(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: ProjectAssertMembershipParams = parse_params(args)?;
+    if params.owner_id.is_empty() {
+        return Err(acp::Error::invalid_params().data("ownerId is required"));
+    }
+    let session_id = acp::SessionId::new(params.session_id);
+    let handle = agent
+        .get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let store_root = canonical_dir_within(params.store_root, &workspace)?;
+    let store = xai_grok_science::project::ProjectStore::new(store_root);
+    let pid = xai_grok_science::project::ProjectId(params.project_id.clone());
+
+    let member = match store.load_project(&pid) {
+        Ok(project) => project.owner_id.0 == params.owner_id,
+        Err(_) => false,
+    };
+
+    to_raw_response(&serde_json::json!({
+        "ok": member,
+        "member": member,
+        "ownerId": params.owner_id,
+        "projectId": params.project_id,
+        "reason": if member { "owner matches the durable project record" }
+                  else { "not the owner of this project, or no such project" },
+        "runtimeAuthority": "SessionActor-gated ACP adapter",
+    }))
 }
 
 #[derive(Debug, Deserialize)]
@@ -227,27 +437,35 @@ struct ProjectTransitionParams {
     owner_id: String,
     /// Draft | Planned | Active | ReviewPending | Accepted | Rejected | Inconclusive | Archived
     status: String,
+    operation_id: String,
+    #[serde(default)]
+    expected_revision: Option<String>,
+    #[serde(default)]
+    artifact_root: Option<PathBuf>,
+    #[serde(default = "default_approval_timeout_ms")]
+    approval_timeout_ms: u64,
 }
 
 async fn handle_project_transition(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: ProjectTransitionParams = parse_params(args)?;
-    let session_id = acp::SessionId::new(params.session_id);
-    let handle = agent
-        .get_session_handle(&session_id)
-        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
-    let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root);
     let status = parse_project_status(&params.status)
         .ok_or_else(|| acp::Error::invalid_params().data("invalid status"))?;
-    let project = store
-        .transition_project(
-            &xai_grok_science::project::ProjectId(params.project_id),
-            &params.owner_id,
+    let outcome = run_project_mutation(
+        agent,
+        params.session_id,
+        params.owner_id,
+        params.store_root,
+        params.artifact_root,
+        params.operation_id,
+        params.expected_revision,
+        params.approval_timeout_ms,
+        xai_grok_science::project::ProjectMutation::ProjectTransition {
+            project_id: xai_grok_science::project::ProjectId(params.project_id),
             status,
-        )
-        .map_err(internal)?;
-    to_raw_response(&project)
+        },
+    )
+    .await?;
+    mutation_response(outcome)
 }
 
 fn parse_project_status(s: &str) -> Option<xai_grok_science::project::ProjectStatus> {
@@ -274,6 +492,13 @@ struct ClaimProposeParams {
     owner_id: String,
     statement: String,
     proposed_by: String,
+    operation_id: String,
+    #[serde(default)]
+    expected_revision: Option<String>,
+    #[serde(default)]
+    artifact_root: Option<PathBuf>,
+    #[serde(default = "default_approval_timeout_ms")]
+    approval_timeout_ms: u64,
 }
 
 async fn handle_claim_propose(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
@@ -281,22 +506,23 @@ async fn handle_claim_propose(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtRe
     if params.statement.is_empty() {
         return Err(acp::Error::invalid_params().data("statement is required"));
     }
-    let session_id = acp::SessionId::new(params.session_id);
-    let handle = agent
-        .get_session_handle(&session_id)
-        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
-    let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root);
-    let claim = store
-        .propose_claim(
-            &xai_grok_science::project::ProjectId(params.project_id),
-            &params.owner_id,
-            params.statement,
-            params.proposed_by,
-        )
-        .map_err(internal)?;
-    to_raw_response(&claim)
+    let outcome = run_project_mutation(
+        agent,
+        params.session_id,
+        params.owner_id,
+        params.store_root,
+        params.artifact_root,
+        params.operation_id,
+        params.expected_revision,
+        params.approval_timeout_ms,
+        xai_grok_science::project::ProjectMutation::ClaimPropose {
+            project_id: xai_grok_science::project::ProjectId(params.project_id),
+            statement: params.statement,
+            proposed_by: params.proposed_by,
+        },
+    )
+    .await?;
+    mutation_response(outcome)
 }
 
 #[derive(Debug, Deserialize)]
@@ -311,32 +537,36 @@ struct EvidenceAttachParams {
     label: String,
     #[serde(default)]
     run_id: Option<String>,
+    operation_id: String,
+    #[serde(default)]
+    expected_revision: Option<String>,
+    #[serde(default)]
+    artifact_root: Option<PathBuf>,
+    #[serde(default = "default_approval_timeout_ms")]
+    approval_timeout_ms: u64,
 }
 
 async fn handle_evidence_attach(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: EvidenceAttachParams = parse_params(args)?;
-    let session_id = acp::SessionId::new(params.session_id);
-    let handle = agent
-        .get_session_handle(&session_id)
-        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
-    let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root);
-    let (claim, graph) = store
-        .attach_evidence(
-            &xai_grok_science::project::ProjectId(params.project_id),
-            &params.owner_id,
-            &params.claim_id,
-            params.artifact_sha256,
-            params.label,
-            params.run_id,
-        )
-        .map_err(internal)?;
-    to_raw_response(&serde_json::json!({
-        "claim": claim,
-        "nodeCount": graph.nodes.len(),
-        "edgeCount": graph.edges.len(),
-    }))
+    let outcome = run_project_mutation(
+        agent,
+        params.session_id,
+        params.owner_id,
+        params.store_root,
+        params.artifact_root,
+        params.operation_id,
+        params.expected_revision,
+        params.approval_timeout_ms,
+        xai_grok_science::project::ProjectMutation::EvidenceAttach {
+            project_id: xai_grok_science::project::ProjectId(params.project_id),
+            claim_id: params.claim_id,
+            artifact_sha256: params.artifact_sha256,
+            label: params.label,
+            run_id: params.run_id,
+        },
+    )
+    .await?;
+    mutation_response(outcome)
 }
 
 /// Offline Motif-class sequence analysis product path.
@@ -410,7 +640,12 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
         "tool": analysis.tool,
         "toolVersion": analysis.tool_version,
         "network": "disabled",
-        "runtimeAuthority": "SessionActor-gated ACP adapter",
+        // NOT SessionActor-gated. This handler still writes artifacts from the
+        // ACP request task with no SessionCommand, no permission request and
+        // no durable run record. The previous "SessionActor-gated ACP adapter"
+        // claim here was false; do not restore it until seq_analyze routes
+        // through the actor the way the WP-2 mutations now do.
+        "runtimeAuthority": "ACP request task (not actor-gated)",
     }))
 }
 
@@ -852,6 +1087,11 @@ async fn handle_evidence_reproduction(agent: &MvpAgent, args: &acp::ExtRequest) 
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ProjectMigrateParams { session_id: String, store_root: PathBuf, run_id: String, owner_id: String, title: String, question: String }
 
+/// KNOWN BYPASS: unlike the four WP-2 mutations above, this still constructs a
+/// ProjectStore on the ACP request task and writes a project record with no
+/// SessionCommand, no permission request and no durable run record. It makes
+/// no `runtimeAuthority` claim for that reason. Route it through
+/// `run_project_mutation` when the migration gains a typed mutation variant.
 async fn handle_project_migrate(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: ProjectMigrateParams = parse_params(args)?;
     let session_id = acp::SessionId::new(params.session_id);
@@ -890,18 +1130,243 @@ async fn handle_workflow_validate(agent: &MvpAgent, args: &acp::ExtRequest) -> E
 async fn handle_workflow_dry_run(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: WorkflowGenParams = parse_params(args)?;
     let spec: xai_grok_science::workflow::WorkflowSpec = serde_json::from_value(params.spec).map_err(internal)?;
-    store_handler(agent, &params.session_id, params.store_root, move |s| s.workflow_dry_run(&spec)).await
+    // No kernel manifest is available on this read-only surface, so a
+    // workflow with notebook steps is reported as blocked rather than
+    // assumed to pass. See ProjectStore::workflow_dry_run.
+    store_handler(agent, &params.session_id, params.store_root, move |s| s.workflow_dry_run(&spec, None)).await
+}
+
+// ── LS5-K8: workflow execution ───────────────────────────────────
+//
+// The only ACP entry in this file that RUNS a workflow, and therefore the only
+// one that spawns an interpreter. Like the four WP-2 mutations above it takes
+// no authority of its own: it parses, confines every path to the session
+// workspace, and hands a typed binding to the SessionActor. It never
+// constructs a WorkflowExecutor, a StepRunner or a kernel admission — those
+// exist only on the far side of a permission decision, inside the actor.
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct WorkflowExecuteParams {
+    session_id: String,
+    owner_id: String,
+    store_root: PathBuf,
+    /// Idempotency key. REQUIRED — there is no default, because without one a
+    /// retry is indistinguishable from a second intentional execution.
+    operation_id: String,
+    #[serde(rename = "workflowSpec")]
+    spec: serde_json::Value,
+    /// Absolute path to the interpreter kernel steps run on. Never resolved
+    /// from `PATH`: which binary ran is part of the evidence.
+    interpreter_path: PathBuf,
+    #[serde(default = "_workflow_kernel_id")]
+    kernel_id: String,
+    #[serde(default = "_python_kind")]
+    kernel_kind: String,
+    /// Explicit opt-in to `StepKind::NotebookCell`.
+    ///
+    /// `ExecutionPolicy::default()` omits that kind so running arbitrary code
+    /// is a decision rather than a default; this is where the caller makes it,
+    /// visibly, in the request. Absent, kernel steps are refused by the
+    /// executor before the run is queued.
+    #[serde(default)]
+    allow_kernel_steps: bool,
+    #[serde(default)]
+    artifact_root: Option<PathBuf>,
+    #[serde(default = "_probe_timeout_ms")]
+    probe_timeout_ms: u64,
+    #[serde(default = "default_approval_timeout_ms")]
+    approval_timeout_ms: u64,
+}
+
+fn _workflow_kernel_id() -> String {
+    "session-kernel".into()
+}
+
+async fn handle_workflow_execute(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: WorkflowExecuteParams = parse_params(args)?;
+    if params.owner_id.is_empty() {
+        return Err(acp::Error::invalid_params().data("ownerId is required"));
+    }
+    if params.operation_id.is_empty() {
+        return Err(acp::Error::invalid_params().data("operationId is required"));
+    }
+    if !(1..=300_000).contains(&params.approval_timeout_ms) {
+        return Err(acp::Error::invalid_params().data("approvalTimeoutMs must be in 1..=300000"));
+    }
+    if !(1..=120_000).contains(&params.probe_timeout_ms) {
+        return Err(acp::Error::invalid_params().data("probeTimeoutMs must be in 1..=120000"));
+    }
+    if !params.interpreter_path.is_absolute() {
+        return Err(acp::Error::invalid_params().data("interpreterPath must be absolute"));
+    }
+    let kernel_kind = match params.kernel_kind.as_str() {
+        "r" | "R" => xai_grok_science::workflow::KernelKind::R,
+        "julia" => xai_grok_science::workflow::KernelKind::Julia,
+        "python" => xai_grok_science::workflow::KernelKind::Python,
+        other => {
+            return Err(acp::Error::invalid_params()
+                .data(format!("unknown kernelKind '{other}'")));
+        }
+    };
+    let spec: xai_grok_science::workflow::WorkflowSpec =
+        serde_json::from_value(params.spec).map_err(|error| {
+            acp::Error::invalid_params().data(format!("workflowSpec is not a WorkflowSpec: {error}"))
+        })?;
+
+    let session_id = acp::SessionId::new(params.session_id);
+    let handle = agent
+        .get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let store_root = canonical_dir_within(params.store_root, &workspace)?;
+    let artifact_root = match params.artifact_root {
+        Some(root) => canonical_dir_within(root, &workspace)?,
+        None => canonical_dir_within(store_root.join("runs"), &workspace)?,
+    };
+    // Kernel cell bodies, per-attempt outputs and the exec-loop driver all live
+    // inside the session workspace, confined by the same helper as every other
+    // science path. A workflow cannot read or write its way out of the session.
+    let cell_source_root = canonical_dir_within(store_root.join("workflow-cells"), &workspace)?;
+    let output_root = canonical_dir_within(store_root.join("workflow-outputs"), &workspace)?;
+    let runtime_root = canonical_dir_within(store_root.join("workflow-runtime"), &workspace)?;
+
+    let run_project = if spec.project_id.0.is_empty() {
+        format!("pending-{}", params.operation_id)
+    } else {
+        spec.project_id.0.clone()
+    };
+    let context = RunContext {
+        run_id: RunId::new_v7(),
+        project_id: ProjectId::new(run_project),
+        session_id: session_id.0.to_string(),
+        owner_id: params.owner_id.clone(),
+        workspace_root: workspace,
+        provider: "offline-deterministic".into(),
+        approval_policy: "production-session-permission".into(),
+        tool_profile: "science-workflow-execute-v1".into(),
+        artifact_root,
+        environment: BTreeMap::from([
+            ("network".into(), "disabled".into()),
+            ("locale".into(), "C".into()),
+        ]),
+    };
+    let binding = crate::session::commands::ScienceWorkflowBinding {
+        execution: xai_grok_science::workflow::WorkflowExecutionRequest {
+            operation_id: params.operation_id,
+            session_id: session_id.0.to_string(),
+            owner_id: params.owner_id,
+            spec,
+        },
+        executor_root: store_root.clone(),
+        cell_source_root,
+        output_root,
+        runtime_root,
+        kernel_id: params.kernel_id,
+        kernel_kind,
+        interpreter_path: params.interpreter_path,
+        probe_timeout: Duration::from_millis(params.probe_timeout_ms),
+        allow_kernel_steps: params.allow_kernel_steps,
+    };
+    let report = agent
+        .run_science_workflow_execution(
+            &session_id,
+            ScienceStore::new(store_root),
+            context,
+            binding,
+            Duration::from_millis(params.approval_timeout_ms),
+        )
+        .await
+        .map_err(internal)?;
+    workflow_execution_response(&report)
+}
+
+fn workflow_execution_response(
+    report: &xai_grok_science::workflow::WorkflowRunReport,
+) -> ExtResult {
+    to_raw_response(&serde_json::json!({
+        "operationId": report.run.operation_id,
+        "runId": report.run.run_id,
+        "workflowId": report.run.workflow_id,
+        "projectId": report.run.project_id.0,
+        "state": report.run.state,
+        "stepOrder": report.run.step_order,
+        "refusedSteps": report.run.refused_steps,
+        "failure": report.run.failure,
+        "artifactsCommitted": report.artifacts_committed,
+        "stepsReused": report.steps_reused,
+        "replayed": report.replayed,
+        "recovered": report.recovered,
+        "commits": report.commits.iter().map(|commit| serde_json::json!({
+            "commitKey": commit.commit_key,
+            "stepId": commit.step_id,
+            "outputManifest": commit.output_manifest,
+            "outputManifestHash": commit.output_manifest_hash,
+            "committedByAttempt": commit.committed_by_attempt,
+        })).collect::<Vec<_>>(),
+        "attempts": report.attempts.iter().map(|attempt| serde_json::json!({
+            "attemptId": attempt.attempt_id,
+            "stepId": attempt.step_id,
+            "attemptNumber": attempt.attempt_number,
+            "terminalState": attempt.terminal_state,
+            "errorClass": attempt.error_class,
+            "errorDetail": attempt.error_detail,
+        })).collect::<Vec<_>>(),
+        "runtimeAuthority": "SessionActor-gated ACP adapter",
+    }))
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct KernelAdmParams2 { session_id: String, store_root: PathBuf, kernel_id: String, #[serde(default = "_python_kind")] kind: String, exec_hash: String, lock_hash: String }
+struct KernelAdmParams2 {
+    session_id: String,
+    store_root: PathBuf,
+    kernel_id: String,
+    #[serde(default = "_python_kind")]
+    kind: String,
+    /// Absolute path to the interpreter to probe. Required: there is nothing
+    /// to admit without one.
+    interpreter_path: PathBuf,
+    /// Optional confinement root for the resolved interpreter.
+    #[serde(default)]
+    allowed_root: Option<PathBuf>,
+    /// Optional digest the caller asserts. VERIFIED against the probe and
+    /// rejected on mismatch — it is no longer echoed back into the record.
+    #[serde(default)]
+    exec_hash: Option<String>,
+    #[serde(default)]
+    package_lock_path: Option<PathBuf>,
+    #[serde(default)]
+    lock_hash: Option<String>,
+    #[serde(default = "_probe_timeout_ms")]
+    probe_timeout_ms: u64,
+}
 fn _python_kind() -> String { "python".into() }
+fn _probe_timeout_ms() -> u64 { 10_000 }
 
+/// KNOWN BYPASS: like the other WP-4/5 preview entries this builds a store on
+/// the ACP request task. Unlike them it now *executes* the interpreter to read
+/// its version, so it takes more authority than a read-only query: route it
+/// through `run_project_mutation`'s pattern (typed SessionCommand + permission
+/// request) before it is promoted past preview.
 async fn handle_kernel_admission(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: KernelAdmParams2 = parse_params(args)?;
     let kind = match params.kind.as_str() { "r" | "R" => xai_grok_science::workflow::KernelKind::R, "julia" => xai_grok_science::workflow::KernelKind::Julia, _ => xai_grok_science::workflow::KernelKind::Python };
-    store_handler(agent, &params.session_id, params.store_root, move |s| s.check_kernel_admission(params.kernel_id, kind, params.exec_hash, params.lock_hash)).await
+    if !(1..=120_000).contains(&params.probe_timeout_ms) {
+        return Err(acp::Error::invalid_params().data("probeTimeoutMs must be in 1..=120000"));
+    }
+    let mut request = xai_grok_science::workflow::KernelAdmissionRequest::new(
+        params.kernel_id,
+        kind,
+        params.interpreter_path,
+    )
+    .with_admitted_by(format!("acp-session:{}", params.session_id))
+    .with_probe_timeout(Duration::from_millis(params.probe_timeout_ms));
+    request.allowed_root = params.allowed_root;
+    request.supplied_executable_hash = params.exec_hash;
+    request.package_lock_path = params.package_lock_path;
+    request.supplied_package_lock_hash = params.lock_hash;
+    store_handler(agent, &params.session_id, params.store_root, move |s| s.check_kernel_admission(&request)).await
 }
 
 #[derive(Debug, Deserialize)]

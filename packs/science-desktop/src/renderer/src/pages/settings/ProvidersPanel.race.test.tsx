@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: Copy expectations follow this product's name.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -302,12 +306,12 @@ describe('ProvidersPanel: claude-shared actions', () => {
 
     render()
     const disconnect = document.body.querySelector<HTMLButtonElement>(
-      '[aria-label="Disconnect from Open Science"]'
+      '[aria-label="Disconnect from Lumen Science"]'
     )
     await act(async () => disconnect?.click())
 
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      'Could not disconnect Claude from Open Science.'
+      'Could not disconnect Claude from Lumen Science.'
     )
   })
 })

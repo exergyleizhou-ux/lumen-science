@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { BrowserWindow, dialog, ipcMain } from 'electron'
 import { randomUUID } from 'node:crypto'
 
@@ -181,8 +187,8 @@ const nativeFallback = async (
           buttons: ['Cancel', 'Quit'],
           defaultId: 0,
           cancelId: 0,
-          title: 'Open Science',
-          message: 'Quit Open Science?',
+          title: 'Lumen Science',
+          message: 'Quit Lumen Science?',
           detail: 'Work is still running and will be interrupted if you quit.'
         }
       : {
@@ -190,7 +196,7 @@ const nativeFallback = async (
           buttons: ['Minimize to tray', 'Quit'],
           defaultId: 0,
           cancelId: 0,
-          title: 'Open Science',
+          title: 'Lumen Science',
           message: 'Minimize to tray or quit?',
           detail: 'Background work may still be running.',
           checkboxLabel: "Don't ask again",

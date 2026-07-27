@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import {
   spawn,
   type ChildProcessWithoutNullStreams,
@@ -155,7 +161,7 @@ const buildCodexConfig = (provider: {
     model_provider: CODEX_PROVIDER_ID,
     model_providers: {
       [CODEX_PROVIDER_ID]: {
-        name: 'Open Science',
+        name: 'Lumen Science',
         wire_api: 'responses',
         ...(baseUrl ? { base_url: baseUrl } : {}),
         ...(provider.key ? { requires_openai_auth: true } : {})

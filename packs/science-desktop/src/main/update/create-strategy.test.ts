@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: Configures a Lumen-owned update feed; the hardened policy refuses to construct a networked strategy without one.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 // createUpdateStrategy constructs a concrete strategy per platform. Both strategies touch native
 // modules at construction (UpdateService reads app.getVersion(); ElectronUpdaterStrategy subscribes to
@@ -14,6 +18,22 @@ vi.mock('electron-updater', () => ({
 import { createUpdateStrategy } from './create-strategy'
 import { ElectronUpdaterStrategy } from './electron-updater-strategy'
 import { UpdateService } from './service'
+
+
+// The hardened update policy refuses to construct a networked strategy without
+// an explicit Lumen-owned feed (update-policy.ts) — the fallback these tests
+// relied on used to be a hardcoded third-party URL, which is exactly what the
+// hardening removed. The suite configures a syntactically valid Lumen feed so
+// it can test the strategy MECHANICS; the refusal paths have their own
+// coverage in scripts/test-update-egress.mts.
+beforeAll(() => {
+  process.env.LUMEN_UPDATE_FEED_URL = 'https://releases.lumen.science/desktop/manifest.json'
+  process.env.LUMEN_UPDATE_PUBLIC_KEY = 'RWTest0000000000000000000000000000000000000000000000000000'
+})
+afterAll(() => {
+  delete process.env.LUMEN_UPDATE_FEED_URL
+  delete process.env.LUMEN_UPDATE_PUBLIC_KEY
+})
 
 describe('createUpdateStrategy', () => {
   it('uses ElectronUpdaterStrategy on win32', () => {

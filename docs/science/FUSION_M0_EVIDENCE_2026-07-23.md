@@ -1,3 +1,7 @@
+<!-- status-claim: historical -->
+> **Historical record.** M0 evidence captured 2026-07-23 against a different
+> checkout. Live status: [`docs/science/status/current.json`](status/current.json).
+
 # Lumen Science M0 evidence — 2026-07-23
 
 **Checkout:** `/Users/lei/code/lumen`  

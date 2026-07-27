@@ -101,19 +101,44 @@ lint:
 
 # ── Release ─────────────────────────────────────────────────────
 
+# LS5-R1-01: reproducible archives. Plain `tar -czf` embeds per-file mtimes,
+# uid/gid and a gzip header timestamp, so two builds of the same commit produced
+# different bytes and the release could not be independently reproduced.
+#
+# SOURCE_DATE_EPOCH comes from the source commit (CI sets it; this default
+# covers local builds). Every input mtime is normalised to it, entries are
+# sorted, ownership is zeroed, and `gzip -n` drops the header timestamp.
+SOURCE_DATE_EPOCH ?= $(shell git show -s --format=%ct HEAD 2>/dev/null || echo 0)
+
+# Both tar flavours can produce deterministic archives, but not with the same
+# flags: GNU tar has --sort/--mtime/--owner, macOS bsdtar has --uid/--gid/
+# --uname/--gname and no --sort. Support both rather than hard-failing on the
+# platform most of this is developed on. scripts/repro-archive.sh picks the
+# right flags and feeds a sorted, mtime-normalised file list.
+# ABSOLUTE. Every use is preceded by `cd $(RELEASE_DIR)`, so a path relative to
+# this Makefile resolves against dist/science-release instead and lands on
+# packs/science/scripts/, which does not exist. $(abspath) is expanded at parse
+# time, while the working directory is still packs/science.
+REPRO_ARCHIVE := $(abspath ../../scripts/repro-archive.sh)
+
 release: clean cross
-	@echo "Building release package version=$(VERSION)..."
+	@echo "Building release package version=$(VERSION) SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH)..."
 	@mkdir -p $(RELEASE_DIR)
 	@# Per-platform archives (primary CLI + MCP helpers)
-	@cd $(RELEASE_DIR) && tar -czf lumen-science-$(VERSION)-darwin-arm64.tar.gz \
+	@cd $(RELEASE_DIR) && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) bash $(REPRO_ARCHIVE) \
+		tar lumen-science-$(VERSION)-darwin-arm64.tar.gz \
 		lumen-science-darwin-arm64 lumen-mcp-*-darwin-arm64
-	@cd $(RELEASE_DIR) && tar -czf lumen-science-$(VERSION)-darwin-amd64.tar.gz \
+	@cd $(RELEASE_DIR) && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) bash $(REPRO_ARCHIVE) \
+		tar lumen-science-$(VERSION)-darwin-amd64.tar.gz \
 		lumen-science-darwin-amd64 lumen-mcp-*-darwin-amd64
-	@cd $(RELEASE_DIR) && tar -czf lumen-science-$(VERSION)-linux-amd64.tar.gz \
+	@cd $(RELEASE_DIR) && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) bash $(REPRO_ARCHIVE) \
+		tar lumen-science-$(VERSION)-linux-amd64.tar.gz \
 		lumen-science-linux-amd64 lumen-mcp-*-linux-amd64
-	@cd $(RELEASE_DIR) && tar -czf lumen-science-$(VERSION)-linux-arm64.tar.gz \
+	@cd $(RELEASE_DIR) && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) bash $(REPRO_ARCHIVE) \
+		tar lumen-science-$(VERSION)-linux-arm64.tar.gz \
 		lumen-science-linux-arm64 lumen-mcp-*-linux-arm64
-	@cd $(RELEASE_DIR) && zip -q lumen-science-$(VERSION)-windows-amd64.zip \
+	@cd $(RELEASE_DIR) && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) bash $(REPRO_ARCHIVE) \
+		zip lumen-science-$(VERSION)-windows-amd64.zip \
 		lumen-science-windows-amd64.exe lumen-mcp-*-windows-amd64.exe
 	@# SHA-256 for every binary + archive
 	@cd $(RELEASE_DIR) && shasum -a 256 lumen-science-* lumen-mcp-* > SHA256SUMS

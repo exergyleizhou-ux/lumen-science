@@ -1,3 +1,6 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 
 import type {
@@ -607,6 +610,23 @@ type OpenScienceAPI = {
       expectedSha256?: string
       mimeType?: string
     }) => Promise<unknown>
+    /**
+     * Permission asks initiated by the ENGINE. The renderer may only answer
+     * one, never raise one. Returns an unsubscribe so a remount cannot answer
+     * the same ask twice.
+     */
+    onPermissionAsk: (
+      listener: (ask: {
+        requestId: string
+        operation: string
+        target: string
+        detail?: string
+      }) => void,
+    ) => () => void
+    respondToPermission: (
+      requestId: string,
+      decision: 'allow_once' | 'reject',
+    ) => Promise<unknown>
     listUiProjects: () => Promise<unknown>
     createUiProject: (request: {
       name: string
@@ -619,6 +639,8 @@ type OpenScienceAPI = {
       runId?: string
     }) => Promise<unknown>
     deleteUiProject: (request: { projectId: string }) => Promise<unknown>
+    updateQuestion: (request: { researchQuestion: string }) => Promise<unknown>
+    saveExport: (request: { suggestedName: string; contents: string }) => Promise<unknown>
     /** OSF-3 Notebook — plan/dry-run/export; execute via Lumen ACP only */
     notebookPlanCell: (request: {
       language?: 'python' | 'r'
@@ -1257,6 +1279,35 @@ const api: OpenScienceAPI = {
       ipcRenderer.invoke('files:unbind-session') as Promise<unknown>,
     previewByArtifact: (request) =>
       ipcRenderer.invoke('files:preview-by-artifact', request) as Promise<unknown>,
+
+    /**
+     * Subscribe to permission asks from the engine.
+     *
+     * There is no way to ORIGINATE one from here: the renderer may only answer
+     * an ask the engine initiated, using a request id the main process issued.
+     * Returns an unsubscribe so a remounting component cannot accumulate
+     * listeners and answer the same ask twice.
+     */
+    onPermissionAsk: (
+      listener: (ask: {
+        requestId: string
+        operation: string
+        target: string
+        detail?: string
+      }) => void,
+    ): (() => void) => {
+      const wrapped = (_event: unknown, ask: unknown): void =>
+        listener(ask as Parameters<typeof listener>[0])
+      ipcRenderer.on('permission:ask', wrapped)
+      // Returns void, not the IpcRenderer that removeListener yields: an
+      // unsubscribe handing back the emitter would let a caller keep poking at
+      // the channel it just detached from.
+      return () => {
+        ipcRenderer.removeListener('permission:ask', wrapped)
+      }
+    },
+    respondToPermission: (requestId: string, decision: 'allow_once' | 'reject') =>
+      ipcRenderer.invoke('permission:respond', requestId, decision) as Promise<unknown>,
     listUiProjects: () =>
       ipcRenderer.invoke('files:list-ui-projects') as Promise<unknown>,
     createUiProject: (request) =>
@@ -1265,6 +1316,10 @@ const api: OpenScienceAPI = {
       ipcRenderer.invoke('files:open-ui-project', request) as Promise<unknown>,
     deleteUiProject: (request) =>
       ipcRenderer.invoke('files:delete-ui-project', request) as Promise<unknown>,
+    updateQuestion: (request) =>
+      ipcRenderer.invoke('files:update-question', request) as Promise<unknown>,
+    saveExport: (request) =>
+      ipcRenderer.invoke('files:save-export', request) as Promise<unknown>,
     notebookPlanCell: (request) =>
       ipcRenderer.invoke('notebook:plan-cell', request) as Promise<unknown>,
     notebookDryRunCell: (request) =>

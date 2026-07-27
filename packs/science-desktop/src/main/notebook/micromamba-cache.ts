@@ -1,3 +1,28 @@
+// Modified from Open Science (Apache-2.0) — statement of changes, §4(b).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f,
+//           src/main/notebook/micromamba-cache.ts
+// Per-file digests: docs/provenance/open-science-adoption.json
+//
+// WHAT LUMEN CHANGED, and why (LS5-K4)
+// ------------------------------------
+// The code is adopted unchanged; this notice is the change. Two deliberate
+// non-changes are worth recording, because reviewing them was the work:
+//
+//  * The on-disk marker name (`.open-science-cache.json`) and the cache leaf
+//    prefixes (`osp…`/`os…`) are upstream spellings and stay. Renaming them
+//    would be branding, not safety: the leaf is a hash of (Windows user,
+//    canonical runtime root), so two applications with different roots never
+//    select the same directory, and the Windows path budget arithmetic in
+//    `fitsBudget` is calibrated against these exact lengths.
+//  * `hardenWindowsCacheAcl` shells out to powershell.exe. That is provisioning
+//    mechanics on a directory this app owns — it sets an ACL, it does not
+//    decide that anything may execute — so it stays inside the adapter.
+//
+// Lumen uses this module for one fact rather than for provisioning:
+// `micromambaCacheLockKey` gives the pinned, canonicalised package-cache
+// identity that goes into an environment identity report. Selecting (and, on
+// Windows, creating) a cache remains available to a driven caller, but nothing
+// in the identity path invokes it.
 import { createHash, randomUUID } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'

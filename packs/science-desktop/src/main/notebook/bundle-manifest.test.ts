@@ -1,3 +1,7 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: URL fixtures use the Lumen-owned release host; cdn.example is refused by runtime-origin-policy.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { createHash } from 'node:crypto'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -222,17 +226,17 @@ describe('verifyPackChecksum', () => {
 
 describe('url helpers', () => {
   it('builds the manifest key', () => {
-    expect(manifestUrl('https://cdn.example/envs', 1, 'osx-arm64')).toBe(
-      'https://cdn.example/envs/runtime-bundle/1/osx-arm64/manifest.json'
+    expect(manifestUrl('https://releases.lumen.science/envs', 1, 'osx-arm64')).toBe(
+      'https://releases.lumen.science/envs/runtime-bundle/1/osx-arm64/manifest.json'
     )
   })
 
   it('builds the pack key from a manifest entry file', () => {
-    expect(packUrl('https://cdn.example/envs', 1, 'linux-64', 'python-3.11.tar.zst')).toBe(
-      'https://cdn.example/envs/runtime-bundle/1/linux-64/python-3.11.tar.zst'
+    expect(packUrl('https://releases.lumen.science/envs', 1, 'linux-64', 'python-3.11.tar.zst')).toBe(
+      'https://releases.lumen.science/envs/runtime-bundle/1/linux-64/python-3.11.tar.zst'
     )
-    expect(packUrl('https://cdn.example/envs', 2, 'win-64', 'r-4.4.tar.zst')).toBe(
-      'https://cdn.example/envs/runtime-bundle/2/win-64/r-4.4.tar.zst'
+    expect(packUrl('https://releases.lumen.science/envs', 2, 'win-64', 'r-4.4.tar.zst')).toBe(
+      'https://releases.lumen.science/envs/runtime-bundle/2/win-64/r-4.4.tar.zst'
     )
   })
 })

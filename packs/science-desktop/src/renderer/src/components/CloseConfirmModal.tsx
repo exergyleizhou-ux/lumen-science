@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { AlertDialog } from 'radix-ui'
 import { useEffect, useState } from 'react'
 
@@ -54,7 +60,7 @@ export const CloseConfirmModal = (): React.JSX.Element | null => {
 
   const isQuitVariant = dialogRequest.variant === 'quit'
   const hasSessions = dialogRequest.sessions.length > 0
-  const title = isQuitVariant ? 'Quit Open Science?' : 'Minimize or quit?'
+  const title = isQuitVariant ? 'Quit Lumen Science?' : 'Minimize or quit?'
   const description = isQuitVariant
     ? 'Work is still running and will be interrupted if you quit.'
     : 'This app can keep running in the tray, or you can quit.'

@@ -20,6 +20,15 @@ import {
 } from '../src/main/files/session-identity.js'
 import type { PreviewFileStore } from '../src/main/files/preview-resolver.js'
 
+// Real fixture file: the resolver reads the bytes.
+import osFix from 'node:os'
+import fsFix from 'node:fs'
+import pathFix from 'node:path'
+const REG_FIXTURE = pathFix.join(fsFix.mkdtempSync(pathFix.join(osFix.tmpdir(), 'reg-fixture-')), 'a1.csv')
+fsFix.writeFileSync(REG_FIXTURE, 'reg,a1\n')
+const REG_SHA = '451ef1ee45f12e12fb943665c66d8dc13a908c4d21ba4b4a167b6c676f2c2e10'
+
+
 let failures = 0
 function test(name: string, fn: () => void | Promise<void>) {
   return Promise.resolve()
@@ -61,8 +70,8 @@ const store: PreviewFileStore = {
   async resolveById(artifactId: string) {
     if (artifactId !== 'a1') return null
     return {
-      path: '/store/a1.csv',
-      sha256: 'abc',
+      path: REG_FIXTURE,
+      sha256: REG_SHA,
       ownerId: 'o1',
       projectId: 'p1',
     }
@@ -123,12 +132,12 @@ async function run() {
   setTrustedPreviewContext({ ownerId: 'o1', projectId: 'p1' })
   const allowed = (await previewHandler({}, {
     artifactId: 'a1',
-    expectedSha256: 'abc',
+    expectedSha256: REG_SHA,
     mimeType: 'text/csv',
   })) as { access: { ok: boolean }; path?: string }
   await test('preview handler allows matching trusted session', () => {
     ok(allowed.access.ok, `expected ok, got ${JSON.stringify(allowed)}`)
-    strictEqual(allowed.path, '/store/a1.csv')
+    strictEqual(allowed.path, REG_FIXTURE)
   })
 
   setTrustedPreviewContext({ ownerId: 'evil', projectId: 'p1' })

@@ -248,6 +248,41 @@ pub const GIT_AUTH_SUPPRESSION_ENVS: [(&str, &str); 4] = [
     ("GIT_SSH_COMMAND", "ssh -o BatchMode=yes"),
 ];
 
+/// Reject a git operand that would be parsed as an OPTION instead of a value.
+///
+/// `git clone --upload-pack=<cmd> …` executes `<cmd>`, so a marketplace source
+/// URL or branch beginning with `-` is remote code execution. Empty operands
+/// and embedded control characters/newlines are rejected for the same reason:
+/// they only appear when something is trying to smuggle argv structure.
+fn validate_git_operand(kind: &str, value: &str) -> Result<(), String> {
+    if value.is_empty() {
+        return Err(format!("invalid git {kind}: empty value"));
+    }
+    if value.starts_with('-') {
+        return Err(format!(
+            "invalid git {kind}: {value:?} starts with '-' and would be parsed as an option"
+        ));
+    }
+    if value.chars().any(|c| c.is_control()) {
+        return Err(format!("invalid git {kind}: control character in {value:?}"));
+    }
+    Ok(())
+}
+
+/// Validate a remote URL used as a git operand.
+pub fn validate_git_url(url: &str) -> Result<(), String> {
+    validate_git_operand("url", url)
+}
+
+/// Validate a branch/ref used as a git operand.
+pub fn validate_git_ref(reference: &str) -> Result<(), String> {
+    validate_git_operand("ref", reference)?;
+    if reference.contains(char::is_whitespace) {
+        return Err(format!("invalid git ref: whitespace in {reference:?}"));
+    }
+    Ok(())
+}
+
 /// Git command with auth/LFS/SSH prompt suppression and `--no-optional-locks`.
 pub fn git_command() -> std::process::Command {
     let mut cmd = std::process::Command::new("git");
@@ -262,11 +297,18 @@ pub fn git_command() -> std::process::Command {
 }
 
 fn clone_with_cli(url: &str, branch: Option<&str>, dest: &Path) -> Result<(), String> {
+    validate_git_url(url)?;
+    if let Some(b) = branch {
+        validate_git_ref(b)?;
+    }
     let mut cmd = git_command();
     cmd.args(["clone", "--depth", "1"]);
     if let Some(b) = branch {
         cmd.args(["--branch", b]);
     }
+    // `--` terminates option parsing: without it a URL or path beginning with
+    // `-` is read as an option (e.g. --upload-pack=<cmd> => command execution).
+    cmd.arg("--");
     cmd.arg(url).arg(dest.as_os_str());
 
     let output = cmd
@@ -281,6 +323,9 @@ fn clone_with_cli(url: &str, branch: Option<&str>, dest: &Path) -> Result<(), St
 
 fn fetch_reset_cached_repo(repo_dir: &Path, branch: Option<&str>) -> Result<(), String> {
     let branch_arg = branch.unwrap_or("HEAD");
+    // `git fetch` takes the refspec positionally with no `--` terminator, so
+    // validation is the only defense against an option-shaped ref.
+    validate_git_ref(branch_arg)?;
     let fetch_output = git_command()
         .current_dir(repo_dir)
         .args(["fetch", "--depth", "1", "origin", branch_arg])
@@ -319,6 +364,46 @@ fn fetch_reset_cached_repo(repo_dir: &Path, branch: Option<&str>) -> Result<(), 
 
 #[cfg(test)]
 mod tests {
+    use super::{validate_git_ref, validate_git_url};
+
+    /// `git clone --upload-pack=<cmd> …` runs `<cmd>`. A marketplace source
+    /// URL or branch that starts with `-` must never reach git argv.
+    #[test]
+    fn option_shaped_operands_are_rejected() {
+        for bad in [
+            "--upload-pack=touch /tmp/pwn",
+            "-u",
+            "--config=core.sshCommand=id",
+        ] {
+            assert!(
+                validate_git_url(bad).is_err(),
+                "url must be rejected: {bad:?}"
+            );
+            assert!(
+                validate_git_ref(bad).is_err(),
+                "ref must be rejected: {bad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn empty_and_control_characters_are_rejected() {
+        assert!(validate_git_url("").is_err());
+        assert!(validate_git_ref("").is_err());
+        assert!(validate_git_url("https://example.invalid/a\nb").is_err());
+        assert!(validate_git_ref("main\r").is_err());
+        assert!(validate_git_ref("feature branch").is_err());
+    }
+
+    #[test]
+    fn ordinary_operands_are_accepted() {
+        assert!(validate_git_url("https://github.com/owner/repo.git").is_ok());
+        assert!(validate_git_url("git@github.com:owner/repo.git").is_ok());
+        assert!(validate_git_ref("main").is_ok());
+        assert!(validate_git_ref("release/1.2.3").is_ok());
+        assert!(validate_git_ref("HEAD").is_ok());
+    }
+
     use super::*;
 
     #[test]

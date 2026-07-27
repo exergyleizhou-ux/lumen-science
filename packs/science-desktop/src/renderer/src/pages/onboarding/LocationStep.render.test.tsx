@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: Copy expectations follow this product's name.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { act, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -85,7 +89,7 @@ describe('LocationStep', () => {
   it('shows the warning callout', async () => {
     await renderStep()
 
-    expect(container.textContent).toContain('Open Science manages this folder')
+    expect(container.textContent).toContain('Lumen Science manages this folder')
     expect(container.textContent).toContain(
       "Don't move, rename, or delete files inside it — doing so can break your projects and history."
     )
@@ -101,7 +105,7 @@ describe('LocationStep', () => {
 
     expect(window.api.storage.inspectDataRoot).toHaveBeenCalledWith('/mnt/data')
     expect(container.textContent).toContain('/mnt/data/OpenScience')
-    expect(container.textContent).toContain('Open Science will restart to set this up')
+    expect(container.textContent).toContain('Lumen Science will restart to set this up')
   })
 
   it('Browse with an adopt path shows the used-as-is note', async () => {
@@ -113,7 +117,7 @@ describe('LocationStep', () => {
     await clickButton(/browse/i)
 
     expect(container.textContent).toContain('/mnt/existing/OpenScience')
-    expect(container.textContent).toContain('already contains Open Science data')
+    expect(container.textContent).toContain('already contains Lumen Science data')
     expect(container.textContent).toContain('used as-is')
   })
 

@@ -28,6 +28,20 @@ import {
 } from '../src/main/files/science-ipc.js'
 import { validateIpcChannel } from '../src/main/lumen-authority-policy.js'
 
+// The resolver reads the BYTES now, so seeded fixtures need real files whose
+// content hashes to the recorded digest.
+import osFix from 'node:os'
+import fsFix from 'node:fs'
+import pathFix from 'node:path'
+const BIND_FIXTURE_DIR = fsFix.mkdtempSync(pathFix.join(osFix.tmpdir(), 'bind-fixture-'))
+const OUT_CSV = pathFix.join(BIND_FIXTURE_DIR, 'out.csv')
+const IPC_CSV = pathFix.join(BIND_FIXTURE_DIR, 'a1.csv')
+fsFix.writeFileSync(OUT_CSV, 'out,csv\n')
+fsFix.writeFileSync(IPC_CSV, 'ipc,a1\n')
+const OUT_SHA = 'c69178188e9ccc595b8b378b98fd862cc058629f21bbd2619655939c96d02e2d'
+const IPC_SHA = '7a746bec1eb26f2c38d8a3c87ec1b49ec1adad8f5ee41a57256257eafb465512'
+
+
 let failures = 0
 function test(name: string, fn: () => void | Promise<void>) {
   return Promise.resolve()
@@ -86,8 +100,8 @@ async function run() {
   const items: ArtifactListItem[] = [
     {
       artifact_id: 'art-1',
-      path: '/data/p1/run1/out.csv',
-      sha256: 'hash1',
+      path: OUT_CSV,
+      sha256: OUT_SHA,
       project_id: 'p1',
     },
     {
@@ -109,12 +123,12 @@ async function run() {
     { assertMembership: allowO1P1 },
   )
   const preview = await loadArtifactPreview(
-    { artifactId: 'art-1', expectedSha256: 'hash1' },
+    { artifactId: 'art-1', expectedSha256: OUT_SHA },
     { store },
   )
   await test('seed+bind: preview resolves seeded artifact', () => {
     ok(preview.access.ok, JSON.stringify(preview))
-    strictEqual(preview.path, '/data/p1/run1/out.csv')
+    strictEqual(preview.path, OUT_CSV)
   })
 
   // Cross-owner still blocked even with seed
@@ -170,8 +184,8 @@ async function run() {
       return [
         {
           artifact_id: 'ipc-a1',
-          path: '/ipc/a1.csv',
-          sha256: 'ipc-hash',
+          path: IPC_CSV,
+          sha256: IPC_SHA,
           project_id: 'p1',
         },
       ]
@@ -218,11 +232,11 @@ async function run() {
   const previewHandler = handlers.get('files:preview-by-artifact')!
   const prev = await previewHandler({}, {
     artifactId: 'ipc-a1',
-    expectedSha256: 'ipc-hash',
+    expectedSha256: IPC_SHA,
   })
   await test('ipc: preview after bind+seed works', () => {
     ok(prev.access.ok, JSON.stringify(prev))
-    strictEqual(prev.path, '/ipc/a1.csv')
+    strictEqual(prev.path, IPC_CSV)
   })
 
   const unbindHandler = handlers.get('files:unbind-session')!

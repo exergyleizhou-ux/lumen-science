@@ -7,6 +7,7 @@ use serde_json::json;
 use tempfile::TempDir;
 
 use super::*;
+use crate::foreign_sessions::canonical_tempdir;
 use crate::foreign_sessions::MAX_SESSION_AGE;
 
 fn set_mtime(path: &Path, time: SystemTime) {
@@ -51,7 +52,7 @@ fn scoped_project(root: &Path, cwd: &Path) -> std::path::PathBuf {
 
 #[test]
 fn recent_probe_skips_sidechains_and_wrong_cwds_before_winner() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     fs::create_dir_all(&cwd).unwrap();
     let project = scoped_project(root.path(), &cwd);
@@ -89,7 +90,7 @@ fn recent_probe_skips_sidechains_and_wrong_cwds_before_winner() {
 
 #[test]
 fn recent_probe_bounds_content_reads() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     fs::create_dir_all(&cwd).unwrap();
     let project = scoped_project(root.path(), &cwd);
@@ -117,7 +118,7 @@ fn recent_probe_bounds_content_reads() {
 
 #[test]
 fn recent_probe_fails_closed_at_directory_entry_cap() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     fs::create_dir_all(&cwd).unwrap();
     let project = scoped_project(root.path(), &cwd);
@@ -140,7 +141,7 @@ fn recent_probe_fails_closed_at_directory_entry_cap() {
 
 #[test]
 fn filters_bad_rows_and_uses_newest_duplicate_with_title_precedence() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     fs::create_dir_all(&cwd).unwrap();
     let now = UNIX_EPOCH + Duration::from_secs(4_000_000);
@@ -236,7 +237,7 @@ fn filters_bad_rows_and_uses_newest_duplicate_with_title_precedence() {
 
 #[test]
 fn bounds_results_and_orders_ties_by_id() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     fs::create_dir_all(&cwd).unwrap();
     let now = UNIX_EPOCH + Duration::from_secs(5_000_000);
@@ -263,7 +264,7 @@ fn bounds_results_and_orders_ties_by_id() {
 
 #[test]
 fn skips_meta_and_tool_noise_for_first_prompt() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     fs::create_dir_all(&cwd).unwrap();
     let now = UNIX_EPOCH + Duration::from_secs(6_000_000);
@@ -299,7 +300,7 @@ fn skips_meta_and_tool_noise_for_first_prompt() {
 
 #[test]
 fn scoped_scan_keeps_newest_over_budget_and_rejects_symlinks() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     fs::create_dir_all(&cwd).unwrap();
     let now = UNIX_EPOCH + Duration::from_secs(7_000_000);
@@ -358,8 +359,8 @@ fn scoped_scan_keeps_newest_over_budget_and_rejects_symlinks() {
 #[cfg(unix)]
 #[test]
 fn rejects_project_parent_symlink_escape() {
-    let config = TempDir::new().unwrap();
-    let outside = TempDir::new().unwrap();
+    let config = canonical_tempdir();
+    let outside = canonical_tempdir();
     let cwd = config.path().join("repo");
     fs::create_dir_all(&cwd).unwrap();
     let now = UNIX_EPOCH + Duration::from_secs(7_500_000);
@@ -381,7 +382,7 @@ fn rejects_project_parent_symlink_escape() {
 
 #[test]
 fn linked_worktree_scope_includes_main_and_siblings() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let main = root.path().join("main");
     fs::create_dir_all(&main).unwrap();
     let repository = git2::Repository::init(&main).unwrap();

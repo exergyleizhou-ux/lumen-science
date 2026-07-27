@@ -1,3 +1,7 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: Tooltip expectations follow this product's name.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Menu template item shape captured from Menu.buildFromTemplate.
@@ -151,7 +155,7 @@ describe('createAppTray', () => {
     })
 
     expect(tray).toBeDefined()
-    expect(lastTray?.tooltip).toBe('Open Science')
+    expect(lastTray?.tooltip).toBe('Lumen Science')
     expect(lastTray?.contextMenu?.template).toBe(lastTemplate)
     expect(lastTemplate?.filter((item) => item.label).map((item) => item.label)).toEqual([
       'Show',
@@ -195,7 +199,7 @@ describe('createAppTray', () => {
       onCopyWebUrl
     })
 
-    expect(lastTray?.tooltip).toBe('Open Science (Web)')
+    expect(lastTray?.tooltip).toBe('Lumen Science (Web)')
     expect(lastTemplate?.filter((item) => item.label).map((item) => item.label)).toEqual([
       'Open Web UI',
       'Copy URL',

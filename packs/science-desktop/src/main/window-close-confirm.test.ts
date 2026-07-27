@@ -1,3 +1,7 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: Quit-dialog expectations follow this product's name.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { BrowserWindow } from 'electron'
@@ -613,7 +617,7 @@ describe('createElectronCloseConfirm — nativeFallback', () => {
     expect(options.buttons).toEqual(['Cancel', 'Quit'])
     expect(options.defaultId).toBe(0)
     expect(options.cancelId).toBe(0)
-    expect(options.message).toBe('Quit Open Science?')
+    expect(options.message).toBe('Quit Lumen Science?')
   })
 
   it('translates a Cancel click in the quit fallback to choice=cancel', async () => {

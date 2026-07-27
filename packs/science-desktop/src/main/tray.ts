@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { Menu, Tray, nativeImage, screen, type NativeImage } from 'electron'
 
 import { createLogger } from './logger'
@@ -80,7 +86,7 @@ const createAppTray = (opts: {
           ]
     )
 
-    tray.setToolTip(headlessWeb ? 'Open Science (Web)' : 'Open Science')
+    tray.setToolTip(headlessWeb ? 'Lumen Science (Web)' : 'Lumen Science')
 
     const primaryAction = (): void => {
       if (headlessWeb) void opts.onOpenWeb!()

@@ -1,7 +1,11 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import {
   claudeIsolatedProviderIdentity,
   codexSubscriptionProviderIdentity,
   type AgentFrameworkId,
+  type ManagedAgentFrameworkId,
   type ChatApiEndpoint,
   type ProviderType
 } from '../../../../shared/settings'
@@ -63,11 +67,14 @@ export const defaultProviderKindKey = (
     case 'opencode':
       return 'official:deepseek'
     default: {
-      // The never assignment keeps the switch exhaustive at compile time. Persisted state could
-      // still hold a stale value outside the union; this runs during render, so degrade to the
+      // Exhaustiveness is asserted over the MANAGED ids only: if a fourth runtime with a real
+      // vendor is ever added, it lands here and this assignment fails, forcing a deliberate choice.
+      // The `*-stubbed` ids are different — they legitimately have no official vendor — so they are
+      // excluded from the assertion rather than pretending to be unreachable. Persisted state could
+      // also hold a stale value outside the union; this runs during render, so degrade to the
       // Claude Code vendor instead of throwing.
-      const exhaustive: never = frameworkId
-      void exhaustive
+      const stubbedOrUnknown: Exclude<AgentFrameworkId, ManagedAgentFrameworkId> = frameworkId
+      void stubbedOrUnknown
       return 'official:anthropic'
     }
   }
@@ -142,7 +149,7 @@ export const PROVIDER_KINDS: ProviderKind[] = [
   {
     key: 'codex-subscription',
     label: codexSubscriptionProviderIdentity().name,
-    description: 'Use an existing Codex profile or sign in with a separate Open Science profile.',
+    description: 'Use an existing Codex profile or sign in with a separate Lumen Science profile.',
     group: 'codex'
   },
   {
@@ -151,7 +158,7 @@ export const PROVIDER_KINDS: ProviderKind[] = [
     // app-owned config dir). Surfaced only when Claude Code is the active framework.
     key: 'claude-subscription',
     label: claudeIsolatedProviderIdentity().name,
-    description: 'Use an existing Claude profile or sign in with a separate Open Science profile.',
+    description: 'Use an existing Claude profile or sign in with a separate Lumen Science profile.',
     group: 'claude'
   },
   ...OFFICIAL_VENDORS.map((vendor): ProviderKind => ({

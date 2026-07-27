@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -308,7 +314,7 @@ const ProviderStep = ({
       <CardHeader className="gap-1 rounded-t-lg px-6 py-5">
         <CardTitle className="text-[15px] font-semibold">Connect a model</CardTitle>
         <CardDescription className="text-xs leading-5">
-          Choose the provider Open Science should use for new research sessions.
+          Choose the provider Lumen Science should use for new research sessions.
         </CardDescription>
       </CardHeader>
       <Separator className="bg-border-200" />

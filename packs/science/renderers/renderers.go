@@ -205,6 +205,26 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 		})
 	}
 
+	// Resolve an artifact path and REFUSE anything outside the artifacts root.
+	//
+	// All three components come from the query string, and filepath.Join
+	// cleans but does not confine: a leading `..` survives cleaning as a path
+	// OUTSIDE the root, so `path=../../etc/passwd` walked out of artifactsDir
+	// and /render/api/raw served arbitrary local files (CodeQL
+	// go/path-injection). Confinement is checked on the final joined path, so
+	// no combination of project/run/path can compose an escape.
+	confined := func(project, run, rel string) (string, bool) {
+		root, err := filepath.Abs(s.artifactsDir)
+		if err != nil {
+			return "", false
+		}
+		full := filepath.Join(root, project, run, rel)
+		if full != root && !strings.HasPrefix(full, root+string(filepath.Separator)) {
+			return "", false
+		}
+		return full, true
+	}
+
 	// API: get artifact metadata
 	mux.HandleFunc("/render/api/artifact", func(w http.ResponseWriter, r *http.Request) {
 		project := r.URL.Query().Get("project")
@@ -214,7 +234,11 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 			http.Error(w, `{"error":"missing project/run/path"}`, http.StatusBadRequest)
 			return
 		}
-		fullPath := filepath.Join(s.artifactsDir, project, run, path)
+		fullPath, ok := confined(project, run, path)
+		if !ok {
+			http.Error(w, `{"error":"path escapes the artifacts root"}`, http.StatusBadRequest)
+			return
+		}
 		if _, err := os.Stat(fullPath); err != nil {
 			http.Error(w, `{"error":"artifact not found"}`, http.StatusNotFound)
 			return
@@ -234,7 +258,11 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 			http.Error(w, "missing params", http.StatusBadRequest)
 			return
 		}
-		fullPath := filepath.Join(s.artifactsDir, project, run, path)
+		fullPath, ok := confined(project, run, path)
+		if !ok {
+			http.Error(w, "path escapes the artifacts root", http.StatusBadRequest)
+			return
+		}
 		data, err := os.ReadFile(fullPath)
 		if err != nil {
 			http.Error(w, "not found", http.StatusNotFound)

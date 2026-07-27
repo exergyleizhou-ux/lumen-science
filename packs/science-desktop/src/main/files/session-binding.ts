@@ -19,9 +19,28 @@ export type MembershipClaim = {
   projectId: string
 }
 
+/**
+ * Why a membership claim failed.
+ *
+ * This distinction is load-bearing, not documentation. The previous two-state
+ * result made "the authority said no" and "we could not reach the authority"
+ * literally indistinguishable, so `createHybridMembershipAsserter` fell through
+ * to the local catalog in both cases — while its comment claimed it did not.
+ * A comment cannot make a distinction the type cannot represent.
+ *
+ *  `denied`      the authority answered, and the answer was no. FINAL: no
+ *                other source may grant what the authority refused.
+ *  `unavailable` the authority could not be reached, returned an unusable
+ *                response, or does not implement the check. NOT a denial, and
+ *                also not permission — it means we do not know, and not
+ *                knowing must fail closed on any execution path.
+ *  `no-record`   no authority was consulted and no local record exists.
+ */
+export type MembershipFailure = 'denied' | 'unavailable' | 'no-record'
+
 export type MembershipResult =
   | { ok: true; ownerId: string; projectId: string }
-  | { ok: false; reason: string }
+  | { ok: false; failure: MembershipFailure; reason: string }
 
 export type MembershipAsserter = (claim: MembershipClaim) => Promise<MembershipResult>
 

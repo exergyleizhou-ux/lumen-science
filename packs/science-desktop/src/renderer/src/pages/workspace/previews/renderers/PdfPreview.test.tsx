@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: Asserts the aspect RATIO rather than one cssstyle serialization of it, so the test is jsdom-version independent.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -97,11 +101,17 @@ describe('PdfPreviewContent', () => {
       )
     })
     await act(async () => {
-      await vi.waitFor(() =>
-        expect(
-          container.querySelector<HTMLElement>('[data-page-number="1"]')?.style.aspectRatio
-        ).toBe('2 / 1')
-      )
+      await vi.waitFor(() => {
+        // Assert the RATIO, not one serialization of it. The component sets a
+        // number (viewport.width / viewport.height); cssstyle serializes that
+        // as '2' on jsdom 26 and '2 / 1' on 27, and both are the same valid
+        // CSS value. Pinning a serialization made this test a jsdom-version
+        // detector rather than an aspect-ratio test.
+        const raw =
+          container.querySelector<HTMLElement>('[data-page-number="1"]')?.style.aspectRatio ?? ''
+        const [w, h = '1'] = raw.split('/').map((part) => part.trim())
+        expect(Number(w) / Number(h)).toBe(2)
+      })
     })
 
     expect(getPage).toHaveBeenCalledWith(1)

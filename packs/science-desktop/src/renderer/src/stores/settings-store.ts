@@ -1,3 +1,6 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { create, type StoreApi } from 'zustand'
 
 import type { OfficialVendorId } from '../../../shared/provider-registry'
@@ -31,6 +34,7 @@ import type {
   Preflight,
   AgentFrameworkId,
   AgentFrameworkView,
+  ManagedAgentFrameworkId,
   ChatApiEndpoint,
   OpencodeInfo,
   ProviderType,
@@ -131,7 +135,10 @@ type SettingsStoreData = {
   isDetectingCodex: boolean
   // Per-runtime install state, keyed by framework id. Each runtime's install writes only to its own
   // slice so its progress/logs/error render in its own card alone — never mirrored onto the others.
-  installStates: Record<AgentFrameworkId, RuntimeInstallState>
+  // Keyed by ManagedAgentFrameworkId: install state only exists for a runtime that HAS a managed
+  // installer. The `*-stubbed` ids added to AgentFrameworkId have no binary to install, so forcing
+  // four inert entries into this map would state something untrue about them.
+  installStates: Record<ManagedAgentFrameworkId, RuntimeInstallState>
   // Whether the settings dialog is open (rendered at the app root, over Home/Workspace).
   isSettingsOpen: boolean
   // Panel requested by an external entry point; Settings consumes it after seeding navigation.
@@ -171,7 +178,7 @@ type SettingsStore = SettingsStoreData & {
   uninstallOpencode: () => Promise<void>
   uninstallCodex: () => Promise<void>
   // Clears the transient logs/progress/error for one runtime (or every runtime when omitted).
-  clearInstallLogs: (runtime?: AgentFrameworkId) => void
+  clearInstallLogs: (runtime?: ManagedAgentFrameworkId) => void
   // Persists the draft (create/update) without testing it, returning the affected provider id. The
   // Settings page uses this to return to the list immediately, then tests in the background.
   persistProvider: (request: UpsertProviderRequest) => Promise<string>
@@ -392,7 +399,7 @@ const applySnapshot = (snapshot: SettingsSnapshot): Partial<SettingsStoreData> =
 // isolation is the fix for issue #278: an install event only ever mutates the runtime it belongs to.
 const patchInstallState = (
   set: StoreApi<SettingsStore>['setState'],
-  runtime: AgentFrameworkId,
+  runtime: ManagedAgentFrameworkId,
   patch: Partial<RuntimeInstallState>
 ): void =>
   set((state) => ({
@@ -412,7 +419,7 @@ const patchInstallState = (
 const runRuntimeInstall = async (
   set: StoreApi<SettingsStore>['setState'],
   get: StoreApi<SettingsStore>['getState'],
-  runtime: AgentFrameworkId,
+  runtime: ManagedAgentFrameworkId,
   invoke: () => Promise<ClaudeInstallResult>
 ): Promise<ClaudeInstallResult> => {
   // Refuse to start a second concurrent install. The check + set is synchronous (no await between them),
@@ -730,7 +737,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   clearInstallLogs: (runtime) =>
     set((state) => {
-      const runtimes: AgentFrameworkId[] = runtime
+      const runtimes: ManagedAgentFrameworkId[] = runtime
         ? [runtime]
         : ['claude-code', 'opencode', 'codex']
       const installStates = { ...state.installStates }

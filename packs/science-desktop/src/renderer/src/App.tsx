@@ -1,3 +1,6 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { useCallback, useEffect, useState } from 'react'
 
 import { useDeepLinkNavigation } from '@/lib/deep-link'
@@ -151,7 +154,11 @@ const App = (): React.JSX.Element | null => {
 
   if (
     resolveStartupView({
-      onboardingDone: onboardingCompletedAt !== undefined
+      onboardingDone: onboardingCompletedAt !== undefined,
+      // The engine owns environments, storage and execution here, so the
+      // upstream wizard has nothing left to configure — four of its five steps
+      // set up subsystems this build does not have.
+      lumenBridgePresent: Boolean(window.api?.lumen)
     }) === 'onboarding'
   ) {
     return <OnboardingWizard />

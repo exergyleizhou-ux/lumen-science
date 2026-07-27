@@ -6,7 +6,8 @@
     "src/renderer/src/**/*.tsx",
     "src/renderer/web/**/*",
     "src/preload/*.d.ts",
-    "src/shared/**/*"
+    "src/shared/**/*",
+    "src/types/**/*.d.ts"
   ],
   "compilerOptions": {
     "composite": true,
@@ -20,5 +21,24 @@
         "src/renderer/src/*"
       ]
     }
-  }
+  },
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "src/renderer/src/components/Versions.tsx",
+    "src/renderer/src/components/ui/scroll-area.tsx",
+    "src/renderer/src/office-preview/main.ts",
+    "src/renderer/src/office-preview/office-preview-controller.ts",
+    "src/renderer/src/office-preview/office-preview-frame-bridge.ts",
+    "src/renderer/src/office-preview/office-preview-runtime.ts",
+    "src/renderer/src/pages/onboarding/onboarding-test-utils.ts",
+    "src/renderer/src/pages/settings/test-utils.ts",
+    "src/renderer/src/pages/workspace/message-draft-keyboard.ts",
+    "src/renderer/src/pages/workspace/previews/office-package.ts",
+    "src/renderer/src/pages/workspace/previews/office-renderers.ts",
+    "src/renderer/web/api-map.generated.ts",
+    "src/renderer/web/bootstrap.ts"
+  ]
 }

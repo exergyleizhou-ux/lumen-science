@@ -7,6 +7,7 @@ on:
     branches: [main]
     paths:
       - 'packs/science-desktop/**'
+      - 'agent/**'
       - 'docs/science/fusion-sources.lock.json'
       - 'packs/science/skills/registry.json'
       - 'docs/VERSIONING.md'
@@ -15,6 +16,7 @@ on:
     branches: [main]
     paths:
       - 'packs/science-desktop/**'
+      - 'agent/**'
       - 'docs/science/**'
       - '.github/workflows/desktop-ci.yml'
   workflow_dispatch:
@@ -56,9 +58,34 @@ jobs:
       - name: Authority + release honesty + office gate
         run: npm run test:authority
 
-      - name: Typecheck (best-effort until deps fully pruned)
+      # 4,315 unit tests that existed for months while nothing ran them: no
+      # config, no script, 597 failing — some against behaviour this fork
+      # changed deliberately. Wired in LS5-K33; exclusions derive from the
+      # tsconfig production-exclusion list (see vitest.config.ts).
+      - name: Unit suites (vitest)
+        run: npm run test:unit
+
+      # LS5-D1-01: required. Proves the tsconfig exclusion list still matches
+      # the computed import graph — an excluded file must be genuinely
+      # unreachable, or exclusion would be hiding real type errors.
+      - name: Production source graph matches tsconfig exclusions
+        run: npx tsx scripts/desktop-source-graph.mts --check
+
+      # LS5-D1-02: required. 0 errors on both projects (node + web).
+      #
+      # History: 1566 -> 65 by excluding the unreachable Open Science code the
+      # include globs were dragging in (LS5-D1-01), then 65 -> 0 by fixing every
+      # error in code that actually ships. The web project was never counted
+      # before, because `typecheck` runs node && web and node always failed
+      # first; it contributed a further 223.
+      #
+      # This gate is only meaningful because of what it is NOT allowed to do:
+      # nothing here may be silenced with `any`, ts-ignore, skipLibCheck, or by
+      # adding a file to a tsconfig `exclude` list. An exclusion is legitimate
+      # only when the source graph proves the file unreachable, which the step
+      # above enforces on every run. Fix the error or fix the graph.
+      - name: Typecheck (node + web, 0 errors required)
         run: npm run typecheck
-        continue-on-error: true
 
       - name: Builder config sanity (no aipoch feed, adhoc-sign exists)
         run: |
@@ -68,3 +95,112 @@ jobs:
           ! grep -q 'artifactName: aipoch-' electron-builder.yml
           ! grep -q 'from: cli$' electron-builder.yml
           ! grep -q 'packages/open-science' electron-builder.yml
+
+  # The engine-less E2E launches the REAL built app. Every suite above checks a
+  # module in isolation; none of them opens a window, which is how this pack
+  # once shipped a blank one — #root mounted, zero children — with 24 green
+  # authority suites. Headless via xvfb; Electron cannot open a window without
+  # a display.
+  #
+  # The LIVE suite runs in its own job below (live-e2e), which builds the
+  # engine binary first — it must never silently skip, because it is the only
+  # coverage of the permission handshake and the evidence chain.
+  e2e:
+    name: Desktop headed E2E (no engine)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: packs/science-desktop
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install Playwright system dependencies
+        run: npx playwright install-deps chromium
+
+      - name: Headed E2E under a virtual display
+        run: xvfb-run --auto-servernum npm run test:e2e
+
+      - name: Upload failure traces
+        if: failure()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: e2e-traces
+          path: packs/science-desktop/test-results/
+          retention-days: 7
+
+  # The LIVE suite: a real engine binary, a real permission prompt, a real
+  # sandboxed cell, the full evidence chain. This is the only automated
+  # coverage of the approval handshake — the engine-less suite above proves
+  # fail-closed and nothing else. It was previously local-only with the gap
+  # stated in a comment; LS5-K34 pays the cargo-build cost instead. First run
+  # compiles the workspace (~40 min); the cache makes later runs minutes.
+  live-e2e:
+    name: Desktop live E2E (real engine)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install protoc
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            agent/target
+          key: ${{ runner.os }}-cargo-lumen-bin-${{ hashFiles('agent/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-lumen-bin-
+
+      - name: Build the engine
+        working-directory: agent
+        run: cargo build --bin lumen --locked
+
+      - name: Setup Node
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: packs/science-desktop
+        run: npm ci --no-audit --no-fund
+
+      - name: Install Playwright system dependencies
+        working-directory: packs/science-desktop
+        run: npx playwright install-deps chromium
+
+      - name: Live E2E under a virtual display
+        working-directory: packs/science-desktop
+        env:
+          # The engine authenticates against a key that offline-deterministic
+          # science routes never spend; the handshake needs one to exist.
+          XAI_API_KEY: live-e2e-ci-key
+          GROK_TELEMETRY_ENABLED: 'false'
+          GROK_DISABLE_AUTOUPDATER: '1'
+        run: xvfb-run --auto-servernum npm run test:e2e:live
+
+      - name: Upload failure traces
+        if: failure()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: live-e2e-traces
+          path: packs/science-desktop/test-results/
+          retention-days: 7

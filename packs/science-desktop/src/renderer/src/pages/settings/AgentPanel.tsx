@@ -1,17 +1,23 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { RefreshCw, TriangleAlert } from 'lucide-react'
 
-// Import the bare Mono/Color components straight from their modules: each icon's entry point
-// eagerly attaches its Avatar/Combine companions, which drag in @lobehub/ui (antd-style + an
-// emoji-mart JSON import vitest can't parse). The Mono/Color components are self-contained.
-import ClaudeColor from '@lobehub/icons/es/Claude/components/Color'
-import Codex from '@lobehub/icons/es/Codex/components/Mono'
-import OpenCode from '@lobehub/icons/es/OpenCode/components/Mono'
+// Local marks rather than @lobehub/icons: that package drags in @lobehub/ui + antd
+// (220 MB) and @emoji-mart/react, which declares react ^16.8||^17||^18 and conflicts
+// with this pack's React 19. See components/icons/agent-backends.tsx.
+import {
+  ClaudeMark as ClaudeColor,
+  CodexMark as Codex,
+  OpenCodeMark as OpenCode
+} from '@/components/icons/agent-backends'
 import { ExternalTextLink } from '@/components/ExternalTextLink'
 import { Button } from '@/components/ui/button'
 import { selectAnyInstalling, useSettingsStore } from '@/stores/settings-store'
 import type {
   AgentFrameworkId,
+  ManagedAgentFrameworkId,
   ClaudeInstallResult,
   ClaudeInstallSource,
   ClaudeInstallSourceInfo
@@ -19,7 +25,8 @@ import type {
 import {
   getClaudeInstallSources,
   getCodexInstallSources,
-  getOpencodeInstallSources
+  getOpencodeInstallSources,
+  isManagedAgentFrameworkId
 } from '../../../../shared/settings'
 import { AgentFrameworkCard } from './AgentFrameworkCard'
 import { ModelFrameworkCompatibilityAlert } from './ModelFrameworkCompatibilityAlert'
@@ -241,14 +248,20 @@ const AgentPanel = ({
       return
     }
 
-    const readyByFramework: Record<AgentFrameworkId, boolean> = {
+    // Keyed by ManagedAgentFrameworkId: preflight only reports readiness for runtimes that have a
+    // binary to detect. A `*-stubbed` id has none, so it is never "already ready" and never a
+    // candidate to auto-select — both lookups below narrow first and fail closed.
+    const readyByFramework: Record<ManagedAgentFrameworkId, boolean> = {
       'claude-code': preflight.claudeReady,
       opencode: preflight.opencodeReady,
       codex: preflight.codexReady
     }
-    if (readyByFramework[agentFrameworkId]) return
+    if (isManagedAgentFrameworkId(agentFrameworkId) && readyByFramework[agentFrameworkId]) return
 
-    const installedFramework = agentFrameworks.find((framework) => readyByFramework[framework.id])
+    const installedFramework = agentFrameworks.find(
+      (framework) =>
+        isManagedAgentFrameworkId(framework.id) && readyByFramework[framework.id]
+    )
     if (!installedFramework) return
 
     onboardingAutoSelectAttempted.current = true

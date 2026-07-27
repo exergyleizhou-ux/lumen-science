@@ -102,19 +102,30 @@ pub fn run(root: &Path, changed_files: &[PathBuf], cfg: &config::Config) -> Resu
 
 /// Run the automatic, writer-triggered verifier for one changed file.
 ///
-/// This entry point is deliberately narrower than the standalone CLI. The
-/// agent hook currently auto-runs only for Go files inside the active
-/// workspace and only when a nearest `go.mod` can be found. That keeps the
-/// automatic path on a fixed build/vet/test allowlist and avoids running a
-/// package manager such as `npx` merely because a file was edited.
+/// This entry point is deliberately narrower than the standalone CLI. It
+/// auto-runs only inside the active workspace, only when a project marker is
+/// found by walking up from the changed file, and it never goes through a
+/// package runner such as `npx` (cfg.allow_package_runner is forced off):
+/// - Go: nearest `go.mod` → build/vet/test allowlist
+/// - Python: nearest `pyproject.toml`/`setup.py`/`setup.cfg` → ruff/pytest
+///   (direct tools; missing tools skip, never install)
+/// - TypeScript/JS: nearest `package.json`, and only when the project already
+///   has `node_modules/.bin/tsc` installed → local `tsc --noEmit` (and local
+///   jest when present)
 pub fn run_after_edit(
     workspace_root: &Path,
     changed_file: &Path,
     cfg: &config::Config,
 ) -> Result<Option<VerifyResult>> {
-    if !cfg.enabled || changed_file.extension().and_then(|ext| ext.to_str()) != Some("go") {
+    if !cfg.enabled {
         return Ok(None);
     }
+    let language = match changed_file.extension().and_then(|ext| ext.to_str()) {
+        Some("go") => "go",
+        Some("py") => "python",
+        Some("ts" | "tsx" | "js" | "jsx") => "typescript",
+        _ => return Ok(None),
+    };
 
     let workspace_root = dunce::canonicalize(workspace_root)
         .with_context(|| format!("canonicalize workspace {}", workspace_root.display()))?;
@@ -127,16 +138,33 @@ pub fn run_after_edit(
         );
     }
 
-    let Some(project_root) = nearest_go_module(&workspace_root, &changed_file) else {
+    let project_root = match language {
+        "go" => nearest_marker(&workspace_root, &changed_file, &["go.mod"]),
+        "python" => nearest_marker(
+            &workspace_root,
+            &changed_file,
+            &["pyproject.toml", "setup.py", "setup.cfg"],
+        ),
+        "typescript" => nearest_marker(&workspace_root, &changed_file, &["package.json"])
+            .filter(|root| steps::local_node_bin(root, "tsc").is_some()),
+        _ => None,
+    };
+    let Some(project_root) = project_root else {
         return Ok(None);
     };
-    run(&project_root, &[changed_file], cfg).map(Some)
+    let mut auto_cfg = cfg.clone();
+    auto_cfg.allow_package_runner = false;
+    run(&project_root, &[changed_file], &auto_cfg).map(Some)
 }
 
-fn nearest_go_module(workspace_root: &Path, changed_file: &Path) -> Option<PathBuf> {
+fn nearest_marker(
+    workspace_root: &Path,
+    changed_file: &Path,
+    markers: &[&str],
+) -> Option<PathBuf> {
     let mut dir = changed_file.parent()?;
     loop {
-        if dir.join("go.mod").is_file() {
+        if markers.iter().any(|m| dir.join(m).is_file()) {
             return Some(dir.to_path_buf());
         }
         if dir == workspace_root {
@@ -303,6 +331,81 @@ mod tests {
             run_after_edit(workspace.path(), &changed, &config::Config::default())
                 .unwrap()
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn automatic_verify_activates_python_project() {
+        let workspace = tempfile::TempDir::new().unwrap();
+        std::fs::write(workspace.path().join("pyproject.toml"), "[project]\nname = \"fixture\"\nversion = \"0.0.0\"\n").unwrap();
+        let changed = workspace.path().join("app.py");
+        std::fs::write(&changed, "x = 1\n").unwrap();
+
+        let result = run_after_edit(workspace.path(), &changed, &config::Config::default())
+            .unwrap()
+            .expect("python project marker should trigger automatic verification");
+        // Tools may be absent on the host; skip semantics must keep ok=true,
+        // and the pytest no-tests exit (5) is treated as ok by the runner.
+        assert!(result.ok, "python auto verify should not fail closed: {result:#?}");
+    }
+
+    #[test]
+    fn automatic_verify_ignores_python_file_without_project_marker() {
+        let workspace = tempfile::TempDir::new().unwrap();
+        let changed = workspace.path().join("script.py");
+        std::fs::write(&changed, "x = 1\n").unwrap();
+        assert!(
+            run_after_edit(workspace.path(), &changed, &config::Config::default())
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn automatic_verify_ignores_ts_project_without_local_tsc() {
+        let workspace = tempfile::TempDir::new().unwrap();
+        std::fs::write(workspace.path().join("package.json"), "{}\n").unwrap();
+        let changed = workspace.path().join("index.ts");
+        std::fs::write(&changed, "export const x = 1;\n").unwrap();
+        // No node_modules/.bin/tsc → the auto path must NOT fall back to npx.
+        assert!(
+            run_after_edit(workspace.path(), &changed, &config::Config::default())
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn automatic_verify_uses_local_tsc_when_present() {
+        use std::os::unix::fs::PermissionsExt;
+        let workspace = tempfile::TempDir::new().unwrap();
+        std::fs::write(workspace.path().join("package.json"), "{}\n").unwrap();
+        let bin = workspace.path().join("node_modules/.bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let tsc = bin.join("tsc");
+        std::fs::write(&tsc, "#!/bin/sh\nexit 0\n").unwrap();
+        std::fs::set_permissions(&tsc, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let changed = workspace.path().join("index.ts");
+        std::fs::write(&changed, "export const x = 1;\n").unwrap();
+
+        let result = run_after_edit(workspace.path(), &changed, &config::Config::default())
+            .unwrap()
+            .expect("local tsc should trigger automatic verification");
+        assert!(result.ok, "{result:#?}");
+        assert!(
+            result
+                .step_results
+                .iter()
+                .any(|s| s.command.contains("node_modules") && s.command.contains("tsc")),
+            "expected a local tsc step, got: {:#?}",
+            result.step_results
+        );
+        // And never a package-runner step on the automatic path.
+        assert!(
+            result.step_results.iter().all(|s| !s.command.starts_with("npx")),
+            "auto path must not use npx: {:#?}",
+            result.step_results
         );
     }
 }

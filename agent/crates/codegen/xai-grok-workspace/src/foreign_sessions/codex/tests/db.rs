@@ -1,8 +1,9 @@
 use super::*;
+use crate::foreign_sessions::canonical_tempdir;
 
 #[test]
 fn codex_query_uses_cwd_index_and_length_metadata_opcode() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let db_path = root.path().join("state.sqlite");
     create_db(&db_path, &[]);
     let connection = Connection::open(&db_path).unwrap();
@@ -62,7 +63,7 @@ fn codex_query_uses_cwd_index_and_length_metadata_opcode() {
 
 #[test]
 fn recent_database_probe_is_windowed_bounded_and_keeps_source_filters() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     let rollout_dir = root.path().join("sessions/2027/01/15");
     fs::create_dir_all(&cwd).unwrap();
@@ -148,7 +149,7 @@ fn recent_database_probe_is_windowed_bounded_and_keeps_source_filters() {
 
 #[test]
 fn recent_database_sentinel_marks_invalid_window_incomplete() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     let sessions = root.path().join("sessions");
     fs::create_dir_all(&cwd).unwrap();
@@ -201,7 +202,7 @@ fn recent_database_sentinel_marks_invalid_window_incomplete() {
 
 #[test]
 fn recent_database_row_decode_error_is_incomplete() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     let sessions = root.path().join("sessions");
     fs::create_dir_all(&cwd).unwrap();
@@ -254,7 +255,7 @@ fn recent_database_row_decode_error_is_incomplete() {
 fn recent_database_tri_state_uses_only_current_generation() {
     let now = UNIX_EPOCH + Duration::from_secs(1_800_020_000);
 
-    let readable = TempDir::new().unwrap();
+    let readable = canonical_tempdir();
     let readable_cwd = readable.path().join("repo");
     fs::create_dir_all(&readable_cwd).unwrap();
     let older_id = uuid::Uuid::from_u128(200);
@@ -285,7 +286,7 @@ fn recent_database_tri_state_uses_only_current_generation() {
         "a usable empty current index must suppress obsolete DB and rollout fallback"
     );
 
-    let unreadable = TempDir::new().unwrap();
+    let unreadable = canonical_tempdir();
     let unreadable_cwd = unreadable.path().join("repo");
     fs::create_dir_all(&unreadable_cwd).unwrap();
     let fallback_id = uuid::Uuid::from_u128(201);
@@ -309,7 +310,7 @@ fn recent_database_tri_state_uses_only_current_generation() {
         fallback_id.to_string()
     );
 
-    let absent = TempDir::new().unwrap();
+    let absent = canonical_tempdir();
     let absent_cwd = absent.path().join("repo");
     fs::create_dir_all(&absent_cwd).unwrap();
     let absent_id = uuid::Uuid::from_u128(202);
@@ -325,7 +326,7 @@ fn recent_database_tri_state_uses_only_current_generation() {
 #[cfg(unix)]
 #[test]
 fn recent_database_unsafe_highest_uses_fallback_not_older_database() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     fs::create_dir_all(&cwd).unwrap();
     let now = UNIX_EPOCH + Duration::from_secs(1_800_025_000);
@@ -360,7 +361,7 @@ fn recent_database_unsafe_highest_uses_fallback_not_older_database() {
 
 #[test]
 fn highest_database_filters_sources_paths_cwd_and_millis() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     fs::create_dir_all(&cwd).unwrap();
     let now = UNIX_EPOCH + Duration::from_secs(1_800_000_000);
@@ -497,7 +498,7 @@ fn highest_database_filters_sources_paths_cwd_and_millis() {
 
 #[test]
 fn empty_newer_database_uses_older_nonempty_generation() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     let rollout_dir = root.path().join("sessions/2027/01/15");
     fs::create_dir_all(&cwd).unwrap();
@@ -530,7 +531,7 @@ fn empty_newer_database_uses_older_nonempty_generation() {
 
 #[test]
 fn empty_databases_fall_back_to_rollout_files() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     let now = UNIX_EPOCH + Duration::from_secs(1_800_100_000);
     let day = session_day(root.path(), now);
@@ -572,7 +573,7 @@ fn empty_databases_fall_back_to_rollout_files() {
 
 #[test]
 fn database_window_qualifies_past_invalid_rows() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     let sessions = root.path().join("sessions");
     fs::create_dir_all(&cwd).unwrap();
@@ -634,7 +635,7 @@ fn database_window_qualifies_past_invalid_rows() {
 
 #[test]
 fn database_window_normalizes_units_and_filters_future_rows_before_limit() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     let sessions = root.path().join("sessions");
     fs::create_dir_all(&cwd).unwrap();
@@ -701,7 +702,7 @@ fn database_window_normalizes_units_and_filters_future_rows_before_limit() {
 #[test]
 fn each_required_sql_predicate_protects_the_candidate_window() {
     for case in 0..5_u128 {
-        let root = TempDir::new().unwrap();
+        let root = canonical_tempdir();
         let cwd = root.path().join("repo");
         let sessions = root.path().join("sessions");
         fs::create_dir_all(&cwd).unwrap();
@@ -759,7 +760,7 @@ fn each_required_sql_predicate_protects_the_candidate_window() {
 
 #[test]
 fn optional_codex_metadata_degrades_without_dropping_rows() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let cwd = root.path().join("repo");
     let sessions = root.path().join("sessions");
     fs::create_dir_all(&cwd).unwrap();
@@ -824,7 +825,7 @@ fn optional_codex_metadata_degrades_without_dropping_rows() {
 
 #[test]
 fn state_database_probes_have_a_supported_generation_ceiling() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     for i in 0..100 {
         fs::write(root.path().join(format!("unrelated-{i:03}")), "").unwrap();
     }
@@ -852,7 +853,7 @@ fn state_database_probes_have_a_supported_generation_ceiling() {
 #[cfg(unix)]
 #[test]
 fn state_database_probe_rejects_symlink_escape() {
-    let root = TempDir::new().unwrap();
+    let root = canonical_tempdir();
     let codex_home = root.path().join("codex");
     fs::create_dir_all(&codex_home).unwrap();
     let outside = root.path().join("outside.sqlite");

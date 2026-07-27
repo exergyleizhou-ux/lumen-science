@@ -19,6 +19,25 @@ The earlier **Go** Lumen line that previously occupied GitHub `main` is preserve
 
 Do not treat Go tags as the current shipping line.
 
+## Product status
+
+**Machine-readable, generated from the source tree — not from prose:
+[`docs/science/status/current.json`](docs/science/status/current.json).**
+
+That file is the single status authority: versions, connector and skill
+inventories, CI gate results, release properties, known authority gaps, and the
+E0–E9 evidence level of each component. It is regenerated and verified in CI
+(`scripts/verify-science-status.py`), so it cannot drift behind the code.
+
+A gate is only recorded `pass` when evidence names a command that exited 0.
+Unproven gates read `not_run` — never `pass`. Documents elsewhere in this repo
+that state a status number must agree with it, or declare themselves historical.
+
+```bash
+python3 scripts/generate-science-status.py   # regenerate
+python3 scripts/verify-science-status.py     # fresh + honest + non-contradicting
+```
+
 **Versions (three lines — see `docs/VERSIONING.md`):**
 
 - Lumen Core (pager): `agent/.../xai-grok-pager` crate version (currently `0.1.222`)

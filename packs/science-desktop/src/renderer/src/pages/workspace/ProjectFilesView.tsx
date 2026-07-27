@@ -1,3 +1,6 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { Check, ChevronDown, File, Folder, Paperclip, Plus, Server } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -292,6 +295,9 @@ const useProjectFilePreviews = (
 const useInfiniteLoad = (
   enabled: boolean,
   loadMore: () => void | Promise<void>
+  // RefObject<HTMLDivElement | null>, matching what `useRef<T>(null)` returns under React 19:
+  // 19 widened the type parameter itself, where 18 returned RefObject<T> with `.current` already
+  // `T | null`. React 19's JSX `ref` prop accepts the nullable form, so no cast is needed.
 ): React.RefObject<HTMLDivElement | null> => {
   const sentinelRef = useRef<HTMLDivElement>(null)
 

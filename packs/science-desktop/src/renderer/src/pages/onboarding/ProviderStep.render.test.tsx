@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: Copy expectations follow this product's name.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { useState } from 'react'
@@ -319,10 +323,10 @@ describe('ProviderStep', () => {
     expect(container.querySelector<HTMLInputElement>('[aria-label="Model"]')?.value).toBe('gpt-5')
   })
 
-  // Switches the auth picker to the isolated "Sign in with Open Science" mode — the only path that
+  // Switches the auth picker to the isolated "Sign in with Lumen Science" mode — the only path that
   // runs the browser login (loginIsolatedCodex).
   const switchToIsolatedSignIn = async (): Promise<void> => {
-    await selectOption('Codex authentication', 'Sign in with Open Science')
+    await selectOption('Codex authentication', 'Sign in with Lumen Science')
   }
 
   it('runs the isolated Codex sign-in then advances', async () => {

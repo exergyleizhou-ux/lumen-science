@@ -23,7 +23,7 @@ import {
 } from '../src/main/files/science-ipc.js'
 import { validateIpcChannel } from '../src/main/lumen-authority-policy.js'
 import { LocalProjectCatalog } from '../src/main/files/local-project-catalog.js'
-import { createHybridMembershipAsserter } from '../src/main/files/hybrid-membership.js'
+import { createOfflineCatalogMembershipAsserter } from '../src/main/files/hybrid-membership.js'
 import { AcpPreviewStore } from '../src/main/files/acp-preview-store.js'
 
 let failures = 0
@@ -66,7 +66,7 @@ async function run() {
     ok(!('ok' in good))
     const p = good as { dryRun: boolean; tool: string; codeHash: string }
     ok(p.dryRun)
-    strictEqual(p.tool, 'notebook_execute')
+    strictEqual(p.tool, 'workflow_execute')
     strictEqual(p.codeHash, hashNotebookCode('print(1+1)\n'))
   })
 
@@ -94,7 +94,7 @@ async function run() {
         codeHash: 'h',
         codeLength: 1,
         dryRun: false,
-        tool: 'notebook_execute',
+        tool: 'workflow_execute',
         authority: 'SessionActor/KernelAdapter',
         requiresAdmittedKernel: true,
         warnings: [],
@@ -106,19 +106,28 @@ async function run() {
   })
 
   // ── Service dry-run + mock ACP execute ───────────────────────
+  // The mock asserts the REAL contract: a one-cell workflowSpec sent to
+  // workflow_execute. The previous mock accepted 'notebook_execute', a method
+  // the registry rejects — so this suite stayed green while the button it
+  // covers could not work against any engine.
   let acpCalls = 0
+  const seenArgs: Record<string, unknown>[] = []
   const svc = createNotebookService({
     acpCall: async (tool, args) => {
       acpCalls++
-      strictEqual(tool, 'notebook_execute')
-      return { OK: true, Stdout: '2\n', code: args.code }
+      strictEqual(tool, 'workflow_execute')
+      seenArgs.push(args)
+      return { state: 'succeeded', operationId: args.operationId }
     },
+    resolveInterpreter: async () => ({ ok: true, interpreterPath: '/usr/bin/python3' }),
+    defaultOwnerId: 'o1',
+    storeRoot: 'science-store',
   })
 
   const dry = svc.dryRun({ language: 'python', code: 'print(2)\n' })
   await test('service dry-run does not call ACP', () => {
     ok(dry.ok)
-    if (dry.ok) strictEqual(dry.wouldCall.tool, 'notebook_execute')
+    if (dry.ok) strictEqual(dry.wouldCall.tool, 'workflow_execute')
     strictEqual(acpCalls, 0)
   })
 
@@ -132,9 +141,63 @@ async function run() {
   setTrustedPreviewContext({ ownerId: 'o1', projectId: 'p1' })
   const exec = await svc.execute({ language: 'python', code: 'print(2)\n' })
   await test('service execute via ACP', () => {
-    ok((exec as { ok?: boolean }).ok)
+    ok((exec as { ok?: boolean }).ok, JSON.stringify(exec))
     strictEqual(acpCalls, 1)
     strictEqual(svc.history().length, 1)
+  })
+
+  await test('the execute request is one the engine can honour', () => {
+    const args = seenArgs[0] as {
+      operationId?: string
+      interpreterPath?: string
+      allowKernelSteps?: boolean
+      ownerId?: string
+      workflowSpec?: {
+        project_id?: string
+        schema_version?: number
+        steps?: { kind?: string; notebook_cell?: string }[]
+      }
+    }
+    // Idempotency: a retried IPC must not run the cell twice.
+    ok(typeof args.operationId === 'string' && args.operationId.length > 0)
+    // The engine refuses a relative path — which binary ran is evidence.
+    ok(args.interpreterPath?.startsWith('/'))
+    // Explicit opt-in: kernel steps are refused by default policy.
+    strictEqual(args.allowKernelSteps, true)
+    // Bound to the trusted session's project, not a default.
+    strictEqual(args.workflowSpec?.project_id, 'p1')
+    strictEqual(args.ownerId, 'o1')
+    const step = args.workflowSpec?.steps?.[0]
+    strictEqual(step?.kind, 'NotebookCell')
+    // The step carries the SOURCE — the executor hashes this as the cell.
+    strictEqual(step?.notebook_cell, 'print(2)\n')
+  })
+
+  await test('a run that did not succeed is not recorded as success', async () => {
+    const failing = createNotebookService({
+      acpCall: async () => ({ state: 'denied' }),
+      resolveInterpreter: async () => ({ ok: true, interpreterPath: '/usr/bin/python3' }),
+    })
+    await failing.execute({ language: 'python', code: 'print(3)\n' })
+    strictEqual(failing.history()[0]?.ok, false)
+  })
+
+  await test('no interpreter means refusal, and the engine is never called', async () => {
+    let called = 0
+    const bare = createNotebookService({
+      acpCall: async () => {
+        called++
+        return { state: 'succeeded' }
+      },
+      resolveInterpreter: async () => ({ ok: false, reason: 'no runnable Python' }),
+    })
+    const out = (await bare.execute({ language: 'python', code: 'print(4)\n' })) as {
+      ok?: boolean
+      reason?: string
+    }
+    strictEqual(out.ok, false)
+    ok(out.reason?.includes('no runnable Python'))
+    strictEqual(called, 0)
   })
 
   const ipynb = svc.exportIpynb()
@@ -180,8 +243,15 @@ async function run() {
     safeHandle,
     getLumenBinaryHash: () => 'h',
     previewStore: new AcpPreviewStore(),
-    assertMembership: createHybridMembershipAsserter({ catalog }),
+    assertMembership: createOfflineCatalogMembershipAsserter({ catalog }),
     projectCatalog: catalog,
+    // Creation is an engine mutation now; this suite is about the notebook, so
+    // it stands in a permissive engine rather than exercising that path.
+    // test-osf2-ui-projects.mts covers what happens when the engine declines.
+    callScienceTool: async (tool: string) => {
+      if (tool !== 'project_create') throw new Error(`unexpected tool ${tool}`)
+      return { projectId: 'nb-engine-project' }
+    },
     notebookService: svc,
   })
 

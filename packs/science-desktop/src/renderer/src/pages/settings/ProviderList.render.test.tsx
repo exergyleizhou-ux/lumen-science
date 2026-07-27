@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: Copy expectations follow this product's name.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -229,7 +233,7 @@ describe('ProviderList', () => {
       })
     ])
 
-    expect(container.textContent).toContain('Authentication imported into Open Science')
+    expect(container.textContent).toContain('Authentication imported into Lumen Science')
     expect(buttonByLabel('Check Codex login')).toBeDefined()
     expect(buttonByLabel('Edit')).toBeDefined()
     expect(buttonByLabel('Delete')).toBeDefined()
@@ -246,7 +250,7 @@ describe('ProviderList', () => {
       provider({
         id: 'builtin-codex-isolated',
         type: 'codex-isolated',
-        name: 'Open Science Codex login'
+        name: 'Lumen Science Codex login'
       })
     ])
 
@@ -261,7 +265,7 @@ describe('ProviderList', () => {
     const isolated = provider({
       id: 'builtin-codex-isolated',
       type: 'codex-isolated',
-      name: 'Open Science Codex login',
+      name: 'Lumen Science Codex login',
       models: [],
       model: undefined,
       maskedKey: undefined,
@@ -371,7 +375,7 @@ describe('ProviderList', () => {
 
     // Signed in (verified): sign-in actions go away, app-local disconnect is offered.
     renderList([{ ...shared, lastValidatedAt: 1 }], undefined, undefined, { onLogoutSharedClaude })
-    act(() => buttonByLabel('Disconnect from Open Science')?.click())
+    act(() => buttonByLabel('Disconnect from Lumen Science')?.click())
     expect(onLogoutSharedClaude).toHaveBeenCalledOnce()
     expect(buttonByLabel('Sign in with browser')).toBeUndefined()
   })

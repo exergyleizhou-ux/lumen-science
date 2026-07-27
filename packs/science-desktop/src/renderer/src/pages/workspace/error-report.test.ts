@@ -1,3 +1,6 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -84,7 +87,7 @@ describe('buildErrorReportText', () => {
 describe('buildGithubIssueUrl', () => {
   it('targets the bug report template with prefilled, decodable fields', () => {
     const url = new URL(buildGithubIssueUrl(baseContext))
-    expect(url.pathname).toBe('/aipoch/open-science/issues/new')
+    expect(url.pathname).toBe('/exergyleizhou-ux/lumen-science/issues/new')
     expect(url.searchParams.get('template')).toBe('bug_report.yml')
     expect(url.searchParams.get('what-happened')).toBe('Run failed: connection reset')
     expect(url.searchParams.get('app-version')).toBe('0.5.1')

@@ -1,3 +1,6 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { fileURLToPath } from 'node:url'
 
 // Only the lightweight argv flags are imported statically here. The MCP server modules (and their heavy
@@ -140,19 +143,33 @@ async function startElectronApp(mainEntryPath: string): Promise<void> {
       // ── Lumen Rust binary supervision ──────────────────────────
       // Start the Rust Lumen binary and surface its identity hash so the UI
       // can attest "this desktop is backed by this exact science engine."
-      const { startLumen, getLumenBinaryHash, stopLumen, installIpcGuard } = await import('./lumen-acp-bridge')
-      app.on('before-quit', () => stopLumen())
+      const { startLumen, getLumenBinaryHash, getLumenEngineState, stopLumen, installIpcGuard } =
+        await import('./lumen-acp-bridge')
+      // Shutdown is now asynchronous (transport close, then SIGTERM/SIGKILL), so it is started
+      // here and awaited by the process manager rather than fired blind. Its escalation timer is
+      // unref'd, so a slow child can never hold quit open.
+      app.on('before-quit', () => {
+        void stopLumen().catch((err: unknown) => log.error('lumen shutdown failed', err))
+      })
 
       // Wire IPC guard BEFORE any handlers register so BANNED channels are
       // rejected at the IPC layer and acp:call routes to Rust Lumen.
       installIpcGuard(ipcMain)
 
+      // The handshake (initialize -> authenticate -> session/new) runs in the background so the
+      // window is not blocked on it. A failure leaves the engine in an explicit `unavailable`
+      // state with a reason: every science call then rejects with that reason instead of a
+      // connection error that looks like a transient hiccup.
       startLumen().then(() => {
-        if (getLumenBinaryHash()) {
-          log.info('lumen binary started', { hash: getLumenBinaryHash() })
-        }
+        log.info('lumen engine ready', {
+          hash: getLumenBinaryHash(),
+          state: getLumenEngineState()
+        })
       }).catch((err: unknown) => {
-        log.error('lumen binary failed to start (science engine unavailable)', err)
+        log.error('lumen engine failed to start (science unavailable)', {
+          error: err,
+          state: getLumenEngineState()
+        })
       })
 
       // Capture otherwise-silent crashes so a hang or unexpected exit leaves a trail in the log file.

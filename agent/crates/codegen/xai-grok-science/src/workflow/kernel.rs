@@ -14,23 +14,47 @@ pub enum KernelKind {
 
 /// Kernel admission record. A kernel must pass independent admission
 /// before it can be used in any workflow.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// Build one with [`crate::workflow::admission::probe_kernel`], which fills
+/// every identity field from the running machine. Constructing this literally
+/// asserts facts nobody checked.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct KernelAdmission {
     pub kernel_id: String,
     pub kind: KernelKind,
+    /// Version string the interpreter itself printed. Empty on a rejection:
+    /// a kernel that could not be run has no version to report.
     pub exact_version: String,
+    /// SHA-256 of the interpreter's own bytes, lowercase hex. Empty on a
+    /// rejection. Never a digest supplied by the caller.
     pub executable_hash: String,
+    /// SHA-256 of the pinned package lock, or
+    /// [`crate::workflow::admission::NO_PACKAGE_LOCK`] when none was pinned.
     pub package_lock_hash: String,
+    /// Absolute path the interpreter resolved to, symlinks followed.
+    #[serde(default)]
+    pub interpreter_path: String,
+    /// Host OS the probe ran on (`std::env::consts::OS`).
+    #[serde(default)]
+    pub os: String,
+    /// Host architecture the probe ran on (`std::env::consts::ARCH`).
+    #[serde(default)]
+    pub architecture: String,
+    /// Sandbox policy the execution seam is required to enforce. Not an
+    /// observation — see [`crate::workflow::admission::KernelPolicy`].
     pub default_no_network: bool,
     pub process_isolation: bool,
     pub resource_cap: ResourceCap,
     pub artifact_only_io: bool,
     pub admission_status: AdmissionStatus,
+    /// Present exactly when `admission_status` is `Rejected`.
+    #[serde(default)]
+    pub rejection_reason: Option<super::admission::RejectionReason>,
     pub admitted_at: Option<String>,
     pub admitted_by: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResourceCap {
     pub max_memory_mb: u64,
     pub max_cpu_seconds: u64,
@@ -48,15 +72,24 @@ pub enum AdmissionStatus {
 
 impl KernelAdmission {
     /// Check if this kernel is safe to execute.
+    ///
+    /// A record carrying a rejection reason is never safe, even if some other
+    /// path set its status to `Admitted`.
     pub fn is_safe(&self) -> bool {
         self.admission_status == AdmissionStatus::Admitted
+            && self.rejection_reason.is_none()
             && self.process_isolation
             && self.artifact_only_io
     }
 
     /// Verify kernel identity matches the admission record.
+    ///
+    /// Refuses to match on an empty probed hash, so a rejected record — whose
+    /// identity fields are blank — cannot be "verified" by passing blanks.
     pub fn verify_identity(&self, executable_hash: &str, package_lock_hash: &str) -> bool {
-        self.executable_hash == executable_hash
+        !self.executable_hash.is_empty()
+            && !self.package_lock_hash.is_empty()
+            && self.executable_hash == executable_hash
             && self.package_lock_hash == package_lock_hash
     }
 }
@@ -156,6 +189,9 @@ mod tests {
             exact_version: "3.12.0".into(),
             executable_hash: "sha256:py".into(),
             package_lock_hash: "sha256:pkg".into(),
+            interpreter_path: "/usr/bin/python3.12".into(),
+            os: "macos".into(),
+            architecture: "aarch64".into(),
             default_no_network: true,
             process_isolation: true,
             resource_cap: ResourceCap {
@@ -166,6 +202,7 @@ mod tests {
             },
             artifact_only_io: true,
             admission_status: AdmissionStatus::Admitted,
+            rejection_reason: None,
             admitted_at: Some("2026-07-25".into()),
             admitted_by: Some("admin".into()),
         }
@@ -175,6 +212,27 @@ mod tests {
     fn admitted_kernel_is_safe() {
         let k = sample_kernel();
         assert!(k.is_safe());
+    }
+
+    /// A record that carries a rejection reason is never safe, whatever its
+    /// status field says.
+    #[test]
+    fn rejection_reason_overrides_an_admitted_status() {
+        let mut k = sample_kernel();
+        k.rejection_reason = Some(super::super::admission::RejectionReason::InterpreterNotFound {
+            path: "/usr/bin/python3.12".into(),
+        });
+        assert!(!k.is_safe());
+    }
+
+    /// The identity fields of a rejected kernel are blank; blanks must not
+    /// verify against blanks.
+    #[test]
+    fn blank_identity_never_verifies() {
+        let mut k = sample_kernel();
+        k.executable_hash = String::new();
+        k.package_lock_hash = String::new();
+        assert!(!k.verify_identity("", ""));
     }
 
     #[test]

@@ -26,6 +26,22 @@ const ALLOWED_CHANNELS = new Set<string>([
   'app:quit',
   'app:get-version',
   'app:get-lumen-hash',
+
+  // Permission prompts. The renderer RESPONDS to an ask the engine initiated;
+  // it cannot originate one, and `permission:respond` carries a request id the
+  // main process issued, so a reply to an unknown id is discarded rather than
+  // resolving something else.
+  'permission:respond',
+
+  // Absent-capability status queries. The absorbed renderer calls these on
+  // mount; each fronts a subsystem Lumen deliberately did not absorb, and each
+  // answers with the truthful "nothing here" rather than a fabricated ready
+  // state. Without them the invokes rejected and React never rendered — the
+  // window opened blank. See main/absent-capability-ipc.ts.
+  'notebook-env:status',
+  'sessions:load-all',
+  'storage:get-info',
+  'notifications:take-pending-open-session',
   // Tray & notifications
   'tray:update',
   'notification:show',
@@ -57,6 +73,11 @@ const ALLOWED_CHANNELS = new Set<string>([
   'files:create-ui-project',
   'files:open-ui-project',
   'files:delete-ui-project',
+  // LS5-K28 Question refinement — actor-gated engine mutation, never local state
+  'files:update-question',
+  // LS5-K30 Export to a user-chosen path. Writes only where a human picked in
+  // the OS save dialog — the renderer never names a destination.
+  'files:save-export',
   // OSF-3 Notebook — plan/dry-run/export local; execute only via ACP
   'notebook:plan-cell',
   'notebook:dry-run-cell',
@@ -84,6 +105,13 @@ const ALLOWED_CHANNELS = new Set<string>([
   // OSF-7 Connector catalog — read-only; no desktop fetch runtime
   'connectors:list',
   'connectors:fetch',
+  // LS5-K4 Environment identity — discovery and identification return
+  // observations (absolute path, sha256, exact version, os/arch, lock digest);
+  // request-admission forwards to the SessionActor and returns ITS verdict.
+  // None of the three can admit anything on the desktop's own authority.
+  'environment:discover',
+  'environment:identify',
+  'environment:request-admission',
   // OSF-8 / office admission / release honesty
   'office:admission-list',
   'office:preview-open',

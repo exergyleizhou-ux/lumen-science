@@ -9,9 +9,15 @@ on:
       - 'scripts/science-machine-gates.sh'
       - 'scripts/science-go-module-boundary.sh'
       - 'scripts/verify-release-assets.sh'
+      - 'scripts/generate-science-status.py'
+      - 'scripts/verify-science-status.py'
+      - 'scripts/test-science-status.py'
+      - 'docs/science/status/current.json'
       - 'docs/science/fusion-sources.lock.json'
-      - 'agent/crates/codegen/xai-grok-science/**'
-      - 'agent/crates/codegen/xai-grok-shell/src/extensions/science.rs'
+      # agent/**: same reasoning as the pull_request trigger below — core
+      # changes reach main through merges, and the record on main should carry
+      # the same evidence the PR gate demanded.
+      - 'agent/**'
       - 'VERSION'
       - 'packs/science/VERSION'
   pull_request:
@@ -20,8 +26,15 @@ on:
       - 'packs/science/**'
       - 'scripts/**'
       - 'docs/science/**'
-      - 'agent/crates/codegen/xai-grok-science/**'
-      - 'agent/crates/codegen/xai-grok-shell/src/extensions/science.rs'
+      # agent/** (not just the science crate): three of main's four REQUIRED
+      # status contexts live in this workflow, and required checks that never
+      # fire never report — so a PR touching only core crates (exactly what a
+      # core-security sync is) was unmergeable by construction. PR #12 had to
+      # be unblocked by manual workflow_dispatch; this makes the next one
+      # merge like any other PR. Core changes genuinely can break the science
+      # crate — one cargo workspace — so running these jobs on them is not
+      # merely ritual.
+      - 'agent/**'
       - 'packs/science/VERSION'
   workflow_dispatch:
 
@@ -60,7 +73,7 @@ jobs:
         run: |
           go test ./mcp ./mcp/artifacts/... ./mcp/notebook/... ./mcp/reviewer/... ./mcp/http_bridge/... \
             ./standalone/internal/seqbench/... ./standalone/internal/pipeline/... \
-            ./standalone/internal/projectstore/... \
+            ./standalone/internal/projectstore/... ./renderers/... \
             -count=1 -timeout=60s
 
       - name: Vet
@@ -75,10 +88,50 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          # verify-science-status regenerates from the tree and needs real git
+          # metadata (commit + committer date), which a shallow clone still has,
+          # but tag enumeration for the release block does not.
+          fetch-depth: 0
+
       - name: Science machine gates
         run: bash scripts/science-machine-gates.sh
+
       - name: Go module boundary (product vs legacy)
         run: bash scripts/science-go-module-boundary.sh
+
+      # LS5-F0-01: status truth. The negative tests run first — if the verifier
+      # cannot detect a corrupted status file, its pass on the real one is
+      # meaningless.
+      - name: Status gate self-test (negative cases)
+        run: python3 scripts/test-science-status.py
+
+      - name: Verify machine-readable status is fresh and honest
+        run: python3 scripts/verify-science-status.py
+
+      # The dossier verifier is the product's central claim: a third party can
+      # check a result without trusting us. Its tamper tests run before the
+      # other gates — a verifier that cannot detect tampering converts "nobody
+      # checked" into "checked and passed", which is worse than none.
+      - name: Dossier verifier detects tampering
+        run: python3 scripts/test-verify-dossier.py
+
+      # A pinned checksum is a security control only if the value is real.
+      # Every non-action digest in a workflow must be attributed in
+      # .github/pinned-digests.txt.
+      - name: Every pinned digest is attributed
+        run: python3 scripts/verify-pinned-digests.py
+
+      # Apache-2.0 §4 obligations for source adopted from Open Science: every
+      # modified file must carry a statement of changes, and the ledger's counts
+      # and pin must be internally consistent. Now wired — it was held back
+      # while 27 files still lacked a notice, since a knowingly-red required
+      # gate only invites a `continue-on-error` that hides it.
+      #
+      # The freshness re-derivation needs an upstream clone, which CI does not
+      # have; it reports as skipped rather than silently counted as passing.
+      - name: Adoption provenance ledger is consistent
+        run: python3 scripts/verify-adoption-provenance.py
 
   rust-science:
     name: Rust xai-grok-science (test + clippy)
@@ -114,6 +167,21 @@ jobs:
 
       - name: cargo test -p xai-grok-science --lib
         run: cargo test -p xai-grok-science --lib --locked -- --test-threads=2
+
+      # xai-grok-workspace + xai-grok-tools ran in NO job, and both were red:
+      # 15 failures from fixtures that fed uncanonicalized temp paths into the
+      # capability layer (invisible on Linux, where /tmp is not a symlink), and
+      # 44 from tests that shell out to ripgrep. Both are now green and stay
+      # that way only if something runs them.
+      #
+      # ripgrep is a real dependency of the grep/glob tools in a DEBUG build
+      # (build.rs bundles it for release only), so the job installs it rather
+      # than letting 43 tests quietly assert nothing.
+      - name: Install ripgrep (grep/glob tools shell out to it)
+        run: sudo apt-get update -y && sudo apt-get install -y ripgrep
+
+      - name: cargo test -p xai-grok-workspace -p xai-grok-tools --lib
+        run: cargo test -p xai-grok-workspace -p xai-grok-tools --lib --locked -- --test-threads=2
 
       - name: cargo clippy -p xai-grok-science -D warnings
         run: cargo clippy -p xai-grok-science --all-targets --locked -- -D warnings

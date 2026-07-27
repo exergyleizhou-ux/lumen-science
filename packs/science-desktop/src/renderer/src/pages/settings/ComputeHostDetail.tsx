@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { AlertTriangle, ChevronDown, ChevronUp, Cpu, HardDrive, MemoryStick, Pin, RefreshCw, Zap } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
@@ -377,7 +383,7 @@ export function ComputeHostDetail({
           <div className="min-w-0">
             <h4 className="text-sm font-medium text-foreground">Details</h4>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Free-form notes about this provider. Open Science reads and adds to them as it learns.
+              Free-form notes about this provider. Lumen Science reads and adds to them as it learns.
             </p>
           </div>
           {!isEditingDetails ? (

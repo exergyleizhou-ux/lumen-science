@@ -1,8 +1,31 @@
+// Modified from Open Science (Apache-2.0) — statement of changes, §4(b).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f,
+//           src/main/notebook/runtime-paths.ts
+// Per-file digests: docs/provenance/open-science-adoption.json
+//
+// WHAT LUMEN CHANGED, and why
+// ---------------------------
+// 1. (LS5-R1-02) `DEFAULT_RUNTIME_CDN_BASE` pointed at the upstream project's
+//    own CDN (statics.aipoch.com, /open-science). That default meant Lumen
+//    would fetch and then EXECUTE Python/R interpreters served by a third
+//    party. The constant is now undefined and the resolver fails closed.
+// 2. (LS5-K4) The replacement read a bare environment variable, so the
+//    forbidden host could simply be typed back in. Origin resolution now
+//    delegates to shared/runtime-origin-policy.ts, which requires https, an
+//    explicitly Lumen-owned host, and refuses the hosts listed in
+//    shared/update-policy.ts FORBIDDEN_UPDATE_HOSTS.
+// 3. (LS5-K4) Env var prefix OPEN_SCIENCE_ENV_CDN_BASE -> LUMEN_RUNTIME_CDN_BASE,
+//    so an Open Science installation on the same machine cannot configure ours.
+//
+// Everything else is upstream's path layout, kept because it is mechanics and
+// carries no execution authority: it names directories, it never decides that
+// anything may run.
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { delimiter, dirname, join, win32 } from 'node:path'
 
 import type { NotebookLanguage } from '../../shared/notebook'
+import { requireRuntimeOriginBase } from '../../shared/runtime-origin-policy'
 
 // Default environment version; bump when the default package set changes so a newer app triggers an
 // additive upgrade of an older user's environments (spec §6.3).
@@ -18,7 +41,12 @@ import type { NotebookLanguage } from '../../shared/notebook'
 //      manifest is live before packaging an installer.
 export const DEFAULT_ENV_VERSION = 1
 
-export const DEFAULT_RUNTIME_CDN_BASE = 'https://statics.aipoch.com/open-science'
+// LS5-R1-02: this defaulted to the upstream project's CDN
+// (statics.aipoch.com/open-science), which would have had Lumen fetch and
+// execute Python/R runtime bundles served by a third party. There is no
+// default any more — a runtime CDN must be configured explicitly, and with
+// none configured runtimeCdnBase() throws rather than silently reaching out.
+export const DEFAULT_RUNTIME_CDN_BASE: string | undefined = undefined
 
 // The runtime bundle publisher and consumer must agree on the conda platform segment. Keep this
 // mapping here rather than letting each caller infer a CDN key independently.
@@ -36,10 +64,16 @@ export const runtimeSubdir = (
   throw new Error(`Unsupported notebook runtime platform: ${platform}/${arch}`)
 }
 
-export const resolveRuntimeCdnBase = (override?: string): string => {
-  const value = override ?? process.env.OPEN_SCIENCE_ENV_CDN_BASE ?? DEFAULT_RUNTIME_CDN_BASE
-  return value.replace(/\/+$/, '')
-}
+// Fail closed, and fail on the host as well as on the absence of one.
+//
+// LS5-R1-02 removed the third-party default; LS5-K4 moved the decision into
+// shared/runtime-origin-policy.ts so that "configured" no longer means "any
+// string someone put in the environment". An override is still accepted (the
+// provisioner threads one through from its own options) but it is checked by
+// exactly the same rule, so a caller cannot route around the policy by passing
+// the forbidden host as an argument.
+export const resolveRuntimeCdnBase = (override?: string): string =>
+  requireRuntimeOriginBase(process.env, override ?? DEFAULT_RUNTIME_CDN_BASE)
 
 export const DEFAULT_PY_ENV = 'default-python'
 export const DEFAULT_R_ENV = 'default-r'

@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { Check } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
@@ -156,7 +162,7 @@ const OnboardingWizard = (): React.JSX.Element => {
           rel="noreferrer"
           className="font-serif text-[26px] font-medium leading-none tracking-[-0.02em] text-text-000 transition-colors duration-150 ease-out hover:text-text-100"
         >
-          Open Science
+          Lumen Science
         </a>
 
         <div

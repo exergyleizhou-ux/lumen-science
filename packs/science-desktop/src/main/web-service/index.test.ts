@@ -1,3 +1,7 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: Error-message expectations follow this product's name.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { describe, expect, it } from 'vitest'
 
 import { parseWebModeOptions } from './options'
@@ -23,7 +27,7 @@ describe('parseWebModeOptions', () => {
 
   it('rejects invalid ports', () => {
     expect(() => parseWebModeOptions(['electron', '--serve=nope'], {})).toThrow(
-      'Invalid Open Science web port'
+      'Invalid Lumen Science web port'
     )
   })
 })

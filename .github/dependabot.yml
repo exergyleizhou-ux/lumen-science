@@ -1,0 +1,56 @@
+# Dependency updates (LS5 §16).
+#
+# This repo vendors and adapts a large upstream codebase and ships signed-adjacent
+# binaries, so unpatched transitive dependencies are a real supply-chain risk.
+#
+# Grouped so a routine patch bump is one reviewable PR rather than dozens.
+# Security updates are deliberately left ungrouped: they must be individually
+# visible and individually reviewable.
+version: 2
+
+updates:
+  - package-ecosystem: cargo
+    directory: /agent
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      cargo-patch:
+        update-types: [patch]
+    labels: [dependencies, rust]
+
+  - package-ecosystem: npm
+    directory: /packs/science-desktop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-patch:
+        update-types: [patch]
+      npm-minor-dev:
+        dependency-type: development
+        update-types: [minor]
+    labels: [dependencies, desktop]
+    ignore:
+      # electron-builder and electron majors change packaging and signing
+      # behaviour; those must be deliberate, not a bot PR.
+      - dependency-name: electron
+        update-types: [version-update:semver-major]
+      - dependency-name: electron-builder
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: gomod
+    directory: /packs/science
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: [dependencies, go]
+
+  # Actions are pinned to commit SHAs in the release workflows (LS5-R1-01).
+  # Dependabot keeps those pins current instead of us floating on mutable tags.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: [dependencies, ci]

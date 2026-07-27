@@ -47,6 +47,43 @@
     return;
   }
 
+  // These three parameters come from the QUERY STRING, and one of them (ds)
+  // becomes a <script src>. Without a host check, anyone who can get a crafted
+  // link opened runs their own script in this page (CodeQL js/xss), and cb
+  // points the Document Server's save callback at their server. The Lab only
+  // ever fronts a DS on loopback or on its own host, so that is the whole
+  // allowlist: http(s), and loopback or same-host. Refused means refused —
+  // the page shows which parameter and why instead of proceeding.
+  function refuseUnlessLabUrl(raw, label) {
+    var parsed;
+    try {
+      parsed = new URL(raw, window.location.href);
+    } catch (e) {
+      showError("参数 " + label + " 不是合法 URL: " + raw);
+      return null;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      showError("参数 " + label + " 只允许 http(s)，得到: " + parsed.protocol);
+      return null;
+    }
+    var host = parsed.hostname;
+    var loopback = host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1";
+    if (!loopback && host !== window.location.hostname) {
+      showError("参数 " + label + " 指向了非本机、非本站的主机: " + host);
+      return null;
+    }
+    return parsed.href;
+  }
+
+  dsUrl = refuseUnlessLabUrl(dsUrl, "ds");
+  if (!dsUrl) return;
+  fileUrl = refuseUnlessLabUrl(fileUrl, "url");
+  if (!fileUrl) return;
+  if (callbackUrl) {
+    callbackUrl = refuseUnlessLabUrl(callbackUrl, "cb");
+    if (callbackUrl === null) return;
+  }
+
   // Normalize dsUrl — strip trailing slash
   dsUrl = dsUrl.replace(/\/+$/, "");
 

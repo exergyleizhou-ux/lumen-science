@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: Copy expectations follow this product's name.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 // Thin shell suite: step transitions (①→⑤ and Back), the recovery single-page view, and the
 // shell-owned side effects (env-store hydration, full-screen relaunch state). Per-step content and
 // gating live in the step suites (EnvironmentStep/AgentStep/ProviderStep/NotebookStep/LocationStep).
@@ -142,7 +146,7 @@ describe('OnboardingWizard flow', () => {
 
     expect(currentSection('Choose data location')).not.toBeNull()
     expect(container.textContent).toContain('/mnt/data/OpenScience')
-    expect(container.textContent).toContain('Open Science will restart to set this up')
+    expect(container.textContent).toContain('Lumen Science will restart to set this up')
   })
 
   it('initializes (detects) the env store on mount without auto-provisioning python', async () => {

@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { CONNECTOR_CATALOG } from './catalog'
 import { getConnectorTools } from './registry'
 
@@ -103,7 +109,7 @@ export function renderConnectorInstructions(connectorIds: string[]): string {
   }
 
   return (
-    `# Open Science data connector conventions\n\n` +
+    `# Lumen Science data connector conventions\n\n` +
     `Detailed instructions, tool schemas, return shapes, and examples are available through the matching \`mcp-*\` skill. Load that skill before using a connector.\n\n` +
     CONVENTIONS
   )

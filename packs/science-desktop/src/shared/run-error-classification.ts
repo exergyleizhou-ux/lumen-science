@@ -1,3 +1,6 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { isMediaOverflowError } from './media-overflow'
 
 // Classifies a failed run into "expected" (keep the message, no report button) vs "unknown/reportable"
@@ -43,6 +46,12 @@ export const CLAUDE_EXECUTABLE_MISSING_MESSAGE =
   'Claude executable is not configured. Complete onboarding in settings.'
 export const CODEX_BRIDGE_UNSUPPORTED_MESSAGE =
   'The active model is not supported over the Codex Chat Completions bridge. Pick another model in Settings → Model.'
+// LS5-D1-02: the Lumen absorb removed the Open Science agent-framework registry, so
+// settings/service.ts:resolveAgentBackendFromSettings has no framework to spawn. That is a
+// deliberate architecture fact, not an app fault — sessions run through the Lumen ACP bridge — so
+// it joins the app-authored set below and hides the report button.
+export const AGENT_FRAMEWORK_UNAVAILABLE_MESSAGE =
+  'No agent framework is registered in this build. Sessions run through the Lumen bridge instead.'
 // The model↔framework mismatch message interpolates the framework name, so the classifier matches on
 // this leading, framework-independent phrase. It also covers the resume-path RESUME_MODEL_INCOMPATIBLE
 // wording (both begin here), so either surfacing is recognized.
@@ -68,7 +77,8 @@ const EXPECTED_RUN_FAILURE_MESSAGES = new Set<string>([
   IMAGE_REPLAY_UNSUPPORTED_MESSAGE,
   NO_ACTIVE_PROVIDER_MESSAGE,
   CLAUDE_EXECUTABLE_MISSING_MESSAGE,
-  CODEX_BRIDGE_UNSUPPORTED_MESSAGE
+  CODEX_BRIDGE_UNSUPPORTED_MESSAGE,
+  AGENT_FRAMEWORK_UNAVAILABLE_MESSAGE
 ])
 
 // Whether a run failure is one the app itself already surfaced with a purpose — an app-crafted

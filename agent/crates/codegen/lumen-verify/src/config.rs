@@ -17,6 +17,11 @@ pub struct Config {
     pub timeout_secs: u64,
     /// Verification scope: "changed-pkg" or "workspace".
     pub scope: String,
+    /// Whether steps may go through a package runner such as `npx` (which can
+    /// download and execute packages). The standalone CLI defaults to true;
+    /// the automatic writer hook always forces this to false and only runs
+    /// binaries already present in the project's `node_modules/.bin`.
+    pub allow_package_runner: bool,
 }
 
 impl Default for Config {
@@ -26,6 +31,7 @@ impl Default for Config {
             max_repair: 3,
             timeout_secs: 30,
             scope: "changed-pkg".to_string(),
+            allow_package_runner: true,
         }
     }
 }

@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: Copy expectations follow this product's name.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -123,7 +127,7 @@ describe('ProviderForm field switching', () => {
     expect(container.querySelector('[aria-label="Provider name"]')).toBeNull()
     expect(container.querySelector('[aria-label="API key"]')).toBeNull()
     expect(container.querySelector('[aria-label="Model"]')).toBeNull()
-    expect(container.textContent).toContain('Copies only Codex authentication into Open Science')
+    expect(container.textContent).toContain('Copies only Codex authentication into Lumen Science')
     expect(container.textContent).toContain('Skills and sessions are not imported')
   })
 
@@ -271,12 +275,12 @@ describe('ProviderForm field switching', () => {
     expect(getApiKeySecurityCopy(true)).toEqual({
       title: 'Your key stays private.',
       description:
-        'It is stored only on this device and never uploaded to Open Science. Your OS secure storage protects it, and it is sent only to the selected provider when you make a request.'
+        'It is stored only on this device and never uploaded to Lumen Science. Your OS secure storage protects it, and it is sent only to the selected provider when you make a request.'
     })
     expect(getApiKeySecurityCopy(false)).toEqual({
       title: 'Secure storage is unavailable.',
       description:
-        'Open Science will not save API keys until the operating-system credential vault is available. Unlock or authorize the system keychain, then retry.'
+        'Lumen Science will not save API keys until the operating-system credential vault is available. Unlock or authorize the system keychain, then retry.'
     })
   })
 

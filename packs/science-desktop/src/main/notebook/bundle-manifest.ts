@@ -1,5 +1,26 @@
+// Modified from Open Science (Apache-2.0) — statement of changes, §4(b).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f,
+//           src/main/notebook/bundle-manifest.ts
+// Per-file digests: docs/provenance/open-science-adoption.json
+//
+// WHAT LUMEN CHANGED, and why (LS5-K4)
+// ------------------------------------
+// `manifestUrl` and `packUrl` were string concatenation over whatever base they
+// were handed. Upstream could afford that: their base was a constant they
+// owned. Here the base arrives from configuration, and a composed URL can land
+// on a host the base never named (a base ending in a scheme-relative `//`, a
+// manifest `file` field that is itself absolute). Both now run the composed URL
+// through shared/runtime-origin-policy.ts, so the host is re-checked at the
+// moment of use rather than trusted from the moment of configuration.
+//
+// The rest is upstream's content-addressing: schema validation, streaming
+// sha256, and a fail-closed post-download re-hash. It is adopted unchanged
+// because it is exactly the mechanic Lumen needs and it decides nothing — it
+// reports whether bytes match a digest.
 import { createHash } from 'node:crypto'
 import { createReadStream, statSync } from 'node:fs'
+
+import { assertRuntimeOriginUrl } from '../../shared/runtime-origin-policy'
 
 // Client side of the split language-pack download protocol
 // (docs/internal/2026-07-18-split-language-pack-download-protocol.md), extended for CURATED
@@ -247,10 +268,13 @@ export const verifyPackChecksum = async (
 }
 
 // CDN key for the shared manifest: runtime-bundle/<envVersion>/<subdir>/manifest.json.
+// The composed URL is re-checked against the origin policy (see the header): the
+// caller's base is not evidence about where this string points.
 export const manifestUrl = (cdnBase: string, version: number, subdir: string): string =>
-  `${cdnBase}/runtime-bundle/${version}/${subdir}/manifest.json`
+  assertRuntimeOriginUrl(`${cdnBase}/runtime-bundle/${version}/${subdir}/manifest.json`)
 
 // CDN key for one pack object: runtime-bundle/<envVersion>/<subdir>/<file>, where `file` is the
-// manifest entry's `file` (e.g. "python-3.11.tar.zst").
+// manifest entry's `file` (e.g. "python-3.11.tar.zst"). `file` comes out of a downloaded manifest,
+// which is the strongest reason to re-check the composed URL rather than the base.
 export const packUrl = (cdnBase: string, version: number, subdir: string, file: string): string =>
-  `${cdnBase}/runtime-bundle/${version}/${subdir}/${file}`
+  assertRuntimeOriginUrl(`${cdnBase}/runtime-bundle/${version}/${subdir}/${file}`)

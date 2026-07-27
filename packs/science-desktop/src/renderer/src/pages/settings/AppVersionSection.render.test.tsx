@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: Copy and copyright expectations follow this product's name and licence line.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -18,7 +22,7 @@ beforeEach(() => {
 
   useUpdateStore.setState({
     appInfo: {
-      name: 'Open Science',
+      name: 'Lumen Science',
       version: '0.2.0',
       copyright: '© 2026 AIPOCH. All rights reserved.'
     },
@@ -37,9 +41,9 @@ describe('AppVersionSection', () => {
       root.render(<AppVersionSection />)
     })
 
-    expect(container.textContent).toContain('Open Science')
+    expect(container.textContent).toContain('Lumen Science')
     expect(container.textContent).toContain('v0.2.0')
-    expect(container.textContent).toContain('© 2026 AIPOCH')
+    expect(container.textContent).toContain('© 2026 Lumen Science contributors. Apache-2.0.')
   })
 
   it('shows an update action when a new version is available', () => {

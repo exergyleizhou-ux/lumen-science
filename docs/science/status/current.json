@@ -1,0 +1,389 @@
+{
+  "schemaVersion": 1,
+  "generator": "scripts/generate-science-status.py",
+  "doc": "Machine-generated product status. Derived from the source tree and git only. Prose documents must point here rather than restate status. Regenerate with: python3 scripts/generate-science-status.py",
+  "sourceCommit": "140acc4279998b26a1fbc5db1b41b73f15338eb0",
+  "sourceCommitEpoch": 1785092860,
+  "sourceCommitIso": "2026-07-27T03:07:40+08:00",
+  "gateVocabulary": {
+    "states": [
+      "pass",
+      "fail",
+      "not_run"
+    ],
+    "rule": "pass requires evidence.command; absent evidence is not_run, never pass"
+  },
+  "versions": {
+    "rootVersion": {
+      "value": "1.0.0",
+      "path": "VERSION",
+      "role": "legacy; still read by scripts/install-science.sh",
+      "authoritative": false
+    },
+    "cliVersion": {
+      "value": "1.0.1",
+      "path": "packs/science/VERSION",
+      "role": "Lumen Science CLI/MCP release line",
+      "authoritative": true
+    },
+    "desktopVersion": {
+      "value": "1.1.0-dev",
+      "path": "packs/science-desktop/package.json",
+      "role": "Electron desktop; not GA",
+      "authoritative": true
+    },
+    "rustCoreVersion": {
+      "value": "0.1.222",
+      "path": "agent/crates/codegen/xai-grok-pager/Cargo.toml",
+      "role": "Lumen Core coding agent",
+      "authoritative": true
+    },
+    "rustCoreBinVersion": {
+      "value": "0.1.222",
+      "path": "agent/crates/codegen/xai-grok-pager-bin/Cargo.toml",
+      "role": "binary crate that produces `lumen`",
+      "authoritative": false
+    }
+  },
+  "connectorInventory": {
+    "present": true,
+    "source": "docs/science/fusion-sources.lock.json",
+    "total": 42,
+    "declaredTotal": 42,
+    "implemented": 40,
+    "rejected": 2,
+    "unresolved": 0,
+    "admissionStatusBreakdown": {
+      "implemented-offline-l4": 40,
+      "rejected-license-or-terms": 1,
+      "rejected-safety-policy": 1
+    },
+    "derivedFromItems": true
+  },
+  "skillInventory": {
+    "present": true,
+    "source": "packs/science/skills/registry.json",
+    "total": 27,
+    "declaredTotal": 27,
+    "declaredApproved": 10,
+    "derivedApproved": 10,
+    "dispositionBreakdown": {
+      "approved": 10,
+      "pending-compute-admission": 14,
+      "pending-controlled-tool-surface": 3
+    },
+    "bySourceRepository": {
+      "https://github.com/aipoch/open-science": 18,
+      "https://github.com/exergyleizhou-ux/lumen-science": 8,
+      "https://github.com/jvogan/motif": 1
+    },
+    "derivedFromItems": true
+  },
+  "ci": {
+    "checks": {
+      "ci.yml": {
+        "state": "not_run"
+      },
+      "desktop-ci.yml": {
+        "state": "not_run"
+      },
+      "release.yml": {
+        "state": "not_run"
+      },
+      "science-ci.yml": {
+        "state": "not_run"
+      },
+      "science-release.yml": {
+        "state": "not_run"
+      },
+      "supply-chain.yml": {
+        "state": "not_run"
+      },
+      "windows-team-build.yml": {
+        "state": "not_run"
+      }
+    },
+    "workflowFacts": {
+      "science-release.yml": {
+        "present": true,
+        "continueOnError": 0,
+        "usesClobber": false,
+        "actionRefs": 10,
+        "unpinnedActionRefs": [],
+        "actionsFullyPinned": true,
+        "declaresTopLevelContentsWrite": false,
+        "usesProtectedEnvironment": true,
+        "verifiesTagPeel": true,
+        "usesVerifyTag": true,
+        "sourceDateEpochFromCommit": true,
+        "sourceDateEpochFromWallClock": false,
+        "lineCount": 523
+      },
+      "release.yml": {
+        "present": true,
+        "continueOnError": 0,
+        "usesClobber": true,
+        "actionRefs": 10,
+        "unpinnedActionRefs": [
+          "actions/checkout@v4"
+        ],
+        "actionsFullyPinned": false,
+        "declaresTopLevelContentsWrite": false,
+        "usesProtectedEnvironment": true,
+        "verifiesTagPeel": true,
+        "usesVerifyTag": true,
+        "sourceDateEpochFromCommit": true,
+        "sourceDateEpochFromWallClock": false,
+        "lineCount": 773
+      },
+      "desktop-ci.yml": {
+        "present": true,
+        "continueOnError": 0,
+        "usesClobber": false,
+        "actionRefs": 10,
+        "unpinnedActionRefs": [
+          "actions/cache@v4",
+          "actions/checkout@v4",
+          "actions/setup-node@v4",
+          "dtolnay/rust-toolchain@stable"
+        ],
+        "actionsFullyPinned": false,
+        "declaresTopLevelContentsWrite": false,
+        "usesProtectedEnvironment": false,
+        "verifiesTagPeel": false,
+        "usesVerifyTag": false,
+        "sourceDateEpochFromCommit": false,
+        "sourceDateEpochFromWallClock": false,
+        "lineCount": 206
+      },
+      "science-ci.yml": {
+        "present": true,
+        "continueOnError": 0,
+        "usesClobber": false,
+        "actionRefs": 13,
+        "unpinnedActionRefs": [
+          "actions/cache@v4",
+          "actions/checkout@v4",
+          "actions/setup-go@v5",
+          "actions/upload-artifact@v4",
+          "dtolnay/rust-toolchain@stable"
+        ],
+        "actionsFullyPinned": false,
+        "declaresTopLevelContentsWrite": false,
+        "usesProtectedEnvironment": false,
+        "verifiesTagPeel": false,
+        "usesVerifyTag": false,
+        "sourceDateEpochFromCommit": false,
+        "sourceDateEpochFromWallClock": false,
+        "lineCount": 284
+      }
+    },
+    "desktopCiAllowsTypecheckFailure": false
+  },
+  "release": {
+    "tags": [
+      "v1.0.0",
+      "v1.0.0-fusion-candidate",
+      "v1.0.0-rc.1",
+      "v1.0.1"
+    ],
+    "scienceReleaseTags": [
+      "v1.0.0",
+      "v1.0.0-fusion-candidate",
+      "v1.0.0-rc.1",
+      "v1.0.1"
+    ],
+    "latestScienceTag": "v1.0.1",
+    "pipeline": {
+      "signsAssets": true,
+      "generatesPerAssetSbom": true,
+      "attestsBuildProvenance": true,
+      "immutablePublish": true,
+      "verifiesTagBinding": true,
+      "reproducibleArchives": true,
+      "capabilitiesSince": "v1.0.2"
+    },
+    "publishedLatest": {
+      "tag": "v1.0.1",
+      "hasSignature": false,
+      "hasSbom": false,
+      "hasProvenance": false,
+      "note": "v1.0.1 was built before the signing/SBOM/provenance work landed, so its assets carry checksums only. The pipeline gains these from v1.0.2."
+    },
+    "openGaps": [
+      "the newest published release (v1.0.1) predates these controls and remains unsigned, without SBOM or provenance",
+      "reproducibility is implemented but no published tag has been independently rebuilt and compared"
+    ]
+  },
+  "desktop": {
+    "version": "1.1.0-dev",
+    "typecheck": {
+      "state": "not_run"
+    },
+    "fullBuild": {
+      "state": "not_run"
+    },
+    "headedE2E": {
+      "state": "not_run"
+    },
+    "distTargetIsBrandingShell": true,
+    "distScript": "npx tsx scripts/pack-dir.mts",
+    "fullBuildScript": "electron-vite build && electron-builder --dir",
+    "bundlesEngineBinary": false,
+    "notes": "`npm run dist` builds src/main/pack-main.ts + pack-index.html — a packaging smoke shell, not the product. The product entry is src/main/index.ts, built only by dist:full, which nothing calls."
+  },
+  "authority": {
+    "engines": {
+      "rust": {
+        "path": "agent/crates/codegen/xai-grok-science",
+        "transport": "ACP ext methods over `lumen agent stdio`",
+        "acpMethods": [
+          "x.ai/science/claim_propose",
+          "x.ai/science/collaboration_invite",
+          "x.ai/science/connector_fetch",
+          "x.ai/science/evidence_attach",
+          "x.ai/science/evidence_compare",
+          "x.ai/science/evidence_consistency",
+          "x.ai/science/evidence_reproduction",
+          "x.ai/science/evidence_trace",
+          "x.ai/science/goal_host_verify",
+          "x.ai/science/import_preview",
+          "x.ai/science/kernel_admission",
+          "x.ai/science/multimodal_index",
+          "x.ai/science/project_assert_membership",
+          "x.ai/science/project_create",
+          "x.ai/science/project_get",
+          "x.ai/science/project_list",
+          "x.ai/science/project_migrate",
+          "x.ai/science/project_transition",
+          "x.ai/science/project_update_question",
+          "x.ai/science/remote_compute_plan",
+          "x.ai/science/review_record",
+          "x.ai/science/run_csv",
+          "x.ai/science/seq_analyze",
+          "x.ai/science/ssh_scp_fixture",
+          "x.ai/science/workflow_dry_run",
+          "x.ai/science/workflow_execute",
+          "x.ai/science/workflow_validate"
+        ],
+        "acpMethodCount": 27
+      },
+      "go": {
+        "path": "packs/science",
+        "transport": "MCP tools + loopback HTTP bridge (bearer token)",
+        "shipsBinary": "lumen-science",
+        "isReleasedCliBinary": true,
+        "mcpToolCount": 33,
+        "hasServeSubcommand": false
+      }
+    },
+    "desktopBridge": {
+      "path": "packs/science-desktop/src/main/{lumen-acp-bridge,lumen-process-manager,acp-stdio-transport,acp-session-manager}.ts",
+      "spawnsSubcommand": "agent stdio",
+      "speaksStdioAcp": true,
+      "usesExtMethodUnderscorePrefix": true,
+      "speaksHttp": false,
+      "toolNamesSent": [
+        "artifact_list",
+        "artifact_resolve",
+        "compute_plan",
+        "project_assert_membership",
+        "review_record",
+        "workflow_execute"
+      ],
+      "toolNamesUnservedByEitherEngine": [
+        "artifact_resolve",
+        "compute_plan"
+      ]
+    },
+    "knownAuthorityGaps": [
+      {
+        "id": "EV-1",
+        "summary": "The desktop dossier exporter writes artifacts/manifest.json but no artifact BYTES, so an exported dossier substantiates none of the digests it lists",
+        "path": "packs/science-desktop/src/main/files/dossier-package.ts:112",
+        "note": "Closed by files/dossier-writer.ts, which writes the bytes under artifacts/<sha256>, re-hashes each before writing, aborts on a mismatch, and ships verify-dossier.py inside the package. test-dossier-writer.mts runs the real verifier against the real export — the only test that checks the two agree.",
+        "status": "closed"
+      },
+      {
+        "id": "AUTH-7",
+        "summary": "artifact_list, notebook_execute and start_review are Go MCP tools, not Rust ACP methods; their desktop call sites fail explicitly pending a Go MCP client",
+        "path": "packs/science-desktop/src/main/science-method-registry.ts"
+      },
+      {
+        "id": "AUTH-8",
+        "summary": "Desktop permission UI: the engine's session/request_permission now reaches a human, and nothing but a click can approve",
+        "path": "packs/science-desktop/src/main/permission-broker.ts",
+        "status": "closed",
+        "note": "Every non-answer denies: no window, a dismissed dialog, a timeout, an unparseable request, a reply naming a request id main never issued, and app quit. The renderer has no channel to originate an ask, only to answer one. 33 negative tests across test-permission-broker.mts and test-permission-ipc.mts."
+      },
+      {
+        "id": "AUTH-3",
+        "summary": "seq_analyze writes artifacts from the ACP request task with no permission request and no durable run record",
+        "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs:536",
+        "note": "Its false 'SessionActor-gated' claim has been removed and it now reports 'ACP request task (not actor-gated)'."
+      },
+      {
+        "id": "AUTH-6",
+        "summary": "project_migrate still mutates via a directly constructed ProjectStore",
+        "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs:981",
+        "note": "Marked KNOWN BYPASS in source; makes no authority claim."
+      },
+      {
+        "id": "AUTH-4",
+        "summary": "FeatureGates is in-memory only; rebuilt from Default on every request, no operator control surface",
+        "path": "agent/crates/codegen/xai-grok-science/src/features.rs:122"
+      }
+    ]
+  },
+  "evidenceLevels": {
+    "scienceCliMcp": {
+      "level": "E8-partial",
+      "rationale": "Released with per-asset SHA-256 across five targets, but assets are unsigned, carry no SBOM or provenance, and publish is mutable."
+    },
+    "rustScienceAcp": {
+      "level": "E4",
+      "rationale": "run_csv / import_preview / connector_fetch / ssh_scp_fixture / goal_host_verify are proven over a rebuilt binary via stdio ACP in tests/test_built_binary_e2e.rs."
+    },
+    "projectEvidenceModel": {
+      "level": "E4",
+      "rationale": "The four WP-2 mutations (project_create, project_transition, claim_propose, evidence_attach) route through SessionActor with operation-id idempotency, session/owner binding, compare-and-swap and a permission request; digests are canonical 64-hex and must reference a registered artifact. Proven over a rebuilt binary via stdio ACP, not only by unit tests.",
+      "builtBinaryProof": {
+        "tests": [
+          "test_stdio_science_project_mutation_is_actor_gated_and_idempotent",
+          "test_stdio_science_project_mutation_fails_closed",
+          "test_stdio_science_project_mutation_denied_writes_nothing"
+        ],
+        "file": "agent/crates/codegen/xai-grok-shell/tests/test_built_binary_e2e.rs",
+        "binarySha256": "8f7103db274e77270723cf704bdc260722360272449338d925cf3152df76aeb7",
+        "sourceCommit": "f1830aac06706b1a4c2d7b75e790fa48a1682a42",
+        "buildCommand": "cargo build -p xai-grok-pager-bin --bin lumen",
+        "runCommand": "GROK_BINARY=$PWD/agent/target/debug/lumen cargo test -p xai-grok-shell --test test_built_binary_e2e -- --ignored project_mutation",
+        "result": "3 passed, 0 failed",
+        "falsified": "Re-run with GROK_BINARY=/nonexistent/lumen fails, confirming the tests genuinely exercise the binary rather than passing trivially."
+      }
+    },
+    "workflowKernel": {
+      "level": "E4",
+      "rationale": "A real executor now runs a WorkflowSpec: topological order, at-least-once execution with exactly-once artifact commit, attempt records, operation-id dedup, bounded retry on an injected clock, cancellation, and crash recovery that marks in-flight attempts Interrupted rather than re-running them. Kernel admission probes a real interpreter — hashing its bytes, executing it for a version under timeout — and can genuinely Reject; it previously wrote exact_version \"unknown\" and returned Admitted unconditionally. Now E4: PythonLoopRunner binds the StepRunner seam and a WorkflowSpec runs end to end through a real python3, and x.ai/science/workflow_execute routes through the SessionActor with a permission request, operation-id idempotency and session/owner binding — proven over a rebuilt binary and falsified twice (a missing binary, and a binary with the dispatch arm removed, which returns -32601)."
+    },
+    "dummyLabTwin": {
+      "level": "E2",
+      "rationale": "DummyLab has simulated logic and unit tests; unreachable from any ACP route."
+    },
+    "deviceGovernance": {
+      "level": "E1",
+      "rationale": "Contract structs only; DeviceCommand/HardwareInLoop/RealDevice gates Disabled."
+    },
+    "desktop": {
+      "level": "E4",
+      "rationale": "The desktop now reaches the engine: spawn -> initialize -> authenticate -> session/new -> x.ai/science/project_create through the SessionActor -> read back, proven against a rebuilt binary over real stdio ACP. `npm run dist:full` packages the real renderer rather than the former branding shell. Not E6: there is still no headed Electron E2E, and no permission UI, so approval-requiring mutations are refused.",
+      "builtBinaryProof": {
+        "test": "packs/science-desktop/scripts/test-acp-live-handshake.mts",
+        "binarySha256": "8f7103db274e77270723cf704bdc260722360272449338d925cf3152df76aeb7",
+        "runCommand": "LUMEN_BINARY=$PWD/agent/target/debug/lumen npx tsx scripts/test-acp-live-handshake.mts",
+        "result": "ALL LIVE HANDSHAKE TESTS PASSED",
+        "note": "Skips with exit 0 when no binary is present, so CI without one reports skipped rather than passed."
+      }
+    }
+  }
+}

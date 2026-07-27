@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { Dialog } from 'radix-ui'
 import { Check, RefreshCw, TriangleAlert } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -288,7 +294,7 @@ const StorageMigrationModal = ({
                 role="alert"
                 className="mt-3 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive"
               >
-                Don&apos;t quit Open Science or turn off your computer until this finishes.
+                Don&apos;t quit Lumen Science or turn off your computer until this finishes.
               </p>
               <div className="mt-4 flex justify-end">
                 <Button type="button" variant="outline" onClick={handleCancel}>

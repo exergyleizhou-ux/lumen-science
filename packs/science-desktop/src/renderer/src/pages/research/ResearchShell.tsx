@@ -8,6 +8,9 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import { PermissionPrompt } from '@/components/PermissionPrompt'
+import { describeError } from './describe-error'
+import { describeOpen, type OpenOutcome } from './describe-open'
 
 type UiProject = {
   id: string
@@ -46,7 +49,22 @@ export const ResearchShell = (): React.JSX.Element => {
   const [tab, setTab] = useState<TabId>('question')
   const [name, setName] = useState('')
   const [question, setQuestion] = useState('')
+  /**
+   * The question as the ENGINE has it recorded. Kept beside the editable text
+   * so the tab can say whether what is on screen has been saved — a textarea
+   * that looks identical whether or not its contents survived a tab switch is
+   * how an hour of work disappears silently.
+   */
+  const [savedQuestion, setSavedQuestion] = useState('')
+  const [questionStatus, setQuestionStatus] = useState('')
   const [status, setStatus] = useState<string>('')
+  /**
+   * The outcome of the last open, as a headline plus the engine's own words.
+   * Previously the raw internals went straight into the status bar, so the
+   * first thing a user saw inside a project was a paragraph about which Rust
+   * module dispatches which method.
+   */
+  const [opened, setOpened] = useState<OpenOutcome | null>(null)
   const [hash, setHash] = useState<string | null>(null)
   const [error, setError] = useState<string | undefined>()
   const [previewMeta, setPreviewMeta] = useState<string>('')
@@ -95,6 +113,11 @@ export const ResearchShell = (): React.JSX.Element => {
 
   const openProject = async (project: UiProject): Promise<void> => {
     if (!lumen) return
+    // Clear the previous outcome BEFORE asking. Otherwise a failed open leaves
+    // the last project's "Opened." line on screen next to the error explaining
+    // that nothing opened — two contradictory claims, one of them stale.
+    setOpened(null)
+    setQuestionStatus('')
     setStatus('Opening (bind + seed)…')
     const res = (await lumen.openUiProject({
       projectId: project.id,
@@ -114,26 +137,89 @@ export const ResearchShell = (): React.JSX.Element => {
     setActive(project)
     setTab('question')
     setError(undefined)
-    setStatus(
-      `Open: seeded ${res.seeded ?? 0} artifacts` +
-        (res.seedError ? ` (seed: ${res.seedError})` : ''),
+    setStatus('')
+    setOpened(describeOpen(res))
+    // Show what is RECORDED, not whatever the previous project left in the box.
+    const recorded = (res as { researchQuestion?: string }).researchQuestion ?? ''
+    setQuestion(recorded)
+    setSavedQuestion(recorded)
+    setQuestionStatus('')
+  }
+
+  const [previewId, setPreviewId] = useState('')
+  const removeFromList = async (project: UiProject): Promise<void> => {
+    if (!lumen) return
+    // Removal drops the local index row; the engine keeps the project. Saying
+    // so in the confirmation matters — a user who reads "Delete" and means it
+    // would otherwise believe their data is gone when it is not.
+    const confirmed = window.confirm(
+      `Remove "${project.name}" from this list?\n\n` +
+        'The project itself stays in the engine — this only removes it from this window.',
     )
+    if (!confirmed) return
+    const res = (await lumen.deleteUiProject({ projectId: project.id })) as {
+      ok?: boolean
+      reason?: string
+    }
+    if (!res.ok) {
+      setError(res.reason ?? 'could not remove the project from this list')
+      return
+    }
+    if (active?.id === project.id) {
+      setActive(null)
+      setOpened(null)
+      setQuestion('')
+      setSavedQuestion('')
+    }
+    await refresh()
+  }
+
+  const saveQuestion = async (): Promise<void> => {
+    if (!lumen || !active) return
+    setQuestionStatus('Saving…')
+    try {
+      const res = (await lumen.updateQuestion({ researchQuestion: question })) as {
+        ok?: boolean
+        reason?: string
+      }
+      if (!res.ok) {
+        // Includes a denied permission. The box keeps the user's text — losing
+        // it because the engine said no would punish them for our refusal.
+        setQuestionStatus(res.reason ?? 'the engine refused this change')
+        return
+      }
+      setSavedQuestion(question)
+      setQuestionStatus('Saved to the project record.')
+    } catch (e: unknown) {
+      setQuestionStatus((e as Error)?.message || String(e))
+    }
   }
 
   const tryPreview = async (): Promise<void> => {
     if (!lumen || !active) return
-    const artifactId = window.prompt('artifact_id to preview (hash-gated path)')
-    if (!artifactId) return
-    const res = (await lumen.previewByArtifact({ artifactId })) as {
-      access?: { ok?: boolean; reason?: string }
-      path?: string
-      sha256?: string
-    }
-    if (!res.access?.ok) {
-      setPreviewMeta(res.access?.reason ?? 'denied')
+    // An inline field, not window.prompt(): Electron renderers THROW on
+    // prompt() ("prompt() is and will not be supported"), so the tab's only
+    // control died on first click with an unhandled rejection and no feedback.
+    const artifactId = previewId.trim()
+    if (!artifactId) {
+      setPreviewMeta('Enter an artifact_id first.')
       return
     }
-    setPreviewMeta(`ok path=${res.path ?? '?'} sha256=${res.sha256 ?? '?'}`)
+    try {
+      const res = (await lumen.previewByArtifact({ artifactId })) as {
+        access?: { ok?: boolean; reason?: string }
+        path?: string
+        sha256?: string
+      }
+      if (!res.access?.ok) {
+        setPreviewMeta(res.access?.reason ?? 'denied')
+        return
+      }
+      setPreviewMeta(`ok path=${res.path ?? '?'} sha256=${res.sha256 ?? '?'}`)
+    } catch (e: unknown) {
+      // A failed preview is a result to show, never an unhandled rejection.
+      setPreviewMeta((e as Error)?.message || String(e))
+    }
   }
 
   const notebookDryRun = async (): Promise<void> => {
@@ -151,13 +237,42 @@ export const ResearchShell = (): React.JSX.Element => {
     setNbOut(JSON.stringify(res, null, 2))
   }
 
-  const notebookExport = async (): Promise<void> => {
+  /**
+   * Turn an export projection into a file the user actually has.
+   *
+   * These buttons used to print JSON into the output pane and write nothing —
+   * a notebook you cannot get out of the app is not an export.
+   */
+  const saveExport = async (
+    build: () => Promise<unknown>,
+    suggestedName: string,
+    report: (text: string) => void,
+  ): Promise<void> => {
     if (!lumen) return
-    const res = await lumen.notebookExportIpynb()
-    setNbOut(JSON.stringify(res, null, 2))
+    const projection = (await build()) as { ok?: boolean; reason?: string }
+    if (projection && projection.ok === false) {
+      report(projection.reason ?? 'there is nothing to export yet')
+      return
+    }
+    const saved = (await lumen.saveExport({
+      suggestedName,
+      contents: JSON.stringify(projection, null, 2),
+    })) as { ok?: boolean; canceled?: boolean; path?: string; reason?: string }
+    if (saved.canceled) {
+      report('Export cancelled — nothing was written.')
+      return
+    }
+    report(saved.ok ? `Saved to ${saved.path}` : (saved.reason ?? 'export failed'))
   }
 
-  const [reviewArtifacts, setReviewArtifacts] = useState('art-1:abc\nart-2:xyz')
+  const notebookExport = async (): Promise<void> =>
+    saveExport(
+      () => lumen!.notebookExportIpynb(),
+      `notebook-${active?.id.slice(0, 8) ?? 'export'}.ipynb`,
+      setNbOut,
+    )
+
+  const [reviewArtifacts, setReviewArtifacts] = useState('')
   const [reviewOut, setReviewOut] = useState('')
   const reviewPlan = async (): Promise<void> => {
     if (!lumen) return
@@ -185,11 +300,12 @@ export const ResearchShell = (): React.JSX.Element => {
     const res = await lumen.reviewSubmit({ artifacts })
     setReviewOut(JSON.stringify(res, null, 2))
   }
-  const reviewExport = async (): Promise<void> => {
-    if (!lumen) return
-    const res = await lumen.reviewExportDossier()
-    setReviewOut(JSON.stringify(res, null, 2))
-  }
+  const reviewExport = async (): Promise<void> =>
+    saveExport(
+      () => lumen!.reviewExportDossier(),
+      `dossier-${active?.id.slice(0, 8) ?? 'export'}.json`,
+      setReviewOut,
+    )
 
   const [skillsOut, setSkillsOut] = useState('')
   const skillsList = async (): Promise<void> => {
@@ -241,30 +357,77 @@ export const ResearchShell = (): React.JSX.Element => {
   }
 
   return (
-    <div style={styles.root}>
-      <header style={styles.header}>
+    <div className={cx.root}>
+      {/* Mounted unconditionally. The engine can ask at any point, and a prompt
+          that only exists on some screen would leave those asks to time out
+          into a denial the user never saw. */}
+      {lumen ? (
+        <PermissionPrompt
+          subscribe={lumen.onPermissionAsk}
+          respond={lumen.respondToPermission}
+        />
+      ) : null}
+      <header className={cx.header}>
         <div>
-          <h1 style={styles.title}>Lumen Science</h1>
-          <p style={styles.sub}>
+          <h1 className={cx.title}>Lumen Science</h1>
+          <p className={cx.sub}>
             Question · Plan · Evidence · Result · Review — auditable research desk
           </p>
         </div>
-        <div style={styles.meta}>
-          <span title="Rust binary identity">
-            engine {hash ? hash.slice(0, 12) + '…' : 'offline'}
-          </span>
+        <div className={hash ? cx.engineOnline : cx.engineOffline}>
+          {/* A dot plus a word, not colour alone: the state has to survive
+              being read by someone who cannot separate green from amber. */}
+          <span aria-hidden className={hash ? cx.engineDotOn : cx.engineDotOff} />
+          {hash ? (
+            <span title="Rust engine binary identity (SHA-256)">
+              engine <span className="font-mono">{hash.slice(0, 12)}…</span>
+            </span>
+          ) : (
+            <span title="No Lumen engine binary was resolved">engine offline</span>
+          )}
         </div>
       </header>
 
-      {error && <div style={styles.error}>{error}</div>}
-      {status && <div style={styles.status}>{status}</div>}
+      {error &&
+        (() => {
+          const described = describeError(error)
+          return (
+            <div
+              className={described.expected ? cx.notice : cx.error}
+              role={described.expected ? 'status' : 'alert'}
+            >
+              <p className={cx.noticeHeadline}>{described.headline}</p>
+              {/* The original text, verbatim and never truncated. Shortening an
+                  engine error is how a product ends up saying "something went
+                  wrong" while the cause sits in a log nobody reads. */}
+              <p className={cx.noticeDetail}>{described.detail}</p>
+            </div>
+          )
+        })()}
+      {opened && (
+        <div className={cx.notice} role="status">
+          <p className={cx.noticeHeadline}>{opened.headline}</p>
+          {/* Present, not shouted. The engine's exact words stay one click
+              away rather than dominating the screen — dropping them would be
+              how a build silently stops seeding evidence it claims to have. */}
+          {opened.detail && (
+            <details className={cx.details}>
+              <summary className={cx.summary}>
+                {opened.expected ? 'Why' : 'Technical detail'}
+              </summary>
+              <p className={cx.noticeDetail}>{opened.detail}</p>
+            </details>
+          )}
+        </div>
+      )}
+      {status && <div className={cx.status}>{status}</div>}
 
-      <div style={styles.body}>
-        <aside style={styles.aside}>
-          <h2 style={styles.h2}>Projects</h2>
-          <div style={styles.row}>
+      <div className={cx.body}>
+        <aside className={cx.aside}>
+          <h2 className={cx.h2}>Projects</h2>
+          <div className={cx.row}>
             <input
-              style={styles.input}
+              className={cx.input}
               placeholder="New project name"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -272,54 +435,95 @@ export const ResearchShell = (): React.JSX.Element => {
                 if (e.key === 'Enter') void createProject()
               }}
             />
-            <button type="button" style={styles.btn} onClick={() => void createProject()}>
+            <button
+              type="button"
+              className={cx.btn}
+              // createProject() returns early on an empty name, so the button
+              // did nothing and said nothing. A dead control teaches people the
+              // app is broken; disabling it states the requirement instead.
+              disabled={!name.trim()}
+              onClick={() => void createProject()}
+            >
               Create
             </button>
           </div>
-          <ul style={styles.list}>
+          <ul className={cx.list}>
             {projects.map((p) => (
-              <li key={p.id}>
+              <li key={p.id} className={cx.projectRow}>
                 <button
                   type="button"
-                  style={{
-                    ...styles.projectBtn,
-                    ...(active?.id === p.id ? styles.projectBtnActive : {}),
-                  }}
+                  className={active?.id === p.id ? cx.projectBtnActive : cx.projectBtn}
+                  // Selection is announced, not only drawn: a sighted user sees
+                  // the filled row, everyone else needs this.
+                  aria-current={active?.id === p.id ? 'true' : undefined}
                   onClick={() => void openProject(p)}
                 >
-                  {p.name}
+                  <span className={cx.projectName}>{p.name}</span>
+                  {/* Two projects may share a name; the id is what identifies
+                      one to the engine, so show enough of it to tell them
+                      apart without dominating the row. */}
+                  <span className={cx.projectId}>{p.id.slice(0, 8)}</span>
+                </button>
+                {/* "Remove", not "Delete": this drops the local index row and
+                    the engine keeps the project. An accessible name that says
+                    which project, because "Remove" alone in a list of rows
+                    tells a screen-reader user nothing. */}
+                <button
+                  type="button"
+                  className={cx.rowAction}
+                  aria-label={`Remove ${p.name} from this list`}
+                  title="Remove from this list (the project stays in the engine)"
+                  onClick={() => void removeFromList(p)}
+                >
+                  ✕
                 </button>
               </li>
             ))}
             {projects.length === 0 && (
-              <li style={styles.muted}>No projects yet — create one to start.</li>
+              <li className={cx.sidebarEmpty}>No projects yet.</li>
             )}
           </ul>
-          <p style={styles.muted}>
-            UI catalog only. Science state stays in Rust SessionActor.
+          <p className={cx.sidebarNote}>
+            This list is just an index. The projects themselves live in the
+            engine, which is what any of these results can be checked against.
           </p>
         </aside>
 
-        <main style={styles.main}>
+        <main className={cx.main}>
           {!active ? (
-            <div style={styles.empty}>
-              <h2>Open a project</h2>
-              <p>
-                Membership is asserted before bind. Preview loads by{' '}
-                <code>artifact_id</code>, never by arbitrary path.
-              </p>
+            <div className={cx.empty}>
+              <div className={cx.emptyInner}>
+                <h2 className={cx.emptyTitle}>No project open</h2>
+                <p className={cx.emptyBody}>
+                  Create one on the left, or pick an existing project to open its
+                  question, evidence and results.
+                </p>
+                {/* The invariant belongs here, but quieter than the
+                    instruction: a first-time reader needs to know what to DO
+                    before they need to know what is guaranteed. */}
+                <p className={cx.emptyNote}>
+                  Membership is asserted before bind. Previews load by{' '}
+                  <code className={cx.code}>artifact_id</code>, never by an
+                  arbitrary path.
+                </p>
+              </div>
             </div>
           ) : (
             <>
-              <div style={styles.tabs}>
+              {/* role="tab" is only meaningful inside a tablist: on its own it
+                  tells a screen reader "this is a tab" without ever saying what
+                  set it belongs to or how many there are. The panel below is
+                  labelled by its tab for the same reason. */}
+              <div className={cx.tabs} role="tablist" aria-label="Project workspace">
                 {TABS.map((t) => (
                   <button
                     key={t.id}
                     type="button"
-                    style={{
-                      ...styles.tab,
-                      ...(tab === t.id ? styles.tabActive : {}),
-                    }}
+                    id={`tab-${t.id}`}
+                    className={tab === t.id ? cx.tabActive : cx.tab}
+                    role="tab"
+                    aria-selected={tab === t.id}
+                    aria-controls={`panel-${t.id}`}
                     onClick={() => setTab(t.id)}
                   >
                     {t.label}
@@ -328,31 +532,59 @@ export const ResearchShell = (): React.JSX.Element => {
               </div>
 
               {tab === 'question' && (
-                <section style={styles.panel}>
-                  <h2 style={styles.h2}>Research question</h2>
+                <section
+                  className={cx.panel}
+                  role="tabpanel"
+                  id="panel-question"
+                  aria-labelledby="tab-question"
+                >
+                  <h2 className={cx.h2}>Research question</h2>
                   <textarea
-                    style={styles.textarea}
+                    className={cx.textarea}
                     rows={6}
                     placeholder="e.g. Given disease X and target Y, assemble literature, genetic, protein, and compound evidence into a reproducible dossier."
                     value={question}
                     onChange={(e) => setQuestion(e.target.value)}
                   />
-                  <p style={styles.muted}>
-                    Month-2 golden path: literature → databases → notebook → Motif →
-                    reviewer → evidence package. Plan execution routes through Lumen
-                    only.
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className={cx.btn}
+                      // Nothing to save is not an error to explain after the
+                      // click; the control says so by being unavailable.
+                      disabled={!question.trim() || question === savedQuestion}
+                      onClick={() => void saveQuestion()}
+                    >
+                      Save question
+                    </button>
+                    {question !== savedQuestion && (
+                      <span className={cx.muted}>Unsaved changes</span>
+                    )}
+                    {questionStatus && <span className={cx.muted}>{questionStatus}</span>}
+                  </div>
+                  <p className={cx.muted}>
+                    The question is part of the project record, so saving it goes
+                    through the engine and asks for your approval like any other
+                    change to that record.
                   </p>
                 </section>
               )}
 
               {tab === 'plan' && (
-                <section style={styles.panel}>
-                  <h2 style={styles.h2}>Plan</h2>
-                  <p style={styles.muted}>
-                    Workflow validate / dry-run via Rust WorkflowActor (ACP). No
-                    Electron executor.
+                <section
+                  className={cx.panel}
+                  role="tabpanel"
+                  id="panel-plan"
+                  aria-labelledby="tab-plan"
+                >
+                  <h2 className={cx.h2}>Plan</h2>
+                  <p className={cx.muted}>
+                    An outline of the intended route, written here — <strong>not</strong>
+                    validated by the engine. Nothing on this tab has been checked
+                    against anything; the Notebook tab is where a step actually runs,
+                    and only the engine runs it.
                   </p>
-                  <pre style={styles.pre}>
+                  <pre className={cx.pre}>
                     {question
                       ? `1. Literature (PubMed/OpenAlex)\n2. Biological DBs (UniProt/ClinVar/ChEMBL)\n3. Notebook analysis\n4. Reviewer + EvidenceGraph\n5. Export package\n\nQuestion: ${question}`
                       : 'Enter a question first.'}
@@ -361,53 +593,79 @@ export const ResearchShell = (): React.JSX.Element => {
               )}
 
               {tab === 'notebook' && (
-                <section style={styles.panel}>
-                  <h2 style={styles.h2}>Notebook</h2>
-                  <p style={styles.muted}>
-                    Plan / dry-run in desktop; live execute only via Lumen ACP{' '}
-                    <code>notebook_execute</code> → SessionActor / KernelAdapter. Electron
-                    KernelExecutor stays stubbed.
+                <section
+                  className={cx.panel}
+                  role="tabpanel"
+                  id="panel-notebook"
+                  aria-labelledby="tab-notebook"
+                >
+                  <h2 className={cx.h2}>Notebook</h2>
+                  <p className={cx.muted}>
+                    Write and dry-run cells here; every real execution happens in the
+                    engine, which records what ran. No code runs inside this window.
                   </p>
                   <textarea
-                    style={styles.textarea}
+                    className={cx.textarea}
                     rows={8}
                     value={nbCode}
                     onChange={(e) => setNbCode(e.target.value)}
                     spellCheck={false}
                   />
                   <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-                    <button type="button" style={styles.btn} onClick={() => void notebookDryRun()}>
+                    <button type="button" className={cx.btn} onClick={() => void notebookDryRun()}>
                       Dry-run plan
                     </button>
-                    <button type="button" style={styles.btn} onClick={() => void notebookExecute()}>
-                      Execute (ACP)
+                    <button type="button" className={cx.btn} onClick={() => void notebookExecute()}>
+                      Run in engine
                     </button>
-                    <button type="button" style={styles.btn} onClick={() => void notebookExport()}>
+                    <button type="button" className={cx.btn} onClick={() => void notebookExport()}>
                       Export .ipynb
                     </button>
                   </div>
-                  {nbOut && <pre style={styles.pre}>{nbOut}</pre>}
+                  {nbOut && <pre className={cx.pre}>{nbOut}</pre>}
                 </section>
               )}
 
               {tab === 'evidence' && (
-                <section style={styles.panel}>
-                  <h2 style={styles.h2}>Evidence</h2>
-                  <p style={styles.muted}>
+                <section
+                  className={cx.panel}
+                  role="tabpanel"
+                  id="panel-evidence"
+                  aria-labelledby="tab-evidence"
+                >
+                  <h2 className={cx.h2}>Evidence</h2>
+                  <p className={cx.muted}>
                     Artifacts are hash-registered. Open preview by artifact_id after
                     session bind.
                   </p>
-                  <button type="button" style={styles.btn} onClick={() => void tryPreview()}>
-                    Preview by artifact_id
-                  </button>
-                  {previewMeta && <pre style={styles.pre}>{previewMeta}</pre>}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <input
+                      className={cx.input}
+                      value={previewId}
+                      onChange={(e) => setPreviewId(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void tryPreview()
+                      }}
+                      placeholder="artifact_id"
+                      aria-label="Artifact id to preview"
+                    />
+                    <button type="button" className={cx.btn} onClick={() => void tryPreview()}>
+                      Preview
+                    </button>
+                  </div>
+                  {previewMeta && <pre className={cx.pre}>{previewMeta}</pre>}
                 </section>
               )}
 
               {tab === 'result' && (
-                <section style={styles.panel}>
-                  <h2 style={styles.h2}>Result</h2>
-                  <p style={styles.muted}>
+                <section
+                  className={cx.panel}
+                  role="tabpanel"
+                  id="panel-result"
+                  aria-labelledby="tab-result"
+                >
+                  <h2 className={cx.h2}>Result</h2>
+                  <p className={cx.muted}>
                     ResearchResult claims must cite evidence nodes. Export package
                     deferred to 3.0 product path.
                   </p>
@@ -415,110 +673,134 @@ export const ResearchShell = (): React.JSX.Element => {
               )}
 
               {tab === 'connectors' && (
-                <section style={styles.panel}>
-                  <h2 style={styles.h2}>Connectors</h2>
-                  <p style={styles.muted}>
-                    Read-only catalog from fusion-sources.lock (42 inventory, 40
-                    implemented, 2 rejected). Desktop never fetches — Rust
-                    SessionActor adapters only.
+                <section
+                  className={cx.panel}
+                  role="tabpanel"
+                  id="panel-connectors"
+                  aria-labelledby="tab-connectors"
+                >
+                  <h2 className={cx.h2}>Connectors</h2>
+                  <p className={cx.muted}>
+                    A read-only catalog of the data sources this build knows about. All
+                    fetching is done by the engine — ask this window to fetch one and it
+                    will tell you it has no way to.
                   </p>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button type="button" style={styles.btn} onClick={() => void connectorsList()}>
+                    <button type="button" className={cx.btn} onClick={() => void connectorsList()}>
                       List catalog
                     </button>
                     <button
                       type="button"
-                      style={styles.btn}
+                      className={cx.btnQuiet}
                       onClick={() => void connectorsFetchDeny()}
                     >
-                      Try desktop fetch (must deny)
+                      Ask this window to fetch
                     </button>
                   </div>
-                  {connOut && <pre style={styles.pre}>{connOut}</pre>}
+                  {connOut && <pre className={cx.pre}>{connOut}</pre>}
                 </section>
               )}
 
               {tab === 'compute' && (
-                <section style={styles.panel}>
-                  <h2 style={styles.h2}>Remote Compute</h2>
-                  <p style={styles.muted}>
-                    Dry-run plan only (LocalProcess → SSH fixture → authorized). Desktop never
-                    runs SystemSshRunner/SCP. Live schedule via SessionActor ToolAdapter + plan
-                    hash permission. Generic shell denied.
+                <section
+                  className={cx.panel}
+                  role="tabpanel"
+                  id="panel-compute"
+                  aria-labelledby="tab-compute"
+                >
+                  <h2 className={cx.h2}>Remote Compute</h2>
+                  <p className={cx.muted}>
+                    Plans a remote run and shows you exactly what it would do. Scheduling
+                    it for real needs your approval of that specific plan, and only the
+                    engine can carry it out — this window runs nothing remotely, and an
+                    open-ended shell command is refused outright.
                   </p>
                   <input
-                    style={styles.input}
+                    className={cx.input}
                     value={computeHost}
                     onChange={(e) => setComputeHost(e.target.value)}
                     placeholder="hostname"
                   />
                   <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-                    <button type="button" style={styles.btn} onClick={() => void computePlan()}>
+                    <button type="button" className={cx.btn} onClick={() => void computePlan()}>
                       Plan (dry-run)
                     </button>
-                    <button type="button" style={styles.btn} onClick={() => void computeLiveDeny()}>
-                      Try live execute (must deny)
+                    <button type="button" className={cx.btnQuiet} onClick={() => void computeLiveDeny()}>
+                      Ask this window to run it live
                     </button>
                   </div>
-                  {computeOut && <pre style={styles.pre}>{computeOut}</pre>}
+                  {computeOut && <pre className={cx.pre}>{computeOut}</pre>}
                 </section>
               )}
 
               {tab === 'skills' && (
-                <section style={styles.panel}>
-                  <h2 style={styles.h2}>Skills</h2>
-                  <p style={styles.muted}>
-                    Lumen inventory (approved/pending) + quarantine import. DS-43
-                    admission required; <strong>no bulk auto-approve</strong>. GPU skills stay
-                    pending until file-level review.
+                <section
+                  className={cx.panel}
+                  role="tabpanel"
+                  id="panel-skills"
+                  aria-labelledby="tab-skills"
+                >
+                  <h2 className={cx.h2}>Skills</h2>
+                  <p className={cx.muted}>
+                    Imported skills arrive quarantined and stay pending until someone
+                    admits them file by file — <strong>nothing is approved in bulk</strong>,
+                    and that includes anything asking for a GPU. Ask this window to admit
+                    them all at once and it will refuse.
                   </p>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button type="button" style={styles.btn} onClick={() => void skillsList()}>
+                    <button type="button" className={cx.btn} onClick={() => void skillsList()}>
                       List inventory
                     </button>
-                    <button type="button" style={styles.btn} onClick={() => void skillsBulkDeny()}>
-                      Try bulk admit (must deny)
+                    <button type="button" className={cx.btnQuiet} onClick={() => void skillsBulkDeny()}>
+                      Ask this window to admit all
                     </button>
                   </div>
-                  {skillsOut && <pre style={styles.pre}>{skillsOut}</pre>}
+                  {skillsOut && <pre className={cx.pre}>{skillsOut}</pre>}
                 </section>
               )}
 
               {tab === 'review' && (
-                <section style={styles.panel}>
-                  <h2 style={styles.h2}>Review</h2>
-                  <p style={styles.muted}>
-                    Artifact-bound review plan/submit via ACP{' '}
-                    <code>start_review</code>. Verdicts project as pass/warn/fail + supports/
-                    contradicts edges into EvidenceGraph. No fix-loop orchestrator authority.
-                    Correction proposals are non-executing plans.
+                <section
+                  className={cx.panel}
+                  role="tabpanel"
+                  id="panel-review"
+                  aria-labelledby="tab-review"
+                >
+                  <h2 className={cx.h2}>Review</h2>
+                  <p className={cx.muted}>
+                    Reviews are bound to specific artifacts, and each verdict — pass, warn
+                    or fail — is recorded as supporting or contradicting evidence. A review
+                    can propose corrections but can never apply them: proposals are plans,
+                    not actions.
                   </p>
-                  <p style={styles.muted}>
+                  <p className={cx.muted}>
                     Evidence (one per line): <code>artifactId:expectedSha256</code>
                   </p>
                   <textarea
-                    style={styles.textarea}
+                    className={cx.textarea}
                     rows={4}
                     value={reviewArtifacts}
                     onChange={(e) => setReviewArtifacts(e.target.value)}
                     spellCheck={false}
+                    aria-label="Artifacts to review, one per line as id:expected-sha256"
+                    placeholder={'artifact_id:expected_sha256 — one per line.\nRun a notebook cell, then use a hash from its report; the id IS the content hash.'}
                   />
                   <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-                    <button type="button" style={styles.btn} onClick={() => void reviewPlan()}>
+                    <button type="button" className={cx.btn} onClick={() => void reviewPlan()}>
                       Plan review
                     </button>
                     <button
                       type="button"
-                      style={styles.btn}
+                      className={cx.btn}
                       onClick={() => void reviewSubmit()}
                     >
                       Submit review
                     </button>
-                    <button type="button" style={styles.btn} onClick={() => void reviewExport()}>
+                    <button type="button" className={cx.btn} onClick={() => void reviewExport()}>
                       Export dossier
                     </button>
                   </div>
-                  {reviewOut && <pre style={styles.pre}>{reviewOut}</pre>}
+                  {reviewOut && <pre className={cx.pre}>{reviewOut}</pre>}
                 </section>
               )}
             </>
@@ -529,117 +811,107 @@ export const ResearchShell = (): React.JSX.Element => {
   )
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  root: {
-    minHeight: '100vh',
-    background: '#0b0f14',
-    color: '#e8eef5',
-    fontFamily:
-      'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: '20px 24px',
-    borderBottom: '1px solid #1e2a38',
-  },
-  title: { margin: 0, fontSize: 22, fontWeight: 650 },
-  sub: { margin: '6px 0 0', color: '#8fa3b8', fontSize: 13 },
-  meta: { fontSize: 12, color: '#6b7f93', fontFamily: 'ui-monospace, monospace' },
-  body: { display: 'flex', minHeight: 'calc(100vh - 88px)' },
-  aside: {
-    width: 280,
-    borderRight: '1px solid #1e2a38',
-    padding: 16,
-    boxSizing: 'border-box',
-  },
-  main: { flex: 1, padding: 20 },
-  h2: { margin: '0 0 12px', fontSize: 14, letterSpacing: 0.4, textTransform: 'uppercase' as const, color: '#9db0c4' },
-  row: { display: 'flex', gap: 8, marginBottom: 12 },
-  input: {
-    flex: 1,
-    background: '#121a24',
-    border: '1px solid #2a3a4d',
-    color: '#e8eef5',
-    borderRadius: 8,
-    padding: '8px 10px',
-  },
-  btn: {
-    background: '#1b6ef3',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 8,
-    padding: '8px 12px',
-    cursor: 'pointer',
-    fontWeight: 600,
-  },
-  list: { listStyle: 'none', padding: 0, margin: '0 0 12px' },
-  projectBtn: {
-    width: '100%',
-    textAlign: 'left' as const,
-    background: 'transparent',
-    border: '1px solid transparent',
-    color: '#e8eef5',
-    padding: '8px 10px',
-    borderRadius: 8,
-    cursor: 'pointer',
-    marginBottom: 4,
-  },
-  projectBtnActive: {
-    background: '#152033',
-    borderColor: '#2d4f7c',
-  },
-  muted: { color: '#6b7f93', fontSize: 12, lineHeight: 1.45 },
-  tabs: { display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' as const },
-  tab: {
-    background: '#121a24',
-    border: '1px solid #2a3a4d',
-    color: '#b7c7d8',
-    borderRadius: 999,
-    padding: '6px 14px',
-    cursor: 'pointer',
-  },
-  tabActive: {
-    background: '#1b6ef3',
-    borderColor: '#1b6ef3',
-    color: '#fff',
-  },
-  panel: {
-    background: '#101820',
-    border: '1px solid #1e2a38',
-    borderRadius: 12,
-    padding: 16,
-  },
-  textarea: {
-    width: '100%',
-    boxSizing: 'border-box' as const,
-    background: '#0b0f14',
-    border: '1px solid #2a3a4d',
-    color: '#e8eef5',
-    borderRadius: 8,
-    padding: 12,
-    resize: 'vertical' as const,
-  },
-  pre: {
-    background: '#0b0f14',
-    border: '1px solid #1e2a38',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 12,
-    overflow: 'auto',
-  },
-  empty: { color: '#8fa3b8', maxWidth: 480 },
-  error: {
-    background: '#3a1515',
-    color: '#ffb4b4',
-    padding: '8px 16px',
-    fontSize: 13,
-  },
-  status: {
-    background: '#122318',
-    color: '#9de0b3',
-    padding: '8px 16px',
-    fontSize: 13,
-  },
-}
+/**
+ * Presentation classes for the research desk.
+ *
+ * Replaces a `Record<string, React.CSSProperties>` of hardcoded colours
+ * (`#0b0f14`, `#e8eef5`, `#1b6ef3`). Those bypassed the design system entirely,
+ * so this screen ignored the app's theme and looked like a different product
+ * bolted on — which is what it was.
+ *
+ * Everything here is a design token: `bg-background`, `text-foreground`,
+ * `border-border`, `bg-primary`. The desk now follows light and dark with the
+ * rest of the app, and a theme change reaches it without touching this file.
+ */
+const cx = {
+  // h-screen + overflow-hidden, not min-h-screen: the panes scroll, the shell
+  // does not. The previous min-h-[calc(100vh-5.5rem)] body hardcoded a guess at
+  // the header height, so a status line pushed the sidebar's own footnote below
+  // the fold where nobody could read it.
+  root: 'flex h-screen flex-col overflow-hidden bg-background text-foreground',
+  header:
+    'flex shrink-0 items-start justify-between gap-4 border-b border-border px-6 py-5',
+  title: 'text-xl font-semibold tracking-tight',
+  sub: 'mt-1 text-sm text-muted-foreground',
+  meta: 'font-mono text-xs text-muted-foreground',
+  body: 'flex min-h-0 flex-1',
+  aside: 'flex w-72 shrink-0 flex-col overflow-y-auto border-r border-border p-4',
+  main: 'flex min-w-0 flex-1 flex-col overflow-y-auto p-6',
+  h2: 'mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground',
+  row: 'mb-3 flex gap-2',
+  input:
+    'flex-1 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
+  btn:
+    'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50',
+  // A secondary weight for the "prove the boundary holds" controls. They are
+  // worth having — this product's claim is containment, and a claim you can
+  // press a button to check is stronger than one in a doc — but they are not
+  // the action a researcher came to this panel to take.
+  btnQuiet:
+    'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-transparent px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50',
+  list: 'flex flex-col gap-1',
+  // The row action sits beside the open control rather than inside it: nesting
+  // a button in a button is invalid, and a click target inside another one is
+  // ambiguous to anyone navigating by keyboard.
+  projectRow: 'group flex items-center gap-1',
+  rowAction:
+    'shrink-0 rounded-md px-2 py-1 text-xs text-muted-foreground opacity-0 transition-opacity ' +
+    'hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100',
+  projectBtn:
+    'flex w-full flex-col items-start gap-0.5 rounded-md px-3 py-2 text-left transition-colors hover:bg-muted',
+  // Selection is carried by background AND weight, not colour alone: a
+  // colour-only cue disappears for anyone who cannot separate those hues.
+  projectBtnActive:
+    'flex w-full flex-col items-start gap-0.5 rounded-md bg-muted px-3 py-2 text-left',
+  muted: 'text-sm text-muted-foreground',
+  tabs: 'mb-4 flex gap-1 border-b border-border',
+  tab:
+    'rounded-t-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground',
+  tabActive:
+    'rounded-t-md border-b-2 border-primary px-3 py-2 text-sm font-medium text-foreground',
+  panel: 'mb-4 rounded-lg border border-border bg-card p-4 text-card-foreground shadow-sm',
+  textarea:
+    'min-h-28 w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
+  // Long output must scroll inside its panel rather than widening the page.
+  pre:
+    'max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-mono text-xs text-foreground',
+  // Anchored rather than floated at the top: an empty screen with one line
+  // pinned under the header reads as a page that failed to load.
+  empty: 'flex flex-1 items-center justify-center p-6',
+  emptyInner: 'max-w-md text-center',
+  emptyTitle: 'text-base font-medium text-foreground',
+  emptyBody: 'mt-2 text-sm text-muted-foreground',
+  emptyNote: 'mt-4 border-t border-border pt-4 text-xs text-muted-foreground',
+  code: 'rounded bg-muted px-1 py-0.5 font-mono text-[0.9em]',
+  sidebarEmpty: 'px-3 py-2 text-sm text-muted-foreground',
+  projectName: 'w-full truncate text-sm text-foreground',
+  projectId: 'font-mono text-[11px] text-muted-foreground',
+  // mt-auto pins this to the bottom of the flex column, so it stops reading as
+  // the next item in the project list.
+  sidebarNote: 'mt-auto border-t border-border pt-3 text-xs text-muted-foreground',
+  error:
+    'shrink-0 border-b border-destructive/40 bg-destructive/10 px-6 py-3 text-destructive',
+  // A refusal by design is not a fault. Showing both in the same alarmed red
+  // teaches people to ignore the colour, so an expected refusal gets a neutral
+  // notice and only the unrecognised failure gets the alarm.
+  notice: 'shrink-0 border-b border-border bg-muted/50 px-6 py-3 text-foreground',
+  noticeHeadline: 'text-sm font-medium',
+  noticeDetail: 'mt-1 font-mono text-xs leading-relaxed text-muted-foreground',
+  // A disclosure, so the engine's exact words are one click away instead of
+  // being the largest thing on the screen.
+  details: 'mt-1',
+  summary:
+    'cursor-pointer text-xs text-muted-foreground underline-offset-2 hover:underline ' +
+    'marker:text-muted-foreground',
+  status:
+    'shrink-0 border-b border-border bg-muted/40 px-6 py-2 font-mono text-xs text-muted-foreground',
+  // Engine identity reads as a status pill rather than stray monospace: it is
+  // the single most load-bearing fact on this screen — every claim the desk
+  // makes is only as good as the binary that produced it.
+  engineOnline:
+    'inline-flex shrink-0 items-center gap-2 rounded-full border border-border bg-muted/60 px-3 py-1 text-xs text-foreground',
+  engineOffline:
+    'inline-flex shrink-0 items-center gap-2 rounded-full border border-destructive/40 bg-destructive/10 px-3 py-1 text-xs text-destructive',
+  engineDotOn: 'size-1.5 rounded-full bg-emerald-500',
+  engineDotOff: 'size-1.5 rounded-full bg-destructive'
+} as const

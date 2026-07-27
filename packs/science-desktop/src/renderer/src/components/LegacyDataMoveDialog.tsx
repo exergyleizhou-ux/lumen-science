@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { AlertDialog } from 'radix-ui'
 import { FolderInput, FolderOpen } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -68,7 +74,7 @@ const LegacyDataMoveDialog = ({
       // would mean abandoning the legacy data, which isn't what "move it out" should do here.
       setPickError(
         inspection.kind === 'adopt'
-          ? 'That folder already contains Open Science data. Pick an empty folder, or use the default location.'
+          ? 'That folder already contains Lumen Science data. Pick an empty folder, or use the default location.'
           : (inspection.error ?? 'That folder can’t be used. Pick another one.')
       )
     } finally {

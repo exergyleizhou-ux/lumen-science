@@ -1,5 +1,9 @@
 # Lumen Science — Product Status (honest)
 
+> **Machine status is authoritative:** [`status/current.json`](status/current.json),
+> generated from the source tree and verified in CI. Where this prose and that
+> file disagree, the file is right and this document is a bug.
+
 **As of:** 2026-07-26  
 **Baseline:** `main` @ `4f75d7a` (Science `v1.0.1` tag + Science Release run `30192164855`)  
 **Repo:** https://github.com/exergyleizhou-ux/lumen-science

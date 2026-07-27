@@ -171,6 +171,102 @@ pub struct FinishScienceFetch {
     pub(crate) respond_to:
         oneshot::Sender<xai_grok_science::Result<xai_grok_science::connectors::fetch::FetchResult>>,
 }
+/// A project mutation admitted by the actor and awaiting its permission
+/// decision. Holds the durable run ticket, so every allow/deny/timeout/cancel
+/// has a record to finish.
+pub struct PreparedScienceProjectMutation {
+    pub(crate) store: xai_grok_science::ScienceStore,
+    pub(crate) project_root: std::path::PathBuf,
+    pub(crate) ticket: xai_grok_science::csv::ScienceRunTicket,
+    pub(crate) request: xai_grok_science::project::MutationRequest,
+    /// Human-readable target used in the permission prompt.
+    pub(crate) target: String,
+    /// An operation already applied under this id: returned without asking
+    /// for permission a second time.
+    pub(crate) replayed: Option<xai_grok_science::project::MutationOutcome>,
+}
+/// WP-2 phase one: admit a project/claim/evidence mutation, bind it to this
+/// session, and open its durable run before the caller awaits permission.
+pub struct BeginScienceProjectMutation {
+    pub(crate) store: xai_grok_science::ScienceStore,
+    pub(crate) project_root: std::path::PathBuf,
+    pub(crate) context: xai_grok_science::RunContext,
+    pub(crate) request: xai_grok_science::project::MutationRequest,
+    pub(crate) respond_to:
+        oneshot::Sender<xai_grok_science::Result<PreparedScienceProjectMutation>>,
+}
+pub struct FinishScienceProjectMutation {
+    pub(crate) prepared: PreparedScienceProjectMutation,
+    pub(crate) decision: xai_grok_science::ApprovalDecision,
+    pub(crate) reason: String,
+    pub(crate) respond_to:
+        oneshot::Sender<xai_grok_science::Result<xai_grok_science::project::MutationOutcome>>,
+}
+
+/// Everything an executor needs to be bound to a workflow run.
+///
+/// The ACP adapter RESOLVES these (session workspace, path confinement, param
+/// parsing) and the actor ACTS on them. Nothing here is an executor, a store or
+/// a runner: handing a constructed executor across this seam would put
+/// execution authority back in the request task, which is exactly what the
+/// SessionActor route exists to prevent.
+#[derive(Debug, Clone)]
+pub struct ScienceWorkflowBinding {
+    /// Operation id, session, owner and the spec itself.
+    pub(crate) execution: xai_grok_science::workflow::WorkflowExecutionRequest,
+    /// Root for the durable run / attempt / commit / operation records.
+    pub(crate) executor_root: std::path::PathBuf,
+    /// Content-addressed cell source store the runner reads from.
+    pub(crate) cell_source_root: std::path::PathBuf,
+    /// Root under which each attempt gets its own output directory.
+    pub(crate) output_root: std::path::PathBuf,
+    /// Where the embedded exec-loop driver is materialised.
+    pub(crate) runtime_root: std::path::PathBuf,
+    pub(crate) kernel_id: String,
+    pub(crate) kernel_kind: xai_grok_science::workflow::KernelKind,
+    /// Absolute path to the interpreter. Probed by the actor, never by the
+    /// adapter: probing runs the binary.
+    pub(crate) interpreter_path: std::path::PathBuf,
+    pub(crate) probe_timeout: std::time::Duration,
+    /// The caller's explicit opt-in to `StepKind::NotebookCell`.
+    ///
+    /// `ExecutionPolicy::default()` omits that kind on purpose, so running
+    /// arbitrary code is a decision rather than a default. This carries the
+    /// decision from the request instead of assuming it here.
+    pub(crate) allow_kernel_steps: bool,
+}
+
+/// A workflow execution admitted by the actor and awaiting its permission
+/// decision. Holds the durable run ticket, so a deny/timeout/cancel still has a
+/// record to close.
+pub struct PreparedScienceWorkflowExecution {
+    pub(crate) store: xai_grok_science::ScienceStore,
+    pub(crate) ticket: xai_grok_science::csv::ScienceRunTicket,
+    pub(crate) binding: ScienceWorkflowBinding,
+    /// Human-readable target used in the permission prompt.
+    pub(crate) target: String,
+    /// This operation id already ran: the recorded report, returned without a
+    /// second prompt and without executing anything again.
+    pub(crate) replayed: Option<xai_grok_science::workflow::WorkflowRunReport>,
+}
+
+/// LS5-K8 phase one: admit a workflow execution, bind it to this session, and
+/// open its durable run before the caller awaits permission.
+pub struct BeginScienceWorkflowExecution {
+    pub(crate) store: xai_grok_science::ScienceStore,
+    pub(crate) context: xai_grok_science::RunContext,
+    pub(crate) binding: ScienceWorkflowBinding,
+    pub(crate) respond_to:
+        oneshot::Sender<xai_grok_science::Result<PreparedScienceWorkflowExecution>>,
+}
+
+pub struct FinishScienceWorkflowExecution {
+    pub(crate) prepared: PreparedScienceWorkflowExecution,
+    pub(crate) decision: xai_grok_science::ApprovalDecision,
+    pub(crate) reason: String,
+    pub(crate) respond_to:
+        oneshot::Sender<xai_grok_science::Result<xai_grok_science::workflow::WorkflowRunReport>>,
+}
 pub struct BeginScienceSshScpAdmission {
     pub(crate) store: xai_grok_science::ScienceStore,
     pub(crate) context: xai_grok_science::RunContext,
@@ -254,6 +350,18 @@ pub enum SessionCommand {
     /// awaits this session's production permission manager.
     BeginScienceFetch(Box<BeginScienceFetch>),
     FinishScienceFetch(Box<FinishScienceFetch>),
+    /// WP-2 phase one: admit a ResearchProject/Claim/EvidenceGraph mutation
+    /// inside the actor before the caller awaits this session's production
+    /// permission manager. The ACP adapter must not mutate the project store
+    /// on its own request task.
+    BeginScienceProjectMutation(Box<BeginScienceProjectMutation>),
+    FinishScienceProjectMutation(Box<FinishScienceProjectMutation>),
+    /// LS5-K8 phase one: admit a workflow execution inside the actor. The ACP
+    /// adapter must not build an executor or a runner of its own — a workflow
+    /// step spawns a process, which is the most consequential authority in this
+    /// crate and belongs to the session actor alone.
+    BeginScienceWorkflowExecution(Box<BeginScienceWorkflowExecution>),
+    FinishScienceWorkflowExecution(Box<FinishScienceWorkflowExecution>),
     BeginScienceSshScpAdmission(Box<BeginScienceSshScpAdmission>),
     FinishScienceSshScpAdmission(Box<FinishScienceSshScpAdmission>),
     ExecuteScienceSshScpOfflineTransport(Box<ExecuteScienceSshScpOfflineTransport>),

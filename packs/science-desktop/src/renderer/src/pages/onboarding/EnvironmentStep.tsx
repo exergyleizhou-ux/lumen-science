@@ -1,3 +1,9 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: product name in user-visible strings. The upstream project name is
+// retained in this notice, as the licence requires; only text the application
+// displays was changed.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { RefreshCw } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -53,7 +59,7 @@ const EnvironmentStep = ({ onContinue }: EnvironmentStepProps): React.JSX.Elemen
           </Button>
         </CardAction>
         <CardDescription className="text-xs leading-5">
-          Open Science confirms its core requirements before your first research session.
+          Lumen Science confirms its core requirements before your first research session.
         </CardDescription>
       </CardHeader>
       <Separator className="bg-border-200" />

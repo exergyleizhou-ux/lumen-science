@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: Copy expectations follow this product's name.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -99,7 +103,7 @@ describe('AgentStep', () => {
     const panel = container.querySelector('section[aria-label="Set up the agent runtime"]')
     expect(panel?.querySelector('h3')?.textContent).toBe('Set up the agent runtime')
     expect(panel?.textContent).toContain(
-      'Pick the agent Open Science drives, then install it. Only this agent needs to be installed to continue.'
+      'Pick the agent Lumen Science drives, then install it. Only this agent needs to be installed to continue.'
     )
     expect(panel?.querySelector('button')?.textContent).toContain('Re-detect')
     expect(container.textContent).not.toContain('Agent framework')

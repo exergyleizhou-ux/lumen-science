@@ -5,7 +5,7 @@
  * Never bulk auto-approve. Never grant independent execution authority.
  */
 
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import type { AccessResult } from '../lumen-authority-policy'
 import type { TrustedPreviewContext } from './session-identity'
 

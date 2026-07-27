@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: Copy expectations follow this product's name.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -168,7 +172,7 @@ describe('StoragePanel', () => {
           id: 'storage',
           label: 'App storage permission',
           status: 'failed',
-          summary: 'Open Science cannot write to its private data folder.',
+          summary: 'Lumen Science cannot write to its private data folder.',
           detail
         }
       ])
@@ -192,7 +196,7 @@ describe('StoragePanel', () => {
         id: 'storage',
         label: 'App storage permission',
         status: 'passed',
-        summary: 'Open Science can write to its private data folder.',
+        summary: 'Lumen Science can write to its private data folder.',
         detail: '/home/u/.open-science'
       }
     ])
@@ -206,7 +210,7 @@ describe('StoragePanel', () => {
           id: 'storage',
           label: 'App storage permission',
           status: 'failed',
-          summary: 'Open Science cannot write to its private data folder.',
+          summary: 'Lumen Science cannot write to its private data folder.',
           detail: '/home/u/.open-science — EACCES: permission denied'
         }
       ]),
@@ -242,7 +246,7 @@ describe('StoragePanel', () => {
         id: 'storage',
         label: 'App storage permission',
         status: 'passed',
-        summary: 'Open Science can write to its private data folder.',
+        summary: 'Lumen Science can write to its private data folder.',
         detail: '/home/u/.open-science'
       },
       {
@@ -263,7 +267,7 @@ describe('StoragePanel', () => {
           id: 'storage',
           label: 'App storage permission',
           status: 'failed',
-          summary: 'Open Science cannot write to its private data folder.',
+          summary: 'Lumen Science cannot write to its private data folder.',
           detail: '/home/u/.open-science — EACCES: permission denied'
         }
       ]),
@@ -297,7 +301,7 @@ describe('StoragePanel', () => {
           id: 'storage',
           label: 'App storage permission',
           status: 'failed',
-          summary: 'Open Science cannot write to its private data folder.',
+          summary: 'Lumen Science cannot write to its private data folder.',
           detail: '/home/u/.open-science — EACCES: permission denied'
         }
       ]),
@@ -321,7 +325,7 @@ describe('StoragePanel', () => {
         id: 'storage',
         label: 'App storage permission',
         status: 'passed',
-        summary: 'Open Science can write to its private data folder.'
+        summary: 'Lumen Science can write to its private data folder.'
       },
       {
         id: 'agent',
@@ -340,7 +344,7 @@ describe('StoragePanel', () => {
           id: 'storage',
           label: 'App storage permission',
           status: 'failed',
-          summary: 'Open Science cannot write to its private data folder.'
+          summary: 'Lumen Science cannot write to its private data folder.'
         }
       ]),
       checkEnvironment
@@ -360,7 +364,7 @@ describe('StoragePanel', () => {
             id: 'storage',
             label: 'App storage permission',
             status: 'passed',
-            summary: 'Open Science can write to its private data folder.'
+            summary: 'Lumen Science can write to its private data folder.'
           }
         ])
       })
@@ -376,7 +380,7 @@ describe('StoragePanel', () => {
           id: 'storage',
           label: 'App storage permission',
           status: 'failed',
-          summary: 'Open Science cannot write to its private data folder.'
+          summary: 'Lumen Science cannot write to its private data folder.'
         }
       ])
     })
@@ -409,7 +413,7 @@ describe('StoragePanel', () => {
           id: 'storage',
           label: 'App storage permission',
           status: 'failed',
-          summary: 'Open Science cannot write to its private data folder.'
+          summary: 'Lumen Science cannot write to its private data folder.'
         }
       ]),
       checkEnvironment
@@ -446,14 +450,14 @@ describe('StoragePanel', () => {
     })
 
     // The warning is gated behind the confirm step — not shown on the collapsed panel.
-    expect(container.textContent).not.toContain('Open Science manages this folder')
+    expect(container.textContent).not.toContain('Lumen Science manages this folder')
 
     await act(async () => {
       clickButton((button) => button.textContent?.trim() === 'Change location')
       await Promise.resolve()
     })
 
-    expect(document.body.textContent).toContain('Open Science manages this folder')
+    expect(document.body.textContent).toContain('Lumen Science manages this folder')
     expect(document.body.textContent).toContain(
       "Don't move, rename, or delete files inside it — doing so can break your projects and history."
     )
@@ -688,7 +692,7 @@ describe('StoragePanel', () => {
       await Promise.resolve()
     })
 
-    expect(container.textContent).toContain('already contains Open Science data')
+    expect(container.textContent).toContain('already contains Lumen Science data')
     expect(container.textContent).toContain('Data will be stored in')
     expect(container.textContent).toContain('/mnt/existing/OpenScience')
     expect(

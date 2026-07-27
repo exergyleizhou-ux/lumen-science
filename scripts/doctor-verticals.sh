@@ -65,20 +65,29 @@ fi
 echo "OK: all vertical packs present (science go files=$sci)"
 
 # The default private-beta vertical must have a real, independently buildable
-# path. This is intentionally scoped to standalone/ because the staged legacy
-# proxy/Lab sources still depend on shared packages in the old Go repository.
-SCI_STANDALONE="$ROOT/packs/science/standalone"
-if [[ ! -f "$SCI_STANDALONE/go.mod" ]]; then
-  echo "FAIL: packs/science/standalone/go.mod missing" >&2
+# path. Build/test are intentionally scoped to standalone/ because the staged
+# legacy proxy/Lab sources still depend on shared packages in the old Go
+# repository. The pack is a single Go module rooted at packs/science/go.mod;
+# standalone/ must stay inside it — a nested standalone/go.mod would break the
+# ./standalone/... package patterns science CI runs from the pack root.
+SCI_PACK="$ROOT/packs/science"
+SCI_STANDALONE="$SCI_PACK/standalone"
+if [[ ! -f "$SCI_PACK/go.mod" ]]; then
+  echo "FAIL: packs/science/go.mod missing" >&2
   exit 1
 fi
 if ! command -v go >/dev/null 2>&1; then
   echo "FAIL: Go is required to verify the Science private-beta path" >&2
   exit 1
 fi
+SCI_GOMOD="$(cd "$SCI_STANDALONE" 2>/dev/null && go env GOMOD || true)"
+if [[ ! "$SCI_GOMOD" -ef "$SCI_PACK/go.mod" ]]; then
+  echo "FAIL: packs/science/standalone is not governed by packs/science/go.mod (go env GOMOD=${SCI_GOMOD:-none})" >&2
+  exit 1
+fi
 SCI_TMP="$(mktemp -d)"
 trap 'rm -rf "$SCI_TMP"' EXIT
-echo "Checking Science standalone module..."
+echo "Checking Science standalone path (pack module)..."
 go test -C "$SCI_STANDALONE" ./...
 go build -C "$SCI_STANDALONE" -o "$SCI_TMP/lumen-science" ./cmd/science
 "$SCI_TMP/lumen-science" doctor --root "$ROOT/packs/science"

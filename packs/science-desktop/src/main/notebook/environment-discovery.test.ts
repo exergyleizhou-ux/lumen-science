@@ -1,3 +1,7 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Change: Windows fixtures declare platform 'win32' (the pinned-path rule is platform-dependent), and the mixed-platform CRAN fixture now asserts the refusal it used to contradict.
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -81,13 +85,17 @@ const makeDeps = (
     versions?: Record<string, string>
     rRunnable?: Record<string, boolean>
     realpath?: Record<string, string>
+    // The pinned-path rule is platform-dependent; a Windows-path fixture must
+    // say so, or a non-Windows host refuses every candidate as unpinned.
+    platform?: NodeJS.Platform
   } = {}
 ): DiscoveryDeps => ({
   candidatePaths: async () => paths,
   probeVersion: async (p) => opts.versions?.[p],
   rRunnable: async (p) => opts.rRunnable?.[p] ?? false,
   realpath: (p) => opts.realpath?.[p] ?? p,
-  runtimeRoot: '/rt'
+  runtimeRoot: '/rt',
+  platform: opts.platform
 })
 
 describe('discoverInterpreters', () => {
@@ -186,31 +194,44 @@ describe('discoverInterpreters', () => {
   it('classifies Windows CRAN R installations as user-own', async () => {
     // Windows CRAN R paths discovered via Program Files should be classified as 'user-own',
     // not 'app-managed' or 'agent-created', since they're user-installed global interpreters.
-    const deps = makeDeps(
-      [
-        'C:\\Program Files\\R\\R-4.4.3\\bin\\x64\\R.exe',
-        'C:\\Program Files (x86)\\R\\R-4.2.0\\bin\\R.exe',
-        '/rt/envs/default-r/bin/R'
-      ],
-      {
-        versions: {
-          'C:\\Program Files\\R\\R-4.4.3\\bin\\x64\\R.exe': '4.4.3',
-          'C:\\Program Files (x86)\\R\\R-4.2.0\\bin\\R.exe': '4.2.0',
-          '/rt/envs/default-r/bin/R': '4.3.1'
-        },
-        rRunnable: {
-          'C:\\Program Files\\R\\R-4.4.3\\bin\\x64\\R.exe': true,
-          'C:\\Program Files (x86)\\R\\R-4.2.0\\bin\\R.exe': true,
-          '/rt/envs/default-r/bin/R': true
+    //
+    // The fixture used to slip a POSIX path in alongside the Windows ones and
+    // assert all three survived. Under the LS5-K4 pinned-path rule that is a
+    // contradiction: on win32 a `/rt/...` candidate is not an absolute Windows
+    // path and MUST be refused. The app-managed classification of runtime-root
+    // envs is covered by the python provenance test above on its own platform.
+    const unpinned: string[] = []
+    const deps = {
+      ...makeDeps(
+        [
+          'C:\\Program Files\\R\\R-4.4.3\\bin\\x64\\R.exe',
+          'C:\\Program Files (x86)\\R\\R-4.2.0\\bin\\R.exe',
+          '/rt/envs/default-r/bin/R'
+        ],
+        {
+          versions: {
+            'C:\\Program Files\\R\\R-4.4.3\\bin\\x64\\R.exe': '4.4.3',
+            'C:\\Program Files (x86)\\R\\R-4.2.0\\bin\\R.exe': '4.2.0'
+          },
+          rRunnable: {
+            'C:\\Program Files\\R\\R-4.4.3\\bin\\x64\\R.exe': true,
+            'C:\\Program Files (x86)\\R\\R-4.2.0\\bin\\R.exe': true
+          },
+          platform: 'win32'
         }
+      ),
+      onUnpinnedCandidate: (candidate: string) => {
+        unpinned.push(candidate)
       }
-    )
+    }
     const found = await discoverInterpreters('r', deps)
     const byId = Object.fromEntries(found.map((f) => [f.envId, f]))
 
     expect(byId['C:\\Program Files\\R\\R-4.4.3\\bin\\x64\\R.exe'].provenance).toBe('user-own')
     expect(byId['C:\\Program Files (x86)\\R\\R-4.2.0\\bin\\R.exe'].provenance).toBe('user-own')
-    expect(byId['/rt/envs/default-r/bin/R'].provenance).toBe('app-managed')
+    // The POSIX path is refused on win32, with the refusal REPORTED, not dropped.
+    expect(found.map((f) => f.interpreterPath)).not.toContain('/rt/envs/default-r/bin/R')
+    expect(unpinned).toContain('/rt/envs/default-r/bin/R')
   })
 
   it('deduplicates when PATH and CRAN paths resolve to the same R installation', async () => {

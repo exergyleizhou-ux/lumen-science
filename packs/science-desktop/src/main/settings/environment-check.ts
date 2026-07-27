@@ -1,14 +1,19 @@
+// Modified from Open Science (Apache-2.0).
+// Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
+// Per-file diff and digests: docs/provenance/open-science-adoption.json
 import { arch as hostArchitecture } from 'node:os'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { request as httpsRequest } from 'node:https'
 import { join } from 'node:path'
 
-import type {
-  AgentFrameworkId,
-  ClaudeDetectResult,
-  EnvironmentCheckItem,
-  EnvironmentCheckResult,
-  ManagedClaudeRegistry
+import {
+  isManagedAgentFrameworkId,
+  type AgentFrameworkId,
+  type ClaudeDetectResult,
+  type EnvironmentCheckItem,
+  type EnvironmentCheckResult,
+  type ManagedAgentFrameworkId,
+  type ManagedClaudeRegistry
 } from '../../shared/settings'
 import { findPythonCommand, type PythonCommand } from '../notebook/python-command'
 import { getManagedPlatform } from './managed-claude'
@@ -26,7 +31,9 @@ const REGISTRY_LABELS: Record<ManagedClaudeRegistry, string> = {
 }
 
 // The npm package path probed per framework to gauge registry reachability for its managed install.
-const REGISTRY_PROBE_PATHS: Record<AgentFrameworkId, string> = {
+// Keyed by ManagedAgentFrameworkId: only those three have a managed npm install to probe for. A
+// `*-stubbed` id has no package at all, which the lookup below handles explicitly.
+const REGISTRY_PROBE_PATHS: Record<ManagedAgentFrameworkId, string> = {
   'claude-code': '/@anthropic-ai%2fclaude-code/latest',
   opencode: '/opencode-ai/latest',
   codex: '/@agentclientprotocol%2fcodex-acp/latest'
@@ -203,14 +210,14 @@ const runEnvironmentCheck = async ({
         id: 'storage',
         label: 'App storage permission',
         status: 'passed',
-        summary: 'Open Science can write to its private data folder.',
+        summary: 'Lumen Science can write to its private data folder.',
         detail: storageRoot
       }))
       .catch<EnvironmentCheckItem>((error) => ({
         id: 'storage',
         label: 'App storage permission',
         status: 'failed',
-        summary: 'Open Science cannot write to its private data folder.',
+        summary: 'Lumen Science cannot write to its private data folder.',
         detail:
           error instanceof Error
             ? `${storageRoot} — ${error.message}`
@@ -222,6 +229,11 @@ const runEnvironmentCheck = async ({
   let recommendedRegistry: ManagedClaudeRegistry | undefined
   let networkCheck: EnvironmentCheckItem
 
+  // undefined for a `*-stubbed` id: that framework has no managed npm package to install.
+  const registryProbePath = isManagedAgentFrameworkId(agentFrameworkId)
+    ? REGISTRY_PROBE_PATHS[agentFrameworkId]
+    : undefined
+
   if (selectedRuntime.found) {
     networkCheck = {
       id: 'install-network',
@@ -229,10 +241,22 @@ const runEnvironmentCheck = async ({
       status: 'passed',
       summary: `No download is needed because ${selectedLabel} is already installed.`
     }
+  } else if (registryProbePath === undefined) {
+    // Still 'failed' — nothing can be installed, so the gate stays closed exactly as before. What
+    // changes is the reason: the old code indexed the map with a stubbed id, got `undefined`,
+    // probed the malformed URL `<registry>undefined`, and reported "neither registry is reachable",
+    // blaming the user's network for a framework that simply has no installer.
+    networkCheck = {
+      id: 'install-network',
+      label: 'Installation network',
+      status: 'failed',
+      summary: `${selectedLabel} has no managed installer in this build.`,
+      detail: 'Select an agent framework with a managed runtime, or install its binary yourself.'
+    }
   } else {
     const registryResults = await Promise.all([
-      inspectRegistry('npmjs', probeRegistry, REGISTRY_PROBE_PATHS[agentFrameworkId]),
-      inspectRegistry('npmmirror', probeRegistry, REGISTRY_PROBE_PATHS[agentFrameworkId])
+      inspectRegistry('npmjs', probeRegistry, registryProbePath),
+      inspectRegistry('npmmirror', probeRegistry, registryProbePath)
     ])
     const reachable = registryResults
       .filter(
