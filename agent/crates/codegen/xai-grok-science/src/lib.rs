@@ -268,6 +268,31 @@ impl ScienceStore {
         kind: impl Into<String>,
         payload: serde_json::Value,
     ) -> Result<Event> {
+        self.append_event_with_failure_policy(run_id, actor, kind, payload, true)
+    }
+
+    /// Append a recoverable commit marker without turning the run terminal
+    /// when the event file is temporarily unavailable. Callers must retry the
+    /// same idempotent operation; this is intentionally narrower than the
+    /// normal event path, whose failure remains fatal.
+    pub fn append_recoverable_commit_event(
+        &self,
+        run_id: &RunId,
+        actor: impl Into<String>,
+        kind: impl Into<String>,
+        payload: serde_json::Value,
+    ) -> Result<Event> {
+        self.append_event_with_failure_policy(run_id, actor, kind, payload, false)
+    }
+
+    fn append_event_with_failure_policy(
+        &self,
+        run_id: &RunId,
+        actor: impl Into<String>,
+        kind: impl Into<String>,
+        payload: serde_json::Value,
+        fail_run: bool,
+    ) -> Result<Event> {
         let _guard = self
             .writes
             .lock()
@@ -276,11 +301,13 @@ impl ScienceStore {
         let mut events: Vec<Event> = match read_json(&path) {
             Ok(events) => events,
             Err(error) => {
-                let _ = self.transition(
-                    run_id,
-                    RunState::Failed,
-                    Some(format!("event persistence failed: {error}")),
-                );
+                if fail_run {
+                    let _ = self.transition(
+                        run_id,
+                        RunState::Failed,
+                        Some(format!("event persistence failed: {error}")),
+                    );
+                }
                 return Err(error);
             }
         };
@@ -295,11 +322,13 @@ impl ScienceStore {
         };
         events.push(event.clone());
         if let Err(error) = write_json_atomic(&path, &events) {
-            let _ = self.transition(
-                run_id,
-                RunState::Failed,
-                Some(format!("event persistence failed: {error}")),
-            );
+            if fail_run {
+                let _ = self.transition(
+                    run_id,
+                    RunState::Failed,
+                    Some(format!("event persistence failed: {error}")),
+                );
+            }
             return Err(error);
         }
         Ok(event)

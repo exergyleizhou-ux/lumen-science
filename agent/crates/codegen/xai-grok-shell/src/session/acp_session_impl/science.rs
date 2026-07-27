@@ -789,7 +789,7 @@ impl SessionActor {
         store: xai_grok_science::ScienceStore,
         project_root: std::path::PathBuf,
         context: xai_grok_science::RunContext,
-        request: xai_grok_science::project::MutationRequest,
+        mut request: xai_grok_science::project::MutationRequest,
     ) -> xai_grok_science::Result<PreparedScienceProjectMutation> {
         // Session binding: the actor only mutates on behalf of its own session.
         if request.session_id != self.session_info.id.0.as_ref()
@@ -922,6 +922,38 @@ impl SessionActor {
             });
         }
 
+        // Crash recovery before the operation record exists. `record_review_inner`
+        // writes the immutable review ledger before the generic operation ledger;
+        // if the process dies between those atomic writes, reuse the ledger's
+        // original Running+Allow authority run instead of opening a second run.
+        let orphan_review = match &request.mutation {
+            xai_grok_science::project::ProjectMutation::ReviewRecord { project_id, .. } => {
+                project_store.lookup_review_record(project_id, &request.operation_id)?
+            }
+            _ => None,
+        };
+        if let Some(review) = orphan_review {
+            let outcome =
+                recover_orphan_review_ledger(&store, &project_store, &mut request, &review)?;
+            return Ok(PreparedScienceProjectMutation {
+                store,
+                project_root,
+                gates,
+                ticket: xai_grok_science::csv::ScienceRunTicket {
+                    project_id: xai_grok_science::ProjectId::new(review.project_id.0.clone()),
+                    run_id: xai_grok_science::RunId::new(&review.authority_run_id),
+                    owner_id: review.owner_id.clone(),
+                    call_id: xai_grok_science::CallId::new("science_project_mutation"),
+                },
+                request,
+                target,
+                replayed: Some(xai_grok_science::project::MutationOutcome {
+                    replayed: true,
+                    ..outcome
+                }),
+            });
+        }
+
         let ticket = begin_project_mutation_run(
             &store,
             context,
@@ -969,6 +1001,22 @@ impl SessionActor {
         let outcome = match project_store.apply_mutation(&prepared.request) {
             Ok(outcome) => outcome,
             Err(error) => {
+                if review_apply_error_may_have_committed(
+                    &project_store,
+                    &prepared.request,
+                ) {
+                    let _ = prepared.store.append_recoverable_commit_event(
+                        &prepared.ticket.run_id,
+                        "SessionActor",
+                        "review.commit.interrupted",
+                        serde_json::json!({
+                            "operation_id": prepared.request.operation_id,
+                            "reason": error.to_string(),
+                            "stage": "project-ledger",
+                        }),
+                    );
+                    return Err(error);
+                }
                 let _ = xai_grok_science::csv::fail_running(
                     &prepared.store,
                     &prepared.ticket,
@@ -985,7 +1033,7 @@ impl SessionActor {
                     // Running: a retry can then reopen that exact record and
                     // idempotently finish its manifest/evidence/provenance. Marking
                     // it Failed here would permanently poison the operation id.
-                    let _ = prepared.store.append_event(
+                    let _ = prepared.store.append_recoverable_commit_event(
                         &prepared.ticket.run_id,
                         "SessionActor",
                         "review.commit.interrupted",
@@ -1703,7 +1751,12 @@ fn append_project_mutation_applied_once(
             "project mutation applied event conflicts with its operation record".into(),
         ));
     }
-    store.append_event(run_id, "SessionActor", "project.mutation.applied", payload)?;
+    store.append_recoverable_commit_event(
+        run_id,
+        "SessionActor",
+        "project.mutation.applied",
+        payload,
+    )?;
     Ok(())
 }
 
@@ -1732,6 +1785,60 @@ fn recover_interrupted_review_commit(
     append_project_mutation_applied_once(store, &ticket.run_id, &outcome)?;
     store.transition(&ticket.run_id, xai_grok_science::RunState::Succeeded, None)?;
     project_store.verify_review_record(review)
+}
+
+fn recover_orphan_review_ledger(
+    store: &xai_grok_science::ScienceStore,
+    project_store: &xai_grok_science::project::ProjectStore,
+    request: &mut xai_grok_science::project::MutationRequest,
+    review: &xai_grok_science::project::ReviewRecord,
+) -> xai_grok_science::Result<xai_grok_science::project::MutationOutcome> {
+    validate_review_replay_request(request, review)?;
+    project_store.verify_pending_review_record(review)?;
+    // The compare-and-swap guarded the original write. The review ledger now
+    // contributes to the project revision, so replaying the pre-write token
+    // would necessarily conflict; only the already-validated ledger is being
+    // adopted here.
+    request.expected_revision = None;
+    if let xai_grok_science::project::ProjectMutation::ReviewRecord {
+        authority_run_id,
+        ..
+    } = &mut request.mutation
+    {
+        *authority_run_id = review.authority_run_id.clone();
+    }
+    let outcome = project_store.apply_mutation(request)?;
+    let operation = project_store
+        .lookup_operation(&request.operation_id)?
+        .ok_or_else(|| {
+            xai_grok_science::ScienceError::Invalid(
+                "review orphan recovery did not create its operation record".into(),
+            )
+        })?;
+    recover_interrupted_review_commit(store, project_store, &operation, review)?;
+    Ok(outcome)
+}
+
+fn review_apply_error_may_have_committed(
+    project_store: &xai_grok_science::project::ProjectStore,
+    request: &xai_grok_science::project::MutationRequest,
+) -> bool {
+    let xai_grok_science::project::ProjectMutation::ReviewRecord { project_id, .. } =
+        &request.mutation
+    else {
+        return false;
+    };
+    match project_store.lookup_review_record(project_id, &request.operation_id) {
+        Ok(Some(review)) => {
+            validate_review_replay_request(request, &review).is_ok()
+                && project_store.verify_pending_review_record(&review).is_ok()
+        }
+        Ok(None) => false,
+        // An unreadable ledger path means the actor cannot prove that the
+        // earlier atomic write did not happen. Preserve Running so a retry can
+        // diagnose/recover instead of irreversibly poisoning the operation.
+        Err(_) => true,
+    }
 }
 
 #[cfg(test)]
@@ -1927,19 +2034,72 @@ mod actor_root_tests {
                 artifact_sha256s: vec![source_artifact.sha256],
             },
         };
-        let first = project_store.apply_mutation(&request).unwrap();
-        let operation = project_store
-            .lookup_operation(&request.operation_id)
+        // Force the real synchronous error path: the review ledger write
+        // succeeds, then record_operation fails because its target is a
+        // directory. The actor must recognize the durable orphan and avoid
+        // fail_running.
+        let operation_path = store_root
+            .join("operations")
+            .join(format!("{}.json", request.operation_id));
+        std::fs::create_dir_all(&operation_path).unwrap();
+        assert!(project_store.apply_mutation(&request).is_err());
+        assert!(
+            review_apply_error_may_have_committed(&project_store, &request),
+            "post-review operation failure was treated as a pre-commit rejection"
+        );
+        let review = project_store
+            .lookup_review_record(&project.project_id, &request.operation_id)
             .unwrap()
             .unwrap();
-        let review: xai_grok_science::project::ReviewRecord =
-            serde_json::from_value(first.result).unwrap();
         assert!(project_store.verify_review_record(&review).is_err());
         assert_eq!(
             store.load_run(&authority_run).unwrap().state,
             xai_grok_science::RunState::Running
         );
 
+        // Simulate the first crash window: review ledger exists, generic
+        // operation ledger does not.
+        std::fs::remove_dir(&operation_path).unwrap();
+        assert!(
+            project_store
+                .lookup_operation(&request.operation_id)
+                .unwrap()
+                .is_none()
+        );
+
+        // Simulate the second window at the same time: the applied-event file
+        // is temporarily unwritable. Recovery may persist the operation and
+        // evidence, but must leave the authority run Running, never Failed.
+        let events_path = store_root
+            .join("runs")
+            .join(&authority_run.0)
+            .join("events.json");
+        let events_before = std::fs::read(&events_path).unwrap();
+        std::fs::remove_file(&events_path).unwrap();
+        std::fs::create_dir(&events_path).unwrap();
+        let mut retry = request.clone();
+        assert!(
+            recover_orphan_review_ledger(&store, &project_store, &mut retry, &review).is_err()
+        );
+        assert_eq!(
+            store.load_run(&authority_run).unwrap().state,
+            xai_grok_science::RunState::Running,
+            "recoverable applied-event failure terminalized the review authority"
+        );
+        assert!(
+            project_store
+                .lookup_operation(&request.operation_id)
+                .unwrap()
+                .is_some(),
+            "orphan review recovery did not restore its operation ledger"
+        );
+        std::fs::remove_dir(&events_path).unwrap();
+        std::fs::write(&events_path, events_before).unwrap();
+
+        let operation = project_store
+            .lookup_operation(&request.operation_id)
+            .unwrap()
+            .unwrap();
         recover_interrupted_review_commit(&store, &project_store, &operation, &review).unwrap();
         assert_eq!(
             store.load_run(&authority_run).unwrap().state,

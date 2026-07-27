@@ -188,6 +188,34 @@ impl ProjectStore {
         Ok(records)
     }
 
+    /// Read an operation-addressed review ledger entry without assuming its
+    /// operation record was durably written. The SessionActor uses this to
+    /// recover the narrow crash window between the two atomic files.
+    pub fn lookup_review_record(
+        &self,
+        project_id: &ProjectId,
+        operation_id: &str,
+    ) -> crate::Result<Option<ReviewRecord>> {
+        super::mutation::validate_operation_id(operation_id)?;
+        super::model::validate_project_id(&project_id.0)?;
+        let path = self.review_path(project_id, operation_id);
+        let metadata = match std::fs::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(error.into()),
+        };
+        if !metadata.file_type().is_file() {
+            return Err(ScienceError::Invalid(
+                "project review ledger entry is not a regular file".into(),
+            ));
+        }
+        let record: ReviewRecord = Self::read_json(&path)?;
+        if record.project_id != *project_id || record.operation_id != operation_id {
+            return Err(ScienceError::Ownership);
+        }
+        Ok(Some(record))
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(super) fn record_review_inner(
         &self,
@@ -528,13 +556,20 @@ impl ProjectStore {
             ));
         }
         let approvals = science_store.approvals(&authority_run)?;
-        if approvals.is_empty()
-            || approvals
-                .iter()
-                .any(|approval| approval.decision != crate::ApprovalDecision::Allow)
+        let [approval] = approvals.as_slice() else {
+            return Err(ScienceError::Invalid(
+                "review authority run must have exactly one approval".into(),
+            ));
+        };
+        if approval.project_id.0 != record.project_id.0
+            || approval.run_id != authority_run
+            || approval.call_id != crate::CallId::new("science_project_mutation")
+            || approval.owner_id != record.owner_id
+            || approval.decision != crate::ApprovalDecision::Allow
+            || approval.decided_at.is_none()
         {
             return Err(ScienceError::Invalid(
-                "review authority run has no terminal Allow approval".into(),
+                "review authority approval does not exactly bind its mutation call".into(),
             ));
         }
         Ok((science_store, authority_run))
@@ -561,9 +596,14 @@ impl ProjectStore {
                 "review authority run must contain exactly one manifest artifact".into(),
             ));
         };
-        if manifest.relative_path != std::path::Path::new("review_record.json") {
+        if manifest.run_id != authority_run
+            || manifest.call_id != crate::CallId::new("science_project_mutation")
+            || manifest.relative_path != std::path::Path::new("review_record.json")
+            || manifest.mime != "application/json"
+            || manifest.preview != "actor-owned durable review record"
+        {
             return Err(ScienceError::Invalid(
-                "review authority run has no canonical review manifest".into(),
+                "review authority run has no canonical review manifest metadata".into(),
             ));
         }
         let manifest_bytes = science_store.artifact_bytes(
@@ -667,7 +707,7 @@ mod tests {
                 environment: BTreeMap::new(),
             })
             .unwrap();
-        let authority_call = CallId::new("review-authority-call");
+        let authority_call = CallId::new("science_project_mutation");
         science_store
             .request_approval(crate::Approval {
                 project_id: ScienceProjectId::new(project.project_id.0.clone()),
@@ -733,11 +773,11 @@ mod tests {
                 &ScienceProjectId::new(fixture.project_id.0.clone()),
                 &fixture.authority_run_id,
                 "owner-1",
-                CallId::new("review-authority-call"),
+                CallId::new("science_project_mutation"),
                 Path::new("review_record.json"),
                 &manifest,
                 "application/json",
-                "review manifest",
+                "actor-owned durable review record",
             )
             .unwrap();
         science_store
@@ -789,6 +829,45 @@ mod tests {
         let replay = reopened.apply_mutation(&request).unwrap();
         assert!(replay.replayed);
         assert_eq!(reopened.list_reviews(&fixture.project_id).unwrap().len(), 1);
+
+        let authority_dir = fixture
+            .store_root
+            .join("runs")
+            .join(&fixture.authority_run_id.0);
+        let approvals_path = authority_dir.join("approvals.json");
+        let approvals: Vec<crate::Approval> = ProjectStore::read_json(&approvals_path).unwrap();
+        let mut wrong_approvals = approvals.clone();
+        wrong_approvals[0].call_id = CallId::new("forged-review-call");
+        ProjectStore::write_json(&approvals_path, &wrong_approvals).unwrap();
+        assert!(
+            reopened.list_reviews(&fixture.project_id).is_err(),
+            "review approval call-id tamper was accepted"
+        );
+        ProjectStore::write_json(&approvals_path, &approvals).unwrap();
+
+        let artifacts_path = authority_dir.join("artifacts.json");
+        let artifacts: Vec<crate::Artifact> = ProjectStore::read_json(&artifacts_path).unwrap();
+        for (field, mutate) in [
+            ("call_id", |artifact: &mut crate::Artifact| {
+                artifact.call_id = CallId::new("forged-review-call")
+            }),
+            ("mime", |artifact: &mut crate::Artifact| {
+                artifact.mime = "text/plain".into()
+            }),
+            ("preview", |artifact: &mut crate::Artifact| {
+                artifact.preview = "forged preview".into()
+            }),
+        ] as [(&str, fn(&mut crate::Artifact)); 3]
+        {
+            let mut tampered = artifacts.clone();
+            mutate(&mut tampered[0]);
+            ProjectStore::write_json(&artifacts_path, &tampered).unwrap();
+            assert!(
+                reopened.list_reviews(&fixture.project_id).is_err(),
+                "review manifest {field} tamper was accepted"
+            );
+            ProjectStore::write_json(&artifacts_path, &artifacts).unwrap();
+        }
 
         let provenance_path = fixture
             .store_root
