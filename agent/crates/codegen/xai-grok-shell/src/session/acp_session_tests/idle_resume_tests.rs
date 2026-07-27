@@ -145,6 +145,7 @@ async fn test_e2e_idle_resume_refreshes_model_metadata() {
                     Some(mgr)
                 },
                 state,
+                science_feature_gates: xai_grok_science::features::FeatureGates::default(),
                 notifications: NotificationSender {
                     gateway: GatewaySender::new(gateway_tx),
                     gateway_enabled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),

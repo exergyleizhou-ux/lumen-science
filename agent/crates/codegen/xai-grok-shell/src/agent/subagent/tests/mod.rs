@@ -1088,6 +1088,7 @@ fn dummy_tracker(
             id: acp::SessionId::new(subagent_id),
             cwd: "/tmp".into(),
         },
+        science_feature_gates: xai_grok_science::features::FeatureGates::default(),
         max_turns: None,
         hunk_tracker_handle: xai_hunk_tracker::HunkTrackerHandle::noop(),
         chat_state_handle: xai_chat_state::ChatStateHandle::noop(),

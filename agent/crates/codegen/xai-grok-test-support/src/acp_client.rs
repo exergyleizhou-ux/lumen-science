@@ -62,6 +62,7 @@ fn spawn_agent_process(
 struct TextCapture {
     chunks: std::sync::Mutex<Vec<String>>,
     notification_count: AtomicU32,
+    permission_request_count: AtomicU32,
 }
 
 /// How the typed ACP harness answers a production permission request.
@@ -86,6 +87,9 @@ impl acp::Client for TestAcpClient {
         &self,
         args: acp::RequestPermissionRequest,
     ) -> acp::Result<acp::RequestPermissionResponse> {
+        self.capture
+            .permission_request_count
+            .fetch_add(1, Ordering::SeqCst);
         if self.permission_response == PermissionResponse::NeverRespond {
             std::future::pending::<()>().await;
         }
@@ -349,6 +353,10 @@ impl GrokStdioClient {
 
     pub fn notification_count(&self) -> u32 {
         self.capture.notification_count.load(Ordering::SeqCst)
+    }
+
+    pub fn permission_request_count(&self) -> u32 {
+        self.capture.permission_request_count.load(Ordering::SeqCst)
     }
 
     pub fn stderr(&self) -> String {

@@ -18,6 +18,7 @@
 use super::claim::Claim;
 use super::model::{ProjectId, ProjectStatus, ResearchProject};
 use super::store::ProjectStore;
+use crate::features::ScienceFeature;
 use crate::{Result, ScienceError};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -85,6 +86,20 @@ impl ProjectMutation {
             | Self::QuestionUpdate { project_id, .. }
             | Self::ClaimPropose { project_id, .. }
             | Self::EvidenceAttach { project_id, .. } => Some(project_id),
+        }
+    }
+
+    /// Capabilities that must all be enabled before the SessionActor may
+    /// create a durable run or ask the operator to approve this mutation.
+    pub fn required_features(&self) -> &'static [ScienceFeature] {
+        use ScienceFeature::{ClaimLifecycle, EvidenceGraph, MigrationChain, ResearchProject};
+        match self {
+            Self::ProjectCreate { .. }
+            | Self::ProjectTransition { .. }
+            | Self::QuestionUpdate { .. } => &[ResearchProject],
+            Self::ProjectMigrate { .. } => &[ResearchProject, MigrationChain],
+            Self::ClaimPropose { .. } => &[ResearchProject, ClaimLifecycle, EvidenceGraph],
+            Self::EvidenceAttach { .. } => &[ResearchProject, EvidenceGraph, ClaimLifecycle],
         }
     }
 }
@@ -368,6 +383,38 @@ mod tests {
                 research_question: "Does EcoRI cut?".into(),
             },
         }
+    }
+
+    #[test]
+    fn compound_mutations_declare_every_required_feature() {
+        use ScienceFeature::{ClaimLifecycle, EvidenceGraph, MigrationChain, ResearchProject};
+
+        assert_eq!(
+            create_request("op-features-create")
+                .mutation
+                .required_features(),
+            &[ResearchProject]
+        );
+        let migrate = ProjectMutation::ProjectMigrate {
+            source_run_id: "run-1".into(),
+            title: "Migrated".into(),
+            research_question: "Question?".into(),
+        };
+        assert_eq!(
+            migrate.required_features(),
+            &[ResearchProject, MigrationChain]
+        );
+        let evidence = ProjectMutation::EvidenceAttach {
+            project_id: ProjectId("project-1".into()),
+            claim_id: "claim-1".into(),
+            artifact_sha256: "a".repeat(64),
+            label: "artifact".into(),
+            run_id: None,
+        };
+        assert_eq!(
+            evidence.required_features(),
+            &[ResearchProject, EvidenceGraph, ClaimLifecycle]
+        );
     }
 
     #[test]

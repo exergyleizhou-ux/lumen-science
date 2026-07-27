@@ -75,6 +75,7 @@ async fn create_test_actor(
         attribution_callback: None,
         auth_manager: None,
         state,
+        science_feature_gates: xai_grok_science::features::FeatureGates::default(),
         notifications: NotificationSender {
             gateway: GatewaySender::new(gateway_tx),
             gateway_enabled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
@@ -515,6 +516,7 @@ async fn create_test_actor_with_memory(
         attribution_callback: None,
         auth_manager: None,
         state,
+        science_feature_gates: xai_grok_science::features::FeatureGates::default(),
         notifications: NotificationSender {
             gateway: GatewaySender::new(gateway_tx),
             gateway_enabled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
@@ -1285,6 +1287,7 @@ async fn test_e2e_idle_resume_refreshes_model_metadata() {
                     Some(mgr)
                 },
                 state,
+                science_feature_gates: xai_grok_science::features::FeatureGates::default(),
                 notifications: NotificationSender {
                     gateway: GatewaySender::new(gateway_tx),
                     gateway_enabled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),

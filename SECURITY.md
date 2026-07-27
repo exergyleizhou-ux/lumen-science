@@ -51,9 +51,8 @@ will be closed as duplicates. Please read
 [`docs/science/status/current.json`](docs/science/status/current.json)
 (`authority.knownAuthorityGaps`) first.
 
-- Desktop's ACP bridge does not currently reach a live engine.
-- Project/Claim/Evidence mutations bypass `SessionActor`.
-- `FeatureGates` is in-memory only, with no operator control surface.
+- `artifact_list`, `notebook_execute`, and `start_review` remain Go MCP tools;
+  their desktop call sites fail explicitly pending a Go MCP client.
 - Science release assets are unsigned and carry no SBOM or provenance
   attestation.
 

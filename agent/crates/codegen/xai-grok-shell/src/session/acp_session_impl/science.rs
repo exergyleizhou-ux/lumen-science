@@ -762,13 +762,17 @@ impl SessionActor {
                 "science mutation owner does not match its run context".into(),
             ));
         }
+        self.science_feature_gates
+            .require_all(request.mutation.required_features())?;
         validate_project_mutation_actor_roots(
             std::path::Path::new(&self.session_info.cwd),
             &store,
             &project_root,
             &context,
         )?;
-        let project_store = xai_grok_science::project::ProjectStore::new(&project_root);
+        let gates = self.science_feature_gates.clone();
+        let project_store =
+            xai_grok_science::project::ProjectStore::new(&project_root).with_gates(gates.clone());
 
         // Project binding: the run context must name the project actually
         // being mutated, so the durable record cannot point at another one.
@@ -805,6 +809,7 @@ impl SessionActor {
             return Ok(PreparedScienceProjectMutation {
                 store,
                 project_root,
+                gates,
                 ticket: xai_grok_science::csv::ScienceRunTicket {
                     // The run ticket uses the kernel's ProjectId; the record
                     // carries the project-model one.
@@ -830,6 +835,7 @@ impl SessionActor {
         Ok(PreparedScienceProjectMutation {
             store,
             project_root,
+            gates,
             ticket,
             request,
             target,
@@ -862,7 +868,8 @@ impl SessionActor {
             )));
         }
         xai_grok_science::csv::mark_allowed(&prepared.store, &prepared.ticket)?;
-        let project_store = xai_grok_science::project::ProjectStore::new(&prepared.project_root);
+        let project_store = xai_grok_science::project::ProjectStore::new(&prepared.project_root)
+            .with_gates(prepared.gates);
         let outcome = match project_store.apply_mutation(&prepared.request) {
             Ok(outcome) => outcome,
             Err(error) => {
@@ -933,6 +940,20 @@ impl SessionActor {
             return Err(ScienceError::Invalid(
                 "workflow execution requires an owner id".into(),
             ));
+        }
+        self.science_feature_gates.require_all(&[
+            xai_grok_science::features::ScienceFeature::WorkflowDag,
+            xai_grok_science::features::ScienceFeature::ComputeEnvironment,
+        ])?;
+        if binding
+            .execution
+            .spec
+            .steps
+            .iter()
+            .any(|step| step.kind == xai_grok_science::workflow::StepKind::NotebookCell)
+        {
+            self.science_feature_gates
+                .require(xai_grok_science::features::ScienceFeature::MultiKernel)?;
         }
         if !binding.interpreter_path.is_absolute() {
             return Err(ScienceError::Invalid(

@@ -55,6 +55,10 @@ pub struct SessionHandle {
     pub pending_interactions: crate::session::pending_interaction::PendingInteractions,
     /// Session info (id, cwd) - cached for quick access without querying persistence
     pub info: crate::session::info::Info,
+    /// Immutable operator-selected Science capability snapshot for this
+    /// session. Read-only ACP routes use this same snapshot; mutations and
+    /// execution are re-checked by the SessionActor before durable admission.
+    pub science_feature_gates: xai_grok_science::features::FeatureGates,
     /// Resolved turn limit for this session; lets a spawned subagent inherit
     /// the parent's limit. `None` = unlimited.
     pub max_turns: Option<usize>,

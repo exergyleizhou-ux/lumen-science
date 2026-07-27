@@ -118,7 +118,7 @@ impl GateState {
 }
 
 /// Runtime feature gate configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FeatureGates {
     pub gates: BTreeMap<String, GateState>,
 }
@@ -160,6 +160,26 @@ impl FeatureGates {
         self.gates.insert(feature.as_str().to_string(), state);
     }
 
+    /// Build one immutable session snapshot from operator overrides.
+    ///
+    /// Unknown keys are rejected instead of being silently ignored. The
+    /// resulting map is complete: omitted features retain the compiled safe
+    /// defaults, while explicit operator states replace them.
+    pub fn from_overrides(overrides: &BTreeMap<String, GateState>) -> Result<Self, ScienceError> {
+        let mut gates = Self::default();
+        for (name, state) in overrides {
+            let feature = ScienceFeature::all()
+                .iter()
+                .copied()
+                .find(|feature| feature.as_str() == name)
+                .ok_or_else(|| {
+                    ScienceError::Invalid(format!("unknown science feature gate: {name}"))
+                })?;
+            gates.set(feature, *state);
+        }
+        Ok(gates)
+    }
+
     /// Fail closed if feature is Disabled.
     pub fn require(&self, feature: ScienceFeature) -> Result<GateState, ScienceError> {
         let state = self.get(feature);
@@ -167,6 +187,15 @@ impl FeatureGates {
             return Err(ScienceError::FeatureDisabled(feature.as_str().to_string()));
         }
         Ok(state)
+    }
+
+    /// Require every capability a compound operation depends on.
+    pub fn require_all(&self, features: &[ScienceFeature]) -> Result<Vec<GateState>, ScienceError> {
+        features
+            .iter()
+            .copied()
+            .map(|feature| self.require(feature))
+            .collect()
     }
 }
 
@@ -195,5 +224,27 @@ mod tests {
         g.set(ScienceFeature::WorkflowDag, GateState::Beta);
         assert_eq!(g.get(ScienceFeature::WorkflowDag), GateState::Beta);
         assert!(g.require(ScienceFeature::WorkflowDag).unwrap().allows_use());
+    }
+
+    #[test]
+    fn operator_overrides_are_complete_and_fail_closed_on_unknown_keys() {
+        let overrides = BTreeMap::from([
+            ("research_project".to_string(), GateState::Disabled),
+            ("workflow_dag".to_string(), GateState::Stable),
+        ]);
+        let gates = FeatureGates::from_overrides(&overrides).unwrap();
+        assert_eq!(
+            gates.get(ScienceFeature::ResearchProject),
+            GateState::Disabled
+        );
+        assert_eq!(gates.get(ScienceFeature::WorkflowDag), GateState::Stable);
+        assert_eq!(gates.get(ScienceFeature::EvidenceGraph), GateState::Preview);
+
+        let error = FeatureGates::from_overrides(&BTreeMap::from([(
+            "research_projet".to_string(),
+            GateState::Stable,
+        )]))
+        .unwrap_err();
+        assert!(error.to_string().contains("unknown science feature gate"));
     }
 }

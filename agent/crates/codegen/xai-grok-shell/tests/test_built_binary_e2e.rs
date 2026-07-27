@@ -3030,6 +3030,154 @@ async fn test_stdio_science_project_mutation_denied_writes_nothing() {
     .await;
 }
 
+/// Operator feature gates are captured once per session and enforced on both
+/// read routes and actor-owned mutations. Re-enabling the feature on disk
+/// after session creation must not widen that already-running session.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_operator_gate_snapshot_denies_read_and_mutation_before_admission() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let store_root = workdir.path().join("science-disabled-store");
+        let home = tempfile::TempDir::new().expect("create temp home");
+        let lumen_dir = home.path().join(".lumen");
+        std::fs::create_dir_all(&lumen_dir).expect("create isolated Lumen home");
+        std::fs::write(
+            lumen_dir.join("config.toml"),
+            concat!(
+                "[science_features]\n",
+                "research_project = \"disabled\"\n",
+                "workflow_dag = \"disabled\"\n",
+            ),
+        )
+        .expect("write disabled science feature config");
+
+        let client = GrokStdioClient::spawn_with_home(&server, workdir.path(), home).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+
+        let read = client
+            .ext_method(
+                "x.ai/science/project_list",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "storeRoot": store_root,
+                }),
+            )
+            .await;
+        let read_error = format!(
+            "{:?}",
+            read.expect_err("disabled project_list was accepted")
+        );
+        assert!(
+            read_error.contains("feature disabled: research_project"),
+            "project_list failed for the wrong reason: {read_error}"
+        );
+
+        // A config watcher may observe this change, but the existing session
+        // must retain the disabled snapshot it was born with.
+        std::fs::write(
+            client.home_path().join(".lumen/config.toml"),
+            concat!(
+                "[science_features]\n",
+                "research_project = \"preview\"\n",
+                "workflow_dag = \"disabled\"\n",
+            ),
+        )
+        .expect("re-enable feature on disk");
+
+        let mutation = client
+            .ext_method(
+                "x.ai/science/project_create",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "ownerId": "science-owner",
+                    "storeRoot": store_root,
+                    "title": "Must stay disabled",
+                    "researchQuestion": "Can a config reload widen this session?",
+                    "operationId": "op-disabled-gate",
+                    "approvalTimeoutMs": 5_000,
+                }),
+            )
+            .await;
+        let mutation_error = format!(
+            "{:?}",
+            mutation.expect_err("disabled project_create was accepted")
+        );
+        assert!(
+            mutation_error.contains("feature disabled: research_project"),
+            "project_create failed for the wrong reason: {mutation_error}"
+        );
+
+        let workflow = client
+            .ext_method(
+                "x.ai/science/workflow_execute",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "ownerId": "science-owner",
+                    "storeRoot": store_root,
+                    "operationId": "op-disabled-workflow",
+                    "workflowSpec": workflow_spec("wf-disabled-gate", WORKFLOW_CELL),
+                    // The actor must reject on its gate snapshot before this
+                    // executable is probed or run.
+                    "interpreterPath": std::env::current_exe()
+                        .expect("resolve inert absolute executable"),
+                    "allowKernelSteps": true,
+                    "approvalTimeoutMs": 5_000,
+                }),
+            )
+            .await;
+        let workflow_error = format!(
+            "{:?}",
+            workflow.expect_err("disabled workflow_execute was accepted")
+        );
+        assert!(
+            workflow_error.contains("feature disabled: workflow_dag"),
+            "workflow_execute failed for the wrong reason: {workflow_error}"
+        );
+        assert_eq!(
+            client.permission_request_count(),
+            0,
+            "disabled feature reached the permission broker"
+        );
+        let run_root = store_root.join("runs");
+        let run_count = if run_root.is_dir() {
+            std::fs::read_dir(&run_root)
+                .expect("read empty run root")
+                .count()
+        } else {
+            0
+        };
+        assert_eq!(
+            run_count, 0,
+            "disabled feature opened a durable run before rejection"
+        );
+        assert!(
+            !store_root.join("projects").exists(),
+            "disabled feature created a project before rejection"
+        );
+        for name in [
+            "workflow-runs",
+            "workflow-operations",
+            "workflow-commits",
+            "workflow-cells",
+            "workflow-outputs",
+            "workflow-runtime",
+        ] {
+            let path = store_root.join(name);
+            let count = std::fs::read_dir(&path).map(Iterator::count).unwrap_or(0);
+            assert_eq!(
+                count, 0,
+                "disabled workflow left {count} durable entries in {name}"
+            );
+        }
+    })
+    .await;
+}
+
 /// The legacy migration endpoint must use the typed project-mutation seam:
 /// one permission, one durable run, one idempotent project-store mutation.
 #[tokio::test]

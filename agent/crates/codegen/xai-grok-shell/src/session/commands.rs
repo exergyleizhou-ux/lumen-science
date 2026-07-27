@@ -203,6 +203,7 @@ pub struct FinishScienceFetch {
 pub struct PreparedScienceProjectMutation {
     pub(crate) store: xai_grok_science::ScienceStore,
     pub(crate) project_root: std::path::PathBuf,
+    pub(crate) gates: xai_grok_science::features::FeatureGates,
     pub(crate) ticket: xai_grok_science::csv::ScienceRunTicket,
     pub(crate) request: xai_grok_science::project::MutationRequest,
     /// Human-readable target used in the permission prompt.

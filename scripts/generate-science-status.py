@@ -526,8 +526,22 @@ def collect_authority() -> dict[str, Any]:
             },
             {
                 "id": "AUTH-4",
-                "summary": "FeatureGates is in-memory only; rebuilt from Default on every request, no operator control surface",
-                "path": "agent/crates/codegen/xai-grok-science/src/features.rs:122",
+                "summary": (
+                    "Operator Science feature gates are validated from config and "
+                    "captured as one immutable SessionActor authority snapshot"
+                ),
+                "path": "agent/crates/codegen/xai-grok-shell/src/agent/config.rs",
+                "status": "closed",
+                "note": (
+                    "Unknown feature names fail config load. Main sessions resolve "
+                    "[science_features] once; subagents inherit the parent's snapshot. "
+                    "Read-only ACP ProjectStore routes use that same snapshot, while "
+                    "project mutations and workflow execution re-check it inside "
+                    "SessionActor before durable admission or permission. A rebuilt-"
+                    "binary negative test proves disabled read/write, zero permission "
+                    "requests, zero runs/projects, and no mid-session widening after "
+                    "the config file is changed."
+                ),
             },
         ],
     }

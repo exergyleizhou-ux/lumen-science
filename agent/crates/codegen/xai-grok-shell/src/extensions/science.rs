@@ -442,7 +442,8 @@ async fn handle_project_get(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
     let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root);
+    let store = xai_grok_science::project::ProjectStore::new(store_root)
+        .with_gates(handle.science_feature_gates.clone());
     let pid = xai_grok_science::project::ProjectId(params.project_id);
     let bundle = store.load_bundle(&pid).map_err(internal)?;
     to_raw_response(&bundle)
@@ -484,7 +485,8 @@ async fn handle_project_assert_membership(agent: &MvpAgent, args: &acp::ExtReque
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
     let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root);
+    let store = xai_grok_science::project::ProjectStore::new(store_root)
+        .with_gates(handle.science_feature_gates.clone());
     let pid = xai_grok_science::project::ProjectId(params.project_id.clone());
 
     let member = match store.load_project(&pid) {
@@ -518,7 +520,8 @@ async fn handle_project_list(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtRes
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
     let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root);
+    let store = xai_grok_science::project::ProjectStore::new(store_root)
+        .with_gates(handle.science_feature_gates.clone());
     let projects = store.list_projects().map_err(internal)?;
     to_raw_response(&projects)
 }
@@ -1117,7 +1120,8 @@ async fn handle_evidence_trace(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtR
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
     let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root);
+    let store = xai_grok_science::project::ProjectStore::new(store_root)
+        .with_gates(handle.science_feature_gates.clone());
     let trace = store.trace_evidence(
         &xai_grok_science::project::ProjectId(params.project_id), &params.claim_id,
     ).map_err(internal)?;
@@ -1135,7 +1139,8 @@ async fn handle_evidence_compare(agent: &MvpAgent, args: &acp::ExtRequest) -> Ex
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
     let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root);
+    let store = xai_grok_science::project::ProjectStore::new(store_root)
+        .with_gates(handle.science_feature_gates.clone());
     let cmp = store.compare_claims(
         &xai_grok_science::project::ProjectId(params.project_id), &params.claim_a, &params.claim_b,
     ).map_err(internal)?;
@@ -1153,7 +1158,8 @@ async fn handle_evidence_consistency(agent: &MvpAgent, args: &acp::ExtRequest) -
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
     let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root);
+    let store = xai_grok_science::project::ProjectStore::new(store_root)
+        .with_gates(handle.science_feature_gates.clone());
     let report = store.check_consistency(
         &xai_grok_science::project::ProjectId(params.project_id),
     ).map_err(internal)?;
@@ -1171,7 +1177,8 @@ async fn handle_evidence_reproduction(agent: &MvpAgent, args: &acp::ExtRequest) 
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
     let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root);
+    let store = xai_grok_science::project::ProjectStore::new(store_root)
+        .with_gates(handle.science_feature_gates.clone());
     let status = store.reproduction_status(
         &xai_grok_science::project::ProjectId(params.project_id), &params.claim_id,
     ).map_err(internal)?;
@@ -1250,7 +1257,8 @@ async fn store_handler<T: serde::Serialize>(agent: &MvpAgent, session_id: &str, 
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
     let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
     let sr = canonical_dir_within(store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(sr);
+    let store = xai_grok_science::project::ProjectStore::new(sr)
+        .with_gates(handle.science_feature_gates.clone());
     let result = f(&store).map_err(internal)?;
     to_raw_response(&result)
 }

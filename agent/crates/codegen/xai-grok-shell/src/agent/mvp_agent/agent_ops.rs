@@ -3757,6 +3757,14 @@ impl MvpAgent {
                 code_nav: client_code_nav_enabled,
                 git_head_changed,
             });
+            let science_feature_gates = {
+                let cfg = self.cfg.borrow();
+                xai_grok_science::features::FeatureGates::from_overrides(&cfg.science_features)
+                    .map_err(|error| {
+                        acp::Error::internal_error()
+                            .data(format!("invalid science feature configuration: {error}"))
+                    })?
+            };
             spawn_session_on_thread(
                     session_info.clone(),
                     self.gateway.clone(),
@@ -3879,6 +3887,7 @@ impl MvpAgent {
                     laziness_debug_log_for_spawn,
                     None,
                     None,
+                    science_feature_gates,
                     max_turns,
                     None,
                 )
