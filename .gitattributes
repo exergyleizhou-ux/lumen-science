@@ -1,3 +1,4 @@
 # Preserve exact upstream whitespace in the inert, hash-addressed SCP source
 # corpus. Its original bytes are provenance evidence, not executable Lumen code.
 third_party/internscience-scp/skills/**/SKILL.md -whitespace
+third_party/biomni-tool-descriptions/tool-descriptions/*.py -whitespace

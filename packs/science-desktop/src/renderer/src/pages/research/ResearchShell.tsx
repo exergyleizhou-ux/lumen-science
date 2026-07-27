@@ -813,13 +813,23 @@ export const ResearchShell = (): React.JSX.Element => {
                                 <span className={cx.muted}>隔离中</span>
                               </div>
                               <div className={cx.muted} style={{ marginTop: 4 }}>
-                                {candidate.discipline} · 上游工具引用{' '}
-                                {candidate.requiredUpstreamToolCount}
+                                {candidate.discipline} ·{' '}
+                                {candidate.sourceKind === 'tool-descriptor'
+                                  ? `Biomni 工具描述 · ${candidate.parameterCount} 个参数`
+                                  : `SCP 技能文档 · 上游工具引用 ${candidate.requiredUpstreamToolCount}`}
                               </div>
                               <p style={{ margin: '8px 0 0' }}>{candidate.description}</p>
+                              <div className={cx.muted} style={{ marginTop: 8 }}>
+                                本地化路线：{candidate.admissionTrack}
+                              </div>
                               {candidate.candidateLumenRoutes.length > 0 && (
                                 <div className={cx.muted} style={{ marginTop: 8 }}>
                                   候选 Lumen 路由：{candidate.candidateLumenRoutes.join(' · ')}
+                                </div>
+                              )}
+                              {candidate.riskFlags.length > 0 && (
+                                <div className={cx.muted} style={{ marginTop: 8 }}>
+                                  待审风险：{candidate.riskFlags.join(' · ')}
                                 </div>
                               )}
                             </article>

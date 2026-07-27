@@ -1,7 +1,7 @@
 # Lumen Science ecosystem absorption plan
 
-**Status:** Phase 0 source/license gate and Phase 1A SCP quarantine catalog
-implemented; capability admission continues
+**Status:** Phase 0 source/license gate and Phase 1 local SCP/Biomni capability
+catalog implemented; capability admission continues
 
 **Date:** 2026-07-27
 
@@ -10,7 +10,7 @@ absorption:
 
 | Source | Exact commit | Root license | Current Lumen disposition |
 |---|---|---|---|
-| `snap-stanford/Biomni` | `400c1f366b96a35ca253e13c9b06c5076af41d65` | Apache-2.0 | inventory complete; native adapters and knowledge admission pending |
+| `snap-stanford/Biomni` | `400c1f366b96a35ca253e13c9b06c5076af41d65` | Apache-2.0 | 224 typed tool descriptors locally cataloged; native adapters and knowledge admission pending |
 | `jvogan/motif` | `876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0` | MIT | current upstream already vendored as renderer; algorithm expansion pending |
 | `aipoch/open-science` | `fd2853f0b9bdb6c063ccc1e741687584ab94bf9a` | Apache-2.0 | 1,082 carried files; 228-file upstream delta under review |
 | `qzzqzzb/OpenClaudeScience` | `4a5f2ab2879ebd4f806155c796e247da94bb1625` | MIT at root, mixed nested licenses | MIT components and catalog may be adapted; four proprietary skill trees rejected |
@@ -207,7 +207,7 @@ Implemented in this slice:
 
 ### Phase 1 — local ecosystem catalog
 
-Implemented in Phase 1A:
+Implemented:
 
 - vendored the permissively licensed SCP skill documents and required license
   into a non-runtime, hash-addressed source area;
@@ -229,12 +229,29 @@ Implemented in Phase 1A:
 - added one-to-one source/catalog/hash and secret-tamper gates;
 - added a desktop fail-closed test proving that a catalog entry cannot be
   relabelled as approved and still appear in the product.
+- preserved Biomni's 22 Apache-2.0 literal tool-description modules without
+  importing or executing Python;
+- generated all 224 Biomni tool candidates, including their typed parameter
+  contracts, source hashes, risk flags, and Lumen-native admission tracks;
+- mapped 20 descriptions to existing Lumen connectors and identified 21
+  explicit new-connector candidates;
+- flagged 119 filesystem-facing, 63 network/download, 31 caller-selected
+  endpoint, 13 code/command, and 9 physical/wet-lab candidates for stronger
+  gates;
+- kept all 224 Biomni candidates quarantined with zero controlled tools and
+  network/shell/filesystem/device access denied;
+- added one-to-one descriptor/source/hash checks and a negative test proving
+  that matching manifest hashes cannot turn an inert descriptor into
+  executable Python;
+- combined the 207 SCP documents and 224 Biomni tool descriptions into one
+  searchable 431-item desktop capability view.
 
-Remaining in Phase 1B:
+Remaining:
 
-- Generate Biomni's 224-tool/22-domain inventory and license/resource backlog.
-- Require one-to-one descriptor/source checks so catalog drift fails.
-- Keep every new entry quarantined until a controlled tool mapping exists.
+- catalog Biomni's 76 data-lake entries, 113 software records, 82 local
+  protocols, and know-how documents with per-resource license/citation status;
+- admit controlled adapters individually; a catalog mapping is not execution
+  proof.
 
 ### Phase 2 — secure skill import delta
 
@@ -268,14 +285,14 @@ Remaining in Phase 1B:
 
 ## Evidence boundary
 
-Phase 0 and the Phase 1A SCP catalog currently have source audit, focused
-verifier evidence, desktop service tests, and TypeScript compile evidence. The
-207 skill sources are local and searchable in the desktop Skills tab, but they
-are not executable or product-approved. A rebuilt packaged application has not
-yet been used to prove the new resource path and rendered UI. This does not
-claim that the
-224 Biomni tools, new connectors, Motif algorithms, or clean-room document
-features are already product-complete.
+Phase 0 and the Phase 1 SCP/Biomni catalogs currently have source audit,
+focused verifier evidence, desktop service tests, and TypeScript compile
+evidence. The 431 candidate capabilities are local and searchable in the
+desktop Skills tab, but none of the new 431 entries is executable or
+product-approved. A rebuilt packaged application has not yet been used to prove
+the new resource paths and rendered UI. This does not claim that the 224
+Biomni tools, new connectors, Motif algorithms, or clean-room document features
+are already product-complete.
 
 For each later slice, report separately:
 

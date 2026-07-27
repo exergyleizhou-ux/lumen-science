@@ -3,11 +3,15 @@ export type EcosystemSkillCandidate = {
   displayName: string
   description: string
   discipline: string
+  sourceKind: 'skill-document' | 'tool-descriptor'
   sourceRepository: string
   exactCommit: string
   sourceSha256: string
   candidateLumenRoutes: string[]
   requiredUpstreamToolCount: number
+  parameterCount: number
+  riskFlags: string[]
+  admissionTrack: string
   disposition: 'quarantined'
 }
 
@@ -78,6 +82,7 @@ export function parseEcosystemSkillInventory(value: unknown): EcosystemInventory
       typeof item.displayName !== 'string' ||
       typeof item.description !== 'string' ||
       typeof item.discipline !== 'string' ||
+      !['skill-document', 'tool-descriptor'].includes(String(item.sourceKind)) ||
       typeof item.sourceRepository !== 'string' ||
       typeof item.exactCommit !== 'string' ||
       !/^[0-9a-f]{40}$/.test(item.exactCommit) ||
@@ -88,6 +93,12 @@ export function parseEcosystemSkillInventory(value: unknown): EcosystemInventory
       typeof item.requiredUpstreamToolCount !== 'number' ||
       !Number.isInteger(item.requiredUpstreamToolCount) ||
       item.requiredUpstreamToolCount < 0 ||
+      typeof item.parameterCount !== 'number' ||
+      !Number.isInteger(item.parameterCount) ||
+      item.parameterCount < 0 ||
+      !Array.isArray(item.riskFlags) ||
+      !item.riskFlags.every((flag) => typeof flag === 'string') ||
+      typeof item.admissionTrack !== 'string' ||
       item.disposition !== 'quarantined'
     ) {
       return {
@@ -130,6 +141,9 @@ export function filterEcosystemSkills(
       candidate.description,
       candidate.discipline,
       candidate.skillId,
+      candidate.sourceKind,
+      candidate.admissionTrack,
+      ...candidate.riskFlags,
       ...candidate.candidateLumenRoutes,
     ]
       .join(' ')

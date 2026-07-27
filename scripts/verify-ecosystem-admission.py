@@ -16,6 +16,7 @@ upstream checkouts.  They never fetch or mutate those repositories.
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
 import re
@@ -295,6 +296,166 @@ def verify_carried_ledgers(lock: dict[str, Any], science_repo: Path) -> None:
         "Motif vendor manifest grants runtime authority",
     )
 
+    biomni_spec = carried["biomni_tool_catalog"]
+    biomni_manifest = load_json(
+        science_repo / biomni_spec["vendor_manifest_path"],
+        "Biomni tool-description vendor manifest",
+    )
+    require(
+        biomni_manifest["commit"] == biomni_spec["commit"],
+        "Biomni vendored source commit changed unexpectedly",
+    )
+    require(
+        biomni_manifest["runtime_authority"] == "none",
+        "Biomni vendor manifest grants runtime authority",
+    )
+    require(
+        biomni_manifest["descriptor_modules"] == biomni_spec["required_modules"],
+        "Biomni descriptor module count regressed",
+    )
+    require(
+        biomni_manifest["tool_records"] == biomni_spec["required_total"],
+        "Biomni tool record count regressed",
+    )
+    require(
+        biomni_manifest["module_counts"]["database"]
+        == biomni_spec["required_database_tools"],
+        "Biomni database tool count regressed",
+    )
+    biomni_source_files = biomni_manifest["source_files"]
+    biomni_vendored_files = biomni_manifest["vendored_files"]
+    require(
+        set(biomni_source_files)
+        == {
+            path
+            for path in biomni_vendored_files
+            if path.startswith("tool-descriptions/")
+        },
+        "Biomni source descriptor and vendored manifests disagree",
+    )
+    for relative, expected in biomni_vendored_files.items():
+        require_relative_path(relative, f"Biomni vendored file {relative}")
+        require(
+            SHA256_RE.fullmatch(expected) is not None,
+            f"Biomni vendored SHA-256 is malformed: {relative}",
+        )
+        vendored_path = science_repo / "third_party/biomni-tool-descriptions" / relative
+        require(vendored_path.is_file(), f"Biomni vendored file is missing: {relative}")
+        require(
+            sha256(vendored_path) == expected,
+            f"Biomni vendored file hash drifted: {relative}",
+        )
+        if relative.startswith("tool-descriptions/"):
+            tree = ast.parse(vendored_path.read_text(encoding="utf-8"))
+            require(
+                len(tree.body) == 1
+                and isinstance(tree.body[0], ast.Assign)
+                and len(tree.body[0].targets) == 1
+                and isinstance(tree.body[0].targets[0], ast.Name)
+                and tree.body[0].targets[0].id == "description",
+                f"Biomni descriptor is no longer one inert literal assignment: {relative}",
+            )
+            try:
+                ast.literal_eval(tree.body[0].value)
+            except (TypeError, ValueError) as error:
+                fail(f"Biomni descriptor is not an inert literal: {relative}: {error}")
+
+    biomni_catalog = load_json(
+        science_repo / biomni_spec["catalog_path"], "Biomni tool candidate catalog"
+    )
+    biomni_authority = biomni_catalog["authority"]
+    require(
+        biomni_authority["runtime_authority"] == "Rust SessionActor"
+        and biomni_authority["source_runtime_authority"] == "none"
+        and biomni_authority["catalog_is_executable"] is False
+        and biomni_authority["direct_upstream_calls_admitted"] is False
+        and biomni_authority["bulk_auto_approval"] is False,
+        "Biomni catalog grants source execution, direct calls, or bulk approval",
+    )
+    biomni_summary = biomni_catalog["summary"]
+    biomni_skills = biomni_catalog["skills"]
+    require(
+        biomni_summary["total"]
+        == biomni_spec["required_total"]
+        == len(biomni_skills),
+        "Biomni catalog total regressed or disagrees with entries",
+    )
+    require(
+        biomni_summary["approved"] == biomni_spec["approved"] == 0,
+        "Biomni catalog contains an unreviewed approved tool",
+    )
+    require(
+        biomni_summary["quarantined"] == len(biomni_skills)
+        and biomni_summary["modules"] == biomni_spec["required_modules"]
+        and biomni_summary["database_tools"] == biomni_spec["required_database_tools"],
+        "Biomni catalog summary disagrees with the locked inventory",
+    )
+
+    biomni_ids: set[str] = set()
+    biomni_names: set[str] = set()
+    biomni_descriptor_paths: set[str] = set()
+    for skill in biomni_skills:
+        skill_id = skill["skill_id"]
+        name = skill["display_name"]
+        vendored_relative = skill["vendored_path"]
+        require(skill_id not in biomni_ids, f"Biomni catalog repeats id: {skill_id}")
+        require(name not in biomni_names, f"Biomni catalog repeats tool name: {name}")
+        biomni_ids.add(skill_id)
+        biomni_names.add(name)
+        biomni_descriptor_paths.add(vendored_relative)
+        require(
+            skill_id == f"ecosystem/biomni/{name}",
+            f"Biomni catalog id/name mismatch: {skill_id}",
+        )
+        require(
+            skill["source_kind"] == "tool-descriptor"
+            and skill["exact_commit"] == biomni_spec["commit"],
+            f"Biomni catalog provenance changed: {skill_id}",
+        )
+        require(
+            vendored_relative in biomni_source_files
+            and skill["source_sha256"] == biomni_source_files[vendored_relative]
+            and biomni_source_files[vendored_relative]
+            == biomni_vendored_files[vendored_relative],
+            f"Biomni catalog hash disagrees with vendor manifest: {skill_id}",
+        )
+        contract = skill["parameter_contract"]
+        require(
+            isinstance(contract["required"], list)
+            and isinstance(contract["optional"], list),
+            f"Biomni parameter contract is malformed: {skill_id}",
+        )
+        parameter_names = [
+            parameter["name"]
+            for parameter in contract["required"] + contract["optional"]
+        ]
+        require(
+            len(parameter_names) == len(set(parameter_names)),
+            f"Biomni parameter contract repeats a name: {skill_id}",
+        )
+        require(
+            skill["final_disposition"] == "quarantined"
+            and skill["prompt_injection_audit"]["status"] == "pending",
+            f"Biomni tool bypassed quarantine or audit: {skill_id}",
+        )
+        permissions = skill["runtime_permissions"]
+        require(
+            permissions["session_actor_required"] is True
+            and permissions["may_call_lumen_tools_only"] is True
+            and permissions["controlled_tools"] == []
+            and permissions["independent_execution_authority"] is False
+            and permissions["network"] == "denied-until-per-tool-admission"
+            and permissions["shell"] == "denied"
+            and permissions["filesystem"] == "denied"
+            and permissions["device"] == "denied",
+            f"Biomni tool has runtime capability before admission: {skill_id}",
+        )
+
+    require(
+        biomni_descriptor_paths == set(biomni_source_files),
+        "Biomni catalog does not cover every vendored descriptor module",
+    )
+
     scp_spec = carried["scp_quarantine_catalog"]
     scp_manifest = load_json(
         science_repo / scp_spec["vendor_manifest_path"], "SCP vendor manifest"
@@ -491,6 +652,38 @@ def verify_local_source(source: dict[str, Any], root: Path) -> None:
             skill_count == inventory["skill_documents"],
             f"{label} has {skill_count} skill documents, expected "
             f"{inventory['skill_documents']}",
+        )
+    if source["id"] == "snap-stanford-biomni":
+        descriptor_paths = sorted(
+            (root / "biomni/tool/tool_description").glob("*.py")
+        )
+        require(
+            len(descriptor_paths) == inventory["tool_modules"],
+            f"{label} has {len(descriptor_paths)} descriptor modules, expected "
+            f"{inventory['tool_modules']}",
+        )
+        tool_count = 0
+        database_count = 0
+        for descriptor_path in descriptor_paths:
+            tree = ast.parse(descriptor_path.read_text(encoding="utf-8"))
+            require(
+                len(tree.body) == 1 and isinstance(tree.body[0], ast.Assign),
+                f"{label} descriptor is not one assignment: {descriptor_path.name}",
+            )
+            tools = ast.literal_eval(tree.body[0].value)
+            require(isinstance(tools, list), f"{label} descriptor is not a list")
+            tool_count += len(tools)
+            if descriptor_path.stem == "database":
+                database_count = len(tools)
+        require(
+            tool_count == inventory["declared_tools"],
+            f"{label} has {tool_count} tool records, expected "
+            f"{inventory['declared_tools']}",
+        )
+        require(
+            database_count == inventory["database_tools"],
+            f"{label} has {database_count} database tools, expected "
+            f"{inventory['database_tools']}",
         )
     if source["id"] == "qzzqzzb-openclaudescience":
         catalog = (root / "ui/src/app/skills/science-skill-catalog.ts").read_text(

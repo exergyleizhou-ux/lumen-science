@@ -31,11 +31,15 @@ export type EcosystemSkillCandidate = {
   displayName: string
   description: string
   discipline: string
+  sourceKind: 'skill-document' | 'tool-descriptor'
   sourceRepository: string
   exactCommit: string
   sourceSha256: string
   candidateLumenRoutes: string[]
   requiredUpstreamToolCount: number
+  parameterCount: number
+  riskFlags: string[]
+  admissionTrack: string
   disposition: 'quarantined'
 }
 
@@ -73,6 +77,8 @@ export function createSkillService(opts: {
   registryPath: string
   /** Optional path to the read-only, zero-approved ecosystem candidate catalog. */
   ecosystemCatalogPath?: string
+  /** Optional complete set of read-only, zero-approved ecosystem catalogs. */
+  ecosystemCatalogPaths?: string[]
 }): SkillService {
   const quarantine = new Map<string, SkillRecord>()
 
@@ -118,20 +124,24 @@ export function createSkillService(opts: {
     }
   }
 
-  function loadEcosystemCatalog(): {
+  function loadOneEcosystemCatalog(catalogPath: string): {
     candidates: EcosystemSkillCandidate[]
     unavailable?: string
   } {
-    if (!opts.ecosystemCatalogPath) return { candidates: [] }
-
     try {
-      const raw = JSON.parse(fs.readFileSync(opts.ecosystemCatalogPath, 'utf-8')) as {
+      const raw = JSON.parse(fs.readFileSync(catalogPath, 'utf-8')) as {
         schema_version?: number
+        source?: {
+          id?: string
+          repository?: string
+          exact_commit?: string
+        }
         authority?: {
           runtime_authority?: string
           source_runtime_authority?: string
           catalog_is_executable?: boolean
           direct_scp_hub_calls_admitted?: boolean
+          direct_upstream_calls_admitted?: boolean
           bulk_auto_approval?: boolean
         }
         summary?: { total?: number; approved?: number; quarantined?: number }
@@ -143,8 +153,12 @@ export function createSkillService(opts: {
           source_repository?: string
           exact_commit?: string
           source_sha256?: string
+          source_kind?: string
           candidate_lumen_routes?: string[]
           required_upstream_tools?: unknown[]
+          parameter_contract?: { required?: unknown[]; optional?: unknown[] }
+          risk_flags?: unknown[]
+          admission_track?: string
           prompt_injection_audit?: { status?: string }
           runtime_permissions?: {
             session_actor_required?: boolean
@@ -154,18 +168,42 @@ export function createSkillService(opts: {
             network?: string
             shell?: string
             filesystem?: string
+            device?: string
           }
           final_disposition?: string
         }>
       }
       const authority = raw.authority
       const skills = raw.skills ?? []
+      const sourceId = raw.source?.id
+      const sourceProfile =
+        sourceId === 'internscience-scp-skills'
+          ? {
+              repository: 'https://github.com/InternScience/scp.git',
+              sourceKind: 'skill-document' as const,
+              network: 'denied-until-per-skill-admission',
+            }
+          : sourceId === 'snap-stanford-biomni'
+            ? {
+                repository: 'https://github.com/snap-stanford/Biomni.git',
+                sourceKind: 'tool-descriptor' as const,
+                network: 'denied-until-per-tool-admission',
+              }
+            : undefined
+      const directCallsDenied =
+        (sourceId === 'internscience-scp-skills' &&
+          authority?.direct_scp_hub_calls_admitted === false) ||
+        (sourceId === 'snap-stanford-biomni' &&
+          authority?.direct_upstream_calls_admitted === false)
       if (
         raw.schema_version !== 1 ||
+        !sourceProfile ||
+        raw.source?.repository !== sourceProfile.repository ||
+        !/^[0-9a-f]{40}$/.test(raw.source?.exact_commit ?? '') ||
         authority?.runtime_authority !== 'Rust SessionActor' ||
         authority.source_runtime_authority !== 'none' ||
         authority.catalog_is_executable !== false ||
-        authority.direct_scp_hub_calls_admitted !== false ||
+        !directCallsDenied ||
         authority.bulk_auto_approval !== false ||
         raw.summary?.approved !== 0 ||
         raw.summary?.total !== skills.length ||
@@ -182,17 +220,27 @@ export function createSkillService(opts: {
           ids.has(skill.skill_id) ||
           !skill.display_name ||
           !skill.description ||
-          !skill.source_repository ||
-          !/^[0-9a-f]{40}$/.test(skill.exact_commit ?? '') ||
+          skill.source_repository !== sourceProfile.repository ||
+          skill.exact_commit !== raw.source?.exact_commit ||
           !/^[0-9a-f]{64}$/.test(skill.source_sha256 ?? '') ||
+          (sourceProfile.sourceKind === 'tool-descriptor'
+            ? skill.source_kind !== 'tool-descriptor' ||
+              !Array.isArray(skill.parameter_contract?.required) ||
+              !Array.isArray(skill.parameter_contract.optional) ||
+              !Array.isArray(skill.risk_flags) ||
+              !skill.risk_flags.every((flag) => typeof flag === 'string') ||
+              !skill.admission_track
+            : skill.source_kind !== undefined) ||
           skill.final_disposition !== 'quarantined' ||
           skill.prompt_injection_audit?.status !== 'pending' ||
           permissions?.session_actor_required !== true ||
           permissions.may_call_lumen_tools_only !== true ||
           permissions.independent_execution_authority !== false ||
-          permissions.network !== 'denied-until-per-skill-admission' ||
+          permissions.network !== sourceProfile.network ||
           permissions.shell !== 'denied' ||
           permissions.filesystem !== 'denied' ||
+          (sourceProfile.sourceKind === 'tool-descriptor' &&
+            permissions.device !== 'denied') ||
           !Array.isArray(permissions.controlled_tools) ||
           permissions.controlled_tools.length !== 0
         ) {
@@ -204,6 +252,7 @@ export function createSkillService(opts: {
           displayName: skill.display_name,
           description: skill.description,
           discipline: skill.discipline || 'unclassified',
+          sourceKind: sourceProfile.sourceKind,
           sourceRepository: skill.source_repository,
           exactCommit: skill.exact_commit!,
           sourceSha256: skill.source_sha256!,
@@ -215,6 +264,19 @@ export function createSkillService(opts: {
           requiredUpstreamToolCount: Array.isArray(skill.required_upstream_tools)
             ? skill.required_upstream_tools.length
             : 0,
+          parameterCount:
+            (Array.isArray(skill.parameter_contract?.required)
+              ? skill.parameter_contract.required.length
+              : 0) +
+            (Array.isArray(skill.parameter_contract?.optional)
+              ? skill.parameter_contract.optional.length
+              : 0),
+          riskFlags: Array.isArray(skill.risk_flags)
+            ? skill.risk_flags.filter(
+                (flag): flag is string => typeof flag === 'string',
+              )
+            : [],
+          admissionTrack: skill.admission_track || 'per-skill-review',
           disposition: 'quarantined',
         }
       })
@@ -222,9 +284,41 @@ export function createSkillService(opts: {
     } catch (e: unknown) {
       return {
         candidates: [],
-        unavailable: `ecosystem skill catalog unreadable at ${opts.ecosystemCatalogPath}: ${(e as Error).message}`,
+        unavailable: `ecosystem skill catalog unreadable at ${catalogPath}: ${(e as Error).message}`,
       }
     }
+  }
+
+  function loadEcosystemCatalog(): {
+    candidates: EcosystemSkillCandidate[]
+    unavailable?: string
+  } {
+    const paths = [
+      ...(opts.ecosystemCatalogPaths ?? []),
+      ...(opts.ecosystemCatalogPath ? [opts.ecosystemCatalogPath] : []),
+    ].filter((value, index, values) => values.indexOf(value) === index)
+    if (paths.length === 0) return { candidates: [] }
+
+    const loaded = paths.map(loadOneEcosystemCatalog)
+    const errors = loaded
+      .map((catalog) => catalog.unavailable)
+      .filter((reason): reason is string => Boolean(reason))
+    if (errors.length > 0) {
+      return { candidates: [], unavailable: errors.join('; ') }
+    }
+
+    const candidates = loaded.flatMap((catalog) => catalog.candidates)
+    const ids = new Set<string>()
+    for (const candidate of candidates) {
+      if (ids.has(candidate.skillId)) {
+        return {
+          candidates: [],
+          unavailable: `ecosystem catalogs repeat candidate id: ${candidate.skillId}`,
+        }
+      }
+      ids.add(candidate.skillId)
+    }
+    return { candidates }
   }
 
   return {

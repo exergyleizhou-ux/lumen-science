@@ -47,6 +47,10 @@ const ECOSYSTEM_CATALOG = path.resolve(
   process.cwd(),
   '../../packs/science/skills/ecosystem/scp-catalog.json',
 )
+const BIOMNI_CATALOG = path.resolve(
+  process.cwd(),
+  '../../packs/science/skills/ecosystem/biomni-tool-catalog.json',
+)
 
 async function run() {
   // ── Pure import plan ─────────────────────────────────────────
@@ -152,7 +156,7 @@ async function run() {
   // ── Service + real registry ──────────────────────────────────
   const svc = createSkillService({
     registryPath: REGISTRY,
-    ecosystemCatalogPath: ECOSYSTEM_CATALOG,
+    ecosystemCatalogPaths: [ECOSYSTEM_CATALOG, BIOMNI_CATALOG],
   })
   clearTrustedPreviewContext()
   const invNoSession = svc.listInventory()
@@ -162,12 +166,12 @@ async function run() {
     strictEqual(invNoSession.summary.approved, 10)
     strictEqual(invNoSession.summary.pending, 17)
   })
-  await test('inventory exposes 207 ecosystem candidates as quarantine-only', () => {
-    strictEqual(invNoSession.ecosystem.summary.total, 207)
+  await test('inventory exposes all 431 ecosystem candidates as quarantine-only', () => {
+    strictEqual(invNoSession.ecosystem.summary.total, 431)
     strictEqual(invNoSession.ecosystem.summary.approved, 0)
-    strictEqual(invNoSession.ecosystem.summary.quarantined, 207)
-    strictEqual(invNoSession.summary.ecosystemQuarantined, 207)
-    strictEqual(invNoSession.ecosystem.candidates.length, 207)
+    strictEqual(invNoSession.ecosystem.summary.quarantined, 431)
+    strictEqual(invNoSession.summary.ecosystemQuarantined, 431)
+    strictEqual(invNoSession.ecosystem.candidates.length, 431)
     strictEqual(invNoSession.ecosystem.authority, 'catalog-only; Rust SessionActor required')
     ok(
       invNoSession.ecosystem.candidates.every(
@@ -184,6 +188,25 @@ async function run() {
     ok(!Object.hasOwn(candidate, 'runtimePermissions'))
     ok(!Object.hasOwn(candidate, 'requiredUpstreamTools'))
     ok(!Object.hasOwn(candidate, 'sourceEndpointsNotAdmitted'))
+  })
+  await test('Biomni descriptors expose typed discovery metadata, not execution', () => {
+    const biomni = invNoSession.ecosystem.candidates.filter(
+      (candidate) => candidate.sourceKind === 'tool-descriptor',
+    )
+    strictEqual(biomni.length, 224)
+    strictEqual(
+      invNoSession.ecosystem.candidates.filter(
+        (candidate) => candidate.sourceKind === 'skill-document',
+      ).length,
+      207,
+    )
+    const uniprot = biomni.find((candidate) => candidate.displayName === 'query_uniprot')
+    ok(uniprot)
+    ok(uniprot.parameterCount > 0)
+    ok(uniprot.riskFlags.includes('caller-supplied-network-target'))
+    ok(uniprot.candidateLumenRoutes.includes('x.ai/science/connector_fetch:uniprot'))
+    strictEqual(uniprot.admissionTrack, 'map-to-existing-lumen-connector')
+    ok(!Object.hasOwn(uniprot, 'parameterContract'))
   })
 
   const tamperDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lumen-scp-catalog-'))
@@ -270,7 +293,7 @@ async function run() {
     previewStore: new AcpPreviewStore(),
     skillService: svc,
     skillsRegistryPath: REGISTRY,
-    skillsEcosystemCatalogPath: ECOSYSTEM_CATALOG,
+    skillsEcosystemCatalogPaths: [ECOSYSTEM_CATALOG, BIOMNI_CATALOG],
   })
   await test('ipc registers skills channels', () => {
     ok(handlers.has('skills:list'))
@@ -281,7 +304,7 @@ async function run() {
   const listed = await listH({})
   await test('ipc list inventory', () => {
     strictEqual(listed.summary.approved, 10)
-    strictEqual(listed.ecosystem.summary.total, 207)
+    strictEqual(listed.ecosystem.summary.total, 431)
     strictEqual(listed.ecosystem.summary.approved, 0)
   })
 

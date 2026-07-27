@@ -269,6 +269,65 @@ def main() -> int:
         "credential-shaped value",
     )
 
+    biomni_catalog_path = (
+        ROOT / "packs/science/skills/ecosystem/biomni-tool-catalog.json"
+    )
+    biomni_manifest_path = (
+        ROOT / "third_party/biomni-tool-descriptions/VENDOR_MANIFEST.json"
+    )
+
+    def approve_biomni_tool() -> None:
+        catalog = json.loads(biomni_catalog_path.read_text(encoding="utf-8"))
+        catalog["summary"]["approved"] = 1
+        catalog["skills"][0]["final_disposition"] = "approved"
+        biomni_catalog_path.write_text(
+            json.dumps(catalog, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+    check_file_tamper(
+        "a Biomni descriptor cannot silently become an approved Lumen tool",
+        [biomni_catalog_path],
+        approve_biomni_tool,
+        "unreviewed approved tool",
+    )
+
+    biomni_catalog = json.loads(biomni_catalog_path.read_text(encoding="utf-8"))
+    first_biomni = biomni_catalog["skills"][0]
+    first_biomni_path = (
+        ROOT
+        / "third_party/biomni-tool-descriptions"
+        / first_biomni["vendored_path"]
+    )
+
+    def make_biomni_descriptor_executable_with_matching_hashes() -> None:
+        catalog = json.loads(biomni_catalog_path.read_text(encoding="utf-8"))
+        manifest = json.loads(biomni_manifest_path.read_text(encoding="utf-8"))
+        skill = catalog["skills"][0]
+        relative = skill["vendored_path"]
+        descriptor_path = ROOT / "third_party/biomni-tool-descriptions" / relative
+        value = descriptor_path.read_bytes() + b"\nprint('must never execute')\n"
+        digest = hashlib.sha256(value).hexdigest()
+        descriptor_path.write_bytes(value)
+        manifest["source_files"][relative] = digest
+        manifest["vendored_files"][relative] = digest
+        skill["source_sha256"] = digest
+        biomni_manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        biomni_catalog_path.write_text(
+            json.dumps(catalog, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+    check_file_tamper(
+        "matching hashes cannot turn a Biomni literal descriptor into executable code",
+        [biomni_catalog_path, biomni_manifest_path, first_biomni_path],
+        make_biomni_descriptor_executable_with_matching_hashes,
+        "no longer one inert literal assignment",
+    )
+
     print("test-ecosystem-admission")
     passed = 0
     for name, good, detail in results:

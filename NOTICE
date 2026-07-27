@@ -9,3 +9,10 @@ cea5398564032aea65a78e246d06c30ae945e03f, licensed under MIT.
 See third_party/internscience-scp/LICENSE, NOTICE.md, VENDOR_MANIFEST.json, and
 third_party/provenance/internscience-scp.md. Embedded remote endpoints and
 execution examples are not admitted product capabilities.
+
+Lumen Science includes the literal tool-description modules from Biomni at
+commit 400c1f366b96a35ca253e13c9b06c5076af41d65, licensed under Apache
+License 2.0. See third_party/biomni-tool-descriptions/LICENSE, NOTICE.md,
+VENDOR_MANIFEST.json, and third_party/provenance/biomni-tool-descriptions.md.
+The Biomni agent runtime, Python/R/Bash execution, downloaded datasets,
+pickled schemas, and device control are not included or authorized.

@@ -10,11 +10,15 @@ const candidate: EcosystemSkillCandidate = {
   displayName: 'clinical_trial_search',
   description: 'Find registered clinical trials for a disease.',
   discipline: 'Clinical Research',
+  sourceKind: 'skill-document',
   sourceRepository: 'https://github.com/InternScience/scp.git',
   exactCommit: 'a'.repeat(40),
   sourceSha256: 'b'.repeat(64),
   candidateLumenRoutes: ['candidate-connector:clinicaltrials-gov'],
   requiredUpstreamToolCount: 1,
+  parameterCount: 0,
+  riskFlags: ['network-or-download'],
+  admissionTrack: 'new-lumen-connector',
   disposition: 'quarantined',
 }
 
@@ -68,9 +72,11 @@ describe('ecosystem skill catalog', () => {
     expect(parsed.ok).toBe(false)
   })
 
-  it('searches name, discipline, description, and candidate Lumen routes', () => {
+  it('searches name, discipline, risk, admission track, and candidate routes', () => {
     expect(filterEcosystemSkills([candidate], 'clinical trial')).toEqual([candidate])
     expect(filterEcosystemSkills([candidate], 'clinicaltrials-gov')).toEqual([candidate])
+    expect(filterEcosystemSkills([candidate], 'network-or-download')).toEqual([candidate])
+    expect(filterEcosystemSkills([candidate], 'new-lumen-connector')).toEqual([candidate])
     expect(filterEcosystemSkills([candidate], 'genomics')).toEqual([])
   })
 })

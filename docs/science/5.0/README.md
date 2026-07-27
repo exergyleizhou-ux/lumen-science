@@ -72,7 +72,9 @@ InternScience/SCP skill catalog are admitted through the component-level
 [`ecosystem-admission.lock.json`](ecosystem-admission.lock.json). The lock
 preserves the existing Science authority foundation, pins exact source and
 license hashes, rejects peer runtimes and restricted nested licenses, and
-keeps all unreviewed skills/data quarantined.
+keeps all unreviewed skills/data quarantined. The current local discovery
+surface contains 207 SCP skill documents plus 224 Biomni tool descriptors:
+431 searchable candidates, zero newly approved.
 
 ## Quick start (WP-2～8 CLI surface)
 

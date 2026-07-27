@@ -104,6 +104,8 @@ export type ScienceIpcDeps = {
   skillsRegistryPath?: string
   /** Read-only ecosystem skill catalog; entries remain quarantined. */
   skillsEcosystemCatalogPath?: string
+  /** Complete set of read-only ecosystem catalogs; all must validate. */
+  skillsEcosystemCatalogPaths?: string[]
   /** Optional inject compute service (tests). */
   computeService?: ComputeService
   /** Path to docs/science/fusion-sources.lock.json */
@@ -586,8 +588,18 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
         deps.skillsRegistryPath ||
         path.resolve(process.cwd(), '../../packs/science/skills/registry.json'),
       ecosystemCatalogPath:
-        deps.skillsEcosystemCatalogPath ||
-        path.resolve(process.cwd(), '../../packs/science/skills/ecosystem/scp-catalog.json'),
+        deps.skillsEcosystemCatalogPath,
+      ecosystemCatalogPaths:
+        deps.skillsEcosystemCatalogPaths ?? [
+          path.resolve(
+            process.cwd(),
+            '../../packs/science/skills/ecosystem/scp-catalog.json',
+          ),
+          path.resolve(
+            process.cwd(),
+            '../../packs/science/skills/ecosystem/biomni-tool-catalog.json',
+          ),
+        ],
     })
 
   safeHandle(ipcMain, 'skills:list', async () => skills.listInventory())
