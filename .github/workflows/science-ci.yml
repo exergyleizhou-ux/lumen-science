@@ -210,6 +210,9 @@ jobs:
             test_stdio_science_project_migrate_is_actor_gated_and_idempotent
             test_stdio_science_project_migrate_refusal_writes_no_project
             test_stdio_science_project_migrate_requires_migration_chain_gate
+            test_stdio_science_project_migrate_timeout_writes_no_project
+            test_stdio_science_project_migrate_allow_rejects_source_tamper
+            test_stdio_science_project_migrate_recovers_journal_before_copy
             test_stdio_science_review_record_is_actor_gated_artifact_bound_and_idempotent
             test_stdio_science_review_record_denied_writes_no_review_or_artifact
             test_stdio_science_kernel_admission_is_actor_gated_and_store_owned

@@ -969,7 +969,7 @@ impl SessionActor {
         &self,
         store: xai_grok_science::ScienceStore,
         project_root: std::path::PathBuf,
-        context: xai_grok_science::RunContext,
+        mut context: xai_grok_science::RunContext,
         mut request: xai_grok_science::project::MutationRequest,
     ) -> xai_grok_science::Result<PreparedScienceProjectMutation> {
         // Session binding: the actor only mutates on behalf of its own session.
@@ -999,6 +999,11 @@ impl SessionActor {
             std::path::Path::new(&self.session_info.cwd),
         )?
         .with_gates(gates.clone());
+        if !store.shares_root_capability_with(&project_store)? {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "science and project stores do not retain the same root capability".into(),
+            ));
+        }
 
         // Project binding: the run context must name the project actually
         // being mutated, so the durable record cannot point at another one.
@@ -1054,10 +1059,169 @@ impl SessionActor {
             }
         }
 
-        let target = match request.mutation.target_project() {
+        // A completed migration replay is verified entirely from the
+        // target-owned authority run, project records and commit journal. It
+        // must not depend on the legacy source still being present after the
+        // migration has made an independent copy.
+        if matches!(
+            request.mutation,
+            xai_grok_science::project::ProjectMutation::ProjectMigrate { .. }
+        ) && let Some(record) = project_store.lookup_operation(&request.operation_id)?
+        {
+            record.verify_replay(&request)?;
+            let outcome = xai_grok_science::project::MutationOutcome {
+                operation_id: record.operation_id,
+                kind: record.kind,
+                project_id: record.project_id,
+                revision: record.revision,
+                result: record.result,
+                replayed: true,
+            };
+            let outcome =
+                recover_migration_authority_if_needed(&store, &project_store, &request, &outcome)?;
+            let result: xai_grok_science::project::MigrationResult =
+                serde_json::from_value(outcome.result.clone())?;
+            return Ok(PreparedScienceProjectMutation {
+                store,
+                project_store,
+                ticket: xai_grok_science::csv::ScienceRunTicket {
+                    project_id: xai_grok_science::ProjectId::new(outcome.project_id.0.clone()),
+                    run_id: xai_grok_science::RunId::new(result.authority_run_id),
+                    owner_id: request.owner_id.clone(),
+                    call_id: xai_grok_science::CallId::new("science_project_mutation"),
+                },
+                request,
+                migration_admission: None,
+                target: format!(
+                    "{}/projects/{} (verified migration replay)",
+                    project_root.display(),
+                    outcome.project_id.0
+                ),
+                replayed: Some(outcome),
+            });
+        }
+
+        // The project journal is written before the generic operation ledger.
+        // If a process stopped in that window, recover the original
+        // target/authority run without opening a second run or permission
+        // prompt.
+        if matches!(
+            request.mutation,
+            xai_grok_science::project::ProjectMutation::ProjectMigrate { .. }
+        ) && let Some(commit) = project_store.lookup_migration_commit(&request.operation_id)?
+        {
+            commit.verify()?;
+            if commit.request_sha256 != request.replay_fingerprint()? {
+                return Err(xai_grok_science::ScienceError::Invalid(
+                    "migration recovery journal does not match this request".into(),
+                ));
+            }
+            let result = xai_grok_science::project::MigrationResult::from_commit(&commit)?;
+            let xai_grok_science::project::ProjectMutation::ProjectMigrate {
+                authority_run_id, ..
+            } = &mut request.mutation
+            else {
+                unreachable!("migration journal branch checked above");
+            };
+            *authority_run_id = result.authority_run_id.clone();
+            let authority_id = xai_grok_science::RunId::new(&result.authority_run_id);
+            let authority = store.load_run(&authority_id)?;
+            if xai_grok_science::project::MigrationRecoveryGrant::verify(&store, &commit).is_err() {
+                if authority.state != xai_grok_science::RunState::Running {
+                    return Err(xai_grok_science::ScienceError::Invalid(
+                        "incomplete migration journal is not recoverable from a terminal authority run"
+                            .into(),
+                    ));
+                }
+                let bundle = commit
+                    .admission
+                    .authorize_after_allow(&store, &authority.context)?;
+                let ticket = xai_grok_science::csv::ScienceRunTicket {
+                    project_id: authority.context.project_id.clone(),
+                    run_id: authority_id,
+                    owner_id: authority.context.owner_id.clone(),
+                    call_id: xai_grok_science::CallId::new("science_project_mutation"),
+                };
+                ensure_migration_target_artifacts(&store, &ticket, &bundle)?;
+            }
+            let outcome = xai_grok_science::project::MutationOutcome {
+                operation_id: request.operation_id.clone(),
+                kind: "project_migrate".into(),
+                project_id: result.target_project_id.clone(),
+                revision: String::new(),
+                result: serde_json::to_value(&result)?,
+                replayed: true,
+            };
+            let outcome =
+                recover_migration_authority_if_needed(&store, &project_store, &request, &outcome)?;
+            return Ok(PreparedScienceProjectMutation {
+                store,
+                project_store,
+                ticket: xai_grok_science::csv::ScienceRunTicket {
+                    project_id: xai_grok_science::ProjectId::new(outcome.project_id.0.clone()),
+                    run_id: xai_grok_science::RunId::new(result.authority_run_id),
+                    owner_id: request.owner_id.clone(),
+                    call_id: xai_grok_science::CallId::new("science_project_mutation"),
+                },
+                request,
+                migration_admission: None,
+                target: format!(
+                    "{}/projects/{} (recovered migration commit)",
+                    project_root.display(),
+                    outcome.project_id.0
+                ),
+                replayed: Some(outcome),
+            });
+        }
+
+        let migration_admission = match &request.mutation {
+            xai_grok_science::project::ProjectMutation::ProjectMigrate {
+                source_run_id,
+                title,
+                research_question,
+                authority_run_id,
+            } => {
+                let target = request.migration_target_project_id()?.ok_or_else(|| {
+                    xai_grok_science::ScienceError::Invalid(
+                        "project migration has no deterministic target".into(),
+                    )
+                })?;
+                if context.project_id.0 != target.0 || context.run_id.0 != *authority_run_id {
+                    return Err(xai_grok_science::ScienceError::Ownership);
+                }
+                let admission = xai_grok_science::project::MigrationAdmission::capture(
+                    &store,
+                    &context,
+                    xai_grok_science::RunId::new(source_run_id),
+                    request.operation_id.clone(),
+                    target,
+                    xai_grok_science::RunId::new(authority_run_id),
+                    title,
+                    research_question,
+                )?;
+                context.environment.insert(
+                    "project_migration_admission_sha256".into(),
+                    admission.sha256()?,
+                );
+                Some(admission)
+            }
+            _ => None,
+        };
+
+        let mut target = match request.mutation.target_project() {
             Some(project_id) => format!("{}/projects/{}", project_root.display(), project_id.0),
             None => format!("{}/projects", project_root.display()),
         };
+        if let Some(admission) = &migration_admission {
+            let digest = admission.sha256()?;
+            target = format!(
+                "{} (migrate run {} as project {}; admission sha256:{})",
+                target,
+                admission.source_run_id().0,
+                admission.target_project_id().0,
+                digest
+            );
+        }
 
         // Idempotent replay: already applied, so no run and no second prompt.
         if let Some(record) = project_store.lookup_operation(&request.operation_id)? {
@@ -1071,27 +1235,39 @@ impl SessionActor {
                 }
                 project_store.verify_review_record(&review)?;
             }
+            let outcome = xai_grok_science::project::MutationOutcome {
+                operation_id: record.operation_id,
+                kind: record.kind,
+                project_id: record.project_id,
+                revision: record.revision,
+                result: record.result,
+                replayed: true,
+            };
+            if outcome.kind == "project_migrate" {
+                verify_migration_replay(&store, &project_store, &request, &outcome)?;
+            }
+            let replay_run_id = if outcome.kind == "project_migrate" {
+                let migration: xai_grok_science::project::MigrationResult =
+                    serde_json::from_value(outcome.result.clone())?;
+                xai_grok_science::RunId::new(migration.authority_run_id)
+            } else {
+                context.run_id.clone()
+            };
             return Ok(PreparedScienceProjectMutation {
                 store,
                 project_store,
                 ticket: xai_grok_science::csv::ScienceRunTicket {
                     // The run ticket uses the kernel's ProjectId; the record
                     // carries the project-model one.
-                    project_id: xai_grok_science::ProjectId::new(record.project_id.0.clone()),
-                    run_id: context.run_id.clone(),
-                    owner_id: record.owner_id.clone(),
+                    project_id: xai_grok_science::ProjectId::new(outcome.project_id.0.clone()),
+                    run_id: replay_run_id,
+                    owner_id: request.owner_id.clone(),
                     call_id: xai_grok_science::CallId::new("science_project_mutation"),
                 },
                 request,
+                migration_admission: None,
                 target,
-                replayed: Some(xai_grok_science::project::MutationOutcome {
-                    operation_id: record.operation_id,
-                    kind: record.kind,
-                    project_id: record.project_id,
-                    revision: record.revision,
-                    result: record.result,
-                    replayed: true,
-                }),
+                replayed: Some(outcome),
             });
         }
 
@@ -1118,6 +1294,7 @@ impl SessionActor {
                     call_id: xai_grok_science::CallId::new("science_project_mutation"),
                 },
                 request,
+                migration_admission: None,
                 target,
                 replayed: Some(xai_grok_science::project::MutationOutcome {
                     replayed: true,
@@ -1126,17 +1303,119 @@ impl SessionActor {
             });
         }
 
-        let ticket = begin_project_mutation_run(
-            &store,
-            context,
-            request.mutation.kind(),
-            &request.operation_id,
-        )?;
+        let mut resumed_ticket = None;
+        if let Some(admission) = migration_admission.as_ref()
+            && let Some(existing) = store.load_run_optional(&context.run_id)?
+        {
+            use xai_grok_science::{Approval, ApprovalDecision, CallId, RunState, ScienceError};
+
+            if existing.context != context {
+                return Err(ScienceError::Ownership);
+            }
+            let ticket = xai_grok_science::csv::ScienceRunTicket {
+                project_id: context.project_id.clone(),
+                run_id: context.run_id.clone(),
+                owner_id: context.owner_id.clone(),
+                call_id: CallId::new("science_project_mutation"),
+            };
+            let mut approvals = store.approvals(&ticket.run_id)?;
+            if existing.state == RunState::Created && approvals.is_empty() {
+                store.append_event(
+                    &ticket.run_id,
+                    "SessionActor",
+                    "migration.begin.recovered",
+                    serde_json::json!({
+                        "operation_id": request.operation_id,
+                        "migration_admission_sha256": admission.sha256()?,
+                    }),
+                )?;
+                store.request_approval(Approval {
+                    project_id: ticket.project_id.clone(),
+                    run_id: ticket.run_id.clone(),
+                    call_id: ticket.call_id.clone(),
+                    owner_id: ticket.owner_id.clone(),
+                    decision: ApprovalDecision::Pending,
+                    decided_at: None,
+                })?;
+                approvals = store.approvals(&ticket.run_id)?;
+            }
+            let [approval] = approvals.as_slice() else {
+                return Err(ScienceError::Invalid(
+                    "resumed migration authority requires exactly one approval".into(),
+                ));
+            };
+            if approval.project_id != ticket.project_id
+                || approval.run_id != ticket.run_id
+                || approval.owner_id != ticket.owner_id
+                || approval.call_id != ticket.call_id
+            {
+                return Err(ScienceError::Ownership);
+            }
+            match existing.state {
+                RunState::Created if approval.decision == ApprovalDecision::Pending => {
+                    store.transition(&ticket.run_id, RunState::AwaitingApproval, None)?;
+                    resumed_ticket = Some(ticket);
+                }
+                RunState::AwaitingApproval
+                    if approval.decision == ApprovalDecision::Pending
+                        && approval.decided_at.is_none() =>
+                {
+                    resumed_ticket = Some(ticket);
+                }
+                RunState::Running
+                    if approval.decision == ApprovalDecision::Allow
+                        && approval.decided_at.is_some() =>
+                {
+                    let outcome = self.finish_science_project_mutation(
+                        PreparedScienceProjectMutation {
+                            store: store.clone(),
+                            project_store: project_store.clone(),
+                            ticket: ticket.clone(),
+                            request: request.clone(),
+                            migration_admission: Some(admission.clone()),
+                            target: target.clone(),
+                            replayed: None,
+                        },
+                        ApprovalDecision::Allow,
+                        "resuming original durable migration authority".into(),
+                    )?;
+                    return Ok(PreparedScienceProjectMutation {
+                        store,
+                        project_store,
+                        ticket,
+                        request,
+                        migration_admission: None,
+                        target,
+                        replayed: Some(xai_grok_science::project::MutationOutcome {
+                            replayed: true,
+                            ..outcome
+                        }),
+                    });
+                }
+                state => {
+                    return Err(ScienceError::Invalid(format!(
+                        "migration authority {} cannot resume from {state:?}/{:?}",
+                        ticket.run_id.0, approval.decision
+                    )));
+                }
+            }
+        }
+
+        let ticket = match resumed_ticket {
+            Some(ticket) => ticket,
+            None => begin_project_mutation_run(
+                &store,
+                context,
+                request.mutation.kind(),
+                &request.operation_id,
+            )?,
+        };
         Ok(PreparedScienceProjectMutation {
             store,
             project_store,
             ticket,
             request,
+            migration_admission,
             target,
             replayed: None,
         })
@@ -1166,8 +1445,96 @@ impl SessionActor {
                 prepared.ticket.run_id.0, terminal.state
             )));
         }
-        xai_grok_science::csv::mark_allowed(&prepared.store, &prepared.ticket)?;
-        let outcome = match prepared.project_store.apply_mutation(&prepared.request) {
+        let authority_before_finish = prepared.store.load_run(&prepared.ticket.run_id)?;
+        if authority_before_finish.state == xai_grok_science::RunState::AwaitingApproval {
+            xai_grok_science::csv::mark_allowed(&prepared.store, &prepared.ticket)?;
+        } else if prepared.migration_admission.is_none()
+            || authority_before_finish.state != xai_grok_science::RunState::Running
+        {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "project mutation Allow requires AwaitingApproval, or the original Running migration authority during crash recovery".into(),
+            ));
+        }
+        let mut migrated_paths = Vec::new();
+        let migration_bundle = match prepared.migration_admission.as_ref() {
+            Some(admission) => {
+                let authority = prepared.store.load_run(&prepared.ticket.run_id)?;
+                if authority
+                    .context
+                    .environment
+                    .get("project_migration_admission_sha256")
+                    != Some(&admission.sha256()?)
+                {
+                    let error = xai_grok_science::ScienceError::Invalid(
+                        "migration authority run is not bound to its admitted source digest".into(),
+                    );
+                    let _ = xai_grok_science::csv::fail_running(
+                        &prepared.store,
+                        &prepared.ticket,
+                        error.to_string(),
+                    );
+                    return Err(error);
+                }
+                let bundle =
+                    match admission.authorize_after_allow(&prepared.store, &authority.context) {
+                        Ok(bundle) => bundle,
+                        Err(error) => {
+                            let _ = xai_grok_science::csv::fail_running(
+                                &prepared.store,
+                                &prepared.ticket,
+                                format!("migration source revalidation failed: {error}"),
+                            );
+                            return Err(error);
+                        }
+                    };
+                if let Err(error) = prepared.project_store.admit_actor_migration(
+                    &prepared.request,
+                    admission,
+                    &bundle,
+                ) {
+                    let _ = xai_grok_science::csv::fail_running(
+                        &prepared.store,
+                        &prepared.ticket,
+                        format!("migration journal admission failed: {error}"),
+                    );
+                    return Err(error);
+                }
+                migrated_paths = match ensure_migration_target_artifacts(
+                    &prepared.store,
+                    &prepared.ticket,
+                    &bundle,
+                ) {
+                    Ok(paths) => paths,
+                    Err(error) => {
+                        let _ = prepared.store.append_recoverable_commit_event(
+                            &prepared.ticket.run_id,
+                            "SessionActor",
+                            "migration.commit.interrupted",
+                            serde_json::json!({
+                                "operation_id": prepared.request.operation_id,
+                                "reason": error.to_string(),
+                                "stage": "target-artifact-copy",
+                            }),
+                        );
+                        return Err(error);
+                    }
+                };
+                Some(bundle)
+            }
+            None => None,
+        };
+        let outcome = match migration_bundle.as_ref() {
+            Some(bundle) => prepared.project_store.apply_actor_migration(
+                &prepared.request,
+                prepared
+                    .migration_admission
+                    .as_ref()
+                    .expect("migration bundle requires its admission"),
+                bundle,
+            ),
+            None => prepared.project_store.apply_mutation(&prepared.request),
+        };
+        let outcome = match outcome {
             Ok(outcome) => outcome,
             Err(error) => {
                 if review_apply_error_may_have_committed(&prepared.project_store, &prepared.request)
@@ -1184,6 +1551,23 @@ impl SessionActor {
                     );
                     return Err(error);
                 }
+                if migration_apply_error_may_have_committed(
+                    &prepared.project_store,
+                    &prepared.request,
+                ) {
+                    let _ = prepared.store.append_recoverable_commit_event(
+                        &prepared.ticket.run_id,
+                        "SessionActor",
+                        "migration.commit.interrupted",
+                        serde_json::json!({
+                            "operation_id": prepared.request.operation_id,
+                            "reason": error.to_string(),
+                            "stage": "project-ledger",
+                        }),
+                    );
+                    return Err(error);
+                }
+                rollback_migration_outputs(&prepared.store, &prepared.ticket, &migrated_paths);
                 let _ = xai_grok_science::csv::fail_running(
                     &prepared.store,
                     &prepared.ticket,
@@ -1192,6 +1576,27 @@ impl SessionActor {
                 return Err(error);
             }
         };
+        if migration_bundle.is_some()
+            && let Err(error) = persist_migration_mutation_evidence(
+                &prepared.store,
+                &prepared.project_store,
+                &prepared.ticket,
+                &prepared.request,
+                &outcome,
+            )
+        {
+            let _ = prepared.store.append_recoverable_commit_event(
+                &prepared.ticket.run_id,
+                "SessionActor",
+                "migration.commit.interrupted",
+                serde_json::json!({
+                    "operation_id": outcome.operation_id,
+                    "reason": error.to_string(),
+                    "stage": "science-evidence",
+                }),
+            );
+            return Err(error);
+        }
         let review =
             match persist_review_mutation_evidence(&prepared.store, &prepared.ticket, &outcome) {
                 Ok(review) => review,
@@ -1773,6 +2178,10 @@ fn begin_project_mutation_run(
     kind: &str,
     operation_id: &str,
 ) -> xai_grok_science::Result<xai_grok_science::csv::ScienceRunTicket> {
+    let migration_admission_sha256 = context
+        .environment
+        .get("project_migration_admission_sha256")
+        .cloned();
     let ticket = xai_grok_science::csv::ScienceRunTicket {
         project_id: context.project_id.clone(),
         run_id: context.run_id.clone(),
@@ -1787,6 +2196,7 @@ fn begin_project_mutation_run(
         serde_json::json!({
             "mutation": kind,
             "operation_id": operation_id,
+            "migration_admission_sha256": migration_admission_sha256,
         }),
     )?;
     store.request_approval(xai_grok_science::Approval {
@@ -1803,6 +2213,575 @@ fn begin_project_mutation_run(
         None,
     )?;
     Ok(ticket)
+}
+
+fn rollback_migration_outputs(
+    store: &xai_grok_science::ScienceStore,
+    ticket: &xai_grok_science::csv::ScienceRunTicket,
+    paths: &[std::path::PathBuf],
+) {
+    let path_refs = paths
+        .iter()
+        .map(std::path::PathBuf::as_path)
+        .collect::<Vec<_>>();
+    if let Err(error) = store.discard_running_outputs(
+        &ticket.project_id,
+        &ticket.run_id,
+        &ticket.owner_id,
+        &ticket.call_id,
+        &path_refs,
+    ) {
+        tracing::warn!(
+            run_id = %ticket.run_id.0,
+            "failed to roll back migration outputs: {error}"
+        );
+    }
+}
+
+/// Idempotently materialize the journaled source bundle into the original
+/// Running+Allow authority run.
+///
+/// Existing paths are reopened through `ScienceStore` and byte-verified;
+/// missing paths are copied. This is used both by the first Finish and by a
+/// retry after a stop during target copying.
+fn ensure_migration_target_artifacts(
+    store: &xai_grok_science::ScienceStore,
+    ticket: &xai_grok_science::csv::ScienceRunTicket,
+    bundle: &xai_grok_science::project::VerifiedMigrationBundle,
+) -> xai_grok_science::Result<Vec<std::path::PathBuf>> {
+    use sha2::Digest as _;
+    use xai_grok_science::ScienceError;
+
+    let existing = store.artifacts(&ticket.run_id)?;
+    for registered in &existing {
+        if registered.relative_path == std::path::Path::new("migration.json") {
+            continue;
+        }
+        let Some((expected, expected_bytes)) = bundle
+            .artifacts()
+            .find(|(artifact, _)| artifact.target_relative_path == registered.relative_path)
+        else {
+            return Err(ScienceError::Invalid(
+                "migration authority contains an unexpected target artifact".into(),
+            ));
+        };
+        if registered.call_id != ticket.call_id
+            || registered.sha256 != expected.sha256
+            || registered.bytes != expected.bytes
+            || registered.mime != expected.mime
+            || registered.preview != expected.preview
+        {
+            return Err(ScienceError::Invalid(
+                "migration authority artifact registry differs from its journal".into(),
+            ));
+        }
+        let reopened = store.allowed_running_artifact_bytes(
+            &ticket.project_id,
+            &ticket.run_id,
+            &ticket.owner_id,
+            &ticket.call_id,
+            &registered.relative_path,
+        )?;
+        if reopened.as_slice() != expected_bytes
+            || format!("{:x}", sha2::Sha256::digest(&reopened)) != expected.sha256
+        {
+            return Err(ScienceError::Invalid(
+                "migration authority target bytes differ from their journal".into(),
+            ));
+        }
+    }
+
+    let mut paths = Vec::with_capacity(bundle.artifact_records().len());
+    for (artifact, bytes) in bundle.artifacts() {
+        paths.push(artifact.target_relative_path.clone());
+        if existing
+            .iter()
+            .any(|registered| registered.relative_path == artifact.target_relative_path)
+        {
+            continue;
+        }
+        let copied = store.put_artifact(
+            &ticket.project_id,
+            &ticket.run_id,
+            &ticket.owner_id,
+            ticket.call_id.clone(),
+            &artifact.target_relative_path,
+            bytes,
+            artifact.mime.clone(),
+            artifact.preview.clone(),
+        )?;
+        if copied.sha256 != artifact.sha256 || copied.bytes != artifact.bytes {
+            return Err(ScienceError::Invalid(
+                "migration copy changed artifact digest or length".into(),
+            ));
+        }
+    }
+    Ok(paths)
+}
+
+fn migration_apply_error_may_have_committed(
+    project_store: &xai_grok_science::project::ProjectStore,
+    request: &xai_grok_science::project::MutationRequest,
+) -> bool {
+    if !matches!(
+        request.mutation,
+        xai_grok_science::project::ProjectMutation::ProjectMigrate { .. }
+    ) {
+        return false;
+    }
+    // Once the journal exists the target may be partially or fully published.
+    // Failing the authority run would make the only safe recovery capability
+    // terminal, so preserve Running and let an exact retry resume it.
+    match project_store.lookup_migration_commit(&request.operation_id) {
+        Ok(Some(commit)) => {
+            commit.verify().is_ok()
+                && commit.request_sha256 == request.replay_fingerprint().unwrap_or_default()
+        }
+        Ok(None) => false,
+        Err(_) => true,
+    }
+}
+
+fn verify_migration_replay(
+    store: &xai_grok_science::ScienceStore,
+    project_store: &xai_grok_science::project::ProjectStore,
+    request: &xai_grok_science::project::MutationRequest,
+    outcome: &xai_grok_science::project::MutationOutcome,
+) -> xai_grok_science::Result<()> {
+    use xai_grok_science::{ApprovalDecision, RunId, RunState, ScienceError};
+
+    let result: xai_grok_science::project::MigrationResult =
+        serde_json::from_value(outcome.result.clone())?;
+    let commit = project_store
+        .lookup_migration_commit(&request.operation_id)?
+        .ok_or_else(|| {
+            xai_grok_science::ScienceError::Invalid(format!(
+                "migration commit {} is missing",
+                request.operation_id
+            ))
+        })?;
+    commit.verify()?;
+    if commit.request_sha256 != request.replay_fingerprint()?
+        || xai_grok_science::project::MigrationResult::from_commit(&commit)? != result
+    {
+        return Err(xai_grok_science::ScienceError::Invalid(
+            "migration recovery outcome differs from its durable commit".into(),
+        ));
+    }
+    if outcome.project_id != result.target_project_id
+        || outcome.project_id != commit.manifest.target_project_id
+    {
+        return Err(ScienceError::Ownership);
+    }
+    let authority_run_id = RunId::new(&result.authority_run_id);
+    let authority = store.load_run(&authority_run_id)?;
+    if authority.state != RunState::Succeeded
+        || authority.context.run_id != authority_run_id
+        || authority.context.project_id.0 != result.target_project_id.0
+        || authority.context.owner_id != request.owner_id
+        || authority.context.session_id != request.session_id
+        || authority.context.workspace_root.as_path() != commit.admission.workspace_root()
+        || authority.context.artifact_root.as_path() != commit.admission.artifact_root()
+        || authority
+            .context
+            .environment
+            .get("project_migration_admission_sha256")
+            != Some(&result.admission_sha256)
+    {
+        return Err(ScienceError::Ownership);
+    }
+    let approvals = store.approvals(&authority_run_id)?;
+    let [approval] = approvals.as_slice() else {
+        return Err(ScienceError::Invalid(
+            "migration replay requires exactly one authority approval".into(),
+        ));
+    };
+    if approval.project_id.0 != result.target_project_id.0
+        || approval.run_id != authority_run_id
+        || approval.owner_id != request.owner_id
+        || approval.call_id.0 != "science_project_mutation"
+        || approval.decision != ApprovalDecision::Allow
+        || approval.decided_at.is_none()
+    {
+        return Err(ScienceError::Invalid(
+            "migration replay is not backed by the original durable Allow".into(),
+        ));
+    }
+
+    let artifacts = store.artifacts(&authority_run_id)?;
+    if artifacts.len() != commit.manifest.artifacts.len() + 1 {
+        return Err(ScienceError::Invalid(
+            "migration replay artifact registry has unexpected entries".into(),
+        ));
+    }
+    for artifact in &commit.manifest.artifacts {
+        let registered = artifacts
+            .iter()
+            .find(|registered| registered.relative_path == artifact.target_relative_path)
+            .ok_or_else(|| {
+                ScienceError::Invalid(
+                    "migration replay target artifact is missing from its registry".into(),
+                )
+            })?;
+        if registered.run_id != authority_run_id
+            || registered.call_id.0 != "science_project_mutation"
+            || registered.sha256 != artifact.sha256
+            || registered.bytes != artifact.bytes
+            || registered.mime != artifact.mime
+            || registered.preview != artifact.preview
+        {
+            return Err(ScienceError::Invalid(
+                "migration replay target artifact metadata differs from its manifest".into(),
+            ));
+        }
+        let bytes = store.artifact_bytes(
+            &authority.context.project_id,
+            &authority_run_id,
+            &request.owner_id,
+            &artifact.target_relative_path,
+        )?;
+        if bytes.len() as u64 != artifact.bytes
+            || format!("{:x}", sha2::Sha256::digest(&bytes)) != artifact.sha256
+        {
+            return Err(ScienceError::Invalid(
+                "migration replay target artifact failed byte verification".into(),
+            ));
+        }
+    }
+    let manifest_bytes = store.artifact_bytes(
+        &authority.context.project_id,
+        &authority_run_id,
+        &request.owner_id,
+        std::path::Path::new("migration.json"),
+    )?;
+    if manifest_bytes != serde_json::to_vec(&commit.manifest)?
+        || format!("{:x}", sha2::Sha256::digest(&manifest_bytes)) != result.manifest_sha256
+    {
+        return Err(ScienceError::Invalid(
+            "migration replay manifest artifact failed byte verification".into(),
+        ));
+    }
+    let manifest_record = artifacts
+        .iter()
+        .find(|artifact| artifact.relative_path == std::path::Path::new("migration.json"))
+        .ok_or_else(|| {
+            ScienceError::Invalid(
+                "migration replay manifest is missing from its artifact registry".into(),
+            )
+        })?;
+    if manifest_record.run_id != authority_run_id
+        || manifest_record.call_id.0 != "science_project_mutation"
+        || manifest_record.sha256 != result.manifest_sha256
+        || manifest_record.bytes != manifest_bytes.len() as u64
+        || manifest_record.mime != "application/json"
+        || manifest_record.preview
+            != format!(
+                "Verified migration {} → {}",
+                result.source_run_id, result.target_project_id.0
+            )
+    {
+        return Err(ScienceError::Invalid(
+            "migration replay manifest registry metadata differs from its commit".into(),
+        ));
+    }
+    let evidence = store.evidence(&authority_run_id)?;
+    let provenance = store.provenance(&authority_run_id)?;
+    let expected_evidence =
+        expected_migration_evidence(&authority_run_id, outcome, &result, &commit.manifest);
+    let expected_provenance = expected_migration_provenance(
+        &authority_run_id,
+        outcome,
+        &result,
+        &commit.admission,
+        &commit.manifest,
+    )?;
+    if evidence != expected_evidence || provenance != expected_provenance {
+        return Err(ScienceError::Invalid(
+            "migration replay evidence or provenance differs from its durable manifest".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn recover_migration_authority_if_needed(
+    store: &xai_grok_science::ScienceStore,
+    project_store: &xai_grok_science::project::ProjectStore,
+    request: &xai_grok_science::project::MutationRequest,
+    outcome: &xai_grok_science::project::MutationOutcome,
+) -> xai_grok_science::Result<xai_grok_science::project::MutationOutcome> {
+    use xai_grok_science::RunState;
+
+    let result: xai_grok_science::project::MigrationResult =
+        serde_json::from_value(outcome.result.clone())?;
+    // Recovery starts from the journal, not from the published project.
+    // `verify_migration_result` requires the project commit marker, graph,
+    // registry and manifest to be complete, which is exactly what can be
+    // missing after a stop between journal admission and project publication.
+    // Verify the immutable journal/request/result tuple first; the actor-owned
+    // recovery path republishes missing project records, then the full replay
+    // verifier below proves the completed state before returning.
+    let commit = project_store
+        .lookup_migration_commit(&request.operation_id)?
+        .ok_or_else(|| {
+            xai_grok_science::ScienceError::Invalid(format!(
+                "migration commit {} is missing",
+                request.operation_id
+            ))
+        })?;
+    commit.verify()?;
+    if commit.request_sha256 != request.replay_fingerprint()?
+        || xai_grok_science::project::MigrationResult::from_commit(&commit)? != result
+    {
+        return Err(xai_grok_science::ScienceError::Invalid(
+            "migration recovery outcome differs from its durable journal".into(),
+        ));
+    }
+    let grant = xai_grok_science::project::MigrationRecoveryGrant::verify(store, &commit)?;
+    let ticket = xai_grok_science::csv::ScienceRunTicket {
+        project_id: xai_grok_science::ProjectId::new(result.target_project_id.0.clone()),
+        run_id: grant.authority_run_id().clone(),
+        owner_id: request.owner_id.clone(),
+        call_id: xai_grok_science::CallId::new("science_project_mutation"),
+    };
+    let recovered = project_store.recover_actor_migration_operation(request, &grant)?;
+    if recovered.project_id != outcome.project_id || recovered.result != outcome.result {
+        return Err(xai_grok_science::ScienceError::Invalid(
+            "recovered migration operation differs from its durable commit".into(),
+        ));
+    }
+    if grant.authority_state() == RunState::Running {
+        persist_migration_mutation_evidence(store, project_store, &ticket, request, &recovered)?;
+        append_project_mutation_applied_once(store, &ticket.run_id, &recovered)?;
+        store.transition(&ticket.run_id, RunState::Succeeded, None)?;
+    }
+    verify_migration_replay(store, project_store, request, &recovered)?;
+    Ok(recovered)
+}
+
+fn persist_migration_mutation_evidence(
+    store: &xai_grok_science::ScienceStore,
+    project_store: &xai_grok_science::project::ProjectStore,
+    ticket: &xai_grok_science::csv::ScienceRunTicket,
+    request: &xai_grok_science::project::MutationRequest,
+    outcome: &xai_grok_science::project::MutationOutcome,
+) -> xai_grok_science::Result<()> {
+    use xai_grok_science::ScienceError;
+
+    if outcome.kind != "project_migrate" {
+        return Err(ScienceError::Invalid(
+            "migration evidence received another mutation kind".into(),
+        ));
+    }
+    let result: xai_grok_science::project::MigrationResult =
+        serde_json::from_value(outcome.result.clone())?;
+    if result.target_project_id != outcome.project_id
+        || result.target_project_id.0 != ticket.project_id.0
+        || result.authority_run_id != ticket.run_id.0
+        || result.source_run_id.is_empty()
+    {
+        return Err(ScienceError::Ownership);
+    }
+    let commit = project_store.verify_migration_result(request, &result)?;
+    let admission = commit.admission;
+    let manifest = commit.manifest;
+    manifest.verify_against_admission(&admission)?;
+    if manifest.sha256()? != result.manifest_sha256 {
+        return Err(ScienceError::Invalid(
+            "migration result is not bound to the project manifest".into(),
+        ));
+    }
+
+    // Reopen every copied target-owned payload while the actor run is still
+    // Running+Allow. This proves the project registry will not point back to
+    // inaccessible source-project bytes.
+    for artifact in &manifest.artifacts {
+        let copied = store.allowed_running_artifact_bytes(
+            &ticket.project_id,
+            &ticket.run_id,
+            &ticket.owner_id,
+            &ticket.call_id,
+            &artifact.target_relative_path,
+        )?;
+        if copied.len() as u64 != artifact.bytes
+            || format!("{:x}", sha2::Sha256::digest(&copied)) != artifact.sha256
+        {
+            return Err(ScienceError::Invalid(
+                "target migration artifact differs from its verified source".into(),
+            ));
+        }
+    }
+
+    let manifest_path = std::path::Path::new("migration.json");
+    let manifest_bytes = serde_json::to_vec(&manifest)?;
+    let manifest_artifact = match store
+        .artifacts(&ticket.run_id)?
+        .into_iter()
+        .find(|artifact| artifact.relative_path == manifest_path)
+    {
+        Some(existing) => {
+            let bytes = store.allowed_running_artifact_bytes(
+                &ticket.project_id,
+                &ticket.run_id,
+                &ticket.owner_id,
+                &ticket.call_id,
+                manifest_path,
+            )?;
+            if bytes != manifest_bytes || existing.sha256 != result.manifest_sha256 {
+                return Err(ScienceError::Invalid(
+                    "migration authority run contains a conflicting manifest artifact".into(),
+                ));
+            }
+            existing
+        }
+        None => store.put_artifact(
+            &ticket.project_id,
+            &ticket.run_id,
+            &ticket.owner_id,
+            ticket.call_id.clone(),
+            manifest_path,
+            &manifest_bytes,
+            "application/json",
+            format!(
+                "Verified migration {} → {}",
+                result.source_run_id, result.target_project_id.0
+            ),
+        )?,
+    };
+    if manifest_artifact.sha256 != result.manifest_sha256 {
+        return Err(ScienceError::Invalid(
+            "stored migration manifest digest does not match its commit".into(),
+        ));
+    }
+
+    let expected_evidence =
+        expected_migration_evidence(&ticket.run_id, outcome, &result, &manifest);
+    let expected_provenance =
+        expected_migration_provenance(&ticket.run_id, outcome, &result, &admission, &manifest)?;
+
+    append_exact_registry_suffix(
+        store.evidence(&ticket.run_id)?,
+        &expected_evidence,
+        |item| store.add_evidence(item),
+        "migration evidence",
+    )?;
+    append_exact_registry_suffix(
+        store.provenance(&ticket.run_id)?,
+        &expected_provenance,
+        |item| store.add_provenance(item),
+        "migration provenance",
+    )?;
+    Ok(())
+}
+
+fn expected_migration_evidence(
+    authority_run_id: &xai_grok_science::RunId,
+    outcome: &xai_grok_science::project::MutationOutcome,
+    result: &xai_grok_science::project::MigrationResult,
+    manifest: &xai_grok_science::project::MigrationManifest,
+) -> Vec<xai_grok_science::Evidence> {
+    let mut expected = manifest
+        .evidence
+        .iter()
+        .map(|item| xai_grok_science::Evidence {
+            run_id: authority_run_id.clone(),
+            claim: item.claim.clone(),
+            source: format!(
+                "migrated:{}:{}",
+                manifest.source_run.context.run_id.0, item.source
+            ),
+            artifact_sha256: item.artifact_sha256.clone(),
+            verified_at: item.verified_at,
+        })
+        .collect::<Vec<_>>();
+    expected.push(xai_grok_science::Evidence {
+        run_id: authority_run_id.clone(),
+        claim: format!(
+            "Migration {} preserved {} byte-verified artifact(s), {} evidence record(s), and {} provenance record(s).",
+            outcome.operation_id,
+            result.artifacts_migrated,
+            result.evidence_items_migrated,
+            result.provenance_items_migrated,
+        ),
+        source: format!(
+            "lumen-science://project/{}/migration.json",
+            outcome.project_id.0
+        ),
+        artifact_sha256: Some(result.manifest_sha256.clone()),
+        verified_at: manifest.generated_at,
+    });
+    expected
+}
+
+fn expected_migration_provenance(
+    authority_run_id: &xai_grok_science::RunId,
+    outcome: &xai_grok_science::project::MutationOutcome,
+    result: &xai_grok_science::project::MigrationResult,
+    admission: &xai_grok_science::project::MigrationAdmission,
+    manifest: &xai_grok_science::project::MigrationManifest,
+) -> xai_grok_science::Result<Vec<xai_grok_science::Provenance>> {
+    let admission_sha256 = admission.sha256()?;
+    let mut expected = manifest
+        .provenance
+        .iter()
+        .map(|item| {
+            let mut environment = item.environment.clone();
+            environment.insert(
+                "migration_source_run_id".into(),
+                manifest.source_run.context.run_id.0.clone(),
+            );
+            environment.insert(
+                "migration_admission_sha256".into(),
+                admission_sha256.clone(),
+            );
+            xai_grok_science::Provenance {
+                run_id: authority_run_id.clone(),
+                source_uri: item.source_uri.clone(),
+                source_commit: item.source_commit.clone(),
+                source_path: item.source_path.clone(),
+                license: item.license.clone(),
+                retrieved_at: item.retrieved_at,
+                input_sha256: item.input_sha256.clone(),
+                tool: "lumen-science/project-migrate".into(),
+                environment,
+            }
+        })
+        .collect::<Vec<_>>();
+    expected.push(xai_grok_science::Provenance {
+        run_id: authority_run_id.clone(),
+        source_uri: format!(
+            "lumen-science://project/{}/migration.json",
+            outcome.project_id.0
+        ),
+        source_commit: Some(result.manifest_sha256.clone()),
+        source_path: Some("migration.json".into()),
+        license: "Lumen-Science-Derived-Evidence".into(),
+        retrieved_at: manifest.generated_at,
+        input_sha256: result.manifest_sha256.clone(),
+        tool: "lumen-science/project-migrate".into(),
+        environment: std::collections::BTreeMap::from([
+            ("operation_id".into(), outcome.operation_id.clone()),
+            ("admission_sha256".into(), admission_sha256),
+            ("network".into(), "disabled".into()),
+        ]),
+    });
+    Ok(expected)
+}
+
+fn append_exact_registry_suffix<T: Clone + PartialEq>(
+    existing: Vec<T>,
+    expected: &[T],
+    mut append: impl FnMut(T) -> xai_grok_science::Result<()>,
+    kind: &str,
+) -> xai_grok_science::Result<()> {
+    if existing.len() > expected.len() || existing != expected[..existing.len()] {
+        return Err(xai_grok_science::ScienceError::Invalid(format!(
+            "{kind} registry conflicts with its recovery plan"
+        )));
+    }
+    for item in &expected[existing.len()..] {
+        append(item.clone())?;
+    }
+    Ok(())
 }
 
 /// A review is itself evidence. Alongside the project review ledger, keep an

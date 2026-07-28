@@ -3715,16 +3715,14 @@ default = "grok-4.5"
 #[tokio::test]
 #[ignore] // requires pre-built binary; run with --ignored
 async fn headless_reasoning_efforts_payload_parses_and_legacy_effort_rides_wire() {
-    let server = MockInferenceServer::start_with_models(vec![
-        MockModelEntry::new("grok-4.5")
-            .with_api_backend("chat_completions")
-            .with_supports_reasoning_effort(true)
-            .with_reasoning_effort("xhigh")
-            .with_reasoning_efforts(vec![
-                serde_json::json!({ "id": "deep", "value": "xhigh", "label": "Deep", "default": true }),
-                serde_json::json!({ "id": "balanced", "value": "medium", "label": "Balanced" }),
-            ]),
-    ])
+    let server = MockInferenceServer::start_with_models(vec![MockModelEntry::new("grok-4.5")
+        .with_api_backend("chat_completions")
+        .with_supports_reasoning_effort(true)
+        .with_reasoning_effort("xhigh")
+        .with_reasoning_efforts(vec![
+            serde_json::json!({ "id": "deep", "value": "xhigh", "label": "Deep", "default": true }),
+            serde_json::json!({ "id": "balanced", "value": "medium", "label": "Balanced" }),
+        ])])
     .await
     .expect("start mock server");
     server.set_response("done");
@@ -4760,6 +4758,95 @@ async fn test_stdio_science_operator_gate_snapshot_denies_read_and_mutation_befo
     .await;
 }
 
+fn seed_succeeded_migration_source(
+    store_root: &std::path::Path,
+    workspace: &std::path::Path,
+    session_id: &str,
+    owner_id: &str,
+    run_id: &str,
+) {
+    let store = xai_grok_science::ScienceStore::new(store_root);
+    let run_id = xai_grok_science::RunId::new(run_id);
+    let project_id = xai_grok_science::ProjectId::new(format!("source-{}", run_id.0));
+    let call_id = xai_grok_science::CallId::new("legacy-import");
+    store
+        .create_run(xai_grok_science::RunContext {
+            run_id: run_id.clone(),
+            project_id: project_id.clone(),
+            session_id: session_id.into(),
+            owner_id: owner_id.into(),
+            workspace_root: workspace.to_path_buf(),
+            provider: "offline-fixture".into(),
+            approval_policy: "test-seed".into(),
+            tool_profile: "legacy-v1-fixture".into(),
+            artifact_root: store_root.join("runs"),
+            environment: std::collections::BTreeMap::from([("network".into(), "disabled".into())]),
+        })
+        .expect("create migration source");
+    store
+        .request_approval(xai_grok_science::Approval {
+            project_id: project_id.clone(),
+            run_id: run_id.clone(),
+            call_id: call_id.clone(),
+            owner_id: owner_id.into(),
+            decision: xai_grok_science::ApprovalDecision::Pending,
+            decided_at: None,
+        })
+        .expect("request migration source approval");
+    store
+        .transition(&run_id, xai_grok_science::RunState::AwaitingApproval, None)
+        .expect("source awaiting approval");
+    store
+        .decide_approval(
+            &project_id,
+            &run_id,
+            owner_id,
+            &call_id,
+            xai_grok_science::ApprovalDecision::Allow,
+        )
+        .expect("allow migration source");
+    store
+        .transition(&run_id, xai_grok_science::RunState::Running, None)
+        .expect("source running");
+    let artifact = store
+        .put_artifact(
+            &project_id,
+            &run_id,
+            owner_id,
+            call_id,
+            std::path::Path::new("source.json"),
+            br#"{"source":"verified"}"#,
+            "application/json",
+            "migration source",
+        )
+        .expect("write migration source artifact");
+    store
+        .add_evidence(xai_grok_science::Evidence {
+            run_id: run_id.clone(),
+            claim: "The source artifact is preserved.".into(),
+            source: "source.json".into(),
+            artifact_sha256: Some(artifact.sha256.clone()),
+            verified_at: chrono::Utc::now(),
+        })
+        .expect("write migration source evidence");
+    store
+        .add_provenance(xai_grok_science::Provenance {
+            run_id: run_id.clone(),
+            source_uri: "fixture://source.json".into(),
+            source_commit: None,
+            source_path: Some("source.json".into()),
+            license: "CC0-1.0".into(),
+            retrieved_at: chrono::Utc::now(),
+            input_sha256: artifact.sha256,
+            tool: "migration-test-fixture".into(),
+            environment: std::collections::BTreeMap::new(),
+        })
+        .expect("write migration source provenance");
+    store
+        .transition(&run_id, xai_grok_science::RunState::Succeeded, None)
+        .expect("complete migration source");
+}
+
 /// The legacy migration endpoint must use the typed project-mutation seam:
 /// one permission, one durable run, one idempotent project-store mutation.
 #[tokio::test]
@@ -4770,11 +4857,106 @@ async fn test_stdio_science_project_migrate_is_actor_gated_and_idempotent() {
             .await
             .expect("start mock server");
         let workdir = git_workdir();
-        let store_root = workdir.path().join("science-migration-store");
+        let workspace = std::fs::canonicalize(workdir.path()).expect("canonical workspace");
+        let store_root = workspace.join("science-migration-store");
 
-        let client = GrokStdioClient::spawn(&server, workdir.path()).await;
+        let client = GrokStdioClient::spawn(&server, &workspace).await;
         client.initialize_with_timeout().await;
-        let session_id = client.create_session_with_timeout(workdir.path()).await;
+        let session_id = client.create_session_with_timeout(&workspace).await;
+
+        // A migration must consume a real, completed V1 run. The old test
+        // passed a made-up id and therefore proved only the permission seam.
+        let source_store = xai_grok_science::ScienceStore::new(&store_root);
+        let source_run = xai_grok_science::RunId::new("legacy-run-42");
+        let source_project = xai_grok_science::ProjectId::new("legacy-project-42");
+        let source_call = xai_grok_science::CallId::new("legacy-import");
+        source_store
+            .create_run(xai_grok_science::RunContext {
+                run_id: source_run.clone(),
+                project_id: source_project.clone(),
+                session_id: session_id.0.to_string(),
+                owner_id: "science-owner".into(),
+                workspace_root: workspace.clone(),
+                provider: "offline-fixture".into(),
+                approval_policy: "test-seed".into(),
+                tool_profile: "legacy-v1-fixture".into(),
+                artifact_root: store_root.join("runs"),
+                environment: std::collections::BTreeMap::from([(
+                    "network".into(),
+                    "disabled".into(),
+                )]),
+            })
+            .expect("create genuine source run");
+        source_store
+            .request_approval(xai_grok_science::Approval {
+                project_id: source_project.clone(),
+                run_id: source_run.clone(),
+                call_id: source_call.clone(),
+                owner_id: "science-owner".into(),
+                decision: xai_grok_science::ApprovalDecision::Pending,
+                decided_at: None,
+            })
+            .expect("request source approval");
+        source_store
+            .transition(
+                &source_run,
+                xai_grok_science::RunState::AwaitingApproval,
+                None,
+            )
+            .expect("source awaits approval");
+        source_store
+            .decide_approval(
+                &source_project,
+                &source_run,
+                "science-owner",
+                &source_call,
+                xai_grok_science::ApprovalDecision::Allow,
+            )
+            .expect("allow source fixture");
+        source_store
+            .transition(&source_run, xai_grok_science::RunState::Running, None)
+            .expect("source running");
+        let source_bytes = b"sample,value\ncontrol,1.0\ntreated,2.5\n";
+        let source_artifact = source_store
+            .put_artifact(
+                &source_project,
+                &source_run,
+                "science-owner",
+                source_call,
+                std::path::Path::new("legacy-result.csv"),
+                source_bytes,
+                "text/csv",
+                "Legacy V1 result",
+            )
+            .expect("store source artifact");
+        source_store
+            .add_evidence(xai_grok_science::Evidence {
+                run_id: source_run.clone(),
+                claim: "The treated sample is higher than control.".into(),
+                source: "legacy-result.csv".into(),
+                artifact_sha256: Some(source_artifact.sha256.clone()),
+                verified_at: chrono::Utc::now(),
+            })
+            .expect("store source evidence");
+        source_store
+            .add_provenance(xai_grok_science::Provenance {
+                run_id: source_run.clone(),
+                source_uri: "fixture://legacy-result.csv".into(),
+                source_commit: None,
+                source_path: Some("legacy-result.csv".into()),
+                license: "CC0-1.0".into(),
+                retrieved_at: chrono::Utc::now(),
+                input_sha256: source_artifact.sha256.clone(),
+                tool: "legacy-v1-fixture".into(),
+                environment: std::collections::BTreeMap::from([(
+                    "network".into(),
+                    "disabled".into(),
+                )]),
+            })
+            .expect("store source provenance");
+        source_store
+            .transition(&source_run, xai_grok_science::RunState::Succeeded, None)
+            .expect("complete source fixture");
         let params = || {
             serde_json::json!({
                 "sessionId": session_id.0.as_ref(),
@@ -4802,6 +4984,14 @@ async fn test_stdio_science_project_migrate_is_actor_gated_and_idempotent() {
             "response: {first}"
         );
         assert_eq!(first["source_run_id"], "legacy-run-42");
+        assert_eq!(first["artifacts_migrated"].as_u64(), Some(1));
+        assert_eq!(first["evidence_items_migrated"].as_u64(), Some(1));
+        assert_eq!(first["provenance_items_migrated"].as_u64(), Some(1));
+        assert_eq!(
+            first["bytes_migrated"].as_u64(),
+            Some(source_bytes.len() as u64)
+        );
+        assert_eq!(first["hash_verification"]["status"], "verified");
         assert_eq!(first["replayed"], false);
         let project_id = xai_grok_science::project::ProjectId(
             first["target_project_id"]
@@ -4816,29 +5006,66 @@ async fn test_stdio_science_project_migrate_is_actor_gated_and_idempotent() {
             .expect("reopen migrated project");
         assert_eq!(project.owner_id.0, "science-owner");
         assert!(project.sessions.contains(&"legacy-run-42".to_string()));
+        let authority_run_id = xai_grok_science::RunId::new(
+            first["authority_run_id"]
+                .as_str()
+                .expect("authority run id"),
+        );
+        assert!(project.sessions.contains(&authority_run_id.0));
         assert_eq!(project_store.list_projects().unwrap().len(), 1);
+        assert_eq!(project_store.list_artifacts(&project_id).unwrap().len(), 1);
+        let graph = project_store
+            .load_graph(&project_id)
+            .expect("migration graph");
+        assert_eq!(graph.edges.len(), 1);
+        assert_eq!(
+            project_store
+                .load_migration_manifest(&project_id)
+                .expect("migration manifest")
+                .source_run
+                .context
+                .run_id,
+            source_run
+        );
 
         let runs = std::fs::read_dir(store_root.join("runs"))
             .expect("durable migration run")
             .collect::<Result<Vec<_>, _>>()
             .expect("read migration runs");
-        assert_eq!(runs.len(), 1);
-        let run_id = xai_grok_science::RunId::new(
-            runs[0]
-                .file_name()
-                .to_str()
-                .expect("UTF-8 run id")
-                .to_owned(),
-        );
+        assert_eq!(runs.len(), 2, "source + one authority run");
         let science_store = xai_grok_science::ScienceStore::new(&store_root);
         assert_eq!(
-            science_store.load_run(&run_id).expect("load run").state,
+            science_store
+                .load_run(&authority_run_id)
+                .expect("load authority run")
+                .state,
             xai_grok_science::RunState::Succeeded
         );
         assert_eq!(
-            science_store.approvals(&run_id).expect("approval")[0].decision,
+            science_store
+                .approvals(&authority_run_id)
+                .expect("approval")[0]
+                .decision,
             xai_grok_science::ApprovalDecision::Allow
         );
+        assert_eq!(
+            science_store
+                .artifact_bytes(
+                    &xai_grok_science::ProjectId::new(&project_id.0),
+                    &authority_run_id,
+                    "science-owner",
+                    std::path::Path::new("migrated/legacy-run-42/legacy-result.csv"),
+                )
+                .expect("reopen migrated target bytes"),
+            source_bytes
+        );
+        assert_eq!(science_store.artifacts(&authority_run_id).unwrap().len(), 2);
+        assert_eq!(science_store.evidence(&authority_run_id).unwrap().len(), 2);
+        assert_eq!(
+            science_store.provenance(&authority_run_id).unwrap().len(),
+            2
+        );
+        assert_eq!(client.permission_request_count(), 1);
 
         let replay: serde_json::Value = serde_json::from_str(
             client
@@ -4856,14 +5083,49 @@ async fn test_stdio_science_project_migrate_is_actor_gated_and_idempotent() {
             std::fs::read_dir(store_root.join("runs"))
                 .expect("migration runs after replay")
                 .count(),
-            1,
+            2,
             "idempotent replay opened a second durable run"
+        );
+        assert_eq!(
+            client.permission_request_count(),
+            1,
+            "idempotent replay prompted a second time"
+        );
+
+        std::fs::write(
+            store_root
+                .join("runs")
+                .join(&authority_run_id.0)
+                .join("artifacts")
+                .join("migrated/legacy-run-42/legacy-result.csv"),
+            b"tampered target bytes",
+        )
+        .expect("tamper target-owned migration artifact");
+        let tampered_replay = client
+            .ext_method("x.ai/science/project_migrate", params())
+            .await;
+        assert!(
+            tampered_replay.is_err(),
+            "tampered target bytes replayed as verified: {tampered_replay:?}"
+        );
+        assert_eq!(
+            client.permission_request_count(),
+            1,
+            "tampered replay requested new authority instead of failing closed"
+        );
+        assert_eq!(project_store.list_projects().unwrap().len(), 1);
+        assert_eq!(
+            std::fs::read_dir(store_root.join("runs"))
+                .expect("migration runs after tampered replay")
+                .count(),
+            2,
+            "tampered replay opened a replacement authority run"
         );
     })
     .await;
 }
 
-/// A refused migration may record the refusal, but it cannot create a project
+/// A denied migration may record the denial, but it cannot create a project
 /// or burn the operation id.
 #[tokio::test]
 #[ignore] // requires pre-built binary
@@ -4873,15 +5135,16 @@ async fn test_stdio_science_project_migrate_refusal_writes_no_project() {
             .await
             .expect("start mock server");
         let workdir = git_workdir();
-        let store_root = workdir.path().join("science-migration-store");
+        let workspace = std::fs::canonicalize(workdir.path()).expect("canonical workspace");
+        let store_root = workspace.join("science-migration-store");
         let client = GrokStdioClient::spawn_with_permission_response(
             &server,
-            workdir.path(),
-            PermissionResponse::Reject,
+            &workspace,
+            PermissionResponse::DenyOnce,
         )
         .await;
         client.initialize_with_timeout().await;
-        let session_id = client.create_session_with_timeout(workdir.path()).await;
+        let session_id = client.create_session_with_timeout(&workspace).await;
 
         let missing_operation = client
             .ext_method(
@@ -4904,6 +5167,42 @@ async fn test_stdio_science_project_migrate_refusal_writes_no_project() {
             !store_root.join("runs").exists(),
             "unkeyed migration opened a durable run"
         );
+        let missing_source = client
+            .ext_method(
+                "x.ai/science/project_migrate",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "ownerId": "science-owner",
+                    "storeRoot": store_root,
+                    "runId": "legacy-run-does-not-exist",
+                    "title": "Must not exist",
+                    "question": "Can an absent run be migrated?",
+                    "operationId": "op-migrate-absent",
+                    "approvalTimeoutMs": 5_000,
+                }),
+            )
+            .await;
+        assert!(
+            missing_source.is_err(),
+            "migration accepted an absent source: {missing_source:?}"
+        );
+        assert_eq!(
+            client.permission_request_count(),
+            0,
+            "absent source reached permission"
+        );
+        assert!(
+            !store_root.join("runs").exists(),
+            "absent source opened a durable authority run"
+        );
+
+        seed_succeeded_migration_source(
+            &store_root,
+            &workspace,
+            session_id.0.as_ref(),
+            "science-owner",
+            "legacy-run-denied",
+        );
 
         let refused = client
             .ext_method(
@@ -4920,7 +5219,7 @@ async fn test_stdio_science_project_migrate_refusal_writes_no_project() {
                 }),
             )
             .await;
-        assert!(refused.is_err(), "refused migration succeeded: {refused:?}");
+        assert!(refused.is_err(), "denied migration succeeded: {refused:?}");
 
         let project_store = xai_grok_science::project::ProjectStore::new(&store_root);
         assert!(project_store.list_projects().unwrap_or_default().is_empty());
@@ -4929,24 +5228,406 @@ async fn test_stdio_science_project_migrate_refusal_writes_no_project() {
             "refused migration burned its operation id"
         );
         let runs = std::fs::read_dir(store_root.join("runs"))
-            .expect("refusal must be durable")
+            .expect("denial must be durable")
             .collect::<Result<Vec<_>, _>>()
             .expect("read refused migration runs");
-        assert_eq!(runs.len(), 1);
-        let run_id = xai_grok_science::RunId::new(
-            runs[0]
-                .file_name()
-                .to_str()
-                .expect("UTF-8 run id")
-                .to_owned(),
-        );
+        assert_eq!(runs.len(), 2, "source + denied authority run");
+        let run_id = runs
+            .iter()
+            .map(|entry| {
+                xai_grok_science::RunId::new(
+                    entry.file_name().to_str().expect("UTF-8 run id").to_owned(),
+                )
+            })
+            .find(|run_id| run_id.0 != "legacy-run-denied")
+            .expect("find denied authority run");
         let science_store = xai_grok_science::ScienceStore::new(&store_root);
         assert_eq!(
             science_store
                 .load_run(&run_id)
                 .expect("load refused run")
                 .state,
-            xai_grok_science::RunState::Cancelled
+            xai_grok_science::RunState::Denied
+        );
+        assert!(science_store.artifacts(&run_id).unwrap().is_empty());
+        assert!(science_store.evidence(&run_id).unwrap().is_empty());
+        assert!(science_store.provenance(&run_id).unwrap().is_empty());
+    })
+    .await;
+}
+
+/// A permission timeout is a distinct durable terminal and must remain
+/// zero-output: no project, operation, artifact, evidence or provenance.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_project_migrate_timeout_writes_no_project() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let workspace = std::fs::canonicalize(workdir.path()).expect("canonical workspace");
+        let store_root = workspace.join("science-migration-timeout-store");
+        let client = GrokStdioClient::spawn_with_permission_response(
+            &server,
+            &workspace,
+            PermissionResponse::NeverRespond,
+        )
+        .await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(&workspace).await;
+        seed_succeeded_migration_source(
+            &store_root,
+            &workspace,
+            session_id.0.as_ref(),
+            "science-owner",
+            "legacy-run-timeout",
+        );
+
+        let timed_out = client
+            .ext_method(
+                "x.ai/science/project_migrate",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "ownerId": "science-owner",
+                    "storeRoot": store_root,
+                    "runId": "legacy-run-timeout",
+                    "title": "Must not exist",
+                    "question": "Was this timed out?",
+                    "operationId": "op-migrate-timeout",
+                    "approvalTimeoutMs": 100,
+                }),
+            )
+            .await;
+        assert!(
+            timed_out.is_err(),
+            "timed-out migration returned success: {timed_out:?}"
+        );
+        assert_eq!(client.permission_request_count(), 1);
+
+        let project_store = xai_grok_science::project::ProjectStore::new(&store_root);
+        assert!(project_store.list_projects().unwrap_or_default().is_empty());
+        assert!(
+            project_store
+                .lookup_operation("op-migrate-timeout")
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            project_store
+                .lookup_migration_commit("op-migrate-timeout")
+                .unwrap()
+                .is_none(),
+            "timeout wrote a post-Allow migration journal"
+        );
+        let science_store = xai_grok_science::ScienceStore::new(&store_root);
+        let authority_run = std::fs::read_dir(store_root.join("runs"))
+            .expect("timeout must leave durable runs")
+            .map(|entry| {
+                xai_grok_science::RunId::new(
+                    entry
+                        .expect("read run entry")
+                        .file_name()
+                        .to_string_lossy()
+                        .into_owned(),
+                )
+            })
+            .find(|run_id| run_id.0 != "legacy-run-timeout")
+            .expect("find timed-out authority run");
+        assert_eq!(
+            science_store.load_run(&authority_run).unwrap().state,
+            xai_grok_science::RunState::TimedOut
+        );
+        assert!(science_store.artifacts(&authority_run).unwrap().is_empty());
+        assert!(science_store.evidence(&authority_run).unwrap().is_empty());
+        assert!(science_store.provenance(&authority_run).unwrap().is_empty());
+    })
+    .await;
+}
+
+/// Allow authorizes the exact source snapshot captured at Begin. Replacing
+/// source bytes while the real permission prompt is pending must fail after
+/// Allow and must not create a journal, target artifact or project.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_project_migrate_allow_rejects_source_tamper() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let workspace = std::fs::canonicalize(workdir.path()).expect("canonical workspace");
+        let store_root = workspace.join("science-migration-tamper-store");
+        let client = GrokStdioClient::spawn_with_permission_response(
+            &server,
+            &workspace,
+            PermissionResponse::AllowAfter(Duration::from_millis(800)),
+        )
+        .await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(&workspace).await;
+        seed_succeeded_migration_source(
+            &store_root,
+            &workspace,
+            session_id.0.as_ref(),
+            "science-owner",
+            "legacy-run-tamper",
+        );
+        let params = serde_json::json!({
+            "sessionId": session_id.0.as_ref(),
+            "ownerId": "science-owner",
+            "storeRoot": store_root,
+            "runId": "legacy-run-tamper",
+            "title": "Tamper must fail",
+            "question": "Did Allow bind the exact source bytes?",
+            "operationId": "op-migrate-source-tamper",
+            "approvalTimeoutMs": 5_000,
+        });
+
+        let request = async {
+            tokio::time::timeout(
+                Duration::from_secs(30),
+                client.ext_method("x.ai/science/project_migrate", params),
+            )
+            .await
+            .expect("tamper migration timed out")
+        };
+        let tamper = async {
+            for _ in 0..200 {
+                if client.permission_request_count() == 1 {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+            assert_eq!(
+                client.permission_request_count(),
+                1,
+                "migration never reached the permission prompt"
+            );
+            std::fs::write(
+                store_root.join("runs/legacy-run-tamper/artifacts/source.json"),
+                br#"{"source":"replaced-during-approval"}"#,
+            )
+            .expect("replace source bytes during approval");
+        };
+        let (result, ()) = tokio::join!(request, tamper);
+        assert!(
+            result.is_err(),
+            "Allow accepted source bytes changed after Begin: {result:?}"
+        );
+
+        let project_store = xai_grok_science::project::ProjectStore::new(&store_root);
+        assert!(project_store.list_projects().unwrap_or_default().is_empty());
+        assert!(
+            project_store
+                .lookup_migration_commit("op-migrate-source-tamper")
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            project_store
+                .lookup_operation("op-migrate-source-tamper")
+                .unwrap()
+                .is_none()
+        );
+        let science_store = xai_grok_science::ScienceStore::new(&store_root);
+        let authority_run = std::fs::read_dir(store_root.join("runs"))
+            .expect("tamper must leave durable runs")
+            .map(|entry| {
+                xai_grok_science::RunId::new(
+                    entry
+                        .expect("read run entry")
+                        .file_name()
+                        .to_string_lossy()
+                        .into_owned(),
+                )
+            })
+            .find(|run_id| run_id.0 != "legacy-run-tamper")
+            .expect("find failed authority run");
+        assert_eq!(
+            science_store.load_run(&authority_run).unwrap().state,
+            xai_grok_science::RunState::Failed
+        );
+        assert!(science_store.artifacts(&authority_run).unwrap().is_empty());
+        assert!(science_store.evidence(&authority_run).unwrap().is_empty());
+        assert!(science_store.provenance(&authority_run).unwrap().is_empty());
+    })
+    .await;
+}
+
+/// Simulate a process stop immediately after the post-Allow migration journal
+/// is durable but before the first target artifact is copied. The rebuilt
+/// binary must reopen the deterministic original authority, copy the admitted
+/// bytes, publish the project and finish without a second permission prompt.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_project_migrate_recovers_journal_before_copy() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let workspace = std::fs::canonicalize(workdir.path()).expect("canonical workspace");
+        let store_root = workspace.join("science-migration-recovery-store");
+        let client = GrokStdioClient::spawn(&server, &workspace).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(&workspace).await;
+        seed_succeeded_migration_source(
+            &store_root,
+            &workspace,
+            session_id.0.as_ref(),
+            "science-owner",
+            "legacy-run-recovery",
+        );
+
+        let mut request = xai_grok_science::project::MutationRequest {
+            operation_id: "op-migrate-journal-recovery".into(),
+            session_id: session_id.0.to_string(),
+            owner_id: "science-owner".into(),
+            expected_revision: None,
+            mutation: xai_grok_science::project::ProjectMutation::ProjectMigrate {
+                source_run_id: "legacy-run-recovery".into(),
+                title: "Recovered journal migration".into(),
+                research_question: "Can the original authority resume?".into(),
+                authority_run_id: String::new(),
+            },
+        };
+        let authority_run_id = xai_grok_science::RunId::new(format!(
+            "migration-authority-{}",
+            request.replay_fingerprint().expect("migration fingerprint")
+        ));
+        let xai_grok_science::project::ProjectMutation::ProjectMigrate {
+            authority_run_id: bound_authority,
+            ..
+        } = &mut request.mutation
+        else {
+            unreachable!();
+        };
+        *bound_authority = authority_run_id.0.clone();
+        let target_project = request
+            .migration_target_project_id()
+            .expect("migration target")
+            .expect("migration target id");
+        let store = xai_grok_science::ScienceStore::new(&store_root);
+        let mut authority_context = xai_grok_science::RunContext {
+            run_id: authority_run_id.clone(),
+            project_id: xai_grok_science::ProjectId::new(target_project.0.clone()),
+            session_id: session_id.0.to_string(),
+            owner_id: "science-owner".into(),
+            workspace_root: workspace.clone(),
+            provider: "offline-deterministic".into(),
+            approval_policy: "production-session-permission".into(),
+            tool_profile: "science-project-mutation-v1".into(),
+            artifact_root: store_root.join("runs"),
+            environment: std::collections::BTreeMap::from([
+                ("network".into(), "disabled".into()),
+                ("locale".into(), "C".into()),
+            ]),
+        };
+        let admission = xai_grok_science::project::MigrationAdmission::capture(
+            &store,
+            &authority_context,
+            xai_grok_science::RunId::new("legacy-run-recovery"),
+            request.operation_id.clone(),
+            target_project.clone(),
+            authority_run_id.clone(),
+            "Recovered journal migration",
+            "Can the original authority resume?",
+        )
+        .expect("capture recovery admission");
+        authority_context.environment.insert(
+            "project_migration_admission_sha256".into(),
+            admission.sha256().expect("admission digest"),
+        );
+        store
+            .create_run(authority_context.clone())
+            .expect("create original authority");
+        let authority_call = xai_grok_science::CallId::new("science_project_mutation");
+        store
+            .request_approval(xai_grok_science::Approval {
+                project_id: authority_context.project_id.clone(),
+                run_id: authority_run_id.clone(),
+                call_id: authority_call.clone(),
+                owner_id: "science-owner".into(),
+                decision: xai_grok_science::ApprovalDecision::Pending,
+                decided_at: None,
+            })
+            .expect("request original authority approval");
+        store
+            .transition(
+                &authority_run_id,
+                xai_grok_science::RunState::AwaitingApproval,
+                None,
+            )
+            .expect("authority awaiting approval");
+        store
+            .decide_approval(
+                &authority_context.project_id,
+                &authority_run_id,
+                "science-owner",
+                &authority_call,
+                xai_grok_science::ApprovalDecision::Allow,
+            )
+            .expect("allow original authority");
+        store
+            .transition(&authority_run_id, xai_grok_science::RunState::Running, None)
+            .expect("original authority running");
+        let bundle = admission
+            .authorize_after_allow(&store, &authority_context)
+            .expect("authorize recovery bundle");
+        let project_store = xai_grok_science::project::ProjectStore::new(&store_root);
+        project_store
+            .admit_actor_migration(&request, &admission, &bundle)
+            .expect("persist pre-copy migration journal");
+        assert!(store.artifacts(&authority_run_id).unwrap().is_empty());
+        assert!(project_store.list_projects().unwrap().is_empty());
+        assert!(
+            project_store
+                .lookup_operation(&request.operation_id)
+                .unwrap()
+                .is_none()
+        );
+
+        let permission_count = client.permission_request_count();
+        let recovered: serde_json::Value = serde_json::from_str(
+            client
+                .ext_method(
+                    "x.ai/science/project_migrate",
+                    serde_json::json!({
+                        "sessionId": session_id.0.as_ref(),
+                        "ownerId": "science-owner",
+                        "storeRoot": store_root,
+                        "runId": "legacy-run-recovery",
+                        "title": "Recovered journal migration",
+                        "question": "Can the original authority resume?",
+                        "operationId": "op-migrate-journal-recovery",
+                        "approvalTimeoutMs": 5_000,
+                    }),
+                )
+                .await
+                .expect("recover journaled migration")
+                .0
+                .get(),
+        )
+        .expect("recovery response JSON");
+        assert_eq!(recovered["authority_run_id"], authority_run_id.0);
+        assert_eq!(recovered["replayed"], true);
+        assert_eq!(
+            client.permission_request_count(),
+            permission_count,
+            "journal recovery requested a second permission"
+        );
+        assert_eq!(
+            store.load_run(&authority_run_id).unwrap().state,
+            xai_grok_science::RunState::Succeeded
+        );
+        assert_eq!(store.artifacts(&authority_run_id).unwrap().len(), 2);
+        assert_eq!(project_store.list_projects().unwrap().len(), 1);
+        assert!(
+            project_store
+                .lookup_operation(&request.operation_id)
+                .unwrap()
+                .is_some()
         );
     })
     .await;

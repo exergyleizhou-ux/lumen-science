@@ -1,5 +1,5 @@
-pub mod claim;
 pub(crate) mod capability;
+pub mod claim;
 pub mod evidence_graph;
 pub mod migration;
 pub mod model;
@@ -14,15 +14,21 @@ pub mod workflows_store;
 #[cfg(test)]
 mod e2e_tests;
 
-pub use claim::{Claim, ClaimStatus, Citation, CitationId};
+pub use claim::{Citation, CitationId, Claim, ClaimStatus};
+pub use evidence_graph::validate_sha256_hex;
 pub use evidence_graph::{EdgeKind, EvidenceEdge, EvidenceGraph, EvidenceNode, NodeId, NodeKind};
-pub use migration::{HashVerification, MigrationResult, V1ToV2Migration};
+pub use migration::{
+    HashVerification, MigratedArtifact, MigrationAdmission, MigrationCommit, MigrationManifest,
+    MigrationRecoveryGrant, MigrationResult, MigrationSnapshot, V1ToV2Migration,
+    VerifiedMigrationBundle,
+};
 pub use model::{
     Hypothesis, HypothesisStatus, OwnerId, ProjectId, ProjectStatus, ResearchProject,
     validate_project_id,
 };
-pub use query::{ClaimComparison, ConsistencyReport, EvidenceTrace, ReproductionStatus, Violation, ViolationKind};
-pub use evidence_graph::validate_sha256_hex;
 pub use mutation::{MutationOutcome, MutationRequest, OperationRecord, ProjectMutation};
+pub use query::{
+    ClaimComparison, ConsistencyReport, EvidenceTrace, ReproductionStatus, Violation, ViolationKind,
+};
 pub use review_store::{ReviewRecord, ReviewVerdict, ReviewedArtifact};
 pub use store::{ProjectBundle, ProjectRecoveryReport, ProjectStore, RegisteredArtifact};

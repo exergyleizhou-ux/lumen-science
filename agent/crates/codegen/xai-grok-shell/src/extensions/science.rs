@@ -901,8 +901,24 @@ async fn run_project_mutation(
         .require_all(mutation.required_features())
         .map_err(internal)?;
     let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
-    let project_root = canonical_dir_within(store_root, &workspace)?;
-    let run_root = canonical_dir_within(project_root.join("runs"), &workspace)?;
+    // A migration source is required to exist before the actor can capture
+    // and admit it. Resolve that store read-only so an absent source cannot
+    // leave even an empty store/runs tree behind. The SessionActor still
+    // repeats the authoritative source, ownership and byte-boundary checks.
+    let is_migration = matches!(
+        mutation,
+        xai_grok_science::project::ProjectMutation::ProjectMigrate { .. }
+    );
+    let project_root = if is_migration {
+        canonical_existing_dir_within(store_root, &workspace)?
+    } else {
+        canonical_dir_within(store_root, &workspace)?
+    };
+    let run_root = if is_migration {
+        canonical_existing_dir_within(project_root.join("runs"), &workspace)?
+    } else {
+        canonical_dir_within(project_root.join("runs"), &workspace)?
+    };
     if let Some(root) = artifact_root {
         use std::path::Component;
         if root
@@ -922,25 +938,61 @@ async fn run_project_mutation(
                 .data("artifactRoot for a project mutation must equal storeRoot/runs"));
         }
     }
-    // The run record is bound to the project being mutated; a create has no
-    // project id yet, so the run is filed under the operation that makes one.
-    let run_project = mutation
-        .target_project()
-        .map(|project_id| project_id.0.clone())
-        .unwrap_or_else(|| format!("pending-{operation_id}"));
-    let authority_run_id = RunId::new_v7();
-    if let xai_grok_science::project::ProjectMutation::ReviewRecord {
-        authority_run_id: bound_run_id,
-        ..
-    } = &mut mutation
-    {
+    let mut authority_run_id = RunId::new_v7();
+    match &mut mutation {
+        xai_grok_science::project::ProjectMutation::ReviewRecord {
+            authority_run_id: bound_run_id,
+            ..
+        }
+        | xai_grok_science::project::ProjectMutation::ProjectMigrate {
+            authority_run_id: bound_run_id,
+            ..
+        } => *bound_run_id = authority_run_id.0.clone(),
+        _ => {}
+    }
+    let mut request = xai_grok_science::project::MutationRequest {
+        operation_id,
+        session_id: session_id.0.to_string(),
+        owner_id,
+        expected_revision,
+        mutation,
+    };
+    if matches!(
+        request.mutation,
+        xai_grok_science::project::ProjectMutation::ProjectMigrate { .. }
+    ) {
+        // A process stop before the project journal exists must not orphan a
+        // random Running+Allow authority and mint a second one on retry.
+        // The normalized request fingerprint excludes the authority id, so
+        // every retry deterministically reopens the same durable run.
+        authority_run_id = RunId::new(format!(
+            "migration-authority-{}",
+            request.replay_fingerprint().map_err(internal)?
+        ));
+        let xai_grok_science::project::ProjectMutation::ProjectMigrate {
+            authority_run_id: bound_run_id,
+            ..
+        } = &mut request.mutation
+        else {
+            unreachable!("migration variant checked above");
+        };
         *bound_run_id = authority_run_id.0.clone();
     }
+    // A migration owns artifacts in its newly-created project, so reserve its
+    // deterministic target before the durable authority run is opened.
+    // Other creates remain filed under their operation until a project id is
+    // minted by the store.
+    let run_project = request
+        .migration_target_project_id()
+        .map_err(internal)?
+        .or_else(|| request.mutation.target_project().cloned())
+        .map(|project_id| project_id.0)
+        .unwrap_or_else(|| format!("pending-{}", request.operation_id));
     let context = RunContext {
         run_id: authority_run_id,
         project_id: ProjectId::new(run_project),
         session_id: session_id.0.to_string(),
-        owner_id: owner_id.clone(),
+        owner_id: request.owner_id.clone(),
         workspace_root: workspace,
         provider: "offline-deterministic".into(),
         approval_policy: "production-session-permission".into(),
@@ -950,13 +1002,6 @@ async fn run_project_mutation(
             ("network".into(), "disabled".into()),
             ("locale".into(), "C".into()),
         ]),
-    };
-    let request = xai_grok_science::project::MutationRequest {
-        operation_id,
-        session_id: session_id.0.to_string(),
-        owner_id,
-        expected_revision,
-        mutation,
     };
     agent
         .run_science_project_mutation(
@@ -2053,6 +2098,7 @@ async fn handle_project_migrate(agent: &MvpAgent, args: &acp::ExtRequest) -> Ext
             source_run_id: params.run_id,
             title: params.title,
             research_question: params.question,
+            authority_run_id: String::new(),
         },
     )
     .await?;

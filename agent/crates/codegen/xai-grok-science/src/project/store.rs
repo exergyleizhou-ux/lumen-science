@@ -313,14 +313,14 @@ impl ProjectStore {
     // guard once and call these, because `std::sync::Mutex` is not reentrant:
     // a multi-file mutation that re-entered a locking method would deadlock.
 
-    fn write_project_file(&self, project: &ResearchProject) -> Result<()> {
+    pub(super) fn write_project_file(&self, project: &ResearchProject) -> Result<()> {
         self.write_confined(
             &Self::project_record(&project.project_id, "project.json")?,
             project,
         )
     }
 
-    fn write_graph_file(&self, graph: &EvidenceGraph) -> Result<()> {
+    pub(super) fn write_graph_file(&self, graph: &EvidenceGraph) -> Result<()> {
         graph
             .validate_integrity()
             .map_err(|error| ScienceError::Invalid(format!("evidence graph invalid: {error}")))?;
@@ -330,7 +330,7 @@ impl ProjectStore {
         )
     }
 
-    fn write_claim_file(&self, claim: &Claim) -> Result<()> {
+    pub(super) fn write_claim_file(&self, claim: &Claim) -> Result<()> {
         self.write_confined(
             &Self::claim_record(&claim.project_id, &claim.claim_id)?,
             claim,
@@ -382,6 +382,13 @@ impl ProjectStore {
             return Err(ScienceError::Ownership);
         }
         Ok(project)
+    }
+
+    pub(super) fn project_exists(&self, project_id: &ProjectId) -> Result<bool> {
+        Ok(self
+            .confined()?
+            .read_optional(&Self::project_record(project_id, "project.json")?)?
+            .is_some())
     }
 
     /// Assert that `owner_id` owns `project_id` without exposing whether the
@@ -489,7 +496,12 @@ impl ProjectStore {
         }
         let mut hasher = Sha256::new();
         hasher.update(project_id.0.as_bytes());
-        for name in ["project.json", "graph.json", "artifacts.json"] {
+        for name in [
+            "project.json",
+            "graph.json",
+            "artifacts.json",
+            "migration.json",
+        ] {
             hasher.update(name.as_bytes());
             match self
                 .confined()?
@@ -599,6 +611,21 @@ impl ProjectStore {
         label: impl Into<String>,
         run_id: Option<String>,
     ) -> Result<RegisteredArtifact> {
+        // Held across the read-modify-write so a concurrent registration of a
+        // different digest is not lost.
+        let _guard = self.write_guard()?;
+        self.register_artifact_inner(project_id, owner_id, artifact_sha256, label, run_id)
+    }
+
+    /// Caller must hold the project-store write guard.
+    pub(super) fn register_artifact_inner(
+        &self,
+        project_id: &ProjectId,
+        owner_id: &str,
+        artifact_sha256: impl Into<String>,
+        label: impl Into<String>,
+        run_id: Option<String>,
+    ) -> Result<RegisteredArtifact> {
         self.gates.require(ScienceFeature::EvidenceGraph)?;
         let project = self.load_project(project_id)?;
         if project.owner_id.0 != owner_id {
@@ -606,9 +633,6 @@ impl ProjectStore {
         }
         let sha = artifact_sha256.into();
         validate_sha256_hex(&sha).map_err(ScienceError::Invalid)?;
-        // Held across the read-modify-write so a concurrent registration of a
-        // different digest is not lost.
-        let _guard = self.write_guard()?;
         let mut registry = self.list_artifacts(project_id)?;
         if let Some(existing) = registry.get(&sha) {
             if existing.project_id != *project_id {
@@ -630,6 +654,91 @@ impl ProjectStore {
         registry.insert(sha, record.clone());
         self.write_confined(&self.artifacts_relative(project_id)?, &registry)?;
         Ok(record)
+    }
+
+    /// Replace the complete registry while committing a newly-created
+    /// migration aggregate. This is not exposed outside the project module;
+    /// ordinary mutations must continue to use `register_artifact`.
+    pub(super) fn write_artifact_registry_inner(
+        &self,
+        project_id: &ProjectId,
+        registry: &BTreeMap<String, RegisteredArtifact>,
+    ) -> Result<()> {
+        if registry.iter().any(|(sha, record)| {
+            validate_sha256_hex(sha).is_err()
+                || record.project_id != *project_id
+                || record.sha256 != *sha
+        }) {
+            return Err(ScienceError::Invalid(
+                "migration artifact registry is malformed".into(),
+            ));
+        }
+        self.write_confined(&self.artifacts_relative(project_id)?, registry)
+    }
+
+    pub(super) fn migration_relative(project_id: &ProjectId) -> Result<PathBuf> {
+        Self::project_record(project_id, "migration.json")
+    }
+
+    pub(super) fn write_migration_manifest_inner(
+        &self,
+        project_id: &ProjectId,
+        manifest: &super::migration::MigrationManifest,
+    ) -> Result<()> {
+        self.write_confined(&Self::migration_relative(project_id)?, manifest)
+    }
+
+    pub fn load_migration_manifest(
+        &self,
+        project_id: &ProjectId,
+    ) -> Result<super::migration::MigrationManifest> {
+        self.read_confined(&Self::migration_relative(project_id)?)?
+            .ok_or_else(|| {
+                ScienceError::Invalid(format!(
+                    "migration manifest not found for project {}",
+                    project_id.0
+                ))
+            })
+    }
+
+    fn migration_commit_relative(operation_id: &str) -> Result<PathBuf> {
+        super::mutation::validate_operation_id(operation_id)?;
+        Ok(PathBuf::from("migration-commits").join(format!("{operation_id}.json")))
+    }
+
+    /// Actor commit journal for crash recovery between project publication
+    /// and the generic operation ledger. It is data, not an execution
+    /// authority: only an already-Allowed authority run may create or recover
+    /// one.
+    pub fn lookup_migration_commit(
+        &self,
+        operation_id: &str,
+    ) -> Result<Option<super::migration::MigrationCommit>> {
+        let commit: Option<super::migration::MigrationCommit> =
+            self.read_confined(&Self::migration_commit_relative(operation_id)?)?;
+        if commit
+            .as_ref()
+            .is_some_and(|commit| commit.admission.operation_id() != operation_id)
+        {
+            return Err(ScienceError::Ownership);
+        }
+        Ok(commit)
+    }
+
+    /// Caller must hold the project-store write guard.
+    pub(super) fn write_migration_commit_inner(
+        &self,
+        commit: &super::migration::MigrationCommit,
+    ) -> Result<()> {
+        let path = Self::migration_commit_relative(commit.admission.operation_id())?;
+        match self.read_confined::<super::migration::MigrationCommit>(&path)? {
+            Some(existing) if existing == *commit => Ok(()),
+            Some(_) => Err(ScienceError::Invalid(format!(
+                "migration commit {} conflicts with its durable journal",
+                commit.admission.operation_id()
+            ))),
+            None => self.write_new_confined(&path, commit),
+        }
     }
 
     /// The first other project that has registered this digest, if any.

@@ -237,6 +237,10 @@ pub struct PreparedScienceProjectMutation {
     pub(crate) project_store: xai_grok_science::project::ProjectStore,
     pub(crate) ticket: xai_grok_science::csv::ScienceRunTicket,
     pub(crate) request: xai_grok_science::project::MutationRequest,
+    /// Present only for `project_migrate`. Captured before permission and
+    /// revalidated after Allow; private fields make it an immutable source
+    /// capability rather than caller-supplied metadata.
+    pub(crate) migration_admission: Option<xai_grok_science::project::MigrationAdmission>,
     /// Human-readable target used in the permission prompt.
     pub(crate) target: String,
     /// An operation already applied under this id: returned without asking

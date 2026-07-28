@@ -323,6 +323,66 @@ impl Drop for PendingScienceDossierApproval {
     }
 }
 
+/// Cancellation safety for every durably admitted project mutation.
+///
+/// An ACP client may disconnect while the production permission future is
+/// pending. Without this guard the durable run remains
+/// `AwaitingApproval` forever even though no caller can resume it.
+struct PendingScienceProjectMutationApproval {
+    cmd_tx: mpsc::UnboundedSender<SessionCommand>,
+    prepared: Option<crate::session::commands::PreparedScienceProjectMutation>,
+}
+
+impl PendingScienceProjectMutationApproval {
+    fn new(
+        cmd_tx: mpsc::UnboundedSender<SessionCommand>,
+        prepared: crate::session::commands::PreparedScienceProjectMutation,
+    ) -> Self {
+        Self {
+            cmd_tx,
+            prepared: Some(prepared),
+        }
+    }
+
+    fn prepared(&self) -> &crate::session::commands::PreparedScienceProjectMutation {
+        self.prepared
+            .as_ref()
+            .expect("project mutation approval guard must remain armed")
+    }
+
+    fn take(mut self) -> crate::session::commands::PreparedScienceProjectMutation {
+        self.prepared
+            .take()
+            .expect("project mutation approval guard must remain armed")
+    }
+}
+
+impl Drop for PendingScienceProjectMutationApproval {
+    fn drop(&mut self) {
+        let Some(prepared) = self.prepared.take() else {
+            return;
+        };
+        let (respond_to, _response) = oneshot::channel();
+        if self
+            .cmd_tx
+            .send(SessionCommand::FinishScienceProjectMutation(Box::new(
+                crate::session::commands::FinishScienceProjectMutation {
+                    prepared,
+                    decision: xai_grok_science::ApprovalDecision::Cancel,
+                    reason: "project mutation permission wait was cancelled before a decision"
+                        .into(),
+                    respond_to,
+                },
+            )))
+            .is_err()
+        {
+            tracing::warn!(
+                "session actor unavailable while cancelling a pending Science project mutation approval"
+            );
+        }
+    }
+}
+
 impl SessionHandle {
     /// S4 product path for the deterministic offline Science micro-loop.
     /// Approval is requested from the existing session-scoped Lumen permission
@@ -883,10 +943,11 @@ impl SessionHandle {
                 )
                 .await;
         }
+        let pending = PendingScienceProjectMutationApproval::new(self.cmd_tx.clone(), prepared);
 
         let call_id = acp::ToolCallId::new(std::sync::Arc::from(format!(
             "science-project-mutation-{}",
-            prepared.ticket.run_id.0
+            pending.prepared().ticket.run_id.0
         )));
         let update = acp::ToolCallUpdate::new(
             call_id,
@@ -894,13 +955,13 @@ impl SessionHandle {
                 .kind(Some(acp::ToolKind::Other))
                 .title(Some(format!(
                     "Lumen Science {} record mutation",
-                    prepared.request.mutation.kind()
+                    pending.prepared().request.mutation.kind()
                 ))),
         );
         let permission = tokio::time::timeout(
             approval_timeout,
             self.permission_handle.request(
-                AccessKind::Edit(prepared.target.clone()),
+                AccessKind::Edit(pending.prepared().target.clone()),
                 update,
                 Some(self.info.id.0.to_string()),
                 None,
@@ -933,7 +994,7 @@ impl SessionHandle {
                 format!("permission requires follow-up: {message}"),
             ),
         };
-        self.finish_science_project_mutation(prepared, decision, reason)
+        self.finish_science_project_mutation(pending.take(), decision, reason)
             .await
     }
 
@@ -1834,6 +1895,115 @@ mod workflow_approval_cancellation_tests {
                 .provenance(&run_id)
                 .unwrap()
                 .is_empty()
+        );
+    }
+
+    fn prepared_project_mutation(
+        workspace: &std::path::Path,
+    ) -> crate::session::commands::PreparedScienceProjectMutation {
+        let workspace = dunce::canonicalize(workspace).unwrap();
+        let store_root = workspace.join("project-mutation-store");
+        std::fs::create_dir(&store_root).unwrap();
+        let store = xai_grok_science::ScienceStore::new_confined(&store_root, &workspace).unwrap();
+        let project_store =
+            xai_grok_science::project::ProjectStore::new_confined(&store_root, &workspace).unwrap();
+        let operation_id = "operation-project-cancel-guard";
+        let context = xai_grok_science::RunContext {
+            run_id: xai_grok_science::RunId::new_v7(),
+            project_id: xai_grok_science::ProjectId::new(format!("pending-{operation_id}")),
+            session_id: "session-project-cancel-guard".into(),
+            owner_id: "owner-project-cancel-guard".into(),
+            workspace_root: workspace,
+            provider: "test".into(),
+            approval_policy: "test".into(),
+            tool_profile: "science-project-mutation-v1".into(),
+            artifact_root: store_root.join("runs"),
+            environment: BTreeMap::new(),
+        };
+        let ticket = xai_grok_science::csv::begin_fixture(&store, context).unwrap();
+        crate::session::commands::PreparedScienceProjectMutation {
+            store,
+            project_store,
+            ticket,
+            request: xai_grok_science::project::MutationRequest {
+                operation_id: operation_id.into(),
+                session_id: "session-project-cancel-guard".into(),
+                owner_id: "owner-project-cancel-guard".into(),
+                expected_revision: None,
+                mutation: xai_grok_science::project::ProjectMutation::ProjectCreate {
+                    title: "Must remain absent".into(),
+                    research_question: "Does disconnect remain zero-output?".into(),
+                },
+            },
+            migration_admission: None,
+            target: store_root.join("projects").display().to_string(),
+            replayed: None,
+        }
+    }
+
+    #[test]
+    fn dropping_project_permission_wait_enqueues_actor_cancel_finish() {
+        let workspace = tempfile::tempdir().unwrap();
+        let prepared = prepared_project_mutation(workspace.path());
+        let run_id = prepared.ticket.run_id.clone();
+        let project_store_root = dunce::canonicalize(workspace.path())
+            .unwrap()
+            .join("project-mutation-store");
+        let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel();
+
+        drop(PendingScienceProjectMutationApproval::new(cmd_tx, prepared));
+
+        let command = cmd_rx
+            .try_recv()
+            .expect("drop must enqueue an actor project Finish command");
+        let SessionCommand::FinishScienceProjectMutation(command) = command else {
+            panic!("drop enqueued the wrong SessionCommand");
+        };
+        assert_eq!(command.prepared.ticket.run_id, run_id);
+        assert_eq!(command.decision, xai_grok_science::ApprovalDecision::Cancel);
+        assert!(command.reason.contains("cancelled before a decision"));
+        assert_eq!(
+            command
+                .prepared
+                .store
+                .load_run(&run_id)
+                .expect("durable awaiting project mutation run")
+                .state,
+            xai_grok_science::RunState::AwaitingApproval,
+            "the handle must enqueue actor work, never mutate the store directly"
+        );
+        let terminal = xai_grok_science::csv::finish_without_execution(
+            &command.prepared.store,
+            &command.prepared.ticket,
+            command.decision,
+            command.reason,
+        )
+        .unwrap();
+        assert_eq!(terminal.state, xai_grok_science::RunState::Cancelled);
+        assert!(
+            command
+                .prepared
+                .store
+                .artifacts(&run_id)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(command.prepared.store.evidence(&run_id).unwrap().is_empty());
+        assert!(
+            command
+                .prepared
+                .store
+                .provenance(&run_id)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            !project_store_root.join("projects").exists(),
+            "disconnect cancellation must not create a project"
+        );
+        assert!(
+            !project_store_root.join("operations").exists(),
+            "disconnect cancellation must not burn an operation id"
         );
     }
 }

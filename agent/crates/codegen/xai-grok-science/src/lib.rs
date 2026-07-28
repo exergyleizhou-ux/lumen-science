@@ -344,6 +344,20 @@ impl ScienceStore {
         Ok(run)
     }
 
+    /// Reopen a run when present without weakening corruption handling.
+    ///
+    /// Only an actual missing directory/record becomes `None`; malformed,
+    /// escaped or identity-mismatched records still fail closed.
+    pub fn load_run_optional(&self, run_id: &RunId) -> Result<Option<RunRecord>> {
+        match self.load_run(run_id) {
+            Ok(run) => Ok(Some(run)),
+            Err(ScienceError::Io(ref error)) if error.kind() == std::io::ErrorKind::NotFound => {
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     pub fn load_run_bounded(&self, run_id: &RunId, max_json_bytes: u64) -> Result<RunRecord> {
         let run: RunRecord = self.open_run_directory(run_id)?.read_json_bounded(
             Path::new("run.json"),
@@ -856,6 +870,42 @@ impl ScienceStore {
         relative: &Path,
     ) -> Result<Vec<u8>> {
         self.artifact_bytes_in_state(project, run_id, owner, relative, RunState::Running)
+    }
+
+    /// Reopen a candidate produced by one durably Allowed actor call while
+    /// the authority run is still Running.
+    ///
+    /// Unlike the crate-internal review helper, this public seam additionally
+    /// proves the exact call id and terminal Allow decision. SessionActor uses
+    /// it for multi-store commits such as V1→V2 migration, where the copied
+    /// payload must be byte-verified before the project ledger and run become
+    /// authoritative.
+    pub fn allowed_running_artifact_bytes(
+        &self,
+        project: &ProjectId,
+        run_id: &RunId,
+        owner: &str,
+        call: &CallId,
+        relative: &Path,
+    ) -> Result<Vec<u8>> {
+        let approvals = self.approvals(run_id)?;
+        let [approval] = approvals.as_slice() else {
+            return Err(ScienceError::Invalid(
+                "running artifact verification requires exactly one approval".into(),
+            ));
+        };
+        if approval.project_id != *project
+            || approval.run_id != *run_id
+            || approval.owner_id != owner
+            || approval.call_id != *call
+            || approval.decision != ApprovalDecision::Allow
+            || approval.decided_at.is_none()
+        {
+            return Err(ScienceError::Invalid(
+                "running artifact verification is not bound to the allowed actor call".into(),
+            ));
+        }
+        self.running_artifact_bytes(project, run_id, owner, relative)
     }
 
     fn artifact_bytes_in_state(
