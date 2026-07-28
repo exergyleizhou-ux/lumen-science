@@ -671,19 +671,24 @@ impl PinnedCommand {
         // deadlock if another parent thread held the allocator lock.
         let seccomp_filter = build_linux_seccomp_filter()?;
         let read_capabilities = open_linux_runtime_read_capabilities()?;
-        let executable_fd = self
+        let executable = self
             .inherited_snapshot
             .as_ref()
-            .ok_or_else(|| io::Error::other("Linux pinned executable descriptor is unavailable"))?
-            .as_raw_fd();
+            .ok_or_else(|| io::Error::other("Linux pinned executable descriptor is unavailable"))?;
+        // LANDLOCK_RULE_PATH_BENEATH requires O_PATH descriptors. Keep the
+        // original inheritable memfd and output-directory descriptor for exec
+        // and fchdir, but derive separate CLOEXEC path capabilities in the
+        // parent for Landlock rule construction.
+        let output_capability = open_linux_directory_path_capability(output_fd)?;
+        let executable_capability = open_linux_fd_path_capability(executable)?;
         // SAFETY: the closure captures owned, parent-built BPF instructions
         // plus parent-opened descriptor capabilities. It performs only
         // async-signal-safe libc syscalls and constructs stack values.
         unsafe {
             self.command.pre_exec(move || {
                 apply_linux_landlock_and_seccomp(
-                    output_fd,
-                    executable_fd,
+                    output_capability.as_raw_fd(),
+                    executable_capability.as_raw_fd(),
                     &read_capabilities,
                     &seccomp_filter,
                 )
@@ -797,6 +802,65 @@ struct LinuxPathCapability {
 }
 
 #[cfg(target_os = "linux")]
+fn open_linux_directory_path_capability(directory_fd: std::os::fd::RawFd) -> io::Result<File> {
+    let path_fd = unsafe {
+        // SAFETY: `directory_fd` is a retained live directory capability and
+        // the relative path is a static NUL-terminated string. The returned
+        // descriptor is checked before ownership is transferred.
+        libc::openat(
+            directory_fd,
+            c".".as_ptr(),
+            libc::O_PATH | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+        )
+    };
+    if path_fd < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: successful openat returned a new descriptor owned by this value.
+    Ok(unsafe { File::from_raw_fd(path_fd) })
+}
+
+#[cfg(target_os = "linux")]
+fn open_linux_fd_path_capability(source: &File) -> io::Result<File> {
+    let proc_path = PathBuf::from(format!("/proc/self/fd/{}", source.as_raw_fd()));
+    let mut options = OpenOptions::new();
+    // Following this kernel-owned magic link is intentional: it converts the
+    // exact retained open file into the O_PATH descriptor Landlock requires.
+    // The source descriptor remains live throughout this operation.
+    options
+        .read(true)
+        .custom_flags(libc::O_PATH | libc::O_CLOEXEC);
+    let capability = options.open(proc_path)?;
+    let source_metadata = source.metadata()?;
+    let capability_metadata = capability.metadata()?;
+    if source_metadata.dev() != capability_metadata.dev()
+        || source_metadata.ino() != capability_metadata.ino()
+    {
+        return Err(io::Error::other(
+            "Linux path capability does not retain the source file identity",
+        ));
+    }
+    Ok(capability)
+}
+
+#[cfg(target_os = "linux")]
+fn open_linux_path_capability(path: &Path) -> io::Result<File> {
+    let inspected = fs::symlink_metadata(path)?;
+    let mut options = OpenOptions::new();
+    options
+        .read(true)
+        .custom_flags(libc::O_PATH | libc::O_CLOEXEC | libc::O_NOFOLLOW);
+    let capability = options.open(path)?;
+    let opened = capability.metadata()?;
+    if inspected.dev() != opened.dev() || inspected.ino() != opened.ino() {
+        return Err(io::Error::other(
+            "Linux runtime path changed while its capability was retained",
+        ));
+    }
+    Ok(capability)
+}
+
+#[cfg(target_os = "linux")]
 fn open_linux_runtime_read_capabilities() -> io::Result<Box<[LinuxPathCapability]>> {
     use std::collections::BTreeSet;
 
@@ -823,7 +887,7 @@ fn open_linux_runtime_read_capabilities() -> io::Result<Box<[LinuxPathCapability
             continue;
         }
         verify_linux_protected_read_path(&canonical)?;
-        let file = File::open(&canonical)?;
+        let file = open_linux_path_capability(&canonical)?;
         let metadata = file.metadata()?;
         let allowed_access = ACCESS_FS_READ_FILE
             | if metadata.is_dir() {
@@ -1198,10 +1262,7 @@ fn create_snapshot(
     source: &mut File,
     executable_mode: u32,
 ) -> Result<(PinnedSnapshot, String), PinExecutableError> {
-    use std::ffi::CStr;
-
-    let name = CStr::from_bytes_with_nul(b"lumen-pinned-executable\0")
-        .expect("static memfd name is NUL-terminated");
+    let name = c"lumen-pinned-executable";
     let raw_fd = unsafe {
         // SAFETY: `name` is a valid C string and the returned descriptor is
         // checked before ownership is transferred.
@@ -1366,6 +1427,55 @@ mod tests {
         assert!(
             !capabilities.is_empty(),
             "the Linux runtime capability set is unexpectedly empty"
+        );
+        for capability in &capabilities {
+            let status_flags = unsafe {
+                // SAFETY: the capability owns a live descriptor and F_GETFL
+                // only reads its open-file status flags.
+                libc::fcntl(capability.file.as_raw_fd(), libc::F_GETFL)
+            };
+            assert!(status_flags >= 0, "read Landlock capability flags");
+            assert_ne!(
+                status_flags & libc::O_PATH,
+                0,
+                "Landlock path-beneath rules require O_PATH descriptors"
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn linux_landlock_uses_path_only_views_of_retained_descriptors() {
+        let dir = TestDir::new();
+        let output = File::open(&dir.0).expect("open retained output directory");
+        let output_capability =
+            open_linux_directory_path_capability(output.as_raw_fd()).expect("retain output O_PATH");
+
+        let executable = PathBuf::from("/bin/sh");
+        let pinned = PinnedExecutable::pin(&executable).expect("pin executable into sealed memfd");
+        let executable_capability =
+            open_linux_fd_path_capability(&pinned.snapshot.file).expect("retain memfd O_PATH");
+
+        for capability in [&output_capability, &executable_capability] {
+            let status_flags = unsafe {
+                // SAFETY: each capability owns a live descriptor and F_GETFL
+                // only reads its open-file status flags.
+                libc::fcntl(capability.as_raw_fd(), libc::F_GETFL)
+            };
+            assert!(status_flags >= 0, "read retained capability flags");
+            assert_ne!(
+                status_flags & libc::O_PATH,
+                0,
+                "Landlock path-beneath rules require O_PATH descriptors"
+            );
+        }
+        let source = pinned.snapshot.file.metadata().expect("stat source memfd");
+        let retained = executable_capability
+            .metadata()
+            .expect("stat retained memfd path");
+        assert_eq!(
+            (source.dev(), source.ino()),
+            (retained.dev(), retained.ino())
         );
     }
 
