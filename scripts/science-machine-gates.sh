@@ -51,6 +51,32 @@ print(f"skills: approved={d['summary']['approved']} pending={d['summary'].get('p
 PY
 ok "skills registry"
 
+python3 - <<'PY' || fail "independent Go release is frozen"
+from pathlib import Path
+
+workflow = Path(".github/workflows/science-release.yml").read_text()
+code = "\n".join(
+    line for line in workflow.splitlines()
+    if not line.lstrip().startswith("#")
+)
+for forbidden in (
+    "push:",
+    "tags:",
+    "contents: write",
+    "independentFromCore",
+    "actions/checkout",
+    "actions/upload-artifact",
+    "gh release",
+    "make release",
+    "go build",
+):
+    assert forbidden not in code, f"legacy release regained authority: {forbidden}"
+assert "workflow_dispatch:" in code
+assert "Legacy Science Go Release (frozen)" in workflow
+print("legacy Go release: manual notice only; no tag/build/publish authority")
+PY
+ok "independent Go release freeze"
+
 test -f docs/science/MOTIF_SUPPLY_CHAIN_AUDIT.md || fail "missing Motif audit"
 test -f third_party/provenance/motif.md || fail "missing motif provenance"
 test -f third_party/motif/NOTICE || fail "missing motif NOTICE"
