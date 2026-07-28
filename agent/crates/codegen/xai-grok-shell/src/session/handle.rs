@@ -230,6 +230,99 @@ impl Drop for PendingScienceWorkflowApproval {
         }
     }
 }
+
+/// Cancellation safety for a durably admitted evidence dossier.
+///
+/// Permission requests are ordinary futures and may be aborted when an ACP
+/// client disconnects. Retaining the prepared bundle here guarantees that a
+/// dropped request still sends an actor-owned Cancel finish instead of leaving
+/// the run permanently pending.
+struct PendingScienceDossierApproval {
+    cmd_tx: mpsc::UnboundedSender<SessionCommand>,
+    prepared: Option<crate::session::commands::PreparedScienceEvidenceDossier>,
+}
+
+/// Unforgeable within the shell crate outside this module: only the production
+/// permission bridge below can construct an Allow grant. The actor verifies
+/// all three bindings before it changes the durable approval to Allow.
+pub(crate) struct ScienceDossierPermissionGrant {
+    run_id: xai_grok_science::RunId,
+    call_id: xai_grok_science::CallId,
+    admission_sha256: String,
+}
+
+impl ScienceDossierPermissionGrant {
+    fn new(
+        prepared: &crate::session::commands::PreparedScienceEvidenceDossier,
+        admission_sha256: String,
+    ) -> Self {
+        Self {
+            run_id: prepared.ticket.run_id.clone(),
+            call_id: prepared.ticket.call_id.clone(),
+            admission_sha256,
+        }
+    }
+
+    pub(crate) fn authorizes(
+        &self,
+        prepared: &crate::session::commands::PreparedScienceEvidenceDossier,
+    ) -> xai_grok_science::Result<bool> {
+        Ok(self.run_id == prepared.ticket.run_id
+            && self.call_id == prepared.ticket.call_id
+            && self.admission_sha256 == prepared.admission.sha256()?)
+    }
+}
+
+impl PendingScienceDossierApproval {
+    fn new(
+        cmd_tx: mpsc::UnboundedSender<SessionCommand>,
+        prepared: crate::session::commands::PreparedScienceEvidenceDossier,
+    ) -> Self {
+        Self {
+            cmd_tx,
+            prepared: Some(prepared),
+        }
+    }
+
+    fn prepared(&self) -> &crate::session::commands::PreparedScienceEvidenceDossier {
+        self.prepared
+            .as_ref()
+            .expect("dossier approval guard must remain armed")
+    }
+
+    fn take(mut self) -> crate::session::commands::PreparedScienceEvidenceDossier {
+        self.prepared
+            .take()
+            .expect("dossier approval guard must remain armed")
+    }
+}
+
+impl Drop for PendingScienceDossierApproval {
+    fn drop(&mut self) {
+        let Some(prepared) = self.prepared.take() else {
+            return;
+        };
+        let (respond_to, _response) = oneshot::channel();
+        if self
+            .cmd_tx
+            .send(SessionCommand::FinishScienceEvidenceDossier(Box::new(
+                crate::session::commands::FinishScienceEvidenceDossier {
+                    prepared,
+                    decision: xai_grok_science::ApprovalDecision::Cancel,
+                    reason: "dossier permission wait was cancelled before a decision".into(),
+                    permission_grant: None,
+                    respond_to,
+                },
+            )))
+            .is_err()
+        {
+            tracing::warn!(
+                "session actor unavailable while cancelling a pending Science dossier approval"
+            );
+        }
+    }
+}
+
 impl SessionHandle {
     /// S4 product path for the deterministic offline Science micro-loop.
     /// Approval is requested from the existing session-scoped Lumen permission
@@ -525,6 +618,116 @@ impl SessionHandle {
                     prepared,
                     decision,
                     reason,
+                    respond_to,
+                },
+            )))
+            .map_err(|_| {
+                xai_grok_science::ScienceError::Invalid("session actor unavailable".into())
+            })?;
+        response
+            .await
+            .map_err(|_| xai_grok_science::ScienceError::Invalid("session actor stopped".into()))?
+    }
+
+    /// Compose byte-verified source runs into a self-contained dossier through
+    /// the same durable Begin/permission/Finish protocol as every Science
+    /// mutation.
+    pub async fn run_science_evidence_dossier_with_approval_timeout(
+        &self,
+        store: xai_grok_science::ScienceStore,
+        project_root: std::path::PathBuf,
+        context: xai_grok_science::RunContext,
+        source_run_ids: Vec<xai_grok_science::RunId>,
+        approval_timeout: std::time::Duration,
+    ) -> xai_grok_science::Result<xai_grok_science::dossier::DossierResult> {
+        use xai_grok_workspace::permission::{AccessKind, Decision};
+        let (begin_tx, begin_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SessionCommand::BeginScienceEvidenceDossier(Box::new(
+                crate::session::commands::BeginScienceEvidenceDossier {
+                    store,
+                    project_root,
+                    context,
+                    source_run_ids,
+                    respond_to: begin_tx,
+                },
+            )))
+            .map_err(|_| {
+                xai_grok_science::ScienceError::Invalid("session actor unavailable".into())
+            })?;
+        let prepared = begin_rx.await.map_err(|_| {
+            xai_grok_science::ScienceError::Invalid("session actor stopped".into())
+        })??;
+        let pending = PendingScienceDossierApproval::new(self.cmd_tx.clone(), prepared);
+        let prepared = pending.prepared();
+        let admission_sha256 = prepared.admission.sha256()?;
+        let call_id = acp::ToolCallId::new(std::sync::Arc::from(format!(
+            "science-evidence-dossier-{}",
+            prepared.ticket.run_id.0
+        )));
+        let update = acp::ToolCallUpdate::new(
+            call_id,
+            acp::ToolCallUpdateFields::new()
+                .kind(Some(acp::ToolKind::Other))
+                .title(Some(format!(
+                    "Build Lumen Science evidence dossier from {} verified run(s), request {}",
+                    prepared.admission.source_run_ids().len(),
+                    &admission_sha256[..12]
+                ))),
+        );
+        let permission = tokio::time::timeout(
+            approval_timeout,
+            self.permission_handle.request(
+                AccessKind::Edit(prepared.target.clone()),
+                update,
+                Some(self.info.id.0.to_string()),
+                None,
+                None,
+            ),
+        )
+        .await;
+        let (decision, reason) = match permission {
+            Err(_) => (
+                xai_grok_science::ApprovalDecision::Timeout,
+                format!(
+                    "permission request timed out after {} ms",
+                    approval_timeout.as_millis()
+                ),
+            ),
+            Ok(Decision::Allow) => (xai_grok_science::ApprovalDecision::Allow, String::new()),
+            Ok(Decision::Ask) => (
+                xai_grok_science::ApprovalDecision::Deny,
+                "permission manager returned unresolved Ask".into(),
+            ),
+            Ok(Decision::Reject(reason)) | Ok(Decision::PolicyDeny(reason)) => {
+                (xai_grok_science::ApprovalDecision::Deny, reason)
+            }
+            Ok(Decision::Cancelled) => (
+                xai_grok_science::ApprovalDecision::Cancel,
+                "permission request cancelled".into(),
+            ),
+            Ok(Decision::FollowupMessage(message)) => (
+                xai_grok_science::ApprovalDecision::Deny,
+                format!("permission requires follow-up: {message}"),
+            ),
+        };
+        let permission_grant = if decision == xai_grok_science::ApprovalDecision::Allow {
+            Some(ScienceDossierPermissionGrant::new(
+                prepared,
+                admission_sha256,
+            ))
+        } else {
+            None
+        };
+        let prepared = pending.take();
+        let (respond_to, response) = oneshot::channel();
+        self.cmd_tx
+            .send(SessionCommand::FinishScienceEvidenceDossier(Box::new(
+                crate::session::commands::FinishScienceEvidenceDossier {
+                    prepared,
+                    decision,
+                    reason,
+                    permission_grant,
                     respond_to,
                 },
             )))
@@ -1504,6 +1707,133 @@ mod workflow_approval_cancellation_tests {
                 .state,
             xai_grok_science::RunState::AwaitingApproval,
             "the handle must enqueue actor work, never mutate the store directly"
+        );
+    }
+
+    fn prepared_dossier(
+        workspace: &std::path::Path,
+    ) -> crate::session::commands::PreparedScienceEvidenceDossier {
+        let workspace = dunce::canonicalize(workspace).unwrap();
+        let store_root = workspace.join("dossier-store");
+        std::fs::create_dir(&store_root).unwrap();
+        let store = xai_grok_science::ScienceStore::new_confined(&store_root, &workspace).unwrap();
+        let project_store =
+            xai_grok_science::project::ProjectStore::new_confined(&store_root, &workspace).unwrap();
+        let project = project_store
+            .create_project(
+                "owner-dossier-cancel",
+                "Dossier cancellation",
+                "Does cancellation close the durable run?",
+            )
+            .unwrap();
+        let project_revision = project_store
+            .with_owned_project_revision(
+                &project.project_id,
+                "owner-dossier-cancel",
+                |_project, revision| Ok(revision.to_owned()),
+            )
+            .unwrap();
+        let context = xai_grok_science::RunContext {
+            run_id: xai_grok_science::RunId::new_v7(),
+            project_id: xai_grok_science::ProjectId::new(project.project_id.0.clone()),
+            session_id: "session-dossier-cancel".into(),
+            owner_id: "owner-dossier-cancel".into(),
+            workspace_root: workspace,
+            provider: "test".into(),
+            approval_policy: "test".into(),
+            tool_profile: "science-evidence-dossier-v1".into(),
+            artifact_root: store_root.join("runs"),
+            environment: BTreeMap::new(),
+        };
+        let source_run_id = xai_grok_science::RunId::new("source-dossier-cancel");
+        let mut source_context = context.clone();
+        source_context.run_id = source_run_id.clone();
+        source_context.tool_profile = "dossier-source-fixture".into();
+        store.create_run(source_context).unwrap();
+        store
+            .transition(&source_run_id, xai_grok_science::RunState::Succeeded, None)
+            .unwrap();
+        let source_snapshots =
+            xai_grok_science::dossier::capture_source_snapshots(&store, &[source_run_id]).unwrap();
+        let admission = xai_grok_science::dossier::DossierAdmission::new(
+            &context,
+            source_snapshots,
+            project_revision,
+            project.title.clone(),
+            project.research_question.clone(),
+            "SessionActor/evidence-dossier-v1".into(),
+        )
+        .unwrap();
+        let ticket = xai_grok_science::dossier::begin_dossier(&store, context, &admission).unwrap();
+        let target = store_root
+            .join("runs")
+            .join(&ticket.run_id.0)
+            .join("artifacts")
+            .display()
+            .to_string();
+        crate::session::commands::PreparedScienceEvidenceDossier {
+            store,
+            project_store,
+            ticket,
+            project,
+            admission,
+            target,
+        }
+    }
+
+    #[test]
+    fn dropping_dossier_permission_wait_enqueues_actor_cancel_finish() {
+        let workspace = tempfile::tempdir().unwrap();
+        let prepared = prepared_dossier(workspace.path());
+        let run_id = prepared.ticket.run_id.clone();
+        let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel();
+
+        drop(PendingScienceDossierApproval::new(cmd_tx, prepared));
+
+        let command = cmd_rx
+            .try_recv()
+            .expect("drop must enqueue an actor dossier Finish command");
+        let SessionCommand::FinishScienceEvidenceDossier(command) = command else {
+            panic!("drop enqueued the wrong SessionCommand");
+        };
+        assert_eq!(command.prepared.ticket.run_id, run_id);
+        assert_eq!(command.decision, xai_grok_science::ApprovalDecision::Cancel);
+        assert!(command.permission_grant.is_none());
+        assert!(command.reason.contains("cancelled before a decision"));
+        assert_eq!(
+            command
+                .prepared
+                .store
+                .load_run(&run_id)
+                .expect("durable awaiting dossier run")
+                .state,
+            xai_grok_science::RunState::AwaitingApproval,
+            "the handle must enqueue actor work, never mutate the store directly"
+        );
+        let terminal = xai_grok_science::csv::finish_without_execution(
+            &command.prepared.store,
+            &command.prepared.ticket,
+            command.decision,
+            command.reason,
+        )
+        .unwrap();
+        assert_eq!(terminal.state, xai_grok_science::RunState::Cancelled);
+        assert!(
+            command
+                .prepared
+                .store
+                .artifacts(&run_id)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(command.prepared.store.evidence(&run_id).unwrap().is_empty());
+        assert!(
+            command
+                .prepared
+                .store
+                .provenance(&run_id)
+                .unwrap()
+                .is_empty()
         );
     }
 }

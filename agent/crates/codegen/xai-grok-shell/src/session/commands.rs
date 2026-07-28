@@ -168,6 +168,34 @@ pub struct FinishScienceSeqAnalyze {
         oneshot::Sender<xai_grok_science::Result<xai_grok_science::seqbench::SeqAnalyzeResult>>,
 }
 
+/// A biomedical evidence dossier admitted by the owning SessionActor. The
+/// retained project store and revision prevent the ACP request task from
+/// swapping the project or changing its question while approval is pending.
+pub struct PreparedScienceEvidenceDossier {
+    pub(crate) store: xai_grok_science::ScienceStore,
+    pub(crate) project_store: xai_grok_science::project::ProjectStore,
+    pub(crate) ticket: xai_grok_science::csv::ScienceRunTicket,
+    pub(crate) project: xai_grok_science::project::ResearchProject,
+    pub(crate) admission: xai_grok_science::dossier::DossierAdmission,
+    pub(crate) target: String,
+}
+pub struct BeginScienceEvidenceDossier {
+    pub(crate) store: xai_grok_science::ScienceStore,
+    pub(crate) project_root: std::path::PathBuf,
+    pub(crate) context: xai_grok_science::RunContext,
+    pub(crate) source_run_ids: Vec<xai_grok_science::RunId>,
+    pub(crate) respond_to:
+        oneshot::Sender<xai_grok_science::Result<PreparedScienceEvidenceDossier>>,
+}
+pub struct FinishScienceEvidenceDossier {
+    pub(crate) prepared: PreparedScienceEvidenceDossier,
+    pub(crate) decision: xai_grok_science::ApprovalDecision,
+    pub(crate) reason: String,
+    pub(crate) permission_grant: Option<crate::session::handle::ScienceDossierPermissionGrant>,
+    pub(crate) respond_to:
+        oneshot::Sender<xai_grok_science::Result<xai_grok_science::dossier::DossierResult>>,
+}
+
 /// A connector fetch that has begun a durable run inside the session actor
 /// and awaits the production permission decision. `requests` are the
 /// policy-validated connector exchanges; `fixture_bytes` stand in for the
@@ -412,6 +440,11 @@ pub enum SessionCommand {
     /// protocol as every other Science mutation.
     BeginScienceSeqAnalyze(Box<BeginScienceSeqAnalyze>),
     FinishScienceSeqAnalyze(Box<FinishScienceSeqAnalyze>),
+    /// Compose already-succeeded, byte-verified Science runs into a
+    /// self-contained dossier. The ACP adapter may select source ids, but only
+    /// the actor may reopen source bytes and publish the new artifacts.
+    BeginScienceEvidenceDossier(Box<BeginScienceEvidenceDossier>),
+    FinishScienceEvidenceDossier(Box<FinishScienceEvidenceDossier>),
     /// S3 phase one: begin a durable connector fetch run before the caller
     /// awaits this session's production permission manager.
     BeginScienceFetch(Box<BeginScienceFetch>),

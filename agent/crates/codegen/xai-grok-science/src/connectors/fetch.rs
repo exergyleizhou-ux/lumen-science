@@ -145,9 +145,9 @@ pub struct FetchResult {
 /// count and order are fixed per connector protocol. Routes through the
 /// global [`super::adapter::REGISTRY`]; unknown IDs fail closed.
 pub fn parse_responses(connector_id: &str, exchanges: &[FetchExchange]) -> Result<ParsedResponse> {
-    let adapter = super::adapter::REGISTRY
-        .get(connector_id)
-        .ok_or_else(|| ScienceError::Invalid(format!("no protocol adapter for connector: {connector_id}")))?;
+    let adapter = super::adapter::REGISTRY.get(connector_id).ok_or_else(|| {
+        ScienceError::Invalid(format!("no protocol adapter for connector: {connector_id}"))
+    })?;
     adapter.parse_responses(exchanges)
 }
 
@@ -288,6 +288,38 @@ pub fn finish_fetch(
         artifact_sha256: artifacts.first().map(|artifact| artifact.sha256.clone()),
         verified_at: Utc::now(),
     })?;
+    // Multi-exchange protocols (currently PubMed esearch + esummary) must not
+    // leave their later raw responses as unbound bytes. The first exchange is
+    // already bound to the scientific claim above; every remaining exchange
+    // receives its own exact digest evidence and provenance.
+    for (index, artifact) in artifacts.iter().enumerate().skip(1) {
+        let exchange = &exchanges[index];
+        store.add_provenance(Provenance {
+            run_id: ticket.run_id.clone(),
+            source_uri: exchange.request.url.clone(),
+            source_commit: None,
+            source_path: None,
+            license: descriptor.tos_url.to_owned(),
+            retrieved_at: Utc::now(),
+            input_sha256: artifact.sha256.clone(),
+            tool: tool_identity.clone(),
+            environment: BTreeMap::from([
+                ("connector".into(), connector_id.to_owned()),
+                ("query".into(), query.to_owned()),
+                ("exchange_index".into(), index.to_string()),
+            ]),
+        })?;
+        store.add_evidence(Evidence {
+            run_id: ticket.run_id.clone(),
+            claim: format!(
+                "{} protocol exchange {index} was captured and byte-verified",
+                connector_id
+            ),
+            source: exchange.request.url.clone(),
+            artifact_sha256: Some(artifact.sha256.clone()),
+            verified_at: Utc::now(),
+        })?;
+    }
     store.append_event(
         &ticket.run_id,
         "LumenToolDispatch",
@@ -404,6 +436,23 @@ mod tests {
         assert_eq!(result.parsed.total_hits, 2);
         assert_eq!(result.parsed.records[0].id, "41234567");
         assert_eq!(result.artifacts.len(), 2);
+        for artifact in &result.artifacts {
+            assert!(
+                result.evidence.iter().any(|evidence| {
+                    evidence.artifact_sha256.as_deref() == Some(artifact.sha256.as_str())
+                }),
+                "artifact {} must have exact digest evidence",
+                artifact.relative_path.display()
+            );
+            assert!(
+                result
+                    .provenance
+                    .iter()
+                    .any(|provenance| provenance.input_sha256 == artifact.sha256),
+                "artifact {} must have exact digest provenance",
+                artifact.relative_path.display()
+            );
+        }
         assert_eq!(result.audits.len(), 2);
         assert!(result.user_notice.contains("NCBI disclaimer"));
         // Audit is redacted; evidence carries the scientific citation.
@@ -735,9 +784,21 @@ mod tests {
     #[test]
     fn normalize_populates_core_identity() {
         let r = RetrievedRecord {
-            id: "PMC123".into(), title: "Test".into(), container: "Nature".into(), url: "https://example.com".into(),
+            id: "PMC123".into(),
+            title: "Test".into(),
+            container: "Nature".into(),
+            url: "https://example.com".into(),
         };
-        let s = ScienceRecord::from_retrieved(&r, "pubmed", "public_reference", 0, 42, None, None, None);
+        let s = ScienceRecord::from_retrieved(
+            &r,
+            "pubmed",
+            "public_reference",
+            0,
+            42,
+            None,
+            None,
+            None,
+        );
         assert_eq!(s.id, "PMC123");
         assert_eq!(s.title, "Test");
         assert_eq!(s.container, "Nature");

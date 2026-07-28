@@ -43,6 +43,7 @@ export const SCIENCE_METHODS = [
   'run_csv',
   'import_preview',
   'connector_fetch',
+  'evidence_dossier',
   'ssh_scp_fixture',
   'goal_host_verify',
   'seq_analyze',

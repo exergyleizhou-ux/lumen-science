@@ -119,10 +119,10 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lumen-acp-test-'))
 // The count is the point: it fails when the engine gains a method nobody
 // mirrored here. That is exactly how it caught workflow_execute, which LS5-K8
 // added to the engine while the desktop had no way to call it.
-await test('registry lists exactly the 28 engine methods', () => {
-  strictEqual(SCIENCE_METHODS.length, 28)
-  strictEqual(new Set(SCIENCE_METHODS).size, 28, 'no duplicates')
-  strictEqual(listScienceMethods().length, 28)
+await test('registry lists exactly the 29 engine methods', () => {
+  strictEqual(SCIENCE_METHODS.length, 29)
+  strictEqual(new Set(SCIENCE_METHODS).size, 29, 'no duplicates')
+  strictEqual(listScienceMethods().length, 29)
 })
 
 await test('registry wire form carries the ACP ext prefix', () => {

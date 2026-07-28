@@ -450,6 +450,19 @@ struct ConnectorFetchParams {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EvidenceDossierParams {
+    session_id: String,
+    project_id: String,
+    owner_id: String,
+    store_root: PathBuf,
+    artifact_root: PathBuf,
+    source_run_ids: Vec<String>,
+    #[serde(default = "default_approval_timeout_ms")]
+    approval_timeout_ms: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SshScpFixtureParams {
     session_id: String,
     project_id: String,
@@ -489,6 +502,7 @@ pub async fn handle(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
         "x.ai/science/run_csv" => handle_run_csv(agent, args).await,
         "x.ai/science/import_preview" => handle_import_preview(agent, args).await,
         "x.ai/science/connector_fetch" => handle_connector_fetch(agent, args).await,
+        "x.ai/science/evidence_dossier" => handle_evidence_dossier(agent, args).await,
         "x.ai/science/ssh_scp_fixture" => handle_ssh_scp_fixture(agent, args).await,
         "x.ai/science/goal_host_verify" => handle_goal_host_verify(agent, args).await,
         "x.ai/science/seq_analyze" => handle_seq_analyze(agent, args).await,
@@ -1671,6 +1685,79 @@ async fn handle_connector_fetch(agent: &MvpAgent, args: &acp::ExtRequest) -> Ext
             params.query,
             requests,
             fixture_bytes,
+            Duration::from_millis(params.approval_timeout_ms),
+        )
+        .await
+        .map_err(internal)?;
+    to_raw_response(&result)
+}
+
+/// Compose already-succeeded Science runs into a self-contained, byte-verified
+/// biomedical evidence dossier. The request task resolves identities and
+/// directories only; source artifact reads and all writes occur in the
+/// SessionActor.
+async fn handle_evidence_dossier(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: EvidenceDossierParams = parse_params(args)?;
+    if params.project_id.is_empty() || params.owner_id.is_empty() {
+        return Err(acp::Error::invalid_params().data("projectId and ownerId are required"));
+    }
+    if params.source_run_ids.is_empty()
+        || params.source_run_ids.len() > xai_grok_science::dossier::MAX_SOURCE_RUNS
+        || params.source_run_ids.iter().any(|run_id| run_id.is_empty())
+    {
+        return Err(acp::Error::invalid_params().data(format!(
+            "sourceRunIds must contain 1..={} non-empty ids",
+            xai_grok_science::dossier::MAX_SOURCE_RUNS
+        )));
+    }
+    if !(1..=300_000).contains(&params.approval_timeout_ms) {
+        return Err(acp::Error::invalid_params().data("approvalTimeoutMs must be in 1..=300000"));
+    }
+    let session_id = acp::SessionId::new(params.session_id);
+    let handle = agent
+        .get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    handle
+        .science_feature_gates
+        .require_all(&[
+            xai_grok_science::features::ScienceFeature::ResearchProject,
+            xai_grok_science::features::ScienceFeature::EvidenceGraph,
+        ])
+        .map_err(internal)?;
+    let workspace = dunce::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let store_root = canonical_existing_dir_within(params.store_root, &workspace)?;
+    let artifact_root = canonical_existing_dir_within(params.artifact_root, &workspace)?;
+    if artifact_root != store_root.join("runs") {
+        return Err(acp::Error::invalid_params()
+            .data("artifactRoot for an evidence dossier must equal storeRoot/runs"));
+    }
+    let source_run_ids = params
+        .source_run_ids
+        .into_iter()
+        .map(RunId::new)
+        .collect::<Vec<_>>();
+    let context = RunContext {
+        run_id: RunId::new_v7(),
+        project_id: ProjectId::new(params.project_id),
+        session_id: session_id.0.to_string(),
+        owner_id: params.owner_id,
+        workspace_root: workspace,
+        provider: "local-store-verified".into(),
+        approval_policy: "production-session-permission".into(),
+        tool_profile: "science-evidence-dossier-v1".into(),
+        artifact_root,
+        environment: BTreeMap::from([
+            ("network".into(), "disabled".into()),
+            ("locale".into(), "C".into()),
+        ]),
+    };
+    let result = agent
+        .run_science_evidence_dossier(
+            &session_id,
+            ScienceStore::new_confined(&store_root, &context.workspace_root).map_err(internal)?,
+            store_root,
+            context,
+            source_run_ids,
             Duration::from_millis(params.approval_timeout_ms),
         )
         .await

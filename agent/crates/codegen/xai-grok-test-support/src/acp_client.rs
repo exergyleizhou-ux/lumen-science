@@ -74,6 +74,9 @@ pub enum PermissionResponse {
     /// Hold the real ACP permission request open so a product test can mutate
     /// hostile external state during the AwaitingApproval window.
     AllowAfter(Duration),
+    /// Select the production RejectOnce option so the SessionActor records a
+    /// durable Denied terminal state rather than a transport cancellation.
+    DenyOnce,
     Reject,
     NeverRespond,
 }
@@ -99,6 +102,19 @@ impl acp::Client for TestAcpClient {
                 return Ok(acp::RequestPermissionResponse::new(
                     acp::RequestPermissionOutcome::Cancelled,
                 ));
+            }
+            PermissionResponse::DenyOnce => {
+                let outcome = args
+                    .options
+                    .iter()
+                    .find(|option| option.kind == acp::PermissionOptionKind::RejectOnce)
+                    .map(|option| {
+                        acp::RequestPermissionOutcome::Selected(
+                            acp::SelectedPermissionOutcome::new(option.option_id.clone()),
+                        )
+                    })
+                    .unwrap_or(acp::RequestPermissionOutcome::Cancelled);
+                return Ok(acp::RequestPermissionResponse::new(outcome));
             }
             PermissionResponse::AllowAfter(delay) => tokio::time::sleep(delay).await,
             PermissionResponse::AllowOnce => {}

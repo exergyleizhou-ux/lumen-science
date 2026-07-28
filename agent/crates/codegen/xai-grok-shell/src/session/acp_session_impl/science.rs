@@ -2,9 +2,9 @@
 
 use super::*;
 use crate::session::commands::{
-    PreparedScienceCsv, PreparedScienceFetch, PreparedScienceImport,
-    PreparedScienceKernelAdmission, PreparedScienceProjectMutation, PreparedScienceSeqAnalyze,
-    PreparedScienceSshScpAdmission, PreparedScienceWorkflowExecution,
+    PreparedScienceCsv, PreparedScienceEvidenceDossier, PreparedScienceFetch,
+    PreparedScienceImport, PreparedScienceKernelAdmission, PreparedScienceProjectMutation,
+    PreparedScienceSeqAnalyze, PreparedScienceSshScpAdmission, PreparedScienceWorkflowExecution,
 };
 use sha2::Digest as _;
 
@@ -390,6 +390,182 @@ impl SessionActor {
             &prepared.source_bytes,
             &prepared.options,
         )
+    }
+
+    /// Admit a dossier composition without exposing source artifact bytes to
+    /// the ACP request task. Source runs and the project revision are checked
+    /// before the durable approval begins, then checked again at commit.
+    pub(super) fn prepare_science_evidence_dossier(
+        &self,
+        store: xai_grok_science::ScienceStore,
+        project_root: std::path::PathBuf,
+        context: xai_grok_science::RunContext,
+        source_run_ids: Vec<xai_grok_science::RunId>,
+    ) -> xai_grok_science::Result<PreparedScienceEvidenceDossier> {
+        if context.session_id != self.session_info.id.0.as_ref() {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "evidence dossier session does not match this SessionActor".into(),
+            ));
+        }
+        self.science_feature_gates.require_all(&[
+            xai_grok_science::features::ScienceFeature::ResearchProject,
+            xai_grok_science::features::ScienceFeature::EvidenceGraph,
+        ])?;
+        let actor_workspace = dunce::canonicalize(&self.session_info.cwd)?;
+        validate_project_mutation_actor_roots(&actor_workspace, &store, &project_root, &context)?;
+        let canonical_project_root = dunce::canonicalize(&project_root)?;
+        let canonical_store_root = dunce::canonicalize(store.root())?;
+        if source_run_ids.is_empty()
+            || source_run_ids.len() > xai_grok_science::dossier::MAX_SOURCE_RUNS
+        {
+            return Err(xai_grok_science::ScienceError::Invalid(format!(
+                "evidence dossier requires 1..={} source runs",
+                xai_grok_science::dossier::MAX_SOURCE_RUNS
+            )));
+        }
+        let unique_source_runs = source_run_ids
+            .iter()
+            .collect::<std::collections::BTreeSet<_>>();
+        if unique_source_runs.len() != source_run_ids.len()
+            || source_run_ids
+                .iter()
+                .any(|run_id| run_id == &context.run_id)
+        {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "evidence dossier source runs must be unique and cannot include the dossier run"
+                    .into(),
+            ));
+        }
+
+        let project_store =
+            xai_grok_science::project::ProjectStore::new_confined(&project_root, &actor_workspace)?
+                .with_gates(self.science_feature_gates.clone());
+        if !store.shares_root_capability_with(&project_store)? {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "evidence dossier science and project stores pin different root identities".into(),
+            ));
+        }
+        let project_id = xai_grok_science::project::ProjectId(context.project_id.0.clone());
+        let (project, project_revision) = project_store.with_owned_project_revision(
+            &project_id,
+            &context.owner_id,
+            |project, revision| Ok((project.clone(), revision.to_owned())),
+        )?;
+
+        for source_run_id in &source_run_ids {
+            let source = store.load_run_bounded(
+                source_run_id,
+                xai_grok_science::dossier::MAX_SOURCE_METADATA_BYTES as u64,
+            )?;
+            if source.state != xai_grok_science::RunState::Succeeded
+                || source.context.project_id != context.project_id
+                || source.context.owner_id != context.owner_id
+                || source.context.session_id != context.session_id
+                || source.context.workspace_root != context.workspace_root
+                || source.context.artifact_root != context.artifact_root
+            {
+                return Err(xai_grok_science::ScienceError::Ownership);
+            }
+        }
+
+        let source_snapshots =
+            xai_grok_science::dossier::capture_source_snapshots(&store, &source_run_ids)?;
+        let admission = xai_grok_science::dossier::DossierAdmission::new(
+            &context,
+            source_snapshots,
+            project_revision,
+            project.title.clone(),
+            project.research_question.clone(),
+            "SessionActor/evidence-dossier-v1".into(),
+        )?;
+        let ticket = xai_grok_science::dossier::begin_dossier(&store, context, &admission)?;
+        let target = canonical_store_root
+            .join("runs")
+            .join(&ticket.run_id.0)
+            .join("artifacts")
+            .display()
+            .to_string();
+        Ok(PreparedScienceEvidenceDossier {
+            store,
+            project_store,
+            ticket,
+            project,
+            admission,
+            target,
+        })
+    }
+
+    pub(super) fn finish_science_evidence_dossier(
+        &self,
+        prepared: PreparedScienceEvidenceDossier,
+        decision: xai_grok_science::ApprovalDecision,
+        reason: String,
+        permission_grant: Option<crate::session::handle::ScienceDossierPermissionGrant>,
+    ) -> xai_grok_science::Result<xai_grok_science::dossier::DossierResult> {
+        if decision == xai_grok_science::ApprovalDecision::Allow
+            && permission_grant
+                .as_ref()
+                .is_none_or(|grant| !grant.authorizes(&prepared).unwrap_or(false))
+        {
+            let terminal = xai_grok_science::csv::finish_without_execution(
+                &prepared.store,
+                &prepared.ticket,
+                xai_grok_science::ApprovalDecision::Deny,
+                "missing or mismatched actor permission grant",
+            )?;
+            return Err(xai_grok_science::ScienceError::Invalid(format!(
+                "science run {} finished {:?}: actor permission grant rejected",
+                prepared.ticket.run_id.0, terminal.state
+            )));
+        }
+        if decision != xai_grok_science::ApprovalDecision::Allow {
+            let terminal = xai_grok_science::csv::finish_without_execution(
+                &prepared.store,
+                &prepared.ticket,
+                decision,
+                reason,
+            )?;
+            return Err(xai_grok_science::ScienceError::Invalid(format!(
+                "science run {} finished {:?}",
+                prepared.ticket.run_id.0, terminal.state
+            )));
+        }
+        xai_grok_science::csv::mark_allowed(&prepared.store, &prepared.ticket)?;
+        let project_id = prepared.project.project_id.clone();
+        let result = prepared.project_store.with_owned_project_revision(
+            &project_id,
+            &prepared.ticket.owner_id,
+            |current_project, current_revision| {
+                if current_revision != prepared.admission.project_revision()
+                    || current_project.project_id != prepared.project.project_id
+                    || current_project.owner_id.0 != prepared.project.owner_id.0
+                    || current_project.title != prepared.project.title
+                    || current_project.research_question != prepared.project.research_question
+                {
+                    return Err(xai_grok_science::ScienceError::Invalid(
+                        "project changed while evidence dossier approval was pending".into(),
+                    ));
+                }
+                xai_grok_science::dossier::finish_dossier(
+                    &prepared.store,
+                    prepared.ticket.clone(),
+                    prepared.admission.clone(),
+                )
+            },
+        );
+        if let Err(error) = &result
+            && prepared
+                .store
+                .load_run(&prepared.ticket.run_id)
+                .is_ok_and(|run| run.state == xai_grok_science::RunState::Running)
+        {
+            let _ = xai_grok_science::csv::fail_running(
+                &prepared.store,
+                &prepared.ticket,
+                error.to_string(),
+            );
+        }
+        result
     }
 
     pub(super) async fn finish_science_import(

@@ -2236,6 +2236,864 @@ async fn test_stdio_science_connector_fetch_product_path() {
     .await;
 }
 
+/// Biomedical dossier product proof: real ACP project creation and three
+/// connector runs feed one actor-approved, byte-self-contained dossier.
+/// Reopening and tampering source bytes prove that success is content-bound
+/// and that a later failed composition rolls back every output.
+#[tokio::test]
+#[ignore]
+async fn test_stdio_science_evidence_dossier_success_and_tamper() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let workspace = std::fs::canonicalize(workdir.path()).expect("canonical workspace");
+        let store_root = workspace.join("science-dossier-store");
+        for name in [
+            "connector_pubmed_esearch.json",
+            "connector_pubmed_esummary.json",
+            "connector_europepmc_search.json",
+            "connector_crossref_works.json",
+        ] {
+            std::fs::copy(
+                format!(
+                    "{}/../xai-grok-science/fixtures/{name}",
+                    env!("CARGO_MANIFEST_DIR")
+                ),
+                workspace.join(name),
+            )
+            .expect("copy dossier connector fixture");
+        }
+
+        let client = GrokStdioClient::spawn(&server, &workspace).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(&workspace).await;
+        let created: serde_json::Value = serde_json::from_str(
+            client
+                .ext_method(
+                    "x.ai/science/project_create",
+                    serde_json::json!({
+                        "sessionId": session_id.0.as_ref(),
+                        "ownerId": "dossier-owner",
+                        "storeRoot": store_root,
+                        "title": "Biomedical evidence dossier",
+                        "researchQuestion": "What evidence supports target X?",
+                        "operationId": "op-dossier-project-0001",
+                        "approvalTimeoutMs": 5_000,
+                    }),
+                )
+                .await
+                .expect("create dossier project")
+                .0
+                .get(),
+        )
+        .expect("project_create JSON");
+        let project_id = created["projectId"]
+            .as_str()
+            .expect("project id")
+            .to_owned();
+        let artifact_root = store_root.join("runs");
+        assert!(
+            artifact_root.is_dir(),
+            "project mutation did not create run root"
+        );
+
+        let cases = [
+            (
+                "pubmed",
+                "crispr",
+                vec![
+                    workspace.join("connector_pubmed_esearch.json"),
+                    workspace.join("connector_pubmed_esummary.json"),
+                ],
+            ),
+            (
+                "europepmc",
+                "single cell RNA",
+                vec![workspace.join("connector_europepmc_search.json")],
+            ),
+            (
+                "crossref",
+                "reproducible science",
+                vec![workspace.join("connector_crossref_works.json")],
+            ),
+        ];
+        let mut source_run_ids = Vec::new();
+        for (connector_id, query, fixture_paths) in cases {
+            let response = client
+                .ext_method(
+                    "x.ai/science/connector_fetch",
+                    serde_json::json!({
+                        "sessionId": session_id.0.as_ref(),
+                        "projectId": project_id,
+                        "ownerId": "dossier-owner",
+                        "storeRoot": store_root,
+                        "artifactRoot": artifact_root,
+                        "connectorId": connector_id,
+                        "query": query,
+                        "maxResults": 5,
+                        "fixturePaths": fixture_paths,
+                        "approvalTimeoutMs": 5_000,
+                    }),
+                )
+                .await
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "dossier source {connector_id} failed: {error:?}\nstderr:\n{}",
+                        client.stderr()
+                    )
+                });
+            let result: serde_json::Value =
+                serde_json::from_str(response.0.get()).expect("connector result JSON");
+            assert_eq!(result["run"]["state"], "succeeded", "source: {result}");
+            source_run_ids.push(
+                result["run"]["context"]["run_id"]
+                    .as_str()
+                    .expect("source run id")
+                    .to_owned(),
+            );
+        }
+
+        let source_count = std::fs::read_dir(&artifact_root).unwrap().count();
+        let unrelated_artifacts = workspace.join("unrelated-dossier-artifacts");
+        std::fs::create_dir(&unrelated_artifacts).unwrap();
+        for (label, session, project, owner, request_store, request_artifacts) in [
+            (
+                "artifact root",
+                session_id.0.to_string(),
+                project_id.clone(),
+                "dossier-owner".to_owned(),
+                store_root.clone(),
+                unrelated_artifacts,
+            ),
+            (
+                "owner",
+                session_id.0.to_string(),
+                project_id.clone(),
+                "other-owner".to_owned(),
+                store_root.clone(),
+                artifact_root.clone(),
+            ),
+            (
+                "session",
+                "not-a-real-session".to_owned(),
+                project_id.clone(),
+                "dossier-owner".to_owned(),
+                store_root.clone(),
+                artifact_root.clone(),
+            ),
+            (
+                "project",
+                session_id.0.to_string(),
+                "not-a-real-project".to_owned(),
+                "dossier-owner".to_owned(),
+                store_root.clone(),
+                artifact_root.clone(),
+            ),
+        ] {
+            let rejected = client
+                .ext_method(
+                    "x.ai/science/evidence_dossier",
+                    serde_json::json!({
+                        "sessionId": session,
+                        "projectId": project,
+                        "ownerId": owner,
+                        "storeRoot": request_store,
+                        "artifactRoot": request_artifacts,
+                        "sourceRunIds": source_run_ids,
+                        "approvalTimeoutMs": 5_000,
+                    }),
+                )
+                .await;
+            assert!(rejected.is_err(), "forged {label} was accepted");
+            assert_eq!(
+                std::fs::read_dir(&artifact_root).unwrap().count(),
+                source_count,
+                "forged {label} opened a dossier run"
+            );
+        }
+        let outside = tempfile::tempdir().expect("outside dossier root");
+        let outside_store = outside.path().join("store");
+        std::fs::create_dir_all(outside_store.join("runs")).unwrap();
+        let outside_request = client
+            .ext_method(
+                "x.ai/science/evidence_dossier",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": project_id,
+                    "ownerId": "dossier-owner",
+                    "storeRoot": outside_store,
+                    "artifactRoot": outside.path().join("store/runs"),
+                    "sourceRunIds": source_run_ids,
+                    "approvalTimeoutMs": 5_000,
+                }),
+            )
+            .await;
+        assert!(
+            outside_request.is_err(),
+            "outside workspace store was accepted"
+        );
+        assert_eq!(
+            std::fs::read_dir(&artifact_root).unwrap().count(),
+            source_count,
+            "outside workspace request opened a dossier run"
+        );
+
+        let response = client
+            .ext_method(
+                "x.ai/science/evidence_dossier",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": project_id,
+                    "ownerId": "dossier-owner",
+                    "storeRoot": store_root,
+                    "artifactRoot": artifact_root,
+                    "sourceRunIds": source_run_ids,
+                    "approvalTimeoutMs": 5_000,
+                }),
+            )
+            .await
+            .unwrap_or_else(|error| {
+                panic!(
+                    "evidence dossier failed: {error:?}\nstderr:\n{}",
+                    client.stderr()
+                )
+            });
+        let result: serde_json::Value =
+            serde_json::from_str(response.0.get()).expect("dossier result JSON");
+        assert_eq!(result["run"]["state"], "succeeded", "dossier: {result}");
+        assert_eq!(
+            result["manifest"]["sources"].as_array().map(Vec::len),
+            Some(3),
+            "dossier: {result}"
+        );
+        assert_eq!(
+            result["artifacts"].as_array().map(Vec::len),
+            Some(6),
+            "four copied source payloads plus manifest and report are required"
+        );
+        let admission_sha256 = result["manifest"]["admission_sha256"]
+            .as_str()
+            .expect("admission digest");
+        assert_eq!(admission_sha256.len(), 64);
+
+        let store = xai_grok_science::ScienceStore::new(&store_root);
+        let dossier_run = xai_grok_science::RunId::new(
+            result["run"]["context"]["run_id"]
+                .as_str()
+                .expect("dossier run id"),
+        );
+        let durable = store.load_run(&dossier_run).expect("reopen dossier run");
+        assert_eq!(durable.state, xai_grok_science::RunState::Succeeded);
+        assert_eq!(
+            durable
+                .context
+                .environment
+                .get(xai_grok_science::dossier::DOSSIER_ADMISSION_ENV_KEY)
+                .map(String::as_str),
+            Some(admission_sha256)
+        );
+        let approval = store
+            .approvals(&dossier_run)
+            .expect("dossier approval")
+            .into_iter()
+            .next()
+            .expect("one approval");
+        assert_eq!(approval.decision, xai_grok_science::ApprovalDecision::Allow);
+        assert!(
+            approval.call_id.0.ends_with(admission_sha256),
+            "approval must bind the exact admitted request"
+        );
+        for source in result["manifest"]["sources"]
+            .as_array()
+            .expect("manifest sources")
+        {
+            for artifact in source["artifacts"].as_array().expect("source artifacts") {
+                let relative = artifact["bundled_relative_path"]
+                    .as_str()
+                    .expect("bundled path");
+                let bytes = store
+                    .artifact_bytes(
+                        &durable.context.project_id,
+                        &dossier_run,
+                        &durable.context.owner_id,
+                        Path::new(relative),
+                    )
+                    .expect("reopen copied source bytes");
+                assert_eq!(
+                    format!("{:x}", Sha256::digest(&bytes)),
+                    artifact["sha256"].as_str().expect("source digest")
+                );
+            }
+        }
+        for relative in ["dossier.json", "dossier.md"] {
+            assert!(
+                !store
+                    .artifact_bytes(
+                        &durable.context.project_id,
+                        &dossier_run,
+                        &durable.context.owner_id,
+                        Path::new(relative),
+                    )
+                    .expect("reopen dossier report")
+                    .is_empty()
+            );
+        }
+
+        let tampered_source = xai_grok_science::RunId::new(&source_run_ids[0]);
+        let source_artifact = store
+            .artifacts(&tampered_source)
+            .expect("source artifacts")
+            .into_iter()
+            .next()
+            .expect("source artifact");
+        std::fs::write(
+            store_root
+                .join("runs")
+                .join(&tampered_source.0)
+                .join("artifacts")
+                .join(&source_artifact.relative_path),
+            b"tampered after source success",
+        )
+        .expect("tamper source payload");
+        let runs_before: std::collections::BTreeSet<_> = std::fs::read_dir(store_root.join("runs"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        let tampered = client
+            .ext_method(
+                "x.ai/science/evidence_dossier",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": project_id,
+                    "ownerId": "dossier-owner",
+                    "storeRoot": store_root,
+                    "artifactRoot": artifact_root,
+                    "sourceRunIds": [tampered_source.0],
+                    "approvalTimeoutMs": 5_000,
+                }),
+            )
+            .await;
+        assert!(tampered.is_err(), "tampered source produced a dossier");
+        let runs_after: std::collections::BTreeSet<_> = std::fs::read_dir(store_root.join("runs"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        let failed_id = runs_after
+            .difference(&runs_before)
+            .next()
+            .and_then(|name| name.to_str())
+            .map(xai_grok_science::RunId::new)
+            .expect("one failed dossier run");
+        assert_eq!(
+            store.load_run(&failed_id).unwrap().state,
+            xai_grok_science::RunState::Failed
+        );
+        assert_eq!(
+            store.approvals(&failed_id).unwrap()[0].decision,
+            xai_grok_science::ApprovalDecision::Allow
+        );
+        assert!(store.artifacts(&failed_id).unwrap().is_empty());
+        assert!(store.evidence(&failed_id).unwrap().is_empty());
+        assert!(store.provenance(&failed_id).unwrap().is_empty());
+    })
+    .await;
+}
+
+/// The durable approval must authorize the exact source metadata and project
+/// revision observed at Begin, not merely a list of run ids. Both adversarial
+/// mutations happen while the real ACP permission request is open; the client
+/// eventually selects Allow, so only the SessionActor's Finish-time snapshot
+/// and revision checks can keep the changed inputs from becoming authoritative.
+#[tokio::test]
+#[ignore]
+async fn test_stdio_science_evidence_dossier_allow_rejects_approval_window_mutation() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let workspace = std::fs::canonicalize(workdir.path()).expect("canonical dossier workspace");
+        let store_root = workspace.join("science-dossier-approval-window-store");
+        let client = GrokStdioClient::spawn_with_permission_response(
+            &server,
+            &workspace,
+            PermissionResponse::AllowAfter(Duration::from_millis(800)),
+        )
+        .await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(&workspace).await;
+
+        // Seed a valid succeeded source in the same project/session/root. The
+        // request under test still traverses the rebuilt binary, ACP permission
+        // bridge, and owning SessionActor; direct seeding avoids consuming the
+        // delayed permission response before the adversarial request begins.
+        let project_store = xai_grok_science::project::ProjectStore::new(&store_root);
+        let project = project_store
+            .create_project(
+                "approval-window-owner",
+                "Approval-window dossier",
+                "Does the approval bind exact source metadata?",
+            )
+            .expect("seed dossier project");
+        let store = xai_grok_science::ScienceStore::new(&store_root);
+        let source_run = xai_grok_science::RunId::new("source-approval-window");
+        let source_project = xai_grok_science::ProjectId::new(project.project_id.0.clone());
+        let source_call = xai_grok_science::CallId::new("source-call-approval-window");
+        store
+            .create_run(xai_grok_science::RunContext {
+                run_id: source_run.clone(),
+                project_id: source_project.clone(),
+                session_id: session_id.0.to_string(),
+                owner_id: "approval-window-owner".into(),
+                workspace_root: workspace.clone(),
+                provider: "offline-test".into(),
+                approval_policy: "fixture".into(),
+                tool_profile: "dossier-source-fixture".into(),
+                artifact_root: store_root.join("runs"),
+                environment: std::collections::BTreeMap::new(),
+            })
+            .expect("create source run");
+        store
+            .request_approval(xai_grok_science::Approval {
+                project_id: source_project.clone(),
+                run_id: source_run.clone(),
+                call_id: source_call.clone(),
+                owner_id: "approval-window-owner".into(),
+                decision: xai_grok_science::ApprovalDecision::Pending,
+                decided_at: None,
+            })
+            .expect("request source approval");
+        store
+            .transition(
+                &source_run,
+                xai_grok_science::RunState::AwaitingApproval,
+                None,
+            )
+            .expect("await source approval");
+        let source_ticket = xai_grok_science::csv::ScienceRunTicket {
+            project_id: source_project.clone(),
+            run_id: source_run.clone(),
+            owner_id: "approval-window-owner".into(),
+            call_id: source_call,
+        };
+        xai_grok_science::csv::mark_allowed(&store, &source_ticket).expect("allow source fixture");
+        let source_artifact = store
+            .put_artifact(
+                &source_project,
+                &source_run,
+                "approval-window-owner",
+                source_ticket.call_id.clone(),
+                Path::new("source.json"),
+                br#"{"records":[{"id":"approval-window"}]}"#,
+                "application/json",
+                "fixture",
+            )
+            .expect("write source artifact");
+        store
+            .add_evidence(xai_grok_science::Evidence {
+                run_id: source_run.clone(),
+                claim: "original source evidence".into(),
+                source: "https://example.invalid/original".into(),
+                artifact_sha256: Some(source_artifact.sha256.clone()),
+                verified_at: chrono::Utc::now(),
+            })
+            .expect("write source evidence");
+        store
+            .add_provenance(xai_grok_science::Provenance {
+                run_id: source_run.clone(),
+                source_uri: "https://example.invalid/original".into(),
+                source_commit: None,
+                source_path: None,
+                license: "CC0-1.0".into(),
+                retrieved_at: chrono::Utc::now(),
+                input_sha256: source_artifact.sha256,
+                tool: "built-binary-fixture".into(),
+                environment: std::collections::BTreeMap::new(),
+            })
+            .expect("write source provenance");
+        store
+            .transition(&source_run, xai_grok_science::RunState::Succeeded, None)
+            .expect("succeed source fixture");
+
+        let dossier_params = || {
+            serde_json::json!({
+                "sessionId": session_id.0.as_ref(),
+                "projectId": project.project_id.0,
+                "ownerId": "approval-window-owner",
+                "storeRoot": store_root,
+                "artifactRoot": store_root.join("runs"),
+                "sourceRunIds": [source_run.0],
+                "approvalTimeoutMs": 5_000,
+            })
+        };
+        let run_ids = || {
+            std::fs::read_dir(store_root.join("runs"))
+                .expect("read dossier runs")
+                .map(|entry| entry.expect("read dossier run entry").file_name())
+                .collect::<std::collections::BTreeSet<_>>()
+        };
+
+        // First prove metadata substitution is rejected. The added record is
+        // valid JSON and remains scientifically bound to the source artifact;
+        // only the admission snapshot distinguishes it from what was approved.
+        let before_metadata = run_ids();
+        let request = async {
+            tokio::time::timeout(
+                Duration::from_secs(30),
+                client.ext_method("x.ai/science/evidence_dossier", dossier_params()),
+            )
+            .await
+            .expect("metadata-race dossier timed out")
+        };
+        let mutate_metadata = async {
+            for _ in 0..200 {
+                if client.permission_request_count() == 1 {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+            assert_eq!(
+                client.permission_request_count(),
+                1,
+                "dossier never reached the metadata-race permission prompt"
+            );
+            let mut evidence = store.evidence(&source_run).expect("read source evidence");
+            evidence.push(xai_grok_science::Evidence {
+                run_id: source_run.clone(),
+                claim: "injected while approval was pending".into(),
+                source: "https://example.invalid/injected".into(),
+                artifact_sha256: evidence[0].artifact_sha256.clone(),
+                verified_at: chrono::Utc::now(),
+            });
+            std::fs::write(
+                store_root
+                    .join("runs")
+                    .join(&source_run.0)
+                    .join("evidence.json"),
+                serde_json::to_vec_pretty(&evidence).expect("serialize injected evidence"),
+            )
+            .expect("mutate source evidence during approval");
+        };
+        let (metadata_outcome, ()) = tokio::join!(request, mutate_metadata);
+        assert!(
+            metadata_outcome.is_err(),
+            "Allow accepted source metadata changed after admission"
+        );
+        assert_eq!(
+            store
+                .evidence(&source_run)
+                .expect("reopen mutated evidence")
+                .len(),
+            2,
+            "adversarial source mutation did not occur"
+        );
+        let after_metadata = run_ids();
+        let metadata_run = after_metadata
+            .difference(&before_metadata)
+            .next()
+            .and_then(|name| name.to_str())
+            .map(xai_grok_science::RunId::new)
+            .expect("one metadata-race dossier run");
+        assert_eq!(
+            store
+                .load_run(&metadata_run)
+                .expect("load metadata-race run")
+                .state,
+            xai_grok_science::RunState::Failed
+        );
+        assert_eq!(
+            store
+                .approvals(&metadata_run)
+                .expect("metadata-race approval")[0]
+                .decision,
+            xai_grok_science::ApprovalDecision::Allow,
+            "test must reach Allow before the snapshot check fails closed"
+        );
+        assert!(
+            store
+                .artifacts(&metadata_run)
+                .expect("metadata-race artifacts")
+                .is_empty()
+        );
+        assert!(
+            store
+                .evidence(&metadata_run)
+                .expect("metadata-race evidence")
+                .is_empty()
+        );
+        assert!(
+            store
+                .provenance(&metadata_run)
+                .expect("metadata-race provenance")
+                .is_empty()
+        );
+
+        // A second real permission request captures the now-current source
+        // snapshot, then changes only the owned project while AwaitingApproval.
+        let before_project = run_ids();
+        let request = async {
+            tokio::time::timeout(
+                Duration::from_secs(30),
+                client.ext_method("x.ai/science/evidence_dossier", dossier_params()),
+            )
+            .await
+            .expect("project-race dossier timed out")
+        };
+        let mutate_project = async {
+            for _ in 0..200 {
+                if client.permission_request_count() == 2 {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+            assert_eq!(
+                client.permission_request_count(),
+                2,
+                "dossier never reached the project-race permission prompt"
+            );
+            let mut changed = project_store
+                .load_project(&project.project_id)
+                .expect("load project during approval");
+            changed.research_question =
+                "This question changed while dossier approval was pending.".into();
+            project_store
+                .save_project(&changed)
+                .expect("mutate project during approval");
+        };
+        let (project_outcome, ()) = tokio::join!(request, mutate_project);
+        assert!(
+            project_outcome.is_err(),
+            "Allow accepted a project revision changed after admission"
+        );
+        let after_project = run_ids();
+        let project_run = after_project
+            .difference(&before_project)
+            .next()
+            .and_then(|name| name.to_str())
+            .map(xai_grok_science::RunId::new)
+            .expect("one project-race dossier run");
+        assert_eq!(
+            store
+                .load_run(&project_run)
+                .expect("load project-race run")
+                .state,
+            xai_grok_science::RunState::Failed
+        );
+        assert_eq!(
+            store
+                .approvals(&project_run)
+                .expect("project-race approval")[0]
+                .decision,
+            xai_grok_science::ApprovalDecision::Allow
+        );
+        assert!(
+            store
+                .artifacts(&project_run)
+                .expect("project-race artifacts")
+                .is_empty()
+        );
+        assert!(
+            store
+                .evidence(&project_run)
+                .expect("project-race evidence")
+                .is_empty()
+        );
+        assert!(
+            store
+                .provenance(&project_run)
+                .expect("project-race provenance")
+                .is_empty()
+        );
+    })
+    .await;
+}
+
+/// Deny, transport cancellation, and timeout are distinct durable terminal
+/// states. None may publish a dossier artifact, evidence, or provenance.
+#[tokio::test]
+#[ignore]
+async fn test_stdio_science_evidence_dossier_non_allow_terminals_write_nothing() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let cases = [
+            (
+                "deny",
+                PermissionResponse::DenyOnce,
+                xai_grok_science::RunState::Denied,
+                xai_grok_science::ApprovalDecision::Deny,
+                5_000,
+            ),
+            (
+                "cancel",
+                PermissionResponse::Reject,
+                xai_grok_science::RunState::Cancelled,
+                xai_grok_science::ApprovalDecision::Cancel,
+                5_000,
+            ),
+            (
+                "timeout",
+                PermissionResponse::NeverRespond,
+                xai_grok_science::RunState::TimedOut,
+                xai_grok_science::ApprovalDecision::Timeout,
+                50,
+            ),
+        ];
+
+        for (label, response, expected_state, expected_decision, approval_timeout_ms) in cases {
+            let workdir = git_workdir();
+            let workspace =
+                std::fs::canonicalize(workdir.path()).expect("canonical terminal workspace");
+            let store_root = workspace.join(format!("science-dossier-{label}-store"));
+            let client =
+                GrokStdioClient::spawn_with_permission_response(&server, &workspace, response)
+                    .await;
+            client.initialize_with_timeout().await;
+            let session_id = client.create_session_with_timeout(&workspace).await;
+
+            let project_store = xai_grok_science::project::ProjectStore::new(&store_root);
+            let project = project_store
+                .create_project(
+                    format!("{label}-owner"),
+                    format!("{label} dossier"),
+                    "Must a non-Allow decision publish nothing?",
+                )
+                .expect("seed dossier project");
+            let store = xai_grok_science::ScienceStore::new(&store_root);
+            let source_run = xai_grok_science::RunId::new(format!("source-{label}"));
+            let source_project = xai_grok_science::ProjectId::new(project.project_id.0.clone());
+            let source_call = xai_grok_science::CallId::new(format!("source-call-{label}"));
+            store
+                .create_run(xai_grok_science::RunContext {
+                    run_id: source_run.clone(),
+                    project_id: source_project.clone(),
+                    session_id: session_id.0.to_string(),
+                    owner_id: format!("{label}-owner"),
+                    workspace_root: workspace.clone(),
+                    provider: "offline-test".into(),
+                    approval_policy: "fixture".into(),
+                    tool_profile: "dossier-source-fixture".into(),
+                    artifact_root: store_root.join("runs"),
+                    environment: std::collections::BTreeMap::new(),
+                })
+                .unwrap();
+            store
+                .request_approval(xai_grok_science::Approval {
+                    project_id: source_project.clone(),
+                    run_id: source_run.clone(),
+                    call_id: source_call.clone(),
+                    owner_id: format!("{label}-owner"),
+                    decision: xai_grok_science::ApprovalDecision::Pending,
+                    decided_at: None,
+                })
+                .unwrap();
+            store
+                .transition(
+                    &source_run,
+                    xai_grok_science::RunState::AwaitingApproval,
+                    None,
+                )
+                .unwrap();
+            let source_ticket = xai_grok_science::csv::ScienceRunTicket {
+                project_id: source_project.clone(),
+                run_id: source_run.clone(),
+                owner_id: format!("{label}-owner"),
+                call_id: source_call,
+            };
+            xai_grok_science::csv::mark_allowed(&store, &source_ticket).unwrap();
+            let artifact = store
+                .put_artifact(
+                    &source_project,
+                    &source_run,
+                    &format!("{label}-owner"),
+                    source_ticket.call_id.clone(),
+                    Path::new("source.json"),
+                    br#"{"records":[{"id":"fixture"}]}"#,
+                    "application/json",
+                    "fixture",
+                )
+                .unwrap();
+            store
+                .add_evidence(xai_grok_science::Evidence {
+                    run_id: source_run.clone(),
+                    claim: "fixture source".into(),
+                    source: "https://example.invalid/source".into(),
+                    artifact_sha256: Some(artifact.sha256.clone()),
+                    verified_at: chrono::Utc::now(),
+                })
+                .unwrap();
+            store
+                .add_provenance(xai_grok_science::Provenance {
+                    run_id: source_run.clone(),
+                    source_uri: "https://example.invalid/source".into(),
+                    source_commit: None,
+                    source_path: None,
+                    license: "CC0-1.0".into(),
+                    retrieved_at: chrono::Utc::now(),
+                    input_sha256: artifact.sha256,
+                    tool: "built-binary-fixture".into(),
+                    environment: std::collections::BTreeMap::new(),
+                })
+                .unwrap();
+            store
+                .transition(&source_run, xai_grok_science::RunState::Succeeded, None)
+                .unwrap();
+            let runs_before: std::collections::BTreeSet<_> =
+                std::fs::read_dir(store_root.join("runs"))
+                    .unwrap()
+                    .map(|entry| entry.unwrap().file_name())
+                    .collect();
+
+            let outcome = client
+                .ext_method(
+                    "x.ai/science/evidence_dossier",
+                    serde_json::json!({
+                        "sessionId": session_id.0.as_ref(),
+                        "projectId": project.project_id.0,
+                        "ownerId": format!("{label}-owner"),
+                        "storeRoot": store_root,
+                        "artifactRoot": store_root.join("runs"),
+                        "sourceRunIds": [source_run.0],
+                        "approvalTimeoutMs": approval_timeout_ms,
+                    }),
+                )
+                .await;
+            assert!(
+                outcome.is_err(),
+                "{label} unexpectedly returned a dossier: {outcome:?}"
+            );
+            let runs_after: std::collections::BTreeSet<_> =
+                std::fs::read_dir(store_root.join("runs"))
+                    .unwrap()
+                    .map(|entry| entry.unwrap().file_name())
+                    .collect();
+            let dossier_run = runs_after
+                .difference(&runs_before)
+                .next()
+                .and_then(|name| name.to_str())
+                .map(xai_grok_science::RunId::new)
+                .unwrap_or_else(|| panic!("{label} did not create one durable dossier run"));
+            assert_eq!(
+                store.load_run(&dossier_run).unwrap().state,
+                expected_state,
+                "{label} terminal state"
+            );
+            assert_eq!(
+                store.approvals(&dossier_run).unwrap()[0].decision,
+                expected_decision,
+                "{label} approval decision"
+            );
+            assert!(store.artifacts(&dossier_run).unwrap().is_empty());
+            assert!(store.evidence(&dossier_run).unwrap().is_empty());
+            assert!(store.provenance(&dossier_run).unwrap().is_empty());
+        }
+    })
+    .await;
+}
+
 /// S3 L4 proof: a debug-built product binary drives approval and the sole
 /// SessionActor into a real, isolated local sshd. Both directions preserve
 /// bytes and durable records retain only redacted target correlation data.

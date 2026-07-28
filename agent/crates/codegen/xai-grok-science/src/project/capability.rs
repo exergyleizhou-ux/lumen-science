@@ -474,6 +474,16 @@ impl PinnedDirectory {
             file: self.file.try_clone()?,
         })
     }
+
+    pub(crate) fn identity(&self) -> Result<crate::StoreRootIdentity> {
+        use std::os::unix::fs::MetadataExt as _;
+
+        let metadata = self.file.metadata()?;
+        Ok(crate::StoreRootIdentity::Unix {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        })
+    }
 }
 
 #[cfg(unix)]
@@ -985,6 +995,16 @@ impl PinnedDirectory {
             file: self.file.try_clone()?,
         })
     }
+
+    pub(crate) fn identity(&self) -> Result<crate::StoreRootIdentity> {
+        let identity = windows_file_identity(&self.file).ok_or_else(|| {
+            ScienceError::Invalid("cannot resolve project store root identity".into())
+        })?;
+        Ok(crate::StoreRootIdentity::Windows {
+            volume: identity.volume,
+            index: identity.index,
+        })
+    }
 }
 
 #[cfg(windows)]
@@ -1193,6 +1213,12 @@ pub(crate) struct PinnedDirectory;
 
 #[cfg(not(any(unix, windows)))]
 impl PinnedDirectory {
+    pub(crate) fn identity(&self) -> Result<crate::StoreRootIdentity> {
+        Err(ScienceError::FeatureDisabled(
+            "confined project-store identity has no backend for this platform".into(),
+        ))
+    }
+
     pub(crate) fn open_or_create(_path: &Path) -> Result<Self> {
         Err(ScienceError::FeatureDisabled(
             "confined project-store I/O has no backend for this platform".into(),

@@ -2109,6 +2109,37 @@ impl MvpAgent {
             .await
     }
 
+    /// Route evidence dossier composition through the owning SessionActor.
+    /// This facade performs only session binding; it never opens source
+    /// artifacts or writes the dossier itself.
+    pub async fn run_science_evidence_dossier(
+        &self,
+        session_id: &acp::SessionId,
+        store: xai_grok_science::ScienceStore,
+        project_root: PathBuf,
+        context: xai_grok_science::RunContext,
+        source_run_ids: Vec<xai_grok_science::RunId>,
+        approval_timeout: std::time::Duration,
+    ) -> xai_grok_science::Result<xai_grok_science::dossier::DossierResult> {
+        if context.session_id != session_id.0.as_ref() {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "science context session does not match target SessionActor".into(),
+            ));
+        }
+        let handle = self.get_session_handle(session_id).ok_or_else(|| {
+            xai_grok_science::ScienceError::Invalid("science session not found".into())
+        })?;
+        handle
+            .run_science_evidence_dossier_with_approval_timeout(
+                store,
+                project_root,
+                context,
+                source_run_ids,
+                approval_timeout,
+            )
+            .await
+    }
+
     /// S3 connector fetch entry: verifies the science context targets this
     /// SessionActor and delegates to the session handle's
     /// begin/permission/finish protocol.

@@ -176,6 +176,10 @@ impl ProjectStore {
         &self.root
     }
 
+    pub(crate) fn root_identity(&self) -> Result<crate::StoreRootIdentity> {
+        self.confined()?.identity()
+    }
+
     #[cfg(test)]
     pub(super) fn project_dir(&self, id: &ProjectId) -> PathBuf {
         self.root.join("projects").join(&id.0)
@@ -414,6 +418,23 @@ impl ProjectStore {
             return Err(ScienceError::Ownership);
         }
         Ok(project)
+    }
+
+    /// Execute a read/commit closure while holding the process-wide write
+    /// guard for this project store. This couples the owned aggregate snapshot
+    /// to its content-addressed revision and prevents a concurrent mutation
+    /// from changing the research question between an approval recheck and an
+    /// actor-owned derived-artifact commit.
+    pub fn with_owned_project_revision<T>(
+        &self,
+        project_id: &ProjectId,
+        owner_id: &str,
+        operation: impl FnOnce(&ResearchProject, &str) -> Result<T>,
+    ) -> Result<T> {
+        let _guard = self.write_guard()?;
+        let project = self.load_owned_project(project_id, owner_id)?;
+        let revision = self.project_revision(project_id)?;
+        operation(&project, &revision)
     }
 
     pub fn save_project(&self, project: &ResearchProject) -> Result<()> {

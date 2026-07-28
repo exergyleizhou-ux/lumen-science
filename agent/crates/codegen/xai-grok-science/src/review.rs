@@ -180,7 +180,7 @@ mod tests {
     use super::*;
     use crate::{Approval, CallId, Evidence, ProjectId, Provenance, RunContext};
 
-    fn completed_fixture() -> (tempfile::TempDir, ScienceStore, RunId) {
+    fn running_fixture() -> (tempfile::TempDir, ScienceStore, RunId) {
         let root = tempfile::tempdir().unwrap();
         let store = ScienceStore::new(root.path().join("store"));
         let run_id = RunId::new_v7();
@@ -255,6 +255,11 @@ mod tests {
             })
             .unwrap();
         store.transition(&run_id, RunState::Running, None).unwrap();
+        (root, store, run_id)
+    }
+
+    fn completed_fixture() -> (tempfile::TempDir, ScienceStore, RunId) {
+        let (root, store, run_id) = running_fixture();
         store
             .transition(&run_id, RunState::Succeeded, None)
             .unwrap();
@@ -324,8 +329,10 @@ mod tests {
 
     #[test]
     fn evidence_citing_unregistered_artifact_fails() {
-        let (_root, store, run_id) = completed_fixture();
-        // Add evidence pointing to a hash not in any registered artifact
+        let (_root, store, run_id) = running_fixture();
+        // Persist invalid evidence before the terminal transition. Terminal
+        // runs are immutable, but the completion verifier must still reject a
+        // malformed record that was created while the run was active.
         let fake_sha = "a".repeat(64);
         store
             .add_evidence(Evidence {
@@ -335,6 +342,9 @@ mod tests {
                 artifact_sha256: Some(fake_sha),
                 verified_at: Utc::now(),
             })
+            .unwrap();
+        store
+            .transition(&run_id, RunState::Succeeded, None)
             .unwrap();
         assert!(verify_for_goal_completion(&store, &run_id).is_err());
     }
@@ -470,8 +480,9 @@ mod tests {
 
     #[test]
     fn provenance_incomplete_fails() {
-        let (_root, store, run_id) = completed_fixture();
-        // Add provenance with empty source_uri — must fail
+        let (_root, store, run_id) = running_fixture();
+        // Add provenance with empty source_uri before the immutable terminal
+        // transition; verification must still reject the malformed record.
         store
             .add_provenance(Provenance {
                 run_id: run_id.clone(),
@@ -485,13 +496,17 @@ mod tests {
                 environment: BTreeMap::new(),
             })
             .unwrap();
+        store
+            .transition(&run_id, RunState::Succeeded, None)
+            .unwrap();
         assert!(verify_for_goal_completion(&store, &run_id).is_err());
     }
 
     #[test]
     fn evidence_without_artifact_citation_fails() {
-        let (_root, store, run_id) = completed_fixture();
-        // Evidence with artifact_sha256 = None — must fail (must cite artifact)
+        let (_root, store, run_id) = running_fixture();
+        // Evidence with artifact_sha256 = None must fail after the run reaches
+        // the immutable Succeeded state.
         store
             .add_evidence(Evidence {
                 run_id: run_id.clone(),
@@ -500,6 +515,9 @@ mod tests {
                 artifact_sha256: None, // no artifact cited
                 verified_at: Utc::now(),
             })
+            .unwrap();
+        store
+            .transition(&run_id, RunState::Succeeded, None)
             .unwrap();
         assert!(verify_for_goal_completion(&store, &run_id).is_err());
     }

@@ -21,6 +21,7 @@ pub mod connector;
 pub mod connectors;
 pub mod csv;
 pub mod device;
+pub mod dossier;
 pub mod dummy_lab;
 pub mod features;
 pub mod governance;
@@ -218,16 +219,27 @@ enum StoreRootCapability {
     Unavailable(String),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StoreRootIdentity {
+    #[cfg(unix)]
+    Unix { device: u64, inode: u64 },
+    #[cfg(windows)]
+    Windows { volume: u32, index: u64 },
+}
+
 impl ScienceStore {
+    const MAX_DOSSIER_REGISTRY_BYTES: u64 = 8 * 1024 * 1024;
+    const MAX_DOSSIER_RUN_RECORD_BYTES: u64 = 1024 * 1024;
+
     pub fn new(root: impl Into<PathBuf>) -> Self {
         let root = root.into();
         let root_capability = match fs::symlink_metadata(&root) {
             Ok(metadata) if metadata.file_type().is_symlink() => StoreRootCapability::Unavailable(
                 "science store root must not be a symlink or reparse point".into(),
             ),
-            Ok(metadata) if !metadata.is_dir() => StoreRootCapability::Unavailable(
-                "science store root must be a directory".into(),
-            ),
+            Ok(metadata) if !metadata.is_dir() => {
+                StoreRootCapability::Unavailable("science store root must be a directory".into())
+            }
             Ok(_) => match PinnedDirectory::open_path(&root) {
                 Ok(directory) => StoreRootCapability::Pinned(directory),
                 Err(error) => StoreRootCapability::Unavailable(error.to_string()),
@@ -282,6 +294,18 @@ impl ScienceStore {
         &self.root
     }
 
+    /// Compare the retained directory handles, not their path spellings.
+    ///
+    /// Dossier composition joins Science run records with project records.
+    /// Both stores must therefore pin the exact same directory identity; a
+    /// rename-and-replace between their constructors must fail closed.
+    pub fn shares_root_capability_with(
+        &self,
+        project_store: &project::ProjectStore,
+    ) -> Result<bool> {
+        Ok(self.root_directory()?.identity()? == project_store.root_identity()?)
+    }
+
     pub fn create_run(&self, context: RunContext) -> Result<RunRecord> {
         validate_context(&context)?;
         let record = RunRecord {
@@ -320,6 +344,20 @@ impl ScienceStore {
         Ok(run)
     }
 
+    pub fn load_run_bounded(&self, run_id: &RunId, max_json_bytes: u64) -> Result<RunRecord> {
+        let run: RunRecord = self.open_run_directory(run_id)?.read_json_bounded(
+            Path::new("run.json"),
+            max_json_bytes.min(Self::MAX_DOSSIER_RUN_RECORD_BYTES),
+        )?;
+        validate_context(&run.context)?;
+        if &run.context.run_id != run_id {
+            return Err(ScienceError::Invalid(
+                "run record identity does not match requested run".into(),
+            ));
+        }
+        Ok(run)
+    }
+
     pub fn transition(
         &self,
         run_id: &RunId,
@@ -337,6 +375,21 @@ impl ScienceStore {
         self.open_run_directory(run_id)?
             .replace_json_atomic(Path::new("run.json"), &run)?;
         Ok(run)
+    }
+
+    /// Make Succeeded the final visible commit and reconcile the narrow case
+    /// where atomic replacement became visible but the directory-sync call
+    /// reported an error. Returning an error while a read-back is already
+    /// Succeeded would create an API/durable split that callers cannot safely
+    /// roll back because terminal states are immutable.
+    pub fn transition_succeeded_verified(&self, run_id: &RunId) -> Result<RunRecord> {
+        match self.transition(run_id, RunState::Succeeded, None) {
+            Ok(run) => Ok(run),
+            Err(error) => match self.load_run(run_id) {
+                Ok(run) if run.state == RunState::Succeeded => Ok(run),
+                _ => Err(error),
+            },
+        }
     }
 
     pub fn append_event(
@@ -500,6 +553,12 @@ impl ScienceStore {
             .lock()
             .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
         let run_dir = self.open_run_directory(run_id)?;
+        let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
+        if run.state.terminal() {
+            return Err(ScienceError::Invalid(
+                "terminal science run outputs are immutable".into(),
+            ));
+        }
         let mut items: Vec<Artifact> = run_dir.read_json(Path::new("artifacts.json"))?;
         validate_artifacts(&items, run_id)?;
         if items
@@ -662,6 +721,12 @@ impl ScienceStore {
             .lock()
             .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
         let run_dir = self.open_run_directory(&evidence.run_id)?;
+        let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
+        if run.state.terminal() {
+            return Err(ScienceError::Invalid(
+                "terminal science run outputs are immutable".into(),
+            ));
+        }
         let mut items: Vec<Evidence> = run_dir.read_json(Path::new("evidence.json"))?;
         validate_run_ids(
             items.iter().map(|item| &item.run_id),
@@ -678,6 +743,12 @@ impl ScienceStore {
             .lock()
             .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
         let run_dir = self.open_run_directory(&provenance.run_id)?;
+        let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
+        if run.state.terminal() {
+            return Err(ScienceError::Invalid(
+                "terminal science run outputs are immutable".into(),
+            ));
+        }
         let mut items: Vec<Provenance> = run_dir.read_json(Path::new("provenance.json"))?;
         validate_run_ids(
             items.iter().map(|item| &item.run_id),
@@ -752,6 +823,27 @@ impl ScienceStore {
         self.artifact_bytes_in_state(project, run_id, owner, relative, RunState::Succeeded)
     }
 
+    /// Reopen a succeeded artifact without allowing a forged length record to
+    /// make the process allocate an unbounded buffer. The regular-file handle
+    /// is retained while reading and at most `max_bytes + 1` bytes are read.
+    pub fn artifact_bytes_bounded(
+        &self,
+        project: &ProjectId,
+        run_id: &RunId,
+        owner: &str,
+        relative: &Path,
+        max_bytes: u64,
+    ) -> Result<Vec<u8>> {
+        self.artifact_bytes_in_state_bounded(
+            project,
+            run_id,
+            owner,
+            relative,
+            RunState::Succeeded,
+            Some(max_bytes),
+        )
+    }
+
     /// Reopen and re-hash a commit candidate while its actor-owned run is
     /// still Running. This is crate-internal so product adapters cannot serve
     /// pre-terminal bytes; review commit verification uses it immediately
@@ -774,6 +866,18 @@ impl ScienceStore {
         relative: &Path,
         required_state: RunState,
     ) -> Result<Vec<u8>> {
+        self.artifact_bytes_in_state_bounded(project, run_id, owner, relative, required_state, None)
+    }
+
+    fn artifact_bytes_in_state_bounded(
+        &self,
+        project: &ProjectId,
+        run_id: &RunId,
+        owner: &str,
+        relative: &Path,
+        required_state: RunState,
+        max_bytes: Option<u64>,
+    ) -> Result<Vec<u8>> {
         project.validate()?;
         run_id.validate()?;
         self.assert_owner(project, run_id, owner)?;
@@ -785,21 +889,94 @@ impl ScienceStore {
         }
         validate_relative(relative)?;
         let run_dir = self.open_run_directory(run_id)?;
-        let artifacts: Vec<Artifact> = run_dir.read_json(Path::new("artifacts.json"))?;
+        let artifacts: Vec<Artifact> = match max_bytes {
+            Some(_) => run_dir.read_json_bounded(
+                Path::new("artifacts.json"),
+                Self::MAX_DOSSIER_REGISTRY_BYTES,
+            )?,
+            None => run_dir.read_json(Path::new("artifacts.json"))?,
+        };
         validate_artifacts(&artifacts, run_id)?;
         let artifact = artifacts
             .iter()
             .find(|item| item.relative_path == relative)
             .ok_or_else(|| ScienceError::Invalid("artifact is not registered to run".into()))?;
-        let bytes = run_dir
-            .open_directory(Path::new("artifacts"))?
-            .read_regular(relative)?;
+        if max_bytes.is_some_and(|limit| artifact.bytes > limit) {
+            return Err(ScienceError::Invalid(
+                "artifact exceeds the caller's byte limit".into(),
+            ));
+        }
+        let artifact_dir = run_dir.open_directory(Path::new("artifacts"))?;
+        let bytes = match max_bytes {
+            Some(limit) => artifact_dir.read_regular_bounded(relative, limit)?,
+            None => artifact_dir.read_regular(relative)?,
+        };
         if bytes.len() as u64 != artifact.bytes || hex_sha256(&bytes) != artifact.sha256 {
             return Err(ScienceError::Invalid(
                 "artifact bytes do not match their registered hash/length".into(),
             ));
         }
         Ok(bytes)
+    }
+
+    /// Bounded metadata reads used by dossier composition. These methods
+    /// validate record identity and item count after limiting the bytes read
+    /// from the retained run-directory capability.
+    pub fn artifacts_bounded(
+        &self,
+        run_id: &RunId,
+        max_items: usize,
+        max_json_bytes: u64,
+    ) -> Result<Vec<Artifact>> {
+        let items: Vec<Artifact> = self.open_run_directory(run_id)?.read_json_bounded(
+            Path::new("artifacts.json"),
+            max_json_bytes.min(Self::MAX_DOSSIER_REGISTRY_BYTES),
+        )?;
+        validate_artifacts(&items, run_id)?;
+        if items.len() > max_items {
+            return Err(ScienceError::Invalid(
+                "artifact registry exceeds the dossier item limit".into(),
+            ));
+        }
+        Ok(items)
+    }
+
+    pub fn evidence_bounded(
+        &self,
+        run_id: &RunId,
+        max_items: usize,
+        max_json_bytes: u64,
+    ) -> Result<Vec<Evidence>> {
+        let items: Vec<Evidence> = self.open_run_directory(run_id)?.read_json_bounded(
+            Path::new("evidence.json"),
+            max_json_bytes.min(Self::MAX_DOSSIER_REGISTRY_BYTES),
+        )?;
+        validate_run_ids(items.iter().map(|item| &item.run_id), run_id, "evidence")?;
+        if items.len() > max_items {
+            return Err(ScienceError::Invalid(
+                "evidence registry exceeds the dossier item limit".into(),
+            ));
+        }
+        Ok(items)
+    }
+
+    pub fn provenance_bounded(
+        &self,
+        run_id: &RunId,
+        max_items: usize,
+        max_json_bytes: u64,
+    ) -> Result<Vec<Provenance>> {
+        let items: Vec<Provenance> = self.open_run_directory(run_id)?.read_json_bounded(
+            Path::new("provenance.json"),
+            max_json_bytes.min(Self::MAX_DOSSIER_REGISTRY_BYTES),
+        )?;
+        validate_run_ids(items.iter().map(|item| &item.run_id), run_id, "provenance")?;
+        if items.len() > max_items {
+            return Err(ScienceError::Invalid(
+                "provenance registry exceeds the dossier item limit".into(),
+            ));
+        }
+        Ok(items)
     }
 
     pub fn recover_interrupted(&self, run_id: &RunId) -> Result<RunRecord> {
@@ -952,6 +1129,16 @@ impl PinnedDirectory {
             }
         }
         Ok(current)
+    }
+
+    fn identity(&self) -> Result<StoreRootIdentity> {
+        use std::os::unix::fs::MetadataExt as _;
+
+        let metadata = self.file.metadata()?;
+        Ok(StoreRootIdentity::Unix {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        })
     }
 
     #[cfg(target_os = "macos")]
@@ -1109,8 +1296,48 @@ impl PinnedDirectory {
         Ok(bytes)
     }
 
+    fn read_regular_bounded(&self, relative: &Path, max_bytes: u64) -> Result<Vec<u8>> {
+        validate_relative(relative)?;
+        let parent = self.open_directory_parent(relative)?;
+        let name = relative
+            .file_name()
+            .ok_or_else(|| ScienceError::Invalid("artifact path has no file name".into()))?;
+        let file = openat(
+            &parent.file,
+            name,
+            libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
+            None,
+        )
+        .map_err(|error| match error {
+            ScienceError::Io(io) if io.raw_os_error() == Some(libc::ELOOP) => {
+                ScienceError::Invalid("artifact must not be a symlink".into())
+            }
+            error => error,
+        })?;
+        if !file.metadata()?.is_file() {
+            return Err(ScienceError::Invalid(
+                "artifact must be a regular file".into(),
+            ));
+        }
+        let mut bytes = Vec::new();
+        file.take(max_bytes.saturating_add(1))
+            .read_to_end(&mut bytes)?;
+        if bytes.len() as u64 > max_bytes {
+            return Err(ScienceError::Invalid(
+                "artifact exceeds the caller's byte limit".into(),
+            ));
+        }
+        Ok(bytes)
+    }
+
     fn read_json<T: DeserializeOwned>(&self, relative: &Path) -> Result<T> {
         Ok(serde_json::from_slice(&self.read_regular(relative)?)?)
+    }
+
+    fn read_json_bounded<T: DeserializeOwned>(&self, relative: &Path, max_bytes: u64) -> Result<T> {
+        Ok(serde_json::from_slice(
+            &self.read_regular_bounded(relative, max_bytes)?,
+        )?)
     }
 
     /// Publish a new immutable payload without replacing any existing name.
@@ -1344,14 +1571,7 @@ fn unlink_directory_at(directory: &fs::File, name: &std::ffi::OsStr) -> Result<(
     let name = os_name(name)?;
     // SAFETY: the name is NUL-terminated and relative to the live directory
     // descriptor. AT_REMOVEDIR removes only an empty directory entry.
-    if unsafe {
-        libc::unlinkat(
-            directory.as_raw_fd(),
-            name.as_ptr(),
-            libc::AT_REMOVEDIR,
-        )
-    } == 0
-    {
+    if unsafe { libc::unlinkat(directory.as_raw_fd(), name.as_ptr(), libc::AT_REMOVEDIR) } == 0 {
         Ok(())
     } else {
         Err(std::io::Error::last_os_error().into())
@@ -1412,6 +1632,16 @@ impl PinnedDirectory {
     fn final_path(&self) -> Result<PathBuf> {
         self.assert_path_still_matches_handle()?;
         Ok(dunce::canonicalize(&self.path)?)
+    }
+
+    fn identity(&self) -> Result<StoreRootIdentity> {
+        let identity = windows_file_identity(&self.file).ok_or_else(|| {
+            ScienceError::Invalid("cannot resolve science store root identity".into())
+        })?;
+        Ok(StoreRootIdentity::Windows {
+            volume: identity.volume_serial_number,
+            index: identity.file_index,
+        })
     }
 
     fn create_directory_new(&self, relative: &Path) -> Result<Self> {
@@ -1505,8 +1735,37 @@ impl PinnedDirectory {
         Ok(bytes)
     }
 
+    fn read_regular_bounded(&self, relative: &Path, max_bytes: u64) -> Result<Vec<u8>> {
+        validate_relative(relative)?;
+        let parent = self.open_directory_parent(relative)?;
+        parent.assert_path_still_matches_handle()?;
+        let path = parent.path.join(
+            relative
+                .file_name()
+                .ok_or_else(|| ScienceError::Invalid("artifact path has no file name".into()))?,
+        );
+        let file = windows_open_regular(&path, false)?;
+        windows_assert_regular_handle(&path, &file)?;
+        parent.assert_path_still_matches_handle()?;
+        let mut bytes = Vec::new();
+        file.take(max_bytes.saturating_add(1))
+            .read_to_end(&mut bytes)?;
+        if bytes.len() as u64 > max_bytes {
+            return Err(ScienceError::Invalid(
+                "artifact exceeds the caller's byte limit".into(),
+            ));
+        }
+        Ok(bytes)
+    }
+
     fn read_json<T: DeserializeOwned>(&self, relative: &Path) -> Result<T> {
         Ok(serde_json::from_slice(&self.read_regular(relative)?)?)
+    }
+
+    fn read_json_bounded<T: DeserializeOwned>(&self, relative: &Path, max_bytes: u64) -> Result<T> {
+        Ok(serde_json::from_slice(
+            &self.read_regular_bounded(relative, max_bytes)?,
+        )?)
     }
 
     fn write_new_atomic(&self, relative: &Path, bytes: &[u8]) -> Result<()> {
@@ -1830,6 +2089,12 @@ impl PinnedDirectory {
         ))
     }
 
+    fn identity(&self) -> Result<StoreRootIdentity> {
+        Err(ScienceError::FeatureDisabled(
+            "confined store identity has no backend for this platform".into(),
+        ))
+    }
+
     fn open_directory(&self, _relative: &Path) -> Result<Self> {
         Err(ScienceError::FeatureDisabled(
             "confined artifact I/O has no backend for this platform".into(),
@@ -1854,7 +2119,23 @@ impl PinnedDirectory {
         ))
     }
 
+    fn read_regular_bounded(&self, _relative: &Path, _max_bytes: u64) -> Result<Vec<u8>> {
+        Err(ScienceError::FeatureDisabled(
+            "confined artifact I/O has no backend for this platform".into(),
+        ))
+    }
+
     fn read_json<T: DeserializeOwned>(&self, _relative: &Path) -> Result<T> {
+        Err(ScienceError::FeatureDisabled(
+            "confined artifact I/O has no backend for this platform".into(),
+        ))
+    }
+
+    fn read_json_bounded<T: DeserializeOwned>(
+        &self,
+        _relative: &Path,
+        _max_bytes: u64,
+    ) -> Result<T> {
         Err(ScienceError::FeatureDisabled(
             "confined artifact I/O has no backend for this platform".into(),
         ))
@@ -2870,5 +3151,95 @@ mod tests {
                     .is_err()
             );
         }
+    }
+
+    #[test]
+    fn terminal_run_scientific_outputs_are_immutable() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path());
+        let run = store
+            .create_run(context(temp.path(), "a", "alice"))
+            .unwrap();
+        store
+            .transition(&run.context.run_id, RunState::Succeeded, None)
+            .unwrap();
+
+        assert!(
+            store
+                .put_artifact(
+                    &run.context.project_id,
+                    &run.context.run_id,
+                    "alice",
+                    CallId::new("late"),
+                    Path::new("late.txt"),
+                    b"late",
+                    "text/plain",
+                    "late",
+                )
+                .is_err()
+        );
+        assert!(
+            store
+                .add_evidence(Evidence {
+                    run_id: run.context.run_id.clone(),
+                    claim: "late".into(),
+                    source: "late".into(),
+                    artifact_sha256: None,
+                    verified_at: Utc::now(),
+                })
+                .is_err()
+        );
+        assert!(
+            store
+                .add_provenance(Provenance {
+                    run_id: run.context.run_id.clone(),
+                    source_uri: "late".into(),
+                    source_commit: None,
+                    source_path: None,
+                    license: "late".into(),
+                    retrieved_at: Utc::now(),
+                    input_sha256: "a".repeat(64),
+                    tool: "late".into(),
+                    environment: BTreeMap::new(),
+                })
+                .is_err()
+        );
+        assert!(store.artifacts(&run.context.run_id).unwrap().is_empty());
+        assert!(store.evidence(&run.context.run_id).unwrap().is_empty());
+        assert!(store.provenance(&run.context.run_id).unwrap().is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn science_and_project_stores_compare_retained_root_identity() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = dunce::canonicalize(temp.path()).unwrap();
+        let root = workspace.join("shared-store");
+        fs::create_dir(&root).unwrap();
+        let science = ScienceStore::new_confined(&root, &workspace).unwrap();
+        let original_project = project::ProjectStore::new_confined(&root, &workspace).unwrap();
+        assert!(
+            science
+                .shares_root_capability_with(&original_project)
+                .unwrap()
+        );
+
+        let retained = workspace.join("retained-store");
+        fs::rename(&root, &retained).unwrap();
+        fs::create_dir(&root).unwrap();
+        let replacement_project = project::ProjectStore::new_confined(&root, &workspace).unwrap();
+
+        assert!(
+            science
+                .shares_root_capability_with(&original_project)
+                .unwrap(),
+            "two handles opened before the rename must retain one identity"
+        );
+        assert!(
+            !science
+                .shares_root_capability_with(&replacement_project)
+                .unwrap(),
+            "same path spelling after replacement must not pass identity binding"
+        );
     }
 }
