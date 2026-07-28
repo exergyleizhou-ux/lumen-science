@@ -275,7 +275,11 @@ fn a_step_kind_outside_the_allowlist_is_refused() {
         .unwrap();
 
     assert_eq!(report.state(), WorkflowState::Failed);
-    assert_eq!(runner.calls(), 0, "a refused kind must never reach a runner");
+    assert_eq!(
+        runner.calls(),
+        0,
+        "a refused kind must never reach a runner"
+    );
     assert_eq!(report.run.refused_steps.len(), 1);
     assert_eq!(
         report.run.refused_steps[0].error_class,
@@ -437,7 +441,11 @@ fn a_retried_step_does_not_produce_a_second_artifact() {
         .execute(&request("op-atleast-01", spec(vec![retrying])))
         .unwrap();
 
-    assert_eq!(runner.calls(), 2, "the step must run at least once, twice here");
+    assert_eq!(
+        runner.calls(),
+        2,
+        "the step must run at least once, twice here"
+    );
     let attempts = report.attempts_for("fetch");
     assert_eq!(attempts.len(), 2, "both attempts must be recorded");
     assert!(attempts.iter().all(|a| !a.in_flight()));
@@ -537,7 +545,10 @@ fn deterministic_reuse_skips_a_step_whose_commit_already_exists() {
     assert!(!second.replayed, "this is a new run, not a replay");
     assert_eq!(runner.calls(), 1, "the reused step must not run again");
     assert_eq!(second.steps_reused, 1);
-    assert_eq!(second.attempts_for("fetch")[0].terminal_state, Some(AttemptState::Reused));
+    assert_eq!(
+        second.attempts_for("fetch")[0].terminal_state,
+        Some(AttemptState::Reused)
+    );
     assert_eq!(executor.list_commits().unwrap().len(), 1);
 }
 
@@ -612,6 +623,56 @@ fn a_replay_is_refused_to_another_session_or_owner() {
     assert!(matches!(
         executor.execute(&other_owner),
         Err(ScienceError::Ownership)
+    ));
+}
+
+#[test]
+fn a_replay_binds_project_spec_environment_and_policy() {
+    let harness = Harness::new();
+    let workflow = spec(vec![step("fetch", StepKind::ConnectorFetch, &[])]);
+    harness
+        .executor(Arc::new(ScriptedRunner::always_ok()))
+        .execute(&request("op-authority-bind", workflow.clone()))
+        .unwrap();
+
+    let mut another_project = workflow.clone();
+    another_project.project_id = ProjectId("proj-not-approved".into());
+    assert!(matches!(
+        harness
+            .executor(Arc::new(ScriptedRunner::always_ok()))
+            .execute(&request("op-authority-bind", another_project)),
+        Err(ScienceError::Invalid(message))
+            if message.contains("does not match its original authority request")
+    ));
+
+    let mut changed_spec = workflow.clone();
+    changed_spec.name = "a different workflow payload".into();
+    assert!(matches!(
+        harness
+            .executor(Arc::new(ScriptedRunner::always_ok()))
+            .execute(&request("op-authority-bind", changed_spec)),
+        Err(ScienceError::Invalid(message))
+            if message.contains("does not match its original authority request")
+    ));
+
+    let mut changed_environment = environment();
+    changed_environment.environment_allowlist = vec!["another-interpreter".into()];
+    let environment_executor = WorkflowExecutor::new(&harness.root, changed_environment)
+        .with_clock(Arc::new(harness.clock.clone()))
+        .with_runner(Arc::new(ScriptedRunner::always_ok()));
+    assert!(matches!(
+        environment_executor.execute(&request("op-authority-bind", workflow.clone())),
+        Err(ScienceError::Invalid(message))
+            if message.contains("does not match its original authority request")
+    ));
+
+    let policy_executor = harness
+        .executor(Arc::new(ScriptedRunner::always_ok()))
+        .with_policy(ExecutionPolicy::default().allowing_kernel_steps());
+    assert!(matches!(
+        policy_executor.execute(&request("op-authority-bind", workflow)),
+        Err(ScienceError::Invalid(message))
+            if message.contains("does not match its original authority request")
     ));
 }
 
@@ -877,10 +938,7 @@ fn wedge_a_run_in_flight(executor: &WorkflowExecutor, run_id: &str) {
     attempt.finished_at = None;
     attempt.output_manifest_hash = None;
     executor
-        .write_record(
-            &executor.attempt_path(run_id, &attempt.attempt_id),
-            attempt,
-        )
+        .write_record(&executor.attempt_path(run_id, &attempt.attempt_id), attempt)
         .unwrap();
 
     let mut run = executor.load_run(run_id).unwrap();
@@ -965,7 +1023,10 @@ fn recovery_is_idempotent_and_sweeps_stale_temp_files() {
     assert!(temp_files_under(&harness.root).is_empty());
 
     let second = executor.recover_run(&run_id).unwrap();
-    assert!(!second.repaired(), "recovery must be idempotent: {second:?}");
+    assert!(
+        !second.repaired(),
+        "recovery must be idempotent: {second:?}"
+    );
 }
 
 #[test]
@@ -991,7 +1052,12 @@ fn an_unevaluable_custom_rule_fails_closed() {
         .unwrap();
     assert_eq!(report.state(), WorkflowState::Failed);
     assert!(
-        report.run.failure.as_deref().unwrap().contains("cannot be evaluated"),
+        report
+            .run
+            .failure
+            .as_deref()
+            .unwrap()
+            .contains("cannot be evaluated"),
         "an unevaluable rule must not be reported as passing"
     );
 }
@@ -1138,7 +1204,13 @@ fn concurrent_executions_of_one_operation_id_produce_one_run() {
     }
     assert_eq!(executed, 1, "exactly one thread may execute");
     assert_eq!(run_ids.len(), 1);
-    assert_eq!(executor.load_run(&run_ids.iter().next().unwrap().clone()).unwrap().state, WorkflowState::Succeeded);
+    assert_eq!(
+        executor
+            .load_run(&run_ids.iter().next().unwrap().clone())
+            .unwrap()
+            .state,
+        WorkflowState::Succeeded
+    );
 }
 
 // ── Reuse key ─────────────────────────────────────────────────────
@@ -1185,8 +1257,14 @@ fn topological_order_is_deterministic_and_rejects_a_cycle() {
     ]);
     // 'a' and 'b' are both ready first; lexicographic tie-break makes the
     // order stable across runs.
-    assert_eq!(workflow.topological_order().unwrap(), vec!["a", "b", "m", "z"]);
-    assert_eq!(workflow.topological_order().unwrap(), workflow.topological_order().unwrap());
+    assert_eq!(
+        workflow.topological_order().unwrap(),
+        vec!["a", "b", "m", "z"]
+    );
+    assert_eq!(
+        workflow.topological_order().unwrap(),
+        workflow.topological_order().unwrap()
+    );
 
     let cyclic = spec(vec![
         step("a", StepKind::ConnectorFetch, &["b"]),

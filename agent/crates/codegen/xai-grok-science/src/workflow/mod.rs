@@ -14,9 +14,6 @@ mod e2e_tests;
 pub use admission::{
     KernelAdmissionRequest, KernelPolicy, RejectionReason, default_resource_cap, probe_kernel,
 };
-pub use kernel_admission_protocol::{
-    KernelAdmissionResult, begin_kernel_admission, finish_kernel_admission,
-};
 pub use executor::{
     ArtifactCommit, AttemptState, Clock, ErrorClass, ExecutionPolicy, KernelInvocation,
     ManualClock, RefusedStep, StepAttempt, StepFailure, StepOperation, StepOutput, StepPlan,
@@ -27,6 +24,9 @@ pub use executor::{
 pub use kernel::{
     AdmissionStatus, KernelAdmission, KernelKind, KernelManifest, ReproductionAttempt,
     ReproductionLevel, ReproductionResult, ResourceCap,
+};
+pub use kernel_admission_protocol::{
+    KernelAdmissionResult, begin_kernel_admission, finish_kernel_admission,
 };
 pub use package::{ArtifactManifest, InputManifest, WorkflowPackage};
 pub use python_runner::{
@@ -59,7 +59,7 @@ pub struct WorkflowStep {
     pub kind: StepKind,
     pub connector_id: Option<String>,
     pub notebook_cell: Option<String>,
-    pub inputs: Vec<String>,  // step_id references
+    pub inputs: Vec<String>, // step_id references
     pub parameters: BTreeMap<String, String>,
     pub timeout_secs: u64,
     pub retry_policy: Option<RetryPolicy>,
@@ -326,15 +326,13 @@ impl ComputeEnvironment {
     /// Compute environment identity hash.
     pub fn identity_hash(&self) -> String {
         use sha2::{Digest, Sha256};
-        let mut hasher = Sha256::new();
-        hasher.update(self.os.as_bytes());
-        hasher.update(self.architecture.as_bytes());
-        hasher.update(self.lumen_binary_hash.as_bytes());
-        hasher.update(self.dependency_lock_hash.as_bytes());
-        if let Some(h) = &self.container_digest {
-            hasher.update(h.as_bytes());
-        }
-        format!("{:x}", hasher.finalize())
+        // This hash is an authority and replay boundary, not a display label.
+        // Bind every serialized field so a caller cannot reuse one operation
+        // id after changing an interpreter, dependency, locale, deterministic
+        // flag, hardware identity or network policy.
+        let bytes = serde_json::to_vec(self)
+            .expect("ComputeEnvironment contains only infallibly serializable fields");
+        format!("{:x}", Sha256::digest(bytes))
     }
 }
 
@@ -446,5 +444,11 @@ mod tests {
         };
         let h = env.identity_hash();
         assert!(!h.is_empty());
+
+        let mut changed = env.clone();
+        changed
+            .environment_allowlist
+            .push("different-kernel".into());
+        assert_ne!(h, changed.identity_hash());
     }
 }

@@ -204,8 +204,9 @@ pub struct FinishScienceFetch {
 /// has a record to finish.
 pub struct PreparedScienceProjectMutation {
     pub(crate) store: xai_grok_science::ScienceStore,
-    pub(crate) project_root: std::path::PathBuf,
-    pub(crate) gates: xai_grok_science::features::FeatureGates,
+    /// The exact directory capability validated before approval. Finish must
+    /// use this retained handle instead of reopening a caller-controlled path.
+    pub(crate) project_store: xai_grok_science::project::ProjectStore,
     pub(crate) ticket: xai_grok_science::csv::ScienceRunTicket,
     pub(crate) request: xai_grok_science::project::MutationRequest,
     /// Human-readable target used in the permission prompt.

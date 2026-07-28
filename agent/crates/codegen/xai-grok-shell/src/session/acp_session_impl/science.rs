@@ -885,17 +885,7 @@ impl SessionActor {
 
         // Idempotent replay: already applied, so no run and no second prompt.
         if let Some(record) = project_store.lookup_operation(&request.operation_id)? {
-            if record.session_id != request.session_id || record.owner_id != request.owner_id {
-                return Err(xai_grok_science::ScienceError::Ownership);
-            }
-            if record.kind != request.mutation.kind() {
-                return Err(xai_grok_science::ScienceError::Invalid(format!(
-                    "operation {} was already applied as {}, not {}",
-                    request.operation_id,
-                    record.kind,
-                    request.mutation.kind()
-                )));
-            }
+            record.verify_replay(&request)?;
             if record.kind == "review_record" {
                 let review: xai_grok_science::project::ReviewRecord =
                     serde_json::from_value(record.result.clone())?;
@@ -907,8 +897,7 @@ impl SessionActor {
             }
             return Ok(PreparedScienceProjectMutation {
                 store,
-                project_root,
-                gates,
+                project_store,
                 ticket: xai_grok_science::csv::ScienceRunTicket {
                     // The run ticket uses the kernel's ProjectId; the record
                     // carries the project-model one.
@@ -945,8 +934,7 @@ impl SessionActor {
                 recover_orphan_review_ledger(&store, &project_store, &mut request, &review)?;
             return Ok(PreparedScienceProjectMutation {
                 store,
-                project_root,
-                gates,
+                project_store,
                 ticket: xai_grok_science::csv::ScienceRunTicket {
                     project_id: xai_grok_science::ProjectId::new(review.project_id.0.clone()),
                     run_id: xai_grok_science::RunId::new(&review.authority_run_id),
@@ -970,8 +958,7 @@ impl SessionActor {
         )?;
         Ok(PreparedScienceProjectMutation {
             store,
-            project_root,
-            gates,
+            project_store,
             ticket,
             request,
             target,
@@ -1004,15 +991,11 @@ impl SessionActor {
             )));
         }
         xai_grok_science::csv::mark_allowed(&prepared.store, &prepared.ticket)?;
-        let project_store = xai_grok_science::project::ProjectStore::new_confined(
-            &prepared.project_root,
-            std::path::Path::new(&self.session_info.cwd),
-        )?
-        .with_gates(prepared.gates);
-        let outcome = match project_store.apply_mutation(&prepared.request) {
+        let outcome = match prepared.project_store.apply_mutation(&prepared.request) {
             Ok(outcome) => outcome,
             Err(error) => {
-                if review_apply_error_may_have_committed(&project_store, &prepared.request) {
+                if review_apply_error_may_have_committed(&prepared.project_store, &prepared.request)
+                {
                     let _ = prepared.store.append_recoverable_commit_event(
                         &prepared.ticket.run_id,
                         "SessionActor",
@@ -1054,7 +1037,9 @@ impl SessionActor {
                 }
             };
         if let Some(review) = review {
-            project_store.verify_pending_review_commit(&review)?;
+            prepared
+                .project_store
+                .verify_pending_review_commit(&review)?;
         }
         append_project_mutation_applied_once(&prepared.store, &prepared.ticket.run_id, &outcome)?;
         prepared.store.transition(
@@ -1206,7 +1191,7 @@ impl SessionActor {
         &self,
         store: xai_grok_science::ScienceStore,
         context: xai_grok_science::RunContext,
-        binding: crate::session::commands::ScienceWorkflowBinding,
+        mut binding: crate::session::commands::ScienceWorkflowBinding,
     ) -> xai_grok_science::Result<PreparedScienceWorkflowExecution> {
         use xai_grok_science::ScienceError;
 
@@ -1247,6 +1232,38 @@ impl SessionActor {
                 "interpreter path must be absolute; a kernel is never resolved from PATH".into(),
             ));
         }
+        binding.interpreter_path =
+            dunce::canonicalize(&binding.interpreter_path).map_err(|error| {
+                ScienceError::Invalid(format!("cannot resolve workflow interpreter: {error}"))
+            })?;
+        if !std::fs::metadata(&binding.interpreter_path)?.is_file() {
+            return Err(ScienceError::Invalid(
+                "workflow interpreter must be a regular file".into(),
+            ));
+        }
+        validate_project_mutation_actor_roots(
+            std::path::Path::new(&self.session_info.cwd),
+            &store,
+            &binding.executor_root,
+            &context,
+        )?;
+        if context.project_id.0.trim().is_empty()
+            || binding.execution.spec.project_id.0.trim().is_empty()
+            || context.project_id.0 != binding.execution.spec.project_id.0
+        {
+            return Err(ScienceError::Invalid(
+                "workflow project does not match its run context".into(),
+            ));
+        }
+        let project_store = xai_grok_science::project::ProjectStore::new_confined(
+            &binding.executor_root,
+            std::path::Path::new(&self.session_info.cwd),
+        )?
+        .with_gates(self.science_feature_gates.clone());
+        let project = project_store.load_project(&binding.execution.spec.project_id)?;
+        if project.owner_id.0 != binding.execution.owner_id {
+            return Err(ScienceError::Ownership);
+        }
 
         // Structural spec faults are pure to detect, so detect them before the
         // user is asked to approve a run that could never have executed.
@@ -1268,7 +1285,8 @@ impl SessionActor {
             &binding.executor_root,
             std::path::Path::new(&self.session_info.cwd),
             workflow_compute_environment(&binding),
-        )?;
+        )?
+        .with_policy(workflow_execution_policy(&binding));
         if ledger
             .lookup_operation(&binding.execution.operation_id)?
             .is_some()
@@ -1320,8 +1338,8 @@ impl SessionActor {
     ) -> xai_grok_science::Result<xai_grok_science::workflow::WorkflowRunReport> {
         use xai_grok_science::ScienceError;
         use xai_grok_science::workflow::{
-            AdmissionStatus, DirCellSourceStore, ExecutionPolicy, KernelAdmissionRequest,
-            KernelManifest, PythonLoopRunner, StepKind, WorkflowExecutor, WorkflowState,
+            AdmissionStatus, DirCellSourceStore, KernelAdmissionRequest, KernelManifest,
+            PythonLoopRunner, StepKind, WorkflowExecutor, WorkflowState,
             materialize_python_loop_script, probe_kernel,
         };
 
@@ -1406,11 +1424,7 @@ impl SessionActor {
         // `ExecutionPolicy::default()` omits NotebookCell so that running
         // arbitrary code is a decision. The decision arrives in the request and
         // is applied here; the default itself is never lowered.
-        let policy = if binding.allow_kernel_steps {
-            ExecutionPolicy::default().allowing_kernel_steps()
-        } else {
-            ExecutionPolicy::default()
-        };
+        let policy = workflow_execution_policy(binding);
 
         let runner = PythonLoopRunner::new(
             loop_script,
@@ -1500,12 +1514,30 @@ fn workflow_compute_environment(
         dependency_lock_hash: format!("version:{}", xai_grok_version::VERSION),
         locale: "C".into(),
         timezone: "UTC".into(),
-        environment_allowlist: Vec::new(),
+        environment_allowlist: vec![
+            format!("interpreter={}", binding.interpreter_path.display()),
+            format!("kernel_id={}", binding.kernel_id),
+            format!("kernel_kind={:?}", binding.kernel_kind),
+            format!("probe_timeout_ms={}", binding.probe_timeout.as_millis()),
+        ],
         cpu_identity: None,
         gpu_identity: None,
-        deterministic_flags: vec!["PYTHONHASHSEED=0".into()],
+        deterministic_flags: vec![
+            "PYTHONHASHSEED=0".into(),
+            format!("allow_kernel_steps={}", binding.allow_kernel_steps),
+        ],
         network_policy: xai_grok_science::workflow::NetworkPolicy::None,
         container_digest: None,
+    }
+}
+
+fn workflow_execution_policy(
+    binding: &crate::session::commands::ScienceWorkflowBinding,
+) -> xai_grok_science::workflow::ExecutionPolicy {
+    if binding.allow_kernel_steps {
+        xai_grok_science::workflow::ExecutionPolicy::default().allowing_kernel_steps()
+    } else {
+        xai_grok_science::workflow::ExecutionPolicy::default()
     }
 }
 

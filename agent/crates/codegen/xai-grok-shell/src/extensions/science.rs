@@ -500,9 +500,7 @@ pub async fn handle(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
         }
         "x.ai/science/project_list" => handle_project_list(agent, args).await,
         "x.ai/science/project_transition" => handle_project_transition(agent, args).await,
-        "x.ai/science/project_update_question" => {
-            handle_project_update_question(agent, args).await
-        }
+        "x.ai/science/project_update_question" => handle_project_update_question(agent, args).await,
         "x.ai/science/claim_propose" => handle_claim_propose(agent, args).await,
         "x.ai/science/evidence_attach" => handle_evidence_attach(agent, args).await,
         // WP-3 evidence queries
@@ -949,8 +947,7 @@ async fn run_project_mutation(
     agent
         .run_science_project_mutation(
             &session_id,
-            ScienceStore::new_confined(&project_root, &context.workspace_root)
-                .map_err(internal)?,
+            ScienceStore::new_confined(&project_root, &context.workspace_root).map_err(internal)?,
             project_root,
             context,
             request,
@@ -960,9 +957,7 @@ async fn run_project_mutation(
         .map_err(internal)
 }
 
-fn mutation_response(
-    outcome: xai_grok_science::project::MutationOutcome,
-) -> ExtResult {
+fn mutation_response(outcome: xai_grok_science::project::MutationOutcome) -> ExtResult {
     to_raw_response(&serde_json::json!({
         "operationId": outcome.operation_id,
         "kind": outcome.kind,
@@ -1343,9 +1338,7 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
     if !(1..=300_000).contains(&params.approval_timeout_ms) {
         return Err(acp::Error::invalid_params().data("approvalTimeoutMs must be in 1..=300000"));
     }
-    if !xai_grok_science::seqbench::is_supported_translation_table(
-        params.translation_table_id,
-    ) {
+    if !xai_grok_science::seqbench::is_supported_translation_table(params.translation_table_id) {
         return Err(acp::Error::invalid_params().data(format!(
             "translationTableId must be one of {}",
             xai_grok_science::seqbench::SUPPORTED_TRANSLATION_TABLE_IDS
@@ -1581,8 +1574,7 @@ async fn handle_ssh_scp_fixture(agent: &MvpAgent, args: &acp::ExtRequest) -> Ext
     let result = agent
         .run_science_ssh_scp_transport(
             &session_id,
-            ScienceStore::new_confined(&store_root, &context.workspace_root)
-                .map_err(internal)?,
+            ScienceStore::new_confined(&store_root, &context.workspace_root).map_err(internal)?,
             context,
             policy,
             request,
@@ -1650,10 +1642,9 @@ async fn handle_connector_fetch(agent: &MvpAgent, args: &acp::ExtRequest) -> Ext
         .map_err(|error| acp::Error::invalid_params().data(error.to_string()))?;
     let mut requests = Vec::with_capacity(paths.len());
     for path in &paths {
-        let req = xai_grok_science::connectors::validate_fixture_request(
-            descriptor.id, path, 10_000,
-        )
-        .map_err(|error| acp::Error::invalid_params().data(error.to_string()))?;
+        let req =
+            xai_grok_science::connectors::validate_fixture_request(descriptor.id, path, 10_000)
+                .map_err(|error| acp::Error::invalid_params().data(error.to_string()))?;
         requests.push(req);
     }
     let context = RunContext {
@@ -1674,8 +1665,7 @@ async fn handle_connector_fetch(agent: &MvpAgent, args: &acp::ExtRequest) -> Ext
     let result = agent
         .run_science_fetch(
             &session_id,
-            ScienceStore::new_confined(&store_root, &context.workspace_root)
-                .map_err(internal)?,
+            ScienceStore::new_confined(&store_root, &context.workspace_root).map_err(internal)?,
             context,
             descriptor.id.to_owned(),
             params.query,
@@ -1734,8 +1724,7 @@ async fn handle_import_preview(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtR
     let result = agent
         .run_science_import(
             &session_id,
-            ScienceStore::new_confined(&store_root, &context.workspace_root)
-                .map_err(internal)?,
+            ScienceStore::new_confined(&store_root, &context.workspace_root).map_err(internal)?,
             context,
             source_path,
             bytes,
@@ -1786,8 +1775,7 @@ async fn handle_run_csv(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let result = agent
         .run_science_csv(
             &session_id,
-            ScienceStore::new_confined(&store_root, &context.workspace_root)
-                .map_err(internal)?,
+            ScienceStore::new_confined(&store_root, &context.workspace_root).map_err(internal)?,
             context,
             fixture_path,
             fixture,
@@ -2000,9 +1988,17 @@ async fn handle_project_migrate(agent: &MvpAgent, args: &acp::ExtRequest) -> Ext
 
 // ── WP-4/5/6/7/8 preview handlers ────────────────────────────────
 
-async fn store_handler<T: serde::Serialize>(agent: &MvpAgent, session_id: &str, store_root: PathBuf, f: impl FnOnce(&xai_grok_science::project::ProjectStore) -> Result<T, xai_grok_science::ScienceError>) -> ExtResult {
+async fn store_handler<T: serde::Serialize>(
+    agent: &MvpAgent,
+    session_id: &str,
+    store_root: PathBuf,
+    f: impl FnOnce(
+        &xai_grok_science::project::ProjectStore,
+    ) -> Result<T, xai_grok_science::ScienceError>,
+) -> ExtResult {
     let sid = acp::SessionId::new(session_id.to_string());
-    let handle = agent.get_session_handle(&sid)
+    let handle = agent
+        .get_session_handle(&sid)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
     let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
     let sr = canonical_dir_within(store_root, &workspace)?;
@@ -2015,21 +2011,36 @@ async fn store_handler<T: serde::Serialize>(agent: &MvpAgent, session_id: &str, 
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct WorkflowGenParams { session_id: String, store_root: PathBuf, #[serde(default)] project_id: String, #[serde(rename = "workflowSpec")] spec: serde_json::Value }
+struct WorkflowGenParams {
+    session_id: String,
+    store_root: PathBuf,
+    #[serde(default)]
+    project_id: String,
+    #[serde(rename = "workflowSpec")]
+    spec: serde_json::Value,
+}
 
 async fn handle_workflow_validate(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: WorkflowGenParams = parse_params(args)?;
-    let spec: xai_grok_science::workflow::WorkflowSpec = serde_json::from_value(params.spec).map_err(internal)?;
-    store_handler(agent, &params.session_id, params.store_root, move |s| s.workflow_validate(&spec)).await
+    let spec: xai_grok_science::workflow::WorkflowSpec =
+        serde_json::from_value(params.spec).map_err(internal)?;
+    store_handler(agent, &params.session_id, params.store_root, move |s| {
+        s.workflow_validate(&spec)
+    })
+    .await
 }
 
 async fn handle_workflow_dry_run(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: WorkflowGenParams = parse_params(args)?;
-    let spec: xai_grok_science::workflow::WorkflowSpec = serde_json::from_value(params.spec).map_err(internal)?;
+    let spec: xai_grok_science::workflow::WorkflowSpec =
+        serde_json::from_value(params.spec).map_err(internal)?;
     // No kernel manifest is available on this read-only surface, so a
     // workflow with notebook steps is reported as blocked rather than
     // assumed to pass. See ProjectStore::workflow_dry_run.
-    store_handler(agent, &params.session_id, params.store_root, move |s| s.workflow_dry_run(&spec, None)).await
+    store_handler(agent, &params.session_id, params.store_root, move |s| {
+        s.workflow_dry_run(&spec, None)
+    })
+    .await
 }
 
 // ── LS5-K8: workflow execution ───────────────────────────────────
@@ -2101,14 +2112,18 @@ async fn handle_workflow_execute(agent: &MvpAgent, args: &acp::ExtRequest) -> Ex
         "julia" => xai_grok_science::workflow::KernelKind::Julia,
         "python" => xai_grok_science::workflow::KernelKind::Python,
         other => {
-            return Err(acp::Error::invalid_params()
-                .data(format!("unknown kernelKind '{other}'")));
+            return Err(acp::Error::invalid_params().data(format!("unknown kernelKind '{other}'")));
         }
     };
-    let spec: xai_grok_science::workflow::WorkflowSpec =
-        serde_json::from_value(params.spec).map_err(|error| {
-            acp::Error::invalid_params().data(format!("workflowSpec is not a WorkflowSpec: {error}"))
+    let spec: xai_grok_science::workflow::WorkflowSpec = serde_json::from_value(params.spec)
+        .map_err(|error| {
+            acp::Error::invalid_params()
+                .data(format!("workflowSpec is not a WorkflowSpec: {error}"))
         })?;
+    if spec.project_id.0.trim().is_empty() {
+        return Err(acp::Error::invalid_params()
+            .data("workflowSpec.projectId must name an existing owned project"));
+    }
 
     let session_id = acp::SessionId::new(params.session_id);
     let handle = agent
@@ -2120,21 +2135,16 @@ async fn handle_workflow_execute(agent: &MvpAgent, args: &acp::ExtRequest) -> Ex
         Some(root) => canonical_dir_within(root, &workspace)?,
         None => canonical_dir_within(store_root.join("runs"), &workspace)?,
     };
-    // Kernel cell bodies, per-attempt outputs and the exec-loop driver all live
-    // inside the session workspace, confined by the same helper as every other
-    // science path. A workflow cannot read or write its way out of the session.
-    let cell_source_root = canonical_dir_within(store_root.join("workflow-cells"), &workspace)?;
-    let output_root = canonical_dir_within(store_root.join("workflow-outputs"), &workspace)?;
-    let runtime_root = canonical_dir_within(store_root.join("workflow-runtime"), &workspace)?;
+    // These are actor-owned children of the already confined store. Do not
+    // provision them in the adapter: a denied/cancelled/timed-out request has
+    // no authority to leave staging or runtime directories behind.
+    let cell_source_root = store_root.join("workflow-cells");
+    let output_root = store_root.join("workflow-outputs");
+    let runtime_root = store_root.join("workflow-runtime");
 
-    let run_project = if spec.project_id.0.is_empty() {
-        format!("pending-{}", params.operation_id)
-    } else {
-        spec.project_id.0.clone()
-    };
     let context = RunContext {
         run_id: RunId::new_v7(),
-        project_id: ProjectId::new(run_project),
+        project_id: ProjectId::new(spec.project_id.0.clone()),
         session_id: session_id.0.to_string(),
         owner_id: params.owner_id.clone(),
         workspace_root: workspace,
@@ -2167,8 +2177,7 @@ async fn handle_workflow_execute(agent: &MvpAgent, args: &acp::ExtRequest) -> Ex
     let report = agent
         .run_science_workflow_execution(
             &session_id,
-            ScienceStore::new_confined(&store_root, &context.workspace_root)
-                .map_err(internal)?,
+            ScienceStore::new_confined(&store_root, &context.workspace_root).map_err(internal)?,
             context,
             binding,
             Duration::from_millis(params.approval_timeout_ms),
@@ -2242,8 +2251,12 @@ struct KernelAdmParams2 {
     #[serde(default = "default_approval_timeout_ms")]
     approval_timeout_ms: u64,
 }
-fn _python_kind() -> String { "python".into() }
-fn _probe_timeout_ms() -> u64 { 10_000 }
+fn _python_kind() -> String {
+    "python".into()
+}
+fn _probe_timeout_ms() -> u64 {
+    10_000
+}
 
 /// Resolve only request syntax and actor-owned roots here. The interpreter is
 /// neither read nor executed on the ACP request task; the SessionActor opens
@@ -2266,16 +2279,16 @@ async fn handle_kernel_admission(agent: &MvpAgent, args: &acp::ExtRequest) -> Ex
         "r" => xai_grok_science::workflow::KernelKind::R,
         "julia" => xai_grok_science::workflow::KernelKind::Julia,
         _ => {
-            return Err(acp::Error::invalid_params()
-                .data("kind must be one of python, r, or julia"));
+            return Err(
+                acp::Error::invalid_params().data("kind must be one of python, r, or julia")
+            );
         }
     };
     if !(1..=120_000).contains(&params.probe_timeout_ms) {
         return Err(acp::Error::invalid_params().data("probeTimeoutMs must be in 1..=120000"));
     }
     if !(1..=300_000).contains(&params.approval_timeout_ms) {
-        return Err(acp::Error::invalid_params()
-            .data("approvalTimeoutMs must be in 1..=300000"));
+        return Err(acp::Error::invalid_params().data("approvalTimeoutMs must be in 1..=300000"));
     }
     let session_id = acp::SessionId::new(params.session_id);
     let handle = agent
@@ -2312,8 +2325,7 @@ async fn handle_kernel_admission(agent: &MvpAgent, args: &acp::ExtRequest) -> Ex
     let result = agent
         .run_science_kernel_admission(
             &session_id,
-            ScienceStore::new_confined(&project_root, &context.workspace_root)
-                .map_err(internal)?,
+            ScienceStore::new_confined(&project_root, &context.workspace_root).map_err(internal)?,
             project_root,
             context,
             request,
@@ -2393,8 +2405,8 @@ async fn handle_review_record(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtRe
             "projectId, ownerId, reviewerId, summary, runId and artifactSha256s are required",
         ));
     }
-    let verdict = xai_grok_science::project::ReviewVerdict::parse(&params.verdict)
-        .map_err(internal)?;
+    let verdict =
+        xai_grok_science::project::ReviewVerdict::parse(&params.verdict).map_err(internal)?;
     let outcome = run_project_mutation(
         agent,
         params.session_id,
@@ -2423,13 +2435,24 @@ async fn handle_review_record(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtRe
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct CollabInvParams2 { session_id: String, store_root: PathBuf, project_id: String, owner_id: String, invitee: String }
+struct CollabInvParams2 {
+    session_id: String,
+    store_root: PathBuf,
+    project_id: String,
+    owner_id: String,
+    invitee: String,
+}
 
 async fn handle_collaboration_invite(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: CollabInvParams2 = parse_params(args)?;
-    store_handler(agent, &params.session_id, params.store_root, move |s| s.collaboration_invite(
-        &xai_grok_science::project::ProjectId(params.project_id), &params.owner_id, params.invitee,
-    )).await
+    store_handler(agent, &params.session_id, params.store_root, move |s| {
+        s.collaboration_invite(
+            &xai_grok_science::project::ProjectId(params.project_id),
+            &params.owner_id,
+            params.invitee,
+        )
+    })
+    .await
 }
 
 #[derive(Debug, Deserialize)]

@@ -819,12 +819,33 @@ impl WorkflowExecutor {
                     validate_run_id(&record.run_id)?;
                     let run: WorkflowRunRecord = self
                         .require_record(&self.run_path(&record.run_id), "reserved workflow run")?;
+                    let requested_spec_hash = spec_hash(&request.spec)?;
+                    let requested_environment_hash = self.environment.identity_hash();
+                    let requested_policy_hash = self.policy.policy_hash();
                     if run.run_id != record.run_id
                         || run.operation_id != record.operation_id
                         || run.session_id != record.session_id
                         || run.owner_id != record.owner_id
+                        || run.workflow_id != record.workflow_id
                     {
                         return Err(ScienceError::Ownership);
+                    }
+                    if record.session_id != request.session_id
+                        || record.owner_id != request.owner_id
+                    {
+                        return Err(ScienceError::Ownership);
+                    }
+                    if record.workflow_id != request.spec.workflow_id
+                        || run.workflow_id != request.spec.workflow_id
+                        || run.project_id != request.spec.project_id
+                        || run.spec_hash != requested_spec_hash
+                        || run.environment_hash != requested_environment_hash
+                        || run.policy_hash != requested_policy_hash
+                    {
+                        return Err(ScienceError::Invalid(format!(
+                            "workflow operation {} replay does not match its original authority request",
+                            request.operation_id
+                        )));
                     }
                     OperationOutcome::Replay(Box::new(record), Box::new(run))
                 }
@@ -839,9 +860,6 @@ impl WorkflowExecutor {
                 report
             }
             OperationOutcome::Replay(record, run) => {
-                if record.session_id != request.session_id || record.owner_id != request.owner_id {
-                    return Err(ScienceError::Ownership);
-                }
                 if run.state.terminal() {
                     let mut report = self.build_report(&run)?;
                     report.replayed = true;
@@ -896,9 +914,8 @@ impl WorkflowExecutor {
             if attempt.in_flight() {
                 attempt.terminal_state = Some(AttemptState::Interrupted);
                 attempt.error_class = Some(ErrorClass::Interrupted);
-                attempt.error_detail = Some(
-                    "attempt was in flight when the process stopped; not re-executed".into(),
-                );
+                attempt.error_detail =
+                    Some("attempt was in flight when the process stopped; not re-executed".into());
                 attempt.finished_at = Some(self.clock.now());
                 let path = self.attempt_path(run_id, &attempt.attempt_id);
                 self.write_record(&path, &attempt)?;
@@ -1550,9 +1567,10 @@ impl WorkflowExecutor {
             }
             // Bounded backoff on the injected clock. Never `Instant::now`.
             if let Some(policy) = &step.retry_policy {
-                let factor = policy.backoff_multiplier.max(1.0).powi(
-                    i32::try_from(attempt_number.saturating_sub(1)).unwrap_or(i32::MAX),
-                );
+                let factor = policy
+                    .backoff_multiplier
+                    .max(1.0)
+                    .powi(i32::try_from(attempt_number.saturating_sub(1)).unwrap_or(i32::MAX));
                 let millis = (policy.base_delay_ms as f64 * factor).min(u64::MAX as f64);
                 let delay = Duration::from_millis(millis as u64).min(self.policy.max_retry_delay);
                 if !delay.is_zero() {
@@ -1663,8 +1681,7 @@ impl WorkflowExecutor {
             .list_commits()?
             .into_iter()
             .filter(|c| {
-                c.workflow_id == run.workflow_id
-                    && commit_keys.contains(&c.output_manifest_hash)
+                c.workflow_id == run.workflow_id && commit_keys.contains(&c.output_manifest_hash)
             })
             .collect();
         let artifacts_committed = commits
@@ -1761,10 +1778,7 @@ enum StepOutcome {
 
 enum AcceptanceVerdict {
     Accepted,
-    Rejected {
-        detail: String,
-        on_fail: FailAction,
-    },
+    Rejected { detail: String, on_fail: FailAction },
 }
 
 /// Evaluate a step's acceptance rules against what it produced.
@@ -2031,14 +2045,13 @@ mod confinement_tests {
         let workspace = tempdir().unwrap();
         let outside = tempdir().unwrap();
         assert!(
-            WorkflowExecutor::new_confined(outside.path(), workspace.path(), environment()).is_err()
+            WorkflowExecutor::new_confined(outside.path(), workspace.path(), environment())
+                .is_err()
         );
 
         let linked = workspace.path().join("linked-store");
         symlink(outside.path(), &linked).unwrap();
-        assert!(
-            WorkflowExecutor::new_confined(&linked, workspace.path(), environment()).is_err()
-        );
+        assert!(WorkflowExecutor::new_confined(&linked, workspace.path(), environment()).is_err());
         assert!(outside.path().read_dir().unwrap().next().is_none());
     }
 }

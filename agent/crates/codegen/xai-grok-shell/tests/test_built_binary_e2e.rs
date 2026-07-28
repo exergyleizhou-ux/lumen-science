@@ -3443,6 +3443,31 @@ async fn test_stdio_science_project_mutation_is_actor_gated_and_idempotent() {
             replay["projectId"], project_id,
             "replay created a new project"
         );
+        let permissions_after_replay = client.permission_request_count();
+        let mut changed_payload = create("op-create-1");
+        changed_payload["title"] = serde_json::json!("A title nobody approved");
+        changed_payload["researchQuestion"] =
+            serde_json::json!("Can an operation id be reused for different work?");
+        assert!(
+            client
+                .ext_method("x.ai/science/project_create", changed_payload)
+                .await
+                .is_err(),
+            "changed project payload replayed under the original operation id"
+        );
+        assert_eq!(
+            client.permission_request_count(),
+            permissions_after_replay,
+            "a mismatched replay opened a second permission prompt"
+        );
+        assert_eq!(
+            xai_grok_science::project::ProjectStore::new(&store_root)
+                .list_projects()
+                .expect("list projects after rejected replay")
+                .len(),
+            1,
+            "a mismatched replay created a project"
+        );
 
         // A different operation id is a different mutation and must create a
         // second project — otherwise the check above would pass trivially.
@@ -3815,7 +3840,11 @@ async fn test_stdio_science_operator_gate_snapshot_denies_read_and_mutation_befo
                     "ownerId": "science-owner",
                     "storeRoot": store_root,
                     "operationId": "op-disabled-workflow",
-                    "workflowSpec": workflow_spec("wf-disabled-gate", WORKFLOW_CELL),
+                    "workflowSpec": workflow_spec(
+                        "wf-disabled-gate",
+                        "disabled-project-validation-only",
+                        WORKFLOW_CELL
+                    ),
                     // The actor must reject on its gate snapshot before this
                     // executable is probed or run.
                     "interpreterPath": std::env::current_exe()
@@ -4832,10 +4861,10 @@ const WORKFLOW_CELL: &str = "import os\n\
      open(p, 'w').write('{\"mean\": 1.5}')\n\
      print('acp-computed')\n";
 
-fn workflow_spec(workflow_id: &str, cell: &str) -> Value {
+fn workflow_spec(workflow_id: &str, project_id: &str, cell: &str) -> Value {
     serde_json::json!({
         "workflow_id": workflow_id,
-        "project_id": "proj-acp-workflow",
+        "project_id": project_id,
         "name": "acp workflow execution",
         "steps": [{
             "step_id": "compute",
@@ -4898,6 +4927,30 @@ async fn test_stdio_science_workflow_execute_is_actor_gated_and_idempotent() {
         let client = GrokStdioClient::spawn(&server, workdir.path()).await;
         client.initialize_with_timeout().await;
         let session_id = client.create_session_with_timeout(workdir.path()).await;
+        let created: Value = serde_json::from_str(
+            client
+                .ext_method(
+                    "x.ai/science/project_create",
+                    serde_json::json!({
+                        "sessionId": session_id.0.as_ref(),
+                        "ownerId": "science-owner",
+                        "storeRoot": store_root,
+                        "title": "Workflow authority project",
+                        "researchQuestion": "Can one owned project bind every workflow run?",
+                        "operationId": "op-wf-project-create",
+                        "approvalTimeoutMs": 30_000,
+                    }),
+                )
+                .await
+                .expect("actor-gated workflow project_create failed")
+                .0
+                .get(),
+        )
+        .expect("workflow project_create returned JSON");
+        let project_id = created["projectId"]
+            .as_str()
+            .expect("workflow project_create returned projectId")
+            .to_owned();
 
         let params = |operation_id: &str| {
             serde_json::json!({
@@ -4905,7 +4958,7 @@ async fn test_stdio_science_workflow_execute_is_actor_gated_and_idempotent() {
                 "ownerId": "science-owner",
                 "storeRoot": store_root,
                 "operationId": operation_id,
-                "workflowSpec": workflow_spec("wf-acp-exec", WORKFLOW_CELL),
+                "workflowSpec": workflow_spec("wf-acp-exec", &project_id, WORKFLOW_CELL),
                 "interpreterPath": python,
                 "kernelId": "py-acp-exec",
                 // The opt-in that `ExecutionPolicy::default()` deliberately
@@ -5008,9 +5061,45 @@ async fn test_stdio_science_workflow_execute_is_actor_gated_and_idempotent() {
         // a second execution could not be hidden.
         assert_eq!(
             attempt_dirs(&output_root, &run_id, "compute"),
-            vec![attempt_id],
+            vec![attempt_id.clone()],
             "replay executed the kernel a second time"
         );
+        let permissions_after_replay = client.permission_request_count();
+        let mut changed_spec = params("op-wf-exec-1");
+        changed_spec["workflowSpec"]["name"] = serde_json::json!("a workflow nobody approved");
+        let mut changed_kernel = params("op-wf-exec-1");
+        changed_kernel["kernelId"] = serde_json::json!("another-kernel");
+        let mut changed_timeout = params("op-wf-exec-1");
+        changed_timeout["probeTimeoutMs"] = serde_json::json!(59_999);
+        let mut changed_policy = params("op-wf-exec-1");
+        changed_policy["allowKernelSteps"] = serde_json::json!(false);
+        let mut changed_interpreter = params("op-wf-exec-1");
+        changed_interpreter["interpreterPath"] = serde_json::json!("/bin/sh");
+        for (label, changed) in [
+            ("workflow spec", changed_spec),
+            ("kernel id", changed_kernel),
+            ("probe timeout", changed_timeout),
+            ("execution policy", changed_policy),
+            ("interpreter", changed_interpreter),
+        ] {
+            assert!(
+                client
+                    .ext_method("x.ai/science/workflow_execute", changed)
+                    .await
+                    .is_err(),
+                "{label} changed under a completed operation id"
+            );
+            assert_eq!(
+                client.permission_request_count(),
+                permissions_after_replay,
+                "{label} mismatch opened another permission prompt"
+            );
+            assert_eq!(
+                attempt_dirs(&output_root, &run_id, "compute"),
+                vec![attempt_id.clone()],
+                "{label} mismatch executed another attempt"
+            );
+        }
 
         // A different operation id IS a second execution — without this the
         // replay assertions above could pass on an endpoint that never runs
@@ -5074,7 +5163,7 @@ async fn test_stdio_science_workflow_execute_fails_closed() {
                     "sessionId": session_id.0.as_ref(),
                     "ownerId": "science-owner",
                     "storeRoot": store_root,
-                    "workflowSpec": workflow_spec("wf-no-op", WORKFLOW_CELL),
+                    "workflowSpec": workflow_spec("wf-no-op", "project-validation-only", WORKFLOW_CELL),
                     "interpreterPath": python,
                     "allowKernelSteps": true,
                 }),
@@ -5099,7 +5188,7 @@ async fn test_stdio_science_workflow_execute_fails_closed() {
                     "ownerId": "science-owner",
                     "storeRoot": store_root,
                     "operationId": "op-wf-forged",
-                    "workflowSpec": workflow_spec("wf-forged", WORKFLOW_CELL),
+                    "workflowSpec": workflow_spec("wf-forged", "project-validation-only", WORKFLOW_CELL),
                     "interpreterPath": python,
                     "allowKernelSteps": true,
                 }),
@@ -5142,6 +5231,39 @@ async fn test_stdio_science_workflow_execute_denied_runs_nothing() {
         let workdir = git_workdir();
         let store_root = workdir.path().join("science-store");
 
+        let creator = GrokStdioClient::spawn(&server, workdir.path()).await;
+        creator.initialize_with_timeout().await;
+        let creator_session = creator.create_session_with_timeout(workdir.path()).await;
+        let created: Value = serde_json::from_str(
+            creator
+                .ext_method(
+                    "x.ai/science/project_create",
+                    serde_json::json!({
+                        "sessionId": creator_session.0.as_ref(),
+                        "ownerId": "science-owner",
+                        "storeRoot": store_root,
+                        "title": "Denied workflow project",
+                        "researchQuestion": "Does denial leave all executor state absent?",
+                        "operationId": "op-wf-denied-project-create",
+                        "approvalTimeoutMs": 30_000,
+                    }),
+                )
+                .await
+                .expect("actor-gated denied-workflow project_create failed")
+                .0
+                .get(),
+        )
+        .expect("denied-workflow project_create returned JSON");
+        let project_id = created["projectId"]
+            .as_str()
+            .expect("denied-workflow project_create returned projectId")
+            .to_owned();
+        drop(creator);
+        let runs_before: std::collections::BTreeSet<_> = std::fs::read_dir(store_root.join("runs"))
+            .expect("project create must leave an authority run")
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+
         let client = GrokStdioClient::spawn_with_permission_response(
             &server,
             workdir.path(),
@@ -5160,7 +5282,7 @@ async fn test_stdio_science_workflow_execute_denied_runs_nothing() {
                     "ownerId": "science-owner",
                     "storeRoot": store_root,
                     "operationId": "op-wf-denied",
-                    "workflowSpec": workflow_spec("wf-denied", WORKFLOW_CELL),
+                    "workflowSpec": workflow_spec("wf-denied", &project_id, WORKFLOW_CELL),
                     "interpreterPath": python,
                     "allowKernelSteps": true,
                     "probeTimeoutMs": 60_000,
@@ -5190,14 +5312,12 @@ async fn test_stdio_science_workflow_execute_denied_runs_nothing() {
             "denied execution burned the operation id"
         );
         // Cell staging, driver materialisation and per-attempt output all live
-        // behind the gate, so their directories exist (the adapter created
-        // them) and are empty.
+        // behind the gate. The adapter must not even create their directories.
         for name in ["workflow-cells", "workflow-runtime", "workflow-outputs"] {
             let dir = store_root.join(name);
-            let count = std::fs::read_dir(&dir).map(Iterator::count).unwrap_or(0);
-            assert_eq!(
-                count, 0,
-                "denied execution left {count} entry/entries in {name}"
+            assert!(
+                !dir.exists(),
+                "denied execution provisioned actor-owned directory {name}"
             );
         }
 
@@ -5211,14 +5331,13 @@ async fn test_stdio_science_workflow_execute_denied_runs_nothing() {
         // not-Allow branch in `finish_science_workflow_execution`, so what is
         // proven here is that permission-not-granted executes nothing; the
         // `Denied` spelling specifically is not what this harness produces.
-        let run_id = std::fs::read_dir(store_root.join("runs"))
+        let runs_after: std::collections::BTreeSet<_> = std::fs::read_dir(store_root.join("runs"))
             .expect("durable refused run directory")
-            .next()
-            .expect("one refused run")
-            .expect("run directory entry")
-            .file_name()
-            .to_string_lossy()
-            .to_string();
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        let refused_runs: Vec<_> = runs_after.difference(&runs_before).collect();
+        assert_eq!(refused_runs.len(), 1, "expected one refused workflow run");
+        let run_id = refused_runs[0].to_string_lossy().to_string();
         let store = xai_grok_science::ScienceStore::new(&store_root);
         let run = store
             .load_run(&xai_grok_science::RunId::new(run_id))

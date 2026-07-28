@@ -23,6 +23,7 @@ use crate::features::ScienceFeature;
 use crate::{Result, ScienceError};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 /// The mutations the ACP surface is allowed to ask for.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -166,10 +167,76 @@ pub struct OperationRecord {
     pub session_id: String,
     pub owner_id: String,
     pub kind: String,
+    /// Hash of the exact authority-bearing request, excluding only the
+    /// actor-minted review run id. Older records do not have enough information
+    /// to prove replay equivalence and therefore fail closed instead of
+    /// silently replaying a different same-kind request.
+    #[serde(default)]
+    pub request_sha256: String,
     pub project_id: ProjectId,
     pub revision: String,
     pub result: serde_json::Value,
     pub completed_at: DateTime<Utc>,
+}
+
+impl MutationRequest {
+    /// Stable binding used by the idempotency ledger.
+    ///
+    /// The original optimistic revision is authority-bearing: a caller must
+    /// replay the same admitted compare-and-swap request, not replace it with a
+    /// looser precondition after success. The review authority run id is minted
+    /// by the actor on each attempted call, so only that field is normalized.
+    pub fn replay_fingerprint(&self) -> Result<String> {
+        let mut mutation = self.mutation.clone();
+        if let ProjectMutation::ReviewRecord {
+            authority_run_id, ..
+        } = &mut mutation
+        {
+            authority_run_id.clear();
+        }
+        let binding = serde_json::json!({
+            "operation_id": self.operation_id,
+            "session_id": self.session_id,
+            "owner_id": self.owner_id,
+            "expected_revision": self.expected_revision,
+            "mutation": mutation,
+        });
+        Ok(format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(&binding)?)
+        ))
+    }
+}
+
+impl OperationRecord {
+    /// Prove that a caller is replaying the same request, not merely reusing
+    /// the same operation id for another target or payload of the same kind.
+    pub fn verify_replay(&self, request: &MutationRequest) -> Result<()> {
+        if self.session_id != request.session_id || self.owner_id != request.owner_id {
+            return Err(ScienceError::Ownership);
+        }
+        if self.kind != request.mutation.kind() {
+            return Err(ScienceError::Invalid(format!(
+                "operation {} was already applied as {}, not {}",
+                request.operation_id,
+                self.kind,
+                request.mutation.kind()
+            )));
+        }
+        if self.request_sha256.is_empty() {
+            return Err(ScienceError::Invalid(format!(
+                "operation {} predates request-bound replay; use a new operationId",
+                request.operation_id
+            )));
+        }
+        if self.request_sha256 != request.replay_fingerprint()? {
+            return Err(ScienceError::Invalid(format!(
+                "operation {} replay does not match its original request",
+                request.operation_id
+            )));
+        }
+        Ok(())
+    }
 }
 
 /// Operation ids address a file, so keep them boring and bounded.
@@ -217,17 +284,7 @@ impl ProjectStore {
         // Idempotency: a replay returns the first outcome, and only to the
         // session and owner that produced it.
         if let Some(record) = self.lookup_operation(&request.operation_id)? {
-            if record.session_id != request.session_id || record.owner_id != request.owner_id {
-                return Err(ScienceError::Ownership);
-            }
-            if record.kind != request.mutation.kind() {
-                return Err(ScienceError::Invalid(format!(
-                    "operation {} was already applied as {}, not {}",
-                    request.operation_id,
-                    record.kind,
-                    request.mutation.kind()
-                )));
-            }
+            record.verify_replay(request)?;
             if record.kind == "review_record" {
                 let review: super::review_store::ReviewRecord =
                     serde_json::from_value(record.result.clone())?;
@@ -267,6 +324,7 @@ impl ProjectStore {
             session_id: request.session_id.clone(),
             owner_id: request.owner_id.clone(),
             kind: request.mutation.kind().to_string(),
+            request_sha256: request.replay_fingerprint()?,
             project_id: project_id.clone(),
             revision: revision.clone(),
             result: result.clone(),
@@ -326,11 +384,8 @@ impl ProjectStore {
                 Ok((id, serde_json::to_value(migration)?))
             }
             ProjectMutation::ProjectTransition { project_id, status } => {
-                let project = self.transition_project_inner(
-                    project_id,
-                    &request.owner_id,
-                    *status,
-                )?;
+                let project =
+                    self.transition_project_inner(project_id, &request.owner_id, *status)?;
                 Ok((project_id.clone(), serde_json::to_value(project)?))
             }
             ProjectMutation::QuestionUpdate {
@@ -566,7 +621,9 @@ mod tests {
     fn operation_id_cannot_be_reused_for_a_different_mutation() {
         let dir = tempdir().unwrap();
         let store = ProjectStore::new(dir.path());
-        let created = store.apply_mutation(&create_request("op-create-0003")).unwrap();
+        let created = store
+            .apply_mutation(&create_request("op-create-0003"))
+            .unwrap();
 
         let mut reuse = create_request("op-create-0003");
         reuse.mutation = ProjectMutation::ClaimPropose {
@@ -582,10 +639,174 @@ mod tests {
     }
 
     #[test]
+    fn operation_id_cannot_replay_changed_payload_of_the_same_kind() {
+        let dir = tempdir().unwrap();
+        let store = ProjectStore::new(dir.path());
+        let original = create_request("op-create-payload");
+        let first = store.apply_mutation(&original).unwrap();
+
+        let mut changed = original;
+        changed.mutation = ProjectMutation::ProjectCreate {
+            title: "A different project".into(),
+            research_question: "This was never approved.".into(),
+        };
+        let error = store.apply_mutation(&changed).unwrap_err();
+        assert!(
+            matches!(&error, ScienceError::Invalid(message)
+                if message.contains("does not match its original request")),
+            "unexpected: {error}"
+        );
+        assert_eq!(store.list_projects().unwrap().len(), 1);
+        assert_eq!(store.load_project(&first.project_id).unwrap().title, "Demo");
+    }
+
+    #[test]
+    fn operation_id_cannot_replay_the_same_kind_against_another_project() {
+        let dir = tempdir().unwrap();
+        let store = ProjectStore::new(dir.path());
+        let project_a = store
+            .apply_mutation(&create_request("op-create-target-a"))
+            .unwrap();
+        let project_b = store
+            .apply_mutation(&create_request("op-create-target-b"))
+            .unwrap();
+        let update_a = MutationRequest {
+            operation_id: "op-question-target".into(),
+            session_id: "session-1".into(),
+            owner_id: "owner-1".into(),
+            expected_revision: None,
+            mutation: ProjectMutation::QuestionUpdate {
+                project_id: project_a.project_id.clone(),
+                research_question: "Approved question A".into(),
+            },
+        };
+        store.apply_mutation(&update_a).unwrap();
+
+        let update_b = MutationRequest {
+            mutation: ProjectMutation::QuestionUpdate {
+                project_id: project_b.project_id.clone(),
+                research_question: "Unapproved question B".into(),
+            },
+            ..update_a
+        };
+        let error = store.apply_mutation(&update_b).unwrap_err();
+        assert!(
+            matches!(&error, ScienceError::Invalid(message)
+                if message.contains("does not match its original request")),
+            "unexpected: {error}"
+        );
+        assert_eq!(
+            store
+                .load_project(&project_b.project_id)
+                .unwrap()
+                .research_question,
+            "Does EcoRI cut?"
+        );
+    }
+
+    #[test]
+    fn operation_id_cannot_replay_with_a_different_revision_precondition() {
+        let dir = tempdir().unwrap();
+        let store = ProjectStore::new(dir.path());
+        let created = store
+            .apply_mutation(&create_request("op-create-revision"))
+            .unwrap();
+        let original = MutationRequest {
+            operation_id: "op-question-revision".into(),
+            session_id: "session-1".into(),
+            owner_id: "owner-1".into(),
+            expected_revision: Some(created.revision),
+            mutation: ProjectMutation::QuestionUpdate {
+                project_id: created.project_id,
+                research_question: "Approved against one exact revision".into(),
+            },
+        };
+        let first = store.apply_mutation(&original).unwrap();
+
+        let mut changed = original.clone();
+        changed.expected_revision = None;
+        let error = store.apply_mutation(&changed).unwrap_err();
+        assert!(
+            matches!(&error, ScienceError::Invalid(message)
+                if message.contains("does not match its original request")),
+            "unexpected: {error}"
+        );
+
+        let replay = store.apply_mutation(&original).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.revision, first.revision);
+    }
+
+    #[test]
+    fn legacy_operation_without_a_request_digest_fails_closed() {
+        let dir = tempdir().unwrap();
+        let store = ProjectStore::new(dir.path());
+        let request = create_request("op-legacy-digest");
+        store.apply_mutation(&request).unwrap();
+        let record = store
+            .lookup_operation(&request.operation_id)
+            .unwrap()
+            .expect("operation record");
+        let mut encoded = serde_json::to_value(record).unwrap();
+        encoded
+            .as_object_mut()
+            .expect("record object")
+            .remove("request_sha256");
+        let legacy: OperationRecord = serde_json::from_value(encoded).unwrap();
+
+        assert!(legacy.request_sha256.is_empty());
+        assert!(
+            matches!(
+                legacy.verify_replay(&request),
+                Err(ScienceError::Invalid(message))
+                    if message.contains("predates request-bound replay")
+            ),
+            "legacy operation replay did not fail closed"
+        );
+    }
+
+    #[test]
+    fn migration_operation_id_cannot_replay_changed_source_or_metadata() {
+        let dir = tempdir().unwrap();
+        let store = ProjectStore::new(dir.path());
+        let original = MutationRequest {
+            operation_id: "op-migrate-binding".into(),
+            session_id: "session-1".into(),
+            owner_id: "owner-1".into(),
+            expected_revision: None,
+            mutation: ProjectMutation::ProjectMigrate {
+                source_run_id: "source-run-a".into(),
+                title: "Approved migration".into(),
+                research_question: "What survived?".into(),
+            },
+        };
+        store.apply_mutation(&original).unwrap();
+        let changed = MutationRequest {
+            mutation: ProjectMutation::ProjectMigrate {
+                source_run_id: "source-run-b".into(),
+                title: "Unapproved migration".into(),
+                research_question: "Different payload".into(),
+            },
+            ..original
+        };
+        assert!(
+            matches!(
+                store.apply_mutation(&changed),
+                Err(ScienceError::Invalid(message))
+                    if message.contains("does not match its original request")
+            ),
+            "changed migration payload replayed"
+        );
+        assert_eq!(store.list_projects().unwrap().len(), 1);
+    }
+
+    #[test]
     fn expected_revision_rejects_a_stale_mutation() {
         let dir = tempdir().unwrap();
         let store = ProjectStore::new(dir.path());
-        let created = store.apply_mutation(&create_request("op-create-0004")).unwrap();
+        let created = store
+            .apply_mutation(&create_request("op-create-0004"))
+            .unwrap();
         let stale = created.revision.clone();
 
         let first_claim = MutationRequest {
@@ -631,7 +852,9 @@ mod tests {
     fn question_update_persists_and_is_owner_gated() {
         let dir = tempdir().unwrap();
         let store = ProjectStore::new(dir.path());
-        let created = store.apply_mutation(&create_request("op-create-0006")).unwrap();
+        let created = store
+            .apply_mutation(&create_request("op-create-0006"))
+            .unwrap();
         let project_id = created.project_id.clone();
 
         let update = MutationRequest {
@@ -687,7 +910,9 @@ mod tests {
     fn mutation_refuses_a_project_owned_by_someone_else() {
         let dir = tempdir().unwrap();
         let store = ProjectStore::new(dir.path());
-        let created = store.apply_mutation(&create_request("op-create-0005")).unwrap();
+        let created = store
+            .apply_mutation(&create_request("op-create-0005"))
+            .unwrap();
 
         let intruder = MutationRequest {
             operation_id: "op-intruder-01".into(),
@@ -722,7 +947,9 @@ mod tests {
     fn full_mutation_chain_applies_through_one_api() {
         let dir = tempdir().unwrap();
         let store = ProjectStore::new(dir.path());
-        let created = store.apply_mutation(&create_request("op-chain-00001")).unwrap();
+        let created = store
+            .apply_mutation(&create_request("op-chain-00001"))
+            .unwrap();
         let project_id = created.project_id.clone();
 
         let transitioned = store
@@ -785,12 +1012,17 @@ mod tests {
     fn every_write_moves_the_revision() {
         let dir = tempdir().unwrap();
         let store = ProjectStore::new(dir.path());
-        let created = store.apply_mutation(&create_request("op-rev-000001")).unwrap();
+        let created = store
+            .apply_mutation(&create_request("op-rev-000001"))
+            .unwrap();
         let project_id = created.project_id.clone();
 
         let mut seen = std::collections::BTreeSet::new();
         seen.insert(created.revision.clone());
-        assert_eq!(store.project_revision(&project_id).unwrap(), created.revision);
+        assert_eq!(
+            store.project_revision(&project_id).unwrap(),
+            created.revision
+        );
 
         store
             .register_artifact(&project_id, "owner-1", "b".repeat(64), "art", None)

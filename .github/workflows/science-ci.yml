@@ -214,10 +214,59 @@ jobs:
             test_stdio_science_review_record_denied_writes_no_review_or_artifact
             test_stdio_science_kernel_admission_is_actor_gated_and_store_owned
             test_stdio_science_kernel_admission_denied_writes_nothing
+            test_stdio_science_workflow_execute_is_actor_gated_and_idempotent
+            test_stdio_science_workflow_execute_fails_closed
+            test_stdio_science_workflow_execute_denied_runs_nothing
           )
-          for test_name in "${tests[@]}"; do
+
+          # libtest exits successfully when an exact filter matches zero tests.
+          # Prove every required product test exists exactly once in the ignored
+          # inventory before relying on the individual exit codes below.
+          listed_tests="$(
             cargo test -p xai-grok-shell --test test_built_binary_e2e --locked \
-              "$test_name" -- --ignored --exact --test-threads=1
+              -- --list --ignored
+          )"
+          printf '%s\n' "$listed_tests"
+          for test_name in "${tests[@]}"; do
+            match_count="$(
+              printf '%s\n' "$listed_tests" |
+                awk -v expected="${test_name}: test" \
+                  '$0 == expected { count += 1 } END { print count + 0 }'
+            )"
+            if [[ "$match_count" -ne 1 ]]; then
+              echo "::error::required built-binary test '$test_name' appears $match_count times in the ignored test inventory"
+              exit 1
+            fi
+          done
+
+          for test_name in "${tests[@]}"; do
+            set +e
+            test_output="$(
+              CARGO_TERM_COLOR=never \
+                cargo test -p xai-grok-shell --test test_built_binary_e2e --locked \
+                  "$test_name" -- --ignored --exact --test-threads=1 2>&1
+            )"
+            test_status=$?
+            set -e
+            printf '%s\n' "$test_output"
+            if [[ "$test_status" -ne 0 ]]; then
+              echo "::error::required built-binary test '$test_name' exited $test_status"
+              exit "$test_status"
+            fi
+
+            passed_test_lines="$(
+              printf '%s\n' "$test_output" |
+                grep -Fxc "test ${test_name} ... ok" || true
+            )"
+            passed_summary_lines="$(
+              printf '%s\n' "$test_output" |
+                grep -Ecx 'test result: ok\. 1 passed; 0 failed; 0 ignored; [0-9]+ measured; [0-9]+ filtered out; finished in .+$' ||
+                true
+            )"
+            if [[ "$passed_test_lines" -ne 1 || "$passed_summary_lines" -ne 1 ]]; then
+              echo "::error::required built-binary test '$test_name' did not prove exactly one passing test (test lines=$passed_test_lines, summaries=$passed_summary_lines)"
+              exit 1
+            fi
           done
 
   build:
