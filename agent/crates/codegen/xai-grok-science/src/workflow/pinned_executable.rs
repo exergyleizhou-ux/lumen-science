@@ -32,6 +32,8 @@ use std::{
 use std::io::Write;
 #[cfg(target_os = "linux")]
 use std::os::fd::{AsRawFd, FromRawFd};
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::FileTypeExt;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 #[cfg(target_os = "linux")]
@@ -842,9 +844,16 @@ fn verify_linux_protected_read_path(path: &Path) -> io::Result<()> {
     let mut current = Some(path);
     while let Some(component) = current {
         let metadata = fs::symlink_metadata(component)?;
+        // Standard Linux character devices such as /dev/null and
+        // /dev/urandom are intentionally mode 0666. They are still safe
+        // read-only Landlock capabilities when the exact leaf is a
+        // root-owned character device and every ancestor is protected. Do
+        // not extend this exception to regular files or directories.
+        let protected_device_leaf =
+            component == path && metadata.file_type().is_char_device() && metadata.uid() == 0;
         if metadata.file_type().is_symlink()
             || metadata.uid() != 0
-            || metadata.permissions().mode() & 0o022 != 0
+            || (!protected_device_leaf && metadata.permissions().mode() & 0o022 != 0)
         {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
@@ -1346,6 +1355,17 @@ mod tests {
         assert_eq!(
             String::from_utf8_lossy(&replacement_output.stdout),
             "replacement-bytes\n"
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn linux_runtime_read_capabilities_accept_standard_character_devices() {
+        let capabilities = open_linux_runtime_read_capabilities()
+            .expect("root-owned standard devices may be retained read-only");
+        assert!(
+            !capabilities.is_empty(),
+            "the Linux runtime capability set is unexpectedly empty"
         );
     }
 

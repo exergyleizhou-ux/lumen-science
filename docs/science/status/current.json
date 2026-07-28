@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "generator": "scripts/generate-science-status.py",
   "doc": "Machine-generated product status. Derived from the source tree and git only. Prose documents must point here rather than restate status. Regenerate with: python3 scripts/generate-science-status.py",
-  "sourceCommit": "c712c69e2598265d21c696b088e1f4c0c7d52ebc",
-  "sourceCommitEpoch": 1785128069,
-  "sourceCommitIso": "2026-07-27T12:54:29+08:00",
+  "sourceCommit": "349bf1c562f92d61343be886178f6d1c47d9e725",
+  "sourceCommitEpoch": 1785223596,
+  "sourceCommitIso": "2026-07-28T15:26:36+08:00",
   "gateVocabulary": {
     "states": [
       "pass",
@@ -108,16 +108,16 @@
         "present": true,
         "continueOnError": 0,
         "usesClobber": false,
-        "actionRefs": 10,
+        "actionRefs": 0,
         "unpinnedActionRefs": [],
         "actionsFullyPinned": true,
         "declaresTopLevelContentsWrite": false,
-        "usesProtectedEnvironment": true,
-        "verifiesTagPeel": true,
-        "usesVerifyTag": true,
-        "sourceDateEpochFromCommit": true,
+        "usesProtectedEnvironment": false,
+        "verifiesTagPeel": false,
+        "usesVerifyTag": false,
+        "sourceDateEpochFromCommit": false,
         "sourceDateEpochFromWallClock": false,
-        "lineCount": 523
+        "lineCount": 33
       },
       "release.yml": {
         "present": true,
@@ -134,7 +134,7 @@
         "usesVerifyTag": true,
         "sourceDateEpochFromCommit": true,
         "sourceDateEpochFromWallClock": false,
-        "lineCount": 773
+        "lineCount": 775
       },
       "desktop-ci.yml": {
         "present": true,
@@ -160,7 +160,7 @@
         "present": true,
         "continueOnError": 0,
         "usesClobber": false,
-        "actionRefs": 13,
+        "actionRefs": 16,
         "unpinnedActionRefs": [
           "actions/cache@v4",
           "actions/checkout@v4",
@@ -175,7 +175,7 @@
         "usesVerifyTag": false,
         "sourceDateEpochFromCommit": false,
         "sourceDateEpochFromWallClock": false,
-        "lineCount": 299
+        "lineCount": 472
       }
     },
     "desktopCiAllowsTypecheckFailure": false
@@ -195,12 +195,12 @@
     ],
     "latestScienceTag": "v1.0.1",
     "pipeline": {
-      "signsAssets": true,
-      "generatesPerAssetSbom": true,
-      "attestsBuildProvenance": true,
+      "signsAssets": false,
+      "generatesPerAssetSbom": false,
+      "attestsBuildProvenance": false,
       "immutablePublish": true,
-      "verifiesTagBinding": true,
-      "reproducibleArchives": true,
+      "verifiesTagBinding": false,
+      "reproducibleArchives": false,
       "capabilitiesSince": "v1.0.2"
     },
     "publishedLatest": {
@@ -211,6 +211,9 @@
       "note": "v1.0.1 was built before the signing/SBOM/provenance work landed, so its assets carry checksums only. The pipeline gains these from v1.0.2."
     },
     "openGaps": [
+      "pipeline does not sign assets",
+      "pipeline generates no per-asset SBOM",
+      "pipeline attests no build provenance",
       "the newest published release (v1.0.1) predates these controls and remains unsigned, without SBOM or provenance",
       "reproducibility is implemented but no published tag has been independently rebuilt and compared"
     ]
