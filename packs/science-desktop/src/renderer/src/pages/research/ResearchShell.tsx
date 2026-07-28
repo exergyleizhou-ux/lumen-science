@@ -767,7 +767,7 @@ export const ResearchShell = (): React.JSX.Element => {
                   <h2 className={cx.h2}>Skills</h2>
                   <p className={cx.muted}>
                     本地科研能力目录先隔离、后逐项验收。每项必须映射到受控的 Lumen
-                    工具，并由 Rust SessionActor 管理权限、产物和证据；
+                    工具，并由 Lumen 研究引擎管理权限、产物和证据；
                     <strong>目录本身不能执行，也不能批量批准</strong>。
                   </p>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -782,7 +782,7 @@ export const ResearchShell = (): React.JSX.Element => {
                     <div style={{ marginTop: 16 }}>
                       <div className={cx.muted}>
                         {skillsInventory.total} 项候选 · {skillsInventory.approved} 项已批准 ·{' '}
-                        {skillsInventory.quarantined} 项隔离中 · 仅 SessionActor 可执行
+                        {skillsInventory.quarantined} 项隔离中 · 仅 Lumen 研究引擎可执行
                       </div>
                       <input
                         className={cx.input}
