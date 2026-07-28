@@ -38,7 +38,10 @@ import type { IpcMainLike } from './files/science-ipc'
 import { AcpSessionManager, type EngineState } from './acp-session-manager'
 import { PermissionBroker, type AskHuman } from './permission-broker'
 import { ENGINE_APPROVAL_TIMEOUT_MS } from './files/science-ipc'
-import { listScienceMethods } from './science-method-registry'
+import {
+  isGenericRendererScienceMethod,
+  listScienceMethods,
+} from './science-method-registry'
 
 // ── Engine singleton ─────────────────────────────────────────────
 
@@ -160,8 +163,12 @@ export async function startLumen(): Promise<void> {
 export async function stopLumen(): Promise<void> {
   const current = manager
   manager = null
-  if (!current) return
+  // Invalidate identity before awaiting process shutdown. A stopped, crashed,
+  // or already-absent engine may never preserve a capability from its session.
+  const { clearAllTrustedSessions } = await import('./files/session-binding')
+  clearAllTrustedSessions()
   lastState = { status: 'stopped' }
+  if (!current) return
   await current.stop()
 }
 
@@ -237,6 +244,10 @@ export async function listScienceTools(): Promise<unknown> {
       name: m.name,
       method: m.qualified,
       transport: 'acp-stdio',
+      genericRendererCallable: isGenericRendererScienceMethod(m.name),
+      route: isGenericRendererScienceMethod(m.name)
+        ? 'generic-acp-call'
+        : 'sender-bound-settings-ipc',
     })),
     authority: 'rust-acp-extension-methods',
   }

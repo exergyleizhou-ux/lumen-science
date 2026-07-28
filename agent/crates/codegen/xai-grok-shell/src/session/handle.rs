@@ -323,6 +323,90 @@ impl Drop for PendingScienceDossierApproval {
     }
 }
 
+/// Cancellation safety for a durably admitted skill quarantine import.
+struct PendingScienceSkillQuarantineApproval {
+    cmd_tx: mpsc::UnboundedSender<SessionCommand>,
+    prepared: Option<crate::session::commands::PreparedScienceSkillQuarantine>,
+}
+
+/// Only the production permission bridge can construct an Allow grant. It is
+/// bound to the exact durable run, call and kernel-derived admission digest.
+pub(crate) struct ScienceSkillQuarantinePermissionGrant {
+    run_id: xai_grok_science::RunId,
+    call_id: xai_grok_science::CallId,
+    admission_sha256: String,
+}
+
+impl ScienceSkillQuarantinePermissionGrant {
+    fn new(prepared: &crate::session::commands::PreparedScienceSkillQuarantine) -> Self {
+        Self {
+            run_id: prepared.ticket.run_id.clone(),
+            call_id: prepared.ticket.call_id.clone(),
+            admission_sha256: prepared.admission.sha256().to_owned(),
+        }
+    }
+
+    pub(crate) fn authorizes(
+        &self,
+        prepared: &crate::session::commands::PreparedScienceSkillQuarantine,
+    ) -> bool {
+        self.run_id == prepared.ticket.run_id
+            && self.call_id == prepared.ticket.call_id
+            && self.admission_sha256 == prepared.admission.sha256()
+    }
+}
+
+impl PendingScienceSkillQuarantineApproval {
+    fn new(
+        cmd_tx: mpsc::UnboundedSender<SessionCommand>,
+        prepared: crate::session::commands::PreparedScienceSkillQuarantine,
+    ) -> Self {
+        Self {
+            cmd_tx,
+            prepared: Some(prepared),
+        }
+    }
+
+    fn prepared(&self) -> &crate::session::commands::PreparedScienceSkillQuarantine {
+        self.prepared
+            .as_ref()
+            .expect("skill quarantine approval guard must remain armed")
+    }
+
+    fn take(mut self) -> crate::session::commands::PreparedScienceSkillQuarantine {
+        self.prepared
+            .take()
+            .expect("skill quarantine approval guard must remain armed")
+    }
+}
+
+impl Drop for PendingScienceSkillQuarantineApproval {
+    fn drop(&mut self) {
+        let Some(prepared) = self.prepared.take() else {
+            return;
+        };
+        let (respond_to, _response) = oneshot::channel();
+        if self
+            .cmd_tx
+            .send(SessionCommand::FinishScienceSkillQuarantine(Box::new(
+                crate::session::commands::FinishScienceSkillQuarantine {
+                    prepared,
+                    decision: xai_grok_science::ApprovalDecision::Cancel,
+                    reason: "skill quarantine permission wait was cancelled before a decision"
+                        .into(),
+                    permission_grant: None,
+                    respond_to,
+                },
+            )))
+            .is_err()
+        {
+            tracing::warn!(
+                "session actor unavailable while cancelling a pending skill quarantine approval"
+            );
+        }
+    }
+}
+
 /// Cancellation safety for every durably admitted project mutation.
 ///
 /// An ACP client may disconnect while the production permission future is
@@ -678,6 +762,119 @@ impl SessionHandle {
                     prepared,
                     decision,
                     reason,
+                    respond_to,
+                },
+            )))
+            .map_err(|_| {
+                xai_grok_science::ScienceError::Invalid("session actor unavailable".into())
+            })?;
+        response
+            .await
+            .map_err(|_| xai_grok_science::ScienceError::Invalid("session actor stopped".into()))?
+    }
+
+    /// Quarantine an uploaded skill archive through a durable actor-owned
+    /// Begin/permission/Finish protocol. Dropping this future while permission
+    /// is pending sends Cancel to the same actor.
+    pub async fn run_science_skill_quarantine_with_approval_timeout(
+        &self,
+        store: xai_grok_science::ScienceStore,
+        context: xai_grok_science::RunContext,
+        request: xai_grok_science::skill_quarantine::SkillQuarantineRequest,
+        archive_bytes: Vec<u8>,
+        approval_timeout: std::time::Duration,
+    ) -> xai_grok_science::Result<
+        xai_grok_science::skill_quarantine::SkillQuarantineResult,
+    > {
+        use xai_grok_workspace::permission::{AccessKind, Decision};
+        let (begin_tx, begin_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SessionCommand::BeginScienceSkillQuarantine(Box::new(
+                crate::session::commands::BeginScienceSkillQuarantine {
+                    store,
+                    context,
+                    request,
+                    archive_bytes,
+                    respond_to: begin_tx,
+                },
+            )))
+            .map_err(|_| {
+                xai_grok_science::ScienceError::Invalid("session actor unavailable".into())
+            })?;
+        let mut prepared = begin_rx.await.map_err(|_| {
+            xai_grok_science::ScienceError::Invalid("session actor stopped".into())
+        })??;
+        if let Some(replayed) = prepared.replayed.take() {
+            return Ok(replayed);
+        }
+        let pending =
+            PendingScienceSkillQuarantineApproval::new(self.cmd_tx.clone(), prepared);
+        let prepared = pending.prepared();
+        let call_id = acp::ToolCallId::new(std::sync::Arc::from(format!(
+            "science-skill-quarantine-{}",
+            prepared.ticket.run_id.0
+        )));
+        let update = acp::ToolCallUpdate::new(
+            call_id,
+            acp::ToolCallUpdateFields::new()
+                .kind(Some(acp::ToolKind::Other))
+                .title(Some(format!(
+                    "Quarantine {} skill root(s), {} file(s), {} bytes (not enabled)",
+                    prepared.admission.selected_subpaths().len(),
+                    prepared.admission.file_count(),
+                    prepared.admission.total_uncompressed_bytes()
+                ))),
+        );
+        let permission = tokio::time::timeout(
+            approval_timeout,
+            self.permission_handle.request(
+                AccessKind::Edit(prepared.target.clone()),
+                update,
+                Some(self.info.id.0.to_string()),
+                None,
+                None,
+            ),
+        )
+        .await;
+        let (decision, reason) = match permission {
+            Err(_) => (
+                xai_grok_science::ApprovalDecision::Timeout,
+                format!(
+                    "permission request timed out after {} ms",
+                    approval_timeout.as_millis()
+                ),
+            ),
+            Ok(Decision::Allow) => (
+                xai_grok_science::ApprovalDecision::Allow,
+                String::new(),
+            ),
+            Ok(Decision::Ask) => (
+                xai_grok_science::ApprovalDecision::Deny,
+                "permission manager returned unresolved Ask".into(),
+            ),
+            Ok(Decision::Reject(reason)) | Ok(Decision::PolicyDeny(reason)) => {
+                (xai_grok_science::ApprovalDecision::Deny, reason)
+            }
+            Ok(Decision::Cancelled) => (
+                xai_grok_science::ApprovalDecision::Cancel,
+                "permission request cancelled".into(),
+            ),
+            Ok(Decision::FollowupMessage(message)) => (
+                xai_grok_science::ApprovalDecision::Deny,
+                format!("permission requires follow-up: {message}"),
+            ),
+        };
+        let permission_grant = (decision == xai_grok_science::ApprovalDecision::Allow)
+            .then(|| ScienceSkillQuarantinePermissionGrant::new(pending.prepared()));
+        let prepared = pending.take();
+        let (respond_to, response) = oneshot::channel();
+        self.cmd_tx
+            .send(SessionCommand::FinishScienceSkillQuarantine(Box::new(
+                crate::session::commands::FinishScienceSkillQuarantine {
+                    prepared,
+                    decision,
+                    reason,
+                    permission_grant,
                     respond_to,
                 },
             )))

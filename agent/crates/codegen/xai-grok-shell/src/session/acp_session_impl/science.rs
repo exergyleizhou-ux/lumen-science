@@ -4,7 +4,8 @@ use super::*;
 use crate::session::commands::{
     PreparedScienceCsv, PreparedScienceEvidenceDossier, PreparedScienceFetch,
     PreparedScienceImport, PreparedScienceKernelAdmission, PreparedScienceProjectMutation,
-    PreparedScienceSeqAnalyze, PreparedScienceSshScpAdmission, PreparedScienceWorkflowExecution,
+    PreparedScienceSeqAnalyze, PreparedScienceSkillQuarantine, PreparedScienceSshScpAdmission,
+    PreparedScienceWorkflowExecution,
 };
 use sha2::Digest as _;
 
@@ -389,6 +390,137 @@ impl SessionActor {
             &prepared.source_path,
             &prepared.source_bytes,
             &prepared.options,
+        )
+    }
+
+    /// Inspect and durably admit an uploaded skill archive without writing its
+    /// bytes anywhere. The retained store and actor-derived workspace are the
+    /// only possible authority roots.
+    pub(super) fn prepare_science_skill_quarantine(
+        &self,
+        store: xai_grok_science::ScienceStore,
+        context: xai_grok_science::RunContext,
+        request: xai_grok_science::skill_quarantine::SkillQuarantineRequest,
+        archive_bytes: Vec<u8>,
+    ) -> xai_grok_science::Result<PreparedScienceSkillQuarantine> {
+        let actor_session = self.session_info.id.0.as_ref();
+        let actor_workspace = dunce::canonicalize(&self.session_info.cwd)?;
+        if context.session_id != actor_session
+            || context.workspace_root != actor_workspace
+            || !context.artifact_root.starts_with(&actor_workspace)
+            || dunce::canonicalize(store.root())? != context.artifact_root
+        {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "skill quarantine context or store does not belong to this SessionActor".into(),
+            ));
+        }
+        let admission = xai_grok_science::skill_quarantine::inspect_archive(
+            &archive_bytes,
+            &request,
+            Default::default(),
+        )?;
+        let (ticket, replayed) = match store.load_run_optional(&context.run_id)? {
+            Some(run) => {
+                if run.context.project_id != context.project_id
+                    || run.context.owner_id != context.owner_id
+                    || run.context.session_id != context.session_id
+                    || run.context.workspace_root != context.workspace_root
+                    || run.context.artifact_root != context.artifact_root
+                    || run.context.environment.get("skill_archive_sha256")
+                        != Some(&admission.archive_sha256().to_owned())
+                    || run.context.environment.get("skill_admission_sha256")
+                        != Some(&admission.sha256().to_owned())
+                    || run.context.environment.get("skill_operation_id")
+                        != Some(&admission.operation_id().to_owned())
+                {
+                    return Err(xai_grok_science::ScienceError::Invalid(
+                        "skill quarantine operation id was reused with different authority bindings"
+                            .into(),
+                    ));
+                }
+                if run.state != xai_grok_science::RunState::Succeeded {
+                    return Err(xai_grok_science::ScienceError::Invalid(format!(
+                        "skill quarantine operation already ended or remains active as {:?}",
+                        run.state
+                    )));
+                }
+                let ticket = xai_grok_science::csv::ScienceRunTicket {
+                    project_id: context.project_id.clone(),
+                    run_id: context.run_id.clone(),
+                    owner_id: context.owner_id.clone(),
+                    call_id: xai_grok_science::CallId::new(
+                        "science_skill_quarantine_import",
+                    ),
+                };
+                let replayed = xai_grok_science::skill_quarantine::aggregate(
+                    &store,
+                    run,
+                    admission.operation_id().to_owned(),
+                )?;
+                (ticket, Some(replayed))
+            }
+            None => (
+                xai_grok_science::skill_quarantine::begin_quarantine(
+                    &store,
+                    context.clone(),
+                    &admission,
+                )?,
+                None,
+            ),
+        };
+        let target = context
+            .artifact_root
+            .join("runs")
+            .join(&ticket.run_id.0)
+            .join("artifacts")
+            .join("quarantine")
+            .display()
+            .to_string();
+        Ok(PreparedScienceSkillQuarantine {
+            store,
+            ticket,
+            admission,
+            target,
+            replayed,
+        })
+    }
+
+    pub(super) fn finish_science_skill_quarantine(
+        &self,
+        prepared: PreparedScienceSkillQuarantine,
+        decision: xai_grok_science::ApprovalDecision,
+        reason: String,
+        permission_grant: Option<
+            crate::session::handle::ScienceSkillQuarantinePermissionGrant,
+        >,
+    ) -> xai_grok_science::Result<
+        xai_grok_science::skill_quarantine::SkillQuarantineResult,
+    > {
+        if decision != xai_grok_science::ApprovalDecision::Allow {
+            let terminal = xai_grok_science::csv::finish_without_execution(
+                &prepared.store,
+                &prepared.ticket,
+                decision,
+                reason,
+            )?;
+            return Err(xai_grok_science::ScienceError::Invalid(format!(
+                "science run {} finished {:?}",
+                prepared.ticket.run_id.0, terminal.state
+            )));
+        }
+        if permission_grant
+            .as_ref()
+            .is_none_or(|grant| !grant.authorizes(&prepared))
+        {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "skill quarantine Allow is missing its bound production permission grant".into(),
+            ));
+        }
+        xai_grok_science::csv::mark_allowed(&prepared.store, &prepared.ticket)?;
+        xai_grok_science::skill_quarantine::finish_quarantine(
+            &prepared.store,
+            prepared.ticket,
+            prepared.admission,
         )
     }
 

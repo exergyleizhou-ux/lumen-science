@@ -299,15 +299,11 @@ async function run() {
   })
 
   // ── IPC ──────────────────────────────────────────────────────
-  for (const ch of [
-    'skills:list',
-    'skills:import',
-    'skills:admit',
-    'skills:reject',
-    'skills:quarantine-list',
-    'skills:bulk-admit',
-  ]) {
+  for (const ch of ['skills:list', 'skills:quarantine-list', 'skills:bulk-admit']) {
     await test(`policy allows ${ch}`, () => ok(validateIpcChannel(ch)))
+  }
+  for (const ch of ['skills:import', 'skills:admit', 'skills:reject']) {
+    await test(`policy rejects legacy local mutation ${ch}`, () => ok(!validateIpcChannel(ch)))
   }
 
   const handlers = new Map<string, Function>()
@@ -332,6 +328,9 @@ async function run() {
   await test('ipc registers skills channels', () => {
     ok(handlers.has('skills:list'))
     ok(handlers.has('skills:bulk-admit'))
+    ok(!handlers.has('skills:import'))
+    ok(!handlers.has('skills:admit'))
+    ok(!handlers.has('skills:reject'))
   })
 
   const listH = handlers.get('skills:list')!

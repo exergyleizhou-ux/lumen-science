@@ -45,6 +45,26 @@ where
     tokio::task::LocalSet::new().run_until(f()).await;
 }
 
+fn skill_quarantine_zip_fixture() -> Vec<u8> {
+    use std::io::{Cursor, Write as _};
+    let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    writer
+        .start_file("skills/alpha/SKILL.md", options)
+        .expect("start SKILL.md fixture");
+    writer
+        .write_all(b"---\nname: alpha\n---\nDurable quarantine fixture.\n")
+        .expect("write SKILL.md fixture");
+    writer
+        .start_file("skills/alpha/references/source.txt", options)
+        .expect("start reference fixture");
+    writer
+        .write_all(b"store-owned evidence")
+        .expect("write reference fixture");
+    writer.finish().expect("finish ZIP fixture").into_inner()
+}
+
 struct LocalSshdFixture {
     _root: tempfile::TempDir,
     child: Child,
@@ -1679,6 +1699,538 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             permission_count,
             "rejected listing asked for permission"
         );
+    })
+    .await;
+}
+
+/// The rebuilt product must expose ZIP quarantine through ACP, ask the owning
+/// SessionActor exactly once, avoid any loose pre-Allow payload, and byte-verify
+/// replay without materializing a live skill.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_skill_quarantine_is_actor_gated_store_owned_and_replayable() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let archive = skill_quarantine_zip_fixture();
+        let archive_sha256 = format!("{:x}", Sha256::digest(&archive));
+        let archive_base64 = base64::engine::general_purpose::STANDARD.encode(&archive);
+        let operation_id = "built-product-skill-quarantine-op";
+
+        let client = GrokStdioClient::spawn_with_permission_response(
+            &server,
+            workdir.path(),
+            PermissionResponse::AllowAfter(Duration::from_millis(500)),
+        )
+        .await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+        let params = || {
+            serde_json::json!({
+                "sessionId": session_id.0.as_ref(),
+                "projectId": "skill-quarantine-project",
+                "ownerId": "science-owner",
+                "storeRoot": "science-store",
+                "operationId": operation_id,
+                "archiveBase64": archive_base64,
+                "archiveSha256": archive_sha256,
+                "archiveBytes": archive.len(),
+                "items": [{"subPath": "skills/alpha"}],
+                "approvalTimeoutMs": 5_000,
+            })
+        };
+        let mut response =
+            Box::pin(client.ext_method("x.ai/science/skill_quarantine_import", params()));
+        let permission_barrier = async {
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+            while client.permission_request_count() == 0 {
+                assert!(
+                    tokio::time::Instant::now() < deadline,
+                    "production permission request did not arrive before the barrier"
+                );
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        };
+        tokio::select! {
+            early = &mut response => {
+                panic!(
+                    "skill quarantine completed before its delayed production permission: {early:?}\nstderr:\n{}",
+                    client.stderr()
+                )
+            }
+            () = permission_barrier => {}
+        }
+        assert_eq!(
+            client.permission_request_count(),
+            1,
+            "delayed Allow did not reach the production permission bridge"
+        );
+        let pending_store_root = workdir.path().join("science-store");
+        let pending_runs = std::fs::read_dir(pending_store_root.join("runs"))
+            .expect("Begin must durably create one run before permission")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("read pending durable runs");
+        assert_eq!(pending_runs.len(), 1);
+        let pending_run_id = xai_grok_science::RunId::new(
+            pending_runs[0]
+                .file_name()
+                .to_str()
+                .expect("UTF-8 pending run id")
+                .to_owned(),
+        );
+        let pending_store = xai_grok_science::ScienceStore::new(&pending_store_root);
+        assert_eq!(
+            pending_store
+                .load_run(&pending_run_id)
+                .expect("reopen pending run")
+                .state,
+            xai_grok_science::RunState::AwaitingApproval
+        );
+        assert!(
+            pending_store
+                .artifacts(&pending_run_id)
+                .expect("pending artifacts")
+                .is_empty()
+        );
+        assert!(!workdir.path().join(".science-import-inbox").exists());
+        assert!(!workdir.path().join("skills").exists());
+        let response = response.await.unwrap_or_else(|error| {
+            panic!(
+                "skill quarantine failed: {error:?}\nstderr:\n{}",
+                client.stderr()
+            )
+        });
+        let first: serde_json::Value =
+            serde_json::from_str(response.0.get()).expect("quarantine response JSON");
+        assert_eq!(first["status"], "quarantined", "result: {first}");
+        assert_eq!(first["materialized"], false, "result: {first}");
+        assert_eq!(first["enabled"], false, "result: {first}");
+        assert_eq!(first["run"]["state"], "succeeded", "result: {first}");
+        assert_eq!(first["approvals"][0]["decision"], "allow");
+        assert_eq!(client.permission_request_count(), 1);
+        assert!(
+            !workdir
+                .path()
+                .join(".science-import-inbox")
+                .exists(),
+            "quarantine wrote a loose pre-Allow payload inbox"
+        );
+        for loose in ["skills", ".grok/skills", ".lumen/skills"] {
+            assert!(
+                !workdir.path().join(loose).exists(),
+                "quarantine materialized a live skill at {loose}"
+            );
+        }
+
+        let run_id = xai_grok_science::RunId::new(
+            first["run"]["context"]["run_id"]
+                .as_str()
+                .expect("durable run id"),
+        );
+        let store = xai_grok_science::ScienceStore::new(workdir.path().join("science-store"));
+        let artifacts = store.artifacts(&run_id).expect("reopen artifacts");
+        assert_eq!(artifacts.len(), 2);
+        assert!(artifacts.iter().all(|artifact| {
+            artifact
+                .relative_path
+                .starts_with(std::path::Path::new("quarantine"))
+        }));
+        assert_eq!(store.evidence(&run_id).expect("reopen evidence").len(), 1);
+        assert_eq!(
+            store.provenance(&run_id).expect("reopen provenance").len(),
+            1
+        );
+
+        let replay_response = client
+            .ext_method("x.ai/science/skill_quarantine_import", params())
+            .await
+            .expect("replay quarantine");
+        let replay: serde_json::Value =
+            serde_json::from_str(replay_response.0.get()).expect("replay response JSON");
+        assert_eq!(replay, first, "replay changed the durable projection");
+        assert_eq!(
+            client.permission_request_count(),
+            1,
+            "replay asked for a second permission"
+        );
+        assert_eq!(
+            store.artifacts(&run_id).expect("reopen replay artifacts"),
+            artifacts,
+            "replay appended duplicate artifacts"
+        );
+
+        let changed_archive = {
+            let mut changed = archive.clone();
+            changed.push(0);
+            changed
+        };
+        let changed_params = serde_json::json!({
+            "sessionId": session_id.0.as_ref(),
+            "projectId": "skill-quarantine-project",
+            "ownerId": "science-owner",
+            "storeRoot": "science-store",
+            "operationId": operation_id,
+            "archiveBase64": base64::engine::general_purpose::STANDARD.encode(&changed_archive),
+            "archiveSha256": format!("{:x}", Sha256::digest(&changed_archive)),
+            "archiveBytes": changed_archive.len(),
+            "items": [{"subPath": "skills/alpha"}],
+            "approvalTimeoutMs": 5_000,
+        });
+        assert!(
+            client
+                .ext_method("x.ai/science/skill_quarantine_import", changed_params)
+                .await
+                .is_err(),
+            "same operation id accepted changed archive bytes"
+        );
+        assert_eq!(client.permission_request_count(), 1);
+
+        let archive_artifact = artifacts
+            .iter()
+            .find(|artifact| artifact.relative_path == Path::new("quarantine/original.skill"))
+            .expect("archive artifact");
+        let tampered = workdir
+            .path()
+            .join("science-store/runs")
+            .join(&run_id.0)
+            .join("artifacts")
+            .join(&archive_artifact.relative_path);
+        std::fs::write(&tampered, b"tampered quarantine archive")
+            .expect("tamper quarantine artifact");
+        assert!(
+            client
+                .ext_method("x.ai/science/skill_quarantine_import", params())
+                .await
+                .is_err(),
+            "tampered succeeded quarantine replayed as success"
+        );
+        assert_eq!(client.permission_request_count(), 1);
+    })
+    .await;
+}
+
+/// Production DenyOnce and transport Cancelled must each leave their exact
+/// durable terminal state with zero quarantine artifacts and no loose payload.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_skill_quarantine_denied_and_cancelled_write_nothing() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let archive = skill_quarantine_zip_fixture();
+        let archive_sha256 = format!("{:x}", Sha256::digest(&archive));
+        let archive_base64 = base64::engine::general_purpose::STANDARD.encode(&archive);
+        for (label, permission_response, expected_state, expected_decision) in [
+            (
+                "denied",
+                PermissionResponse::DenyOnce,
+                xai_grok_science::RunState::Denied,
+                xai_grok_science::ApprovalDecision::Deny,
+            ),
+            (
+                "cancelled",
+                PermissionResponse::Reject,
+                xai_grok_science::RunState::Cancelled,
+                xai_grok_science::ApprovalDecision::Cancel,
+            ),
+        ] {
+            let workdir = git_workdir();
+            let client = GrokStdioClient::spawn_with_permission_response(
+                &server,
+                workdir.path(),
+                permission_response,
+            )
+            .await;
+            client.initialize_with_timeout().await;
+            let session_id = client.create_session_with_timeout(workdir.path()).await;
+            let terminal = client
+                .ext_method(
+                    "x.ai/science/skill_quarantine_import",
+                    serde_json::json!({
+                        "sessionId": session_id.0.as_ref(),
+                        "projectId": "skill-quarantine-project",
+                        "ownerId": "science-owner",
+                        "storeRoot": "science-store",
+                        "operationId": format!("skillq-{label}-op"),
+                        "archiveBase64": archive_base64.clone(),
+                        "archiveSha256": archive_sha256.clone(),
+                        "archiveBytes": archive.len(),
+                        "items": [{"subPath": "skills/alpha"}],
+                        "approvalTimeoutMs": 5_000,
+                    }),
+                )
+                .await;
+            assert!(
+                terminal.is_err(),
+                "{label} quarantine returned success: {terminal:?}"
+            );
+            assert_eq!(client.permission_request_count(), 1);
+
+            let store_root = workdir.path().join("science-store");
+            let runs = std::fs::read_dir(store_root.join("runs"))
+                .unwrap_or_else(|error| panic!("{label} request left no durable run: {error}"))
+                .collect::<Result<Vec<_>, _>>()
+                .expect("read durable runs");
+            assert_eq!(runs.len(), 1);
+            let run_id = xai_grok_science::RunId::new(
+                runs[0]
+                    .file_name()
+                    .to_str()
+                    .expect("UTF-8 run id")
+                    .to_owned(),
+            );
+            let store = xai_grok_science::ScienceStore::new(&store_root);
+            assert_eq!(
+                store
+                    .load_run(&run_id)
+                    .unwrap_or_else(|error| panic!("reopen {label} run: {error}"))
+                    .state,
+                expected_state
+            );
+            assert!(store.artifacts(&run_id).expect("artifacts").is_empty());
+            assert!(store.evidence(&run_id).expect("evidence").is_empty());
+            assert!(store.provenance(&run_id).expect("provenance").is_empty());
+            let approvals = store.approvals(&run_id).expect("approvals");
+            assert_eq!(approvals.len(), 1);
+            assert_eq!(approvals[0].decision, expected_decision);
+            assert!(approvals[0].decided_at.is_some());
+            let events = store.events_after(&run_id, 0, 1_000).expect("events");
+            assert!(
+                events
+                    .iter()
+                    .all(|event| event.kind != "skill.quarantine.committed"),
+                "{label} quarantine appended a commit event"
+            );
+            for loose in [
+                ".science-import-inbox",
+                "skills",
+                ".grok/skills",
+                ".lumen/skills",
+            ] {
+                assert!(
+                    !workdir.path().join(loose).exists(),
+                    "{label} quarantine wrote loose payload at {loose}"
+                );
+            }
+        }
+    })
+    .await;
+}
+
+/// Unanswered permission must timeout with zero quarantine artifacts.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_skill_quarantine_permission_timeout_writes_nothing() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let archive = skill_quarantine_zip_fixture();
+        let archive_sha256 = format!("{:x}", Sha256::digest(&archive));
+        let archive_base64 = base64::engine::general_purpose::STANDARD.encode(&archive);
+        let client = GrokStdioClient::spawn_with_permission_response(
+            &server,
+            workdir.path(),
+            PermissionResponse::NeverRespond,
+        )
+        .await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+        let timed_out = client
+            .ext_method(
+                "x.ai/science/skill_quarantine_import",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": "skill-quarantine-project",
+                    "ownerId": "science-owner",
+                    "storeRoot": "science-store",
+                    "operationId": "skillq-timeout-op",
+                    "archiveBase64": archive_base64,
+                    "archiveSha256": archive_sha256,
+                    "archiveBytes": archive.len(),
+                    "items": [{"subPath": "skills/alpha"}],
+                    "approvalTimeoutMs": 100,
+                }),
+            )
+            .await;
+        assert!(
+            timed_out.is_err(),
+            "timed-out quarantine returned success: {timed_out:?}"
+        );
+        assert_eq!(client.permission_request_count(), 1);
+
+        let store_root = workdir.path().join("science-store");
+        let runs = std::fs::read_dir(store_root.join("runs"))
+            .expect("timeout must leave a durable run")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("read durable runs");
+        assert_eq!(runs.len(), 1);
+        let run_id = xai_grok_science::RunId::new(
+            runs[0]
+                .file_name()
+                .to_str()
+                .expect("UTF-8 run id")
+                .to_owned(),
+        );
+        let store = xai_grok_science::ScienceStore::new(&store_root);
+        assert_eq!(
+            store.load_run(&run_id).expect("reopen timed-out run").state,
+            xai_grok_science::RunState::TimedOut
+        );
+        assert!(store.artifacts(&run_id).expect("artifacts").is_empty());
+        assert!(store.evidence(&run_id).expect("evidence").is_empty());
+        assert!(store.provenance(&run_id).expect("provenance").is_empty());
+        assert!(!workdir.path().join(".science-import-inbox").exists());
+        assert!(!workdir.path().join("skills").exists());
+    })
+    .await;
+}
+
+/// Forged session/store/identity and non-canonical archive transport must fail
+/// before any durable quarantine run is opened.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_skill_quarantine_boundaries_fail_closed() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let archive = skill_quarantine_zip_fixture();
+        let archive_sha256 = format!("{:x}", Sha256::digest(&archive));
+        let archive_base64 = base64::engine::general_purpose::STANDARD.encode(&archive);
+        let client = GrokStdioClient::spawn(&server, workdir.path()).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+
+        let oversized = vec![b'x'; 33 * 1024 * 1024];
+        let noncanonical = format!(
+            "{}====",
+            base64::engine::general_purpose::STANDARD.encode(b"abc")
+        );
+        for (label, params) in [
+            (
+                "forged session",
+                serde_json::json!({
+                    "sessionId": "forged-session",
+                    "projectId": "skill-quarantine-project",
+                    "ownerId": "science-owner",
+                    "storeRoot": "science-store",
+                    "operationId": "skillq-boundary-op",
+                    "archiveBase64": archive_base64,
+                    "archiveSha256": archive_sha256,
+                    "archiveBytes": archive.len(),
+                    "items": [{"subPath": "skills/alpha"}],
+                }),
+            ),
+            (
+                "forged store root",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": "skill-quarantine-project",
+                    "ownerId": "science-owner",
+                    "storeRoot": "../escape-store",
+                    "operationId": "skillq-boundary-op",
+                    "archiveBase64": archive_base64,
+                    "archiveSha256": archive_sha256,
+                    "archiveBytes": archive.len(),
+                    "items": [{"subPath": "skills/alpha"}],
+                }),
+            ),
+            (
+                "empty owner",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": "skill-quarantine-project",
+                    "ownerId": "",
+                    "storeRoot": "science-store",
+                    "operationId": "skillq-boundary-op",
+                    "archiveBase64": archive_base64,
+                    "archiveSha256": archive_sha256,
+                    "archiveBytes": archive.len(),
+                    "items": [{"subPath": "skills/alpha"}],
+                }),
+            ),
+            (
+                "declared size mismatch",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": "skill-quarantine-project",
+                    "ownerId": "science-owner",
+                    "storeRoot": "science-store",
+                    "operationId": "skillq-boundary-op",
+                    "archiveBase64": archive_base64,
+                    "archiveSha256": archive_sha256,
+                    "archiveBytes": archive.len() + 1,
+                    "items": [{"subPath": "skills/alpha"}],
+                }),
+            ),
+            (
+                "declared hash mismatch",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": "skill-quarantine-project",
+                    "ownerId": "science-owner",
+                    "storeRoot": "science-store",
+                    "operationId": "skillq-boundary-op",
+                    "archiveBase64": archive_base64,
+                    "archiveSha256": "0".repeat(64),
+                    "archiveBytes": archive.len(),
+                    "items": [{"subPath": "skills/alpha"}],
+                }),
+            ),
+            (
+                "noncanonical base64",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": "skill-quarantine-project",
+                    "ownerId": "science-owner",
+                    "storeRoot": "science-store",
+                    "operationId": "skillq-boundary-op",
+                    "archiveBase64": noncanonical,
+                    "archiveSha256": format!("{:x}", Sha256::digest(b"abc")),
+                    "archiveBytes": 3,
+                    "items": [{"subPath": "skills/alpha"}],
+                }),
+            ),
+            (
+                "oversized payload",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": "skill-quarantine-project",
+                    "ownerId": "science-owner",
+                    "storeRoot": "science-store",
+                    "operationId": "skillq-boundary-op",
+                    "archiveBase64": base64::engine::general_purpose::STANDARD.encode(&oversized),
+                    "archiveSha256": format!("{:x}", Sha256::digest(&oversized)),
+                    "archiveBytes": oversized.len(),
+                    "items": [{"subPath": "skills/alpha"}],
+                }),
+            ),
+        ] {
+            assert!(
+                client
+                    .ext_method("x.ai/science/skill_quarantine_import", params)
+                    .await
+                    .is_err(),
+                "{label} was accepted"
+            );
+        }
+        assert_eq!(
+            client.permission_request_count(),
+            0,
+            "boundary rejections must not open a permission prompt"
+        );
+        assert!(
+            !workdir.path().join("science-store/runs").exists(),
+            "boundary rejections opened a durable quarantine run"
+        );
+        assert!(!workdir.path().join(".science-import-inbox").exists());
+        assert!(!workdir.path().join("skills").exists());
     })
     .await;
 }

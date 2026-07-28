@@ -13628,6 +13628,7 @@ dependencies = [
  "tokio",
  "tower",
  "uuid",
+ "zip",
 ]
 
 [[package]]
@@ -13810,6 +13811,7 @@ dependencies = [
  "xai-tool-types",
  "xai-tracing-macros",
  "xai-tty-utils",
+ "zip",
  "zstd",
 ]
 

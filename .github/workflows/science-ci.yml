@@ -217,6 +217,10 @@ jobs:
             test_stdio_science_review_record_denied_writes_no_review_or_artifact
             test_stdio_science_kernel_admission_is_actor_gated_and_store_owned
             test_stdio_science_kernel_admission_denied_writes_nothing
+            test_stdio_science_skill_quarantine_is_actor_gated_store_owned_and_replayable
+            test_stdio_science_skill_quarantine_denied_and_cancelled_write_nothing
+            test_stdio_science_skill_quarantine_permission_timeout_writes_nothing
+            test_stdio_science_skill_quarantine_boundaries_fail_closed
             test_stdio_science_workflow_execute_is_actor_gated_and_idempotent
             test_stdio_science_workflow_deterministic_reuse_refuses_tampered_cas
             test_stdio_science_workflow_execute_retains_store_and_interpreter_across_approval

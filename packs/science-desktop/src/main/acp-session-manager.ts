@@ -163,13 +163,10 @@ export class AcpSessionManager {
   ): Promise<unknown> {
     const resolved = resolveScienceMethod(method)
     const ready = await this.requireReady()
-    // Every handler takes `sessionId` and the param structs are
-    // `deny_unknown_fields`, so filling it in when absent is required, and
-    // overwriting a caller-supplied one would be wrong.
-    const payload: Record<string, unknown> =
-      params.sessionId === undefined
-        ? { sessionId: ready.sessionId, ...params }
-        : { ...params }
+    // Session identity is main-process authority. A renderer or stale caller
+    // may include a sessionId, but it can never override the live actor this
+    // manager owns.
+    const payload: Record<string, unknown> = { ...params, sessionId: ready.sessionId }
     return ready.transport.request(resolved.wireMethod, payload, opts)
   }
 

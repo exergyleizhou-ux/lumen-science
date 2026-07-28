@@ -233,6 +233,7 @@ const SkillUploadView = ({
     setBusy(true)
     setSummary(null)
     let imported = 0
+    let quarantined = 0
     let skipped = 0
     let failed = 0
 
@@ -254,12 +255,12 @@ const SkillUploadView = ({
         const { results } = await importSkillZipBatch(
           base64,
           group.map((candidate) => ({
-            subPath: candidate.subPath,
-            replaceId: candidate.replaceableId
+            subPath: candidate.subPath
           }))
         )
         for (const result of results) {
           if (result.error) failed += 1
+          else if (result.status === 'quarantined') quarantined += 1
           else if (result.status === 'unchanged') skipped += 1
           else imported += 1
         }
@@ -282,7 +283,9 @@ const SkillUploadView = ({
       }
     }
 
-    setSummary(`Imported ${imported} · skipped ${skipped} · failed ${failed}`)
+    setSummary(
+      `Quarantined ${quarantined} for review · imported ${imported} · skipped ${skipped} · failed ${failed}`
+    )
     setBusy(false)
     if (imported > 0) onUploaded()
   }

@@ -47,6 +47,7 @@ export const SCIENCE_METHODS = [
   'ssh_scp_fixture',
   'goal_host_verify',
   'seq_analyze',
+  'skill_quarantine_import',
   'artifact_list',
   'project_create',
   'project_get',
@@ -79,6 +80,7 @@ export const SCIENCE_METHODS = [
 export type ScienceMethodName = (typeof SCIENCE_METHODS)[number]
 
 const ALLOWED = new Set<string>(SCIENCE_METHODS)
+const SENDER_BOUND_METHODS = new Set<ScienceMethodName>(['skill_quarantine_import'])
 
 /**
  * Names the desktop sends that exist in NEITHER engine — not in the Rust ACP
@@ -136,6 +138,15 @@ function normalize(name: string): string {
 
 export function isScienceMethod(name: string): name is ScienceMethodName {
   return ALLOWED.has(normalize(name))
+}
+
+/**
+ * Whether renderer code may invoke this method through the generic ACP proxy.
+ * Identity-bearing routes must instead use their sender-bound main-process
+ * adapter, which derives owner/project rather than accepting renderer fields.
+ */
+export function isGenericRendererScienceMethod(name: unknown): boolean {
+  return !SENDER_BOUND_METHODS.has(resolveScienceMethod(name).name)
 }
 
 export type ResolvedScienceMethod = {

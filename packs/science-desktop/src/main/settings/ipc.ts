@@ -17,8 +17,6 @@ import {
   type DeleteSkillRequest,
   type ImportAgentHomeSkillRequest,
   type ImportSkillRequest,
-  type ImportSkillZipRequest,
-  type ImportSkillZipBatchRequest,
   type PreviewSkillZipRequest,
   type PreviewGitHubSkillRequest,
   type ScanRepoRequest,
@@ -455,19 +453,6 @@ const registerSettingsIpcHandlers = ({
     onSkillsChanged?.()
     return result
   })
-  ipcMain.handle('settings:import-skill-zip', async (_event, request: ImportSkillZipRequest) => {
-    const result = await service.importSkillZip(request)
-    onSkillsChanged?.()
-    return result
-  })
-  ipcMain.handle(
-    'settings:import-skill-zip-batch',
-    async (_event, request: ImportSkillZipBatchRequest) => {
-      const result = await service.importSkillZipBatch(request)
-      onSkillsChanged?.()
-      return result
-    }
-  )
   ipcMain.handle('settings:preview-skill-zip', (_event, request: PreviewSkillZipRequest) =>
     service.previewSkillZip(request)
   )

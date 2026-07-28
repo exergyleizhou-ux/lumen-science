@@ -18,13 +18,17 @@ import {
 } from './session-binding'
 import type { LocalProjectCatalog } from './local-project-catalog'
 import { SCIENCE_STORE_DIR } from './acp-membership'
-import { getTrustedPreviewContext } from './session-identity'
+import {
+  getTrustedPreviewContext,
+  getTrustedPreviewContextForSender,
+  type TrustedIdentitySender,
+  type TrustedPreviewContext,
+} from './session-identity'
 import { createNotebookService, type NotebookService } from './notebook-service'
 import type { NotebookCellRequest } from './notebook-plan'
 import { createReviewService, type ReviewService } from './review-service'
 import type { ReviewRequest } from './review-plan'
 import { createSkillService, type SkillService } from './skill-service'
-import type { SkillImportRequest, SkillAdmitRequest } from './skill-plan'
 import { createComputeService, type ComputeService } from './compute-service'
 import type { ComputePlanRequest } from './compute-plan'
 import {
@@ -41,8 +45,12 @@ import {
   type AdmissionAsk,
   type EnvironmentService,
 } from '../environment/service'
+import {
+  isGenericRendererScienceMethod,
+  resolveScienceMethod,
+} from '../science-method-registry'
 import type { KernelKindName } from '../environment/interpreter-identity'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -133,6 +141,65 @@ export type ScienceIpcDeps = {
  * an operation the engine has already given up on.
  */
 export const ENGINE_APPROVAL_TIMEOUT_MS = 110_000
+// ACP uses a 64 MiB newline-delimited JSON frame. Canonical base64 for a
+// 32 MiB archive is ~42.7 MiB, leaving bounded room for the request envelope.
+const MAX_SKILL_QUARANTINE_ARCHIVE_BYTES = 32 * 1024 * 1024
+
+/** Extract Electron webContents.id from an IPC event (or test double). */
+function senderIdFromEvent(event: unknown): number | null {
+  const sender = (event as { sender?: { id?: unknown } } | null)?.sender
+  if (!sender || typeof sender.id !== 'number' || !Number.isInteger(sender.id)) {
+    return null
+  }
+  return sender.id
+}
+
+function senderHandleFromEvent(event: unknown): TrustedIdentitySender | undefined {
+  const sender = (event as { sender?: TrustedIdentitySender } | null)?.sender
+  if (!sender || typeof sender.id !== 'number' || typeof sender.on !== 'function') {
+    return undefined
+  }
+  return sender
+}
+
+/**
+ * ZIP quarantine authority path: only the invoking sender's bound identity.
+ * Never reads process-global context (that bag is residual P0 for other tools).
+ */
+function requireSenderTrustedContext(event: unknown): TrustedPreviewContext {
+  const senderId = senderIdFromEvent(event)
+  if (senderId === null) {
+    throw new Error('skill quarantine requires a real IPC sender identity')
+  }
+  const trusted = getTrustedPreviewContextForSender(senderId)
+  if (!trusted) {
+    throw new Error('open and bind a Science project before quarantining skills')
+  }
+  return trusted
+}
+
+function decodeSkillQuarantineArchive(dataBase64: unknown): Buffer {
+  if (typeof dataBase64 !== 'string' || dataBase64.length === 0) {
+    throw new Error('skill archive must be non-empty base64')
+  }
+  const maxEncoded = Math.ceil(MAX_SKILL_QUARANTINE_ARCHIVE_BYTES / 3) * 4 + 4
+  if (
+    dataBase64.length > maxEncoded ||
+    dataBase64.length % 4 !== 0 ||
+    !/^[A-Za-z0-9+/]*={0,2}$/.test(dataBase64)
+  ) {
+    throw new Error('skill archive base64 is malformed or exceeds the quarantine cap')
+  }
+  const bytes = Buffer.from(dataBase64, 'base64')
+  if (
+    bytes.length === 0 ||
+    bytes.length > MAX_SKILL_QUARANTINE_ARCHIVE_BYTES ||
+    bytes.toString('base64') !== dataBase64
+  ) {
+    throw new Error('skill archive base64 is non-canonical or exceeds the quarantine cap')
+  }
+  return bytes
+}
 
 const noTransport = async (): Promise<never> => {
   throw new Error('no science engine transport wired: callScienceTool was not provided')
@@ -192,6 +259,14 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
       return { _lumenError: true, message: 'acp:call requires a non-empty tool name' }
     }
     try {
+      const method = resolveScienceMethod(toolName)
+      if (!isGenericRendererScienceMethod(method.name)) {
+        return {
+          _lumenError: true,
+          message:
+            'skill_quarantine_import is not callable through generic acp:call; use the sender-bound ZIP quarantine IPC route',
+        }
+      }
       return await callTool(toolName, (args as Record<string, unknown>) ?? {})
     } catch (e: unknown) {
       return { _lumenError: true, message: (e as Error).message || String(e) }
@@ -224,7 +299,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     )
   })
 
-  safeHandle(ipcMain, 'files:bind-session', async (_event, payload: unknown) => {
+  safeHandle(ipcMain, 'files:bind-session', async (event, payload: unknown) => {
     const p = (payload ?? {}) as {
       ownerId?: string
       projectId?: string
@@ -234,9 +309,14 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     if (!assertMembership) {
       return { ok: false, reason: 'no membership asserter configured — fail closed' }
     }
+    const senderId = senderIdFromEvent(event)
     const bound = await bindTrustedSession(
       { ownerId: p.ownerId ?? '', projectId: p.projectId ?? '' },
-      { assertMembership },
+      {
+        assertMembership,
+        senderId: senderId ?? undefined,
+        sender: senderHandleFromEvent(event),
+      },
     )
     if (!bound.ok) return bound
 
@@ -272,8 +352,10 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     }
   })
 
-  safeHandle(ipcMain, 'files:unbind-session', async () => {
-    unbindTrustedSession()
+  safeHandle(ipcMain, 'files:unbind-session', async (event) => {
+    const senderId = senderIdFromEvent(event)
+    // Only clear this sender — never wipe every window's binding.
+    unbindTrustedSession(senderId ?? undefined)
     return { ok: true, cleared: true }
   })
 
@@ -382,7 +464,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
    * Open workspace: catalog lookup → membership bind → artifact seed.
    * Single product action for renderer (Question/Plan shell entry).
    */
-  safeHandle(ipcMain, 'files:open-ui-project', async (_event, payload: unknown) => {
+  safeHandle(ipcMain, 'files:open-ui-project', async (event, payload: unknown) => {
     if (!deps.projectCatalog) {
       return { ok: false, reason: 'project catalog not configured' }
     }
@@ -396,9 +478,14 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     if (!assertMembership) {
       return { ok: false, reason: 'no membership asserter configured — fail closed' }
     }
+    const senderId = senderIdFromEvent(event)
     const bound = await bindTrustedSession(
       { ownerId, projectId: project.id },
-      { assertMembership },
+      {
+        assertMembership,
+        senderId: senderId ?? undefined,
+        sender: senderHandleFromEvent(event),
+      },
     )
     if (!bound.ok) return bound
 
@@ -462,12 +549,22 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
    * The `authority: 'ui-local'` is the honest label, and the UI says "Remove
    * from list" rather than "Delete" so the two are not confused.
    */
-  safeHandle(ipcMain, 'files:delete-ui-project', async (_event, payload: unknown) => {
+  safeHandle(ipcMain, 'files:delete-ui-project', async (event, payload: unknown) => {
     if (!deps.projectCatalog) {
       return { ok: false, reason: 'project catalog not configured' }
     }
     const p = (payload ?? {}) as { projectId?: string }
-    const ok = deps.projectCatalog.delete(p.projectId ?? '')
+    const projectId = p.projectId ?? ''
+    const ok = deps.projectCatalog.delete(projectId)
+    // Remove-from-list only clears THIS sender if it is bound to the removed
+    // project — never a process-wide identity wipe.
+    const senderId = senderIdFromEvent(event)
+    if (ok && senderId !== null) {
+      const bound = getTrustedPreviewContextForSender(senderId)
+      if (bound?.projectId === projectId) {
+        unbindTrustedSession(senderId)
+      }
+    }
     return {
       ok,
       reason: ok ? undefined : 'no such project in this list',
@@ -607,20 +704,113 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
         ],
     })
 
+  const quarantineSkillBundle = async (
+    event: unknown,
+    payload: unknown,
+    items: { subPath: string; replaceId?: string }[],
+  ): Promise<{ operationId: string; runId: string }> => {
+    // Sender-scoped only — never process-global getTrustedPreviewContext().
+    const trusted = requireSenderTrustedContext(event)
+    if (
+      items.length === 0 ||
+      items.some((item) => typeof item.subPath !== 'string')
+    ) {
+      throw new Error('skill quarantine requires at least one explicit previewed subPath')
+    }
+    if (items.some((item) => item.replaceId !== undefined)) {
+      throw new Error('quarantine cannot replace or auto-enable an installed skill')
+    }
+    // Renderer payload may not supply owner/project/session/workspace/path.
+    const request = (payload ?? {}) as {
+      dataBase64?: unknown
+      ownerId?: unknown
+      projectId?: unknown
+      sessionId?: unknown
+      workspaceRoot?: unknown
+      storeRoot?: unknown
+      path?: unknown
+    }
+    if (
+      request.ownerId !== undefined ||
+      request.projectId !== undefined ||
+      request.sessionId !== undefined ||
+      request.workspaceRoot !== undefined ||
+      request.storeRoot !== undefined ||
+      request.path !== undefined
+    ) {
+      throw new Error(
+        'renderer may not supply ownerId/projectId/sessionId/workspace/storeRoot/path for skill quarantine',
+      )
+    }
+    const bytes = decodeSkillQuarantineArchive(request.dataBase64)
+    const archiveSha256 = createHash('sha256').update(bytes).digest('hex')
+    const selectedSubPaths = items.map((item) => item.subPath).sort()
+    const operationId = `skillq-${createHash('sha256')
+      .update(
+        JSON.stringify({
+          ownerId: trusted.ownerId,
+          projectId: trusted.projectId,
+          archiveSha256,
+          selectedSubPaths,
+        }),
+      )
+      .digest('hex')
+      .slice(0, 40)}`
+    const result = (await callTool('skill_quarantine_import', {
+      ownerId: trusted.ownerId,
+      projectId: trusted.projectId,
+      storeRoot: SCIENCE_STORE_DIR,
+      operationId,
+      archiveBase64: bytes.toString('base64'),
+      archiveSha256,
+      archiveBytes: bytes.length,
+      items: selectedSubPaths.map((subPath) => ({ subPath })),
+      approvalTimeoutMs: ENGINE_APPROVAL_TIMEOUT_MS,
+    })) as {
+      operationId?: string
+      run?: { context?: { run_id?: string } }
+    }
+    const runId = result.run?.context?.run_id
+    if (result.operationId !== operationId || !runId) {
+      throw new Error('Rust skill quarantine returned an invalid durable result')
+    }
+    return { operationId, runId }
+  }
+
+  safeHandle(ipcMain, 'settings:import-skill-zip', async (event, payload: unknown) => {
+    const request = (payload ?? {}) as { subPath?: string; replaceId?: string }
+    if (typeof request.subPath !== 'string') {
+      throw new Error('preview and select the skill root before quarantine import')
+    }
+    const result = await quarantineSkillBundle(event, payload, [
+      { subPath: request.subPath, replaceId: request.replaceId },
+    ])
+    return {
+      status: 'quarantined',
+      id: result.runId,
+      operationId: result.operationId,
+      skills: [],
+    }
+  })
+
+  safeHandle(ipcMain, 'settings:import-skill-zip-batch', async (event, payload: unknown) => {
+    const request = (payload ?? {}) as {
+      items?: { subPath: string; replaceId?: string }[]
+    }
+    const items = request.items ?? []
+    const result = await quarantineSkillBundle(event, payload, items)
+    return {
+      results: items.map((item) => ({
+        subPath: item.subPath,
+        status: 'quarantined',
+        id: result.runId,
+      })),
+      operationId: result.operationId,
+      skills: [],
+    }
+  })
+
   safeHandle(ipcMain, 'skills:list', async () => skills.listInventory())
-
-  safeHandle(ipcMain, 'skills:import', async (_event, payload: unknown) => {
-    return skills.import((payload ?? {}) as SkillImportRequest)
-  })
-
-  safeHandle(ipcMain, 'skills:admit', async (_event, payload: unknown) => {
-    return skills.admit((payload ?? {}) as SkillAdmitRequest)
-  })
-
-  safeHandle(ipcMain, 'skills:reject', async (_event, payload: unknown) => {
-    const p = (payload ?? {}) as { skillId?: string; reason?: string }
-    return skills.reject(p.skillId ?? '', p.reason ?? 'rejected')
-  })
 
   safeHandle(ipcMain, 'skills:quarantine-list', async () => ({
     skills: skills.quarantineList(),

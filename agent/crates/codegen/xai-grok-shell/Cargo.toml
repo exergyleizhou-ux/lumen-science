@@ -209,6 +209,7 @@ xai-test-utils = { workspace = true }
 # clock with auto-advance) so interval-driven loop tests in `auth::refresh`
 # can assert exact tick counts deterministically without real-time sleep.
 tokio = { workspace = true, features = ["test-util"] }
+zip = { version = "3", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [dependencies.tempfile]
 workspace = true

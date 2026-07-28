@@ -30,11 +30,14 @@ export const SKILL_IMPORT_LIMITS = {
   // Largest nested skill archive we'll even attempt to unpack (compressed). An inner archive bigger
   // than this is skipped as "too large" rather than decompressed, so one oversized skill never blocks
   // the rest of the bundle. Sized so a skill archive carrying a large reference asset still unpacks.
-  maxSkillArchiveBytes: 64 * 1024 * 1024,
+  maxSkillArchiveBytes: 32 * 1024 * 1024,
   // Largest uploaded bundle overall (the outer .zip). Generous enough for a bundle of several sizeable
   // skills, bounded so a single upload can't exhaust memory. NOTE: the decoded bundle plus its
   // extracted entries are held in memory during import, so this is the dominant memory bound.
-  maxBundleBytes: 256 * 1024 * 1024,
+  // Quarantine import is carried as canonical base64 inside ACP's 64 MiB
+  // newline frame, so preview must reject anything the Rust authority cannot
+  // receive. This keeps preview and commit admission honest.
+  maxBundleBytes: 32 * 1024 * 1024,
   // Most skills one bundle may contribute, so a pathological archive of tiny skills can't produce an
   // unbounded number of import candidates.
   maxSkillsPerBundle: 256,

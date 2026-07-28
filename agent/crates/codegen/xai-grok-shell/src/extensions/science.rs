@@ -3,6 +3,7 @@
 use super::{ExtResult, parse_params, to_raw_response};
 use crate::agent::MvpAgent;
 use agent_client_protocol as acp;
+use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -506,6 +507,9 @@ pub async fn handle(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
         "x.ai/science/ssh_scp_fixture" => handle_ssh_scp_fixture(agent, args).await,
         "x.ai/science/goal_host_verify" => handle_goal_host_verify(agent, args).await,
         "x.ai/science/seq_analyze" => handle_seq_analyze(agent, args).await,
+        "x.ai/science/skill_quarantine_import" => {
+            handle_skill_quarantine_import(agent, args).await
+        }
         "x.ai/science/artifact_list" => handle_artifact_list(agent, args).await,
         "x.ai/science/project_create" => handle_project_create(agent, args).await,
         "x.ai/science/project_get" => handle_project_get(agent, args).await,
@@ -1389,6 +1393,28 @@ struct SeqAnalyzeParams {
     approval_timeout_ms: u64,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SkillQuarantineItemParams {
+    sub_path: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SkillQuarantineImportParams {
+    session_id: String,
+    project_id: String,
+    owner_id: String,
+    store_root: PathBuf,
+    operation_id: String,
+    archive_base64: String,
+    archive_sha256: String,
+    archive_bytes: u64,
+    items: Vec<SkillQuarantineItemParams>,
+    #[serde(default = "default_approval_timeout_ms")]
+    approval_timeout_ms: u64,
+}
+
 async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: SeqAnalyzeParams = parse_params(args)?;
     if params.project_id.is_empty() || params.owner_id.is_empty() {
@@ -1481,6 +1507,126 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
         "approvals": result.approvals,
         "recordCount": result.records,
         "replayAfter": result.replay_after,
+        "runtimeAuthority": "SessionActor-gated ACP adapter",
+        "network": "disabled",
+    }))
+}
+
+/// Import an uploaded ZIP/.skill into the ScienceStore quarantine.
+///
+/// The renderer cannot provide a path. Desktop main forwards canonical,
+/// bounded base64 through ACP; this adapter independently decodes and hashes it
+/// in memory before delegating all durable authority to SessionActor. No loose
+/// archive payload is written before Allow.
+async fn handle_skill_quarantine_import(
+    agent: &MvpAgent,
+    args: &acp::ExtRequest,
+) -> ExtResult {
+    let params: SkillQuarantineImportParams = parse_params(args)?;
+    if params.project_id.is_empty() || params.owner_id.is_empty() {
+        return Err(acp::Error::invalid_params().data("projectId and ownerId are required"));
+    }
+    if params.store_root != Path::new("science-store") {
+        return Err(
+            acp::Error::invalid_params().data("storeRoot must be the fixed science-store name")
+        );
+    }
+    if !(1..=300_000).contains(&params.approval_timeout_ms) {
+        return Err(acp::Error::invalid_params().data("approvalTimeoutMs must be in 1..=300000"));
+    }
+    if params.archive_sha256.len() != 64
+        || !params
+            .archive_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
+        return Err(acp::Error::invalid_params().data("archiveSha256 must be lowercase SHA-256"));
+    }
+    let limits = xai_grok_science::skill_quarantine::SkillArchiveLimits::default();
+    if params.archive_bytes == 0 || params.archive_bytes > limits.max_archive_bytes as u64 {
+        return Err(acp::Error::invalid_params().data(format!(
+            "archiveBytes must be in 1..={}",
+            limits.max_archive_bytes
+        )));
+    }
+    let max_encoded = limits.max_archive_bytes.div_ceil(3).saturating_mul(4);
+    if params.archive_base64.is_empty() || params.archive_base64.len() > max_encoded {
+        return Err(acp::Error::invalid_params()
+            .data("archiveBase64 is empty or exceeds the bounded ACP payload cap"));
+    }
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(&params.archive_base64)
+        .map_err(|_| acp::Error::invalid_params().data("archiveBase64 is malformed"))?;
+    if bytes.len() as u64 != params.archive_bytes
+        || bytes.len() > limits.max_archive_bytes
+        || base64::engine::general_purpose::STANDARD.encode(&bytes) != params.archive_base64
+        || format!("{:x}", Sha256::digest(&bytes)) != params.archive_sha256
+    {
+        return Err(acp::Error::invalid_params()
+            .data("archiveBase64 is non-canonical or does not match its size and digest"));
+    }
+    let session_id = acp::SessionId::new(params.session_id);
+    let handle = agent
+        .get_session_handle(&session_id)
+        .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    let workspace = dunce::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let artifact_root =
+        canonical_dir_within(workspace.join(&params.store_root), &workspace)?;
+
+    let project_id = ProjectId::new(params.project_id);
+    let run_id = xai_grok_science::skill_quarantine::operation_run_id(
+        &params.owner_id,
+        &project_id,
+        session_id.0.as_ref(),
+        &params.operation_id,
+    );
+    let context = RunContext {
+        run_id,
+        project_id,
+        session_id: session_id.0.to_string(),
+        owner_id: params.owner_id,
+        workspace_root: workspace,
+        provider: "offline-deterministic".into(),
+        approval_policy: "production-session-permission".into(),
+        tool_profile: "science-skill-quarantine-v1".into(),
+        artifact_root: artifact_root.clone(),
+        environment: BTreeMap::from([
+            ("network".into(), "disabled".into()),
+            ("archive_sha256".into(), params.archive_sha256),
+            ("archive_bytes".into(), params.archive_bytes.to_string()),
+            ("transport".into(), "bounded-canonical-base64".into()),
+        ]),
+    };
+    let result = agent
+        .run_science_skill_quarantine(
+            &session_id,
+            ScienceStore::new_confined(&artifact_root, &context.workspace_root)
+                .map_err(internal)?,
+            context,
+            xai_grok_science::skill_quarantine::SkillQuarantineRequest {
+                operation_id: params.operation_id,
+                selected_subpaths: params
+                    .items
+                    .into_iter()
+                    .map(|item| item.sub_path)
+                    .collect(),
+            },
+            bytes,
+            Duration::from_millis(params.approval_timeout_ms),
+        )
+        .await
+        .map_err(internal)?;
+    to_raw_response(&serde_json::json!({
+        "run": result.run,
+        "operationId": result.operation_id,
+        "artifacts": result.artifacts,
+        "evidence": result.evidence,
+        "provenance": result.provenance,
+        "approvals": result.approvals,
+        "replayAfter": result.replay_after,
+        "status": "quarantined",
+        "materialized": false,
+        "enabled": false,
         "runtimeAuthority": "SessionActor-gated ACP adapter",
         "network": "disabled",
     }))

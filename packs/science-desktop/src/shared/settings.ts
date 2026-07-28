@@ -871,7 +871,12 @@ export type ImportSkillZipBatchRequest = {
 // Per-item outcome: on success `status` (+ `id`) is set and `error` is absent; on failure `error` is
 // set and `status`/`id` are absent. The two are mutually exclusive, so a caller keys off `error`.
 export type ImportSkillZipBatchItemResult =
-  | { subPath: string; status: 'imported' | 'unchanged' | 'updated'; id: string; error?: undefined }
+  | {
+      subPath: string
+      status: 'imported' | 'unchanged' | 'updated' | 'quarantined'
+      id: string
+      error?: undefined
+    }
   | { subPath: string; status?: undefined; id?: undefined; error: string }
 
 export type ImportSkillZipBatchResult = {
@@ -958,7 +963,7 @@ export type ScanRepoResult = {
 // Outcome of an import: newly imported, refreshed from upstream, or an already-imported no-op. The
 // refreshed skill list is included so the renderer can update in one round-trip.
 export type ImportSkillResult = {
-  status: 'imported' | 'unchanged' | 'updated'
+  status: 'imported' | 'unchanged' | 'updated' | 'quarantined'
   id: string
   skills: SkillView[]
 }

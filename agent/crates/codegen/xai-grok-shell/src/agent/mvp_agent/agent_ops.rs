@@ -2109,6 +2109,39 @@ impl MvpAgent {
             .await
     }
 
+    /// Route a bounded skill archive quarantine through the owning
+    /// SessionActor. The facade binds the requested session but cannot inspect
+    /// or persist the archive itself.
+    pub async fn run_science_skill_quarantine(
+        &self,
+        session_id: &acp::SessionId,
+        store: xai_grok_science::ScienceStore,
+        context: xai_grok_science::RunContext,
+        request: xai_grok_science::skill_quarantine::SkillQuarantineRequest,
+        archive_bytes: Vec<u8>,
+        approval_timeout: std::time::Duration,
+    ) -> xai_grok_science::Result<
+        xai_grok_science::skill_quarantine::SkillQuarantineResult,
+    > {
+        if context.session_id != session_id.0.as_ref() {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "science context session does not match target SessionActor".into(),
+            ));
+        }
+        let handle = self.get_session_handle(session_id).ok_or_else(|| {
+            xai_grok_science::ScienceError::Invalid("science session not found".into())
+        })?;
+        handle
+            .run_science_skill_quarantine_with_approval_timeout(
+                store,
+                context,
+                request,
+                archive_bytes,
+                approval_timeout,
+            )
+            .await
+    }
+
     /// Route evidence dossier composition through the owning SessionActor.
     /// This facade performs only session binding; it never opens source
     /// artifacts or writes the dossier itself.

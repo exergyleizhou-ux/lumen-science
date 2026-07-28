@@ -33,6 +33,7 @@ pub mod release;
 pub mod remote;
 pub mod review;
 pub mod seqbench;
+pub mod skill_quarantine;
 pub mod transport;
 pub mod workflow;
 

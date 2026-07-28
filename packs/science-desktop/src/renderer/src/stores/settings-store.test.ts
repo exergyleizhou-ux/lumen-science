@@ -1084,6 +1084,43 @@ describe('settings store: skill bundle upload', () => {
     expect(result.status).toBe('imported')
     expect(useSettingsStore.getState().skills.map((skill) => skill.id)).toEqual(['imported-alpha'])
   })
+
+  it('keeps the installed skill projection unchanged for quarantine-only ZIP results', async () => {
+    const existing = {
+      id: 'existing-skill',
+      name: 'Existing',
+      description: '',
+      source: 'personal' as const,
+      updatedAt: '',
+      enabled: true
+    }
+    useSettingsStore.setState({ skills: [existing] })
+    api.importSkillZip.mockResolvedValue({
+      status: 'quarantined',
+      id: 'skill-quarantine-run',
+      skills: []
+    })
+    api.importSkillZipBatch.mockResolvedValue({
+      results: [
+        {
+          subPath: 'skills/alpha',
+          status: 'quarantined',
+          id: 'skill-quarantine-run'
+        }
+      ],
+      skills: []
+    })
+
+    await useSettingsStore.getState().importSkillZip('YmFzZTY0', {
+      subPath: 'skills/alpha'
+    })
+    expect(useSettingsStore.getState().skills).toEqual([existing])
+
+    await useSettingsStore
+      .getState()
+      .importSkillZipBatch('YmFzZTY0', [{ subPath: 'skills/alpha' }])
+    expect(useSettingsStore.getState().skills).toEqual([existing])
+  })
 })
 
 describe('settings store: connectors slice', () => {

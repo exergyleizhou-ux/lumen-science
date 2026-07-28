@@ -168,6 +168,37 @@ pub struct FinishScienceSeqAnalyze {
         oneshot::Sender<xai_grok_science::Result<xai_grok_science::seqbench::SeqAnalyzeResult>>,
 }
 
+/// A bounded skill archive inspected and durably admitted by the owning
+/// SessionActor. No archive payload or live skill has been written yet.
+pub struct PreparedScienceSkillQuarantine {
+    pub(crate) store: xai_grok_science::ScienceStore,
+    pub(crate) ticket: xai_grok_science::csv::ScienceRunTicket,
+    pub(crate) admission: xai_grok_science::skill_quarantine::SkillImportAdmission,
+    pub(crate) target: String,
+    /// A byte-verified succeeded operation with the same id and bindings.
+    /// Returned without issuing a second permission request.
+    pub(crate) replayed:
+        Option<xai_grok_science::skill_quarantine::SkillQuarantineResult>,
+}
+pub struct BeginScienceSkillQuarantine {
+    pub(crate) store: xai_grok_science::ScienceStore,
+    pub(crate) context: xai_grok_science::RunContext,
+    pub(crate) request: xai_grok_science::skill_quarantine::SkillQuarantineRequest,
+    pub(crate) archive_bytes: Vec<u8>,
+    pub(crate) respond_to:
+        oneshot::Sender<xai_grok_science::Result<PreparedScienceSkillQuarantine>>,
+}
+pub struct FinishScienceSkillQuarantine {
+    pub(crate) prepared: PreparedScienceSkillQuarantine,
+    pub(crate) decision: xai_grok_science::ApprovalDecision,
+    pub(crate) reason: String,
+    pub(crate) permission_grant:
+        Option<crate::session::handle::ScienceSkillQuarantinePermissionGrant>,
+    pub(crate) respond_to: oneshot::Sender<
+        xai_grok_science::Result<xai_grok_science::skill_quarantine::SkillQuarantineResult>,
+    >,
+}
+
 /// A biomedical evidence dossier admitted by the owning SessionActor. The
 /// retained project store and revision prevent the ACP request task from
 /// swapping the project or changing its question while approval is pending.
@@ -444,6 +475,10 @@ pub enum SessionCommand {
     /// protocol as every other Science mutation.
     BeginScienceSeqAnalyze(Box<BeginScienceSeqAnalyze>),
     FinishScienceSeqAnalyze(Box<FinishScienceSeqAnalyze>),
+    /// Uploaded ZIP/.skill bundles remain memory-only until this actor-owned
+    /// durable approval protocol reaches an exact Allow.
+    BeginScienceSkillQuarantine(Box<BeginScienceSkillQuarantine>),
+    FinishScienceSkillQuarantine(Box<FinishScienceSkillQuarantine>),
     /// Compose already-succeeded, byte-verified Science runs into a
     /// self-contained dossier. The ACP adapter may select source ids, but only
     /// the actor may reopen source bytes and publish the new artifacts.

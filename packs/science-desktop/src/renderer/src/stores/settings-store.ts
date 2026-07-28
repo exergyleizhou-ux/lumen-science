@@ -1091,13 +1091,15 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       subPath: opts?.subPath,
       replaceId: opts?.replaceId
     })
-    set({ skills: result.skills })
+    if (result.status !== 'quarantined') set({ skills: result.skills })
     return result
   },
 
   importSkillZipBatch: async (dataBase64, items) => {
     const result = await window.api.settings.importSkillZipBatch({ dataBase64, items })
-    set({ skills: result.skills })
+    if (!result.results.some((item) => item.status === 'quarantined')) {
+      set({ skills: result.skills })
+    }
     return result
   },
 

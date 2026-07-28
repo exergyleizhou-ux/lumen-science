@@ -550,25 +550,15 @@ describe('settings IPC handlers', () => {
     expect(onSkillsChanged).toHaveBeenCalledTimes(3)
   })
 
-  it('routes import-skill-zip-batch to the service, forwards its result, and fires onSkillsChanged', async () => {
+  it('does not register ZIP mutation handlers on the legacy SettingsService authority', () => {
     handlers.clear()
     const service = createFakeService()
     const onSkillsChanged = vi.fn()
-    const result = {
-      results: [{ subPath: 'a', status: 'imported' as const, id: 'imported-a' }],
-      skills: []
-    }
-    service.importSkillZipBatch.mockResolvedValue(result)
     registerSettingsIpcHandlers({ service: asService(service), onSkillsChanged })
 
-    expect(handlers.has('settings:import-skill-zip-batch')).toBe(true)
-
-    const request = { dataBase64: 'YmFzZTY0', items: [{ subPath: 'a' }] }
-    const forwarded = await invoke('settings:import-skill-zip-batch', request)
-
-    expect(service.importSkillZipBatch).toHaveBeenCalledWith(request)
-    expect(forwarded).toBe(result)
-    expect(onSkillsChanged).toHaveBeenCalledTimes(1)
+    expect(handlers.has('settings:import-skill-zip')).toBe(false)
+    expect(handlers.has('settings:import-skill-zip-batch')).toBe(false)
+    expect(onSkillsChanged).not.toHaveBeenCalled()
   })
 
   it('routes GitHub preview read-only without firing skills-changed', async () => {
