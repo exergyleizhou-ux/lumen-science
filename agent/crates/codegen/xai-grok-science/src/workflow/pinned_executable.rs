@@ -2,9 +2,13 @@
 //!
 //! A path is only a lookup hint: another process can replace the object at
 //! that path after admission. `PinnedExecutable` therefore owns a private
-//! snapshot of the bytes that were admitted and always executes that snapshot.
-//! It deliberately has no `Serialize` implementation; the live file
-//! capability cannot be reconstructed from a path or digest.
+//! snapshot of the bytes that were admitted. Ordinary Linux probes execute
+//! that snapshot. A Landlock-confined workflow cannot because path-beneath
+//! rules reject anonymous memfds; that narrower path re-hashes an exact
+//! root-owned protected executable, binds its inode into Landlock, and
+//! executes it only while it matches the sealed admission snapshot.
+//! `PinnedExecutable` deliberately has no `Serialize` implementation; the
+//! live capability cannot be reconstructed from a path or digest.
 //!
 //! Platform backends:
 //! - macOS has no `fexecve`, and inherited `/dev/fd` nodes are not executable.
@@ -13,9 +17,10 @@
 //!   revalidated immediately before spawn. User-writable Homebrew/venv paths
 //!   fail closed until a signed managed runtime exists.
 //! - Linux copies into a `memfd`, re-hashes it, and applies all write/grow/shrink
-//!   seals before the capability is returned.
+//!   seals before the capability is returned. Landlock workflow execution
+//!   additionally requires a matching root-owned protected system path.
 //! - Other platforms fail closed. In particular, there is no fallback that
-//!   executes `canonical_path`.
+//!   executes an unverified caller path.
 
 use sha2::{Digest, Sha256};
 use std::{
@@ -44,7 +49,11 @@ use std::os::unix::process::CommandExt;
 pub enum PinnedExecutableBackend {
     /// A root-owned path whose complete ancestor chain is non-writable.
     MacOsProtectedPath,
-    /// A write-sealed anonymous file executed through `/proc/self/fd/N`.
+    /// A write-sealed anonymous admission snapshot.
+    ///
+    /// Ordinary probes execute it through `/proc/self/fd/N`. Landlock
+    /// workflow execution uses a separately revalidated root-owned inode with
+    /// the same digest because anonymous inodes cannot be path-beneath rules.
     LinuxSealedMemfd,
 }
 
@@ -52,7 +61,7 @@ impl fmt::Display for PinnedExecutableBackend {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::MacOsProtectedPath => f.write_str("macos-protected-path"),
-            Self::LinuxSealedMemfd => f.write_str("linux-sealed-memfd"),
+            Self::LinuxSealedMemfd => f.write_str("linux-sealed-admission+protected-path-exec"),
         }
     }
 }
@@ -336,7 +345,9 @@ impl PinnedExecutable {
 
     /// Canonical source spelling retained for evidence and diagnostics.
     ///
-    /// It is not consulted when a process is spawned.
+    /// A Linux Landlock workflow revalidates this protected path against the
+    /// sealed admission snapshot and binds the exact inode before spawn.
+    /// Ordinary Linux probes execute the sealed snapshot directly.
     pub fn canonical_path(&self) -> &Path {
         &self.canonical_path
     }
@@ -350,7 +361,10 @@ impl PinnedExecutable {
         path == self.requested_path || path == self.canonical_path
     }
 
-    /// SHA-256 of the immutable bytes this capability executes.
+    /// SHA-256 of the immutable admitted bytes.
+    ///
+    /// A sandboxed Linux workflow may execute only a protected inode that is
+    /// re-hashed to this exact value.
     pub fn sha256(&self) -> &str {
         &self.sha256
     }
@@ -395,6 +409,9 @@ impl PinnedExecutable {
                 command,
                 inherited_snapshot: Some(inherited_snapshot),
                 snapshot: Arc::clone(&self.snapshot),
+                execution_path: self.canonical_path.clone(),
+                expected_sha256: self.sha256.clone(),
+                verify_protected_execution_path: false,
             })
         }
 
@@ -404,6 +421,51 @@ impl PinnedExecutable {
                 platform: std::env::consts::OS,
             })
         }
+    }
+
+    /// Build the only Linux command admitted for a Landlock-confined workflow.
+    ///
+    /// This is separate from [`Self::spawn_command`] so the protected program
+    /// is chosen before a caller configures argv, environment or stdio. It
+    /// never creates an inheritable memfd duplicate; the sealed snapshot stays
+    /// in the parent as the admission reference.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn spawn_linux_sandboxed_command(
+        &self,
+        output_fd: std::os::fd::RawFd,
+    ) -> io::Result<PinnedCommand> {
+        use std::os::fd::AsRawFd as _;
+        use std::os::unix::process::CommandExt as _;
+
+        // Build every allocating part in the parent. The pre-exec child may
+        // use only async-signal-safe syscalls.
+        let seccomp_filter = build_linux_seccomp_filter()?;
+        let read_capabilities = open_linux_runtime_read_capabilities()?;
+        let output_capability = open_linux_directory_path_capability(output_fd)?;
+        let executable_capability =
+            open_verified_linux_executable_capability(&self.canonical_path, &self.sha256)
+                .map_err(io::Error::other)?;
+        let mut command = Command::new(&self.canonical_path);
+        // SAFETY: the closure captures parent-built BPF instructions and
+        // parent-opened descriptor capabilities, then performs only syscalls.
+        unsafe {
+            command.pre_exec(move || {
+                apply_linux_landlock_and_seccomp(
+                    output_capability.as_raw_fd(),
+                    executable_capability.as_raw_fd(),
+                    &read_capabilities,
+                    &seccomp_filter,
+                )
+            });
+        }
+        Ok(PinnedCommand {
+            command,
+            inherited_snapshot: None,
+            snapshot: Arc::clone(&self.snapshot),
+            execution_path: self.canonical_path.clone(),
+            expected_sha256: self.sha256.clone(),
+            verify_protected_execution_path: true,
+        })
     }
 }
 
@@ -478,10 +540,12 @@ pub struct PinnedCommand {
     // protected retained path because its `/dev/fd` nodes are not executable.
     inherited_snapshot: Option<File>,
     snapshot: Arc<PinnedSnapshot>,
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     execution_path: PathBuf,
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     expected_sha256: String,
+    #[cfg(target_os = "linux")]
+    verify_protected_execution_path: bool,
 }
 
 impl PinnedCommand {
@@ -661,42 +725,6 @@ impl PinnedCommand {
         Ok(())
     }
 
-    #[cfg(target_os = "linux")]
-    pub(crate) fn enable_os_sandbox(&mut self, output_fd: std::os::fd::RawFd) -> io::Result<()> {
-        use std::os::fd::AsRawFd as _;
-        use std::os::unix::process::CommandExt as _;
-
-        // Build every allocating part of the filter in the parent. The child
-        // runs after `fork`, where allocating or taking a userspace lock can
-        // deadlock if another parent thread held the allocator lock.
-        let seccomp_filter = build_linux_seccomp_filter()?;
-        let read_capabilities = open_linux_runtime_read_capabilities()?;
-        let executable = self
-            .inherited_snapshot
-            .as_ref()
-            .ok_or_else(|| io::Error::other("Linux pinned executable descriptor is unavailable"))?;
-        // LANDLOCK_RULE_PATH_BENEATH requires O_PATH descriptors. Keep the
-        // original inheritable memfd and output-directory descriptor for exec
-        // and fchdir, but derive separate CLOEXEC path capabilities in the
-        // parent for Landlock rule construction.
-        let output_capability = open_linux_directory_path_capability(output_fd)?;
-        let executable_capability = open_linux_fd_path_capability(executable)?;
-        // SAFETY: the closure captures owned, parent-built BPF instructions
-        // plus parent-opened descriptor capabilities. It performs only
-        // async-signal-safe libc syscalls and constructs stack values.
-        unsafe {
-            self.command.pre_exec(move || {
-                apply_linux_landlock_and_seccomp(
-                    output_capability.as_raw_fd(),
-                    executable_capability.as_raw_fd(),
-                    &read_capabilities,
-                    &seccomp_filter,
-                )
-            });
-        }
-        Ok(())
-    }
-
     pub fn spawn(&mut self) -> io::Result<Child> {
         self.verify_immediately_before_spawn()?;
         let _keep_alive = &self.inherited_snapshot;
@@ -727,6 +755,16 @@ impl PinnedCommand {
                 &self.expected_sha256,
             )
             .map_err(io::Error::other)?;
+        }
+        #[cfg(target_os = "linux")]
+        {
+            if self.verify_protected_execution_path {
+                open_verified_linux_executable_capability(
+                    &self.execution_path,
+                    &self.expected_sha256,
+                )
+                .map_err(io::Error::other)?;
+            }
         }
         Ok(())
     }
@@ -821,29 +859,6 @@ fn open_linux_directory_path_capability(directory_fd: std::os::fd::RawFd) -> io:
 }
 
 #[cfg(target_os = "linux")]
-fn open_linux_fd_path_capability(source: &File) -> io::Result<File> {
-    let proc_path = PathBuf::from(format!("/proc/self/fd/{}", source.as_raw_fd()));
-    let mut options = OpenOptions::new();
-    // Following this kernel-owned magic link is intentional: it converts the
-    // exact retained open file into the O_PATH descriptor Landlock requires.
-    // The source descriptor remains live throughout this operation.
-    options
-        .read(true)
-        .custom_flags(libc::O_PATH | libc::O_CLOEXEC);
-    let capability = options.open(proc_path)?;
-    let source_metadata = source.metadata()?;
-    let capability_metadata = capability.metadata()?;
-    if source_metadata.dev() != capability_metadata.dev()
-        || source_metadata.ino() != capability_metadata.ino()
-    {
-        return Err(io::Error::other(
-            "Linux path capability does not retain the source file identity",
-        ));
-    }
-    Ok(capability)
-}
-
-#[cfg(target_os = "linux")]
 fn open_linux_path_capability(path: &Path) -> io::Result<File> {
     let inspected = fs::symlink_metadata(path)?;
     let mut options = OpenOptions::new();
@@ -856,6 +871,96 @@ fn open_linux_path_capability(path: &Path) -> io::Result<File> {
         return Err(io::Error::other(
             "Linux runtime path changed while its capability was retained",
         ));
+    }
+    Ok(capability)
+}
+
+#[cfg(target_os = "linux")]
+fn open_verified_linux_executable_capability(
+    path: &Path,
+    expected_sha256: &str,
+) -> Result<File, PinExecutableError> {
+    // The runtime read capability set is intentionally limited to the system
+    // closure below (/usr, /lib, /lib64 and loader/device leaves). Refuse a
+    // protected-looking interpreter elsewhere instead of letting it fail
+    // later under a mismatched, undocumented runtime closure.
+    if !path.starts_with("/usr") {
+        return Err(PinExecutableError::CommandSetup {
+            source: io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "Linux workflow executable is outside the admitted /usr runtime: {}",
+                    path.display()
+                ),
+            ),
+        });
+    }
+    let mut current = Some(path);
+    while let Some(component) = current {
+        let metadata =
+            fs::symlink_metadata(component).map_err(|source| PinExecutableError::Open {
+                path: component.to_path_buf(),
+                source,
+            })?;
+        if metadata.file_type().is_symlink()
+            || metadata.uid() != 0
+            || metadata.permissions().mode() & 0o022 != 0
+        {
+            return Err(PinExecutableError::CommandSetup {
+                source: io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!(
+                        "Linux workflow executable is not root-owned and protected: {}",
+                        component.display()
+                    ),
+                ),
+            });
+        }
+        current = component.parent().filter(|parent| *parent != component);
+    }
+
+    let mut reopened = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        .open(path)
+        .map_err(|source| PinExecutableError::CommandSetup { source })?;
+    let metadata = reopened
+        .metadata()
+        .map_err(|source| PinExecutableError::CommandSetup { source })?;
+    if !metadata.is_file() || metadata.permissions().mode() & 0o111 == 0 {
+        return Err(PinExecutableError::NotExecutable {
+            path: path.to_path_buf(),
+        });
+    }
+    let mut magic = [0u8; 4];
+    reopened
+        .read_exact(&mut magic)
+        .map_err(|source| PinExecutableError::CommandSetup { source })?;
+    if magic != *b"\x7fELF" {
+        return Err(PinExecutableError::CommandSetup {
+            source: io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Linux workflow executable must be a native ELF image; shebang chains are not admitted",
+            ),
+        });
+    }
+    let observed =
+        hash_file(&mut reopened).map_err(|source| PinExecutableError::CommandSetup { source })?;
+    if observed != expected_sha256 {
+        return Err(PinExecutableError::SnapshotDigestMismatch {
+            copied_sha256: expected_sha256.to_owned(),
+            snapshot_sha256: observed,
+        });
+    }
+    let capability = open_linux_path_capability(path)
+        .map_err(|source| PinExecutableError::CommandSetup { source })?;
+    let capability_metadata = capability
+        .metadata()
+        .map_err(|source| PinExecutableError::CommandSetup { source })?;
+    if metadata.dev() != capability_metadata.dev() || metadata.ino() != capability_metadata.ino() {
+        return Err(PinExecutableError::PathChangedDuringOpen {
+            path: path.to_path_buf(),
+        });
     }
     Ok(capability)
 }
@@ -1027,9 +1132,11 @@ fn apply_linux_landlock(
         unsafe { libc::close(ruleset_fd as i32) };
         return Err(error);
     }
-    // The first exec is allowed only for the exact sealed memfd. Because
-    // EXECUTE is handled but no runtime directory receives that right, a cell
-    // cannot later replace its provenance with /bin/sh or another binary.
+    // The first exec is allowed only for the exact protected executable inode
+    // whose bytes were re-hashed against the sealed admission snapshot.
+    // Because EXECUTE is handled but no runtime directory receives that right,
+    // a cell cannot later replace its provenance with /bin/sh or another
+    // binary.
     if add_linux_landlock_path_rule(
         ruleset_fd,
         executable_fd,
@@ -1445,16 +1552,26 @@ mod tests {
 
     #[test]
     #[cfg(target_os = "linux")]
-    fn linux_landlock_uses_path_only_views_of_retained_descriptors() {
+    fn linux_landlock_uses_path_only_views_of_output_and_protected_executable() {
         let dir = TestDir::new();
         let output = File::open(&dir.0).expect("open retained output directory");
         let output_capability =
             open_linux_directory_path_capability(output.as_raw_fd()).expect("retain output O_PATH");
 
-        let executable = PathBuf::from("/bin/sh");
+        let executable = dunce::canonicalize("/bin/sh").expect("canonical /bin/sh");
         let pinned = PinnedExecutable::pin(&executable).expect("pin executable into sealed memfd");
         let executable_capability =
-            open_linux_fd_path_capability(&pinned.snapshot.file).expect("retain memfd O_PATH");
+            open_linux_path_capability(&executable).expect("retain protected executable O_PATH");
+        let verified = open_verified_linux_executable_capability(&executable, pinned.sha256())
+            .expect("protected executable still matches sealed snapshot");
+        let verified_metadata = verified.metadata().expect("stat verified executable");
+        let executable_metadata = executable_capability
+            .metadata()
+            .expect("stat executable capability");
+        assert_eq!(
+            (verified_metadata.dev(), verified_metadata.ino()),
+            (executable_metadata.dev(), executable_metadata.ino())
+        );
 
         for capability in [&output_capability, &executable_capability] {
             let status_flags = unsafe {
@@ -1469,13 +1586,38 @@ mod tests {
                 "Landlock path-beneath rules require O_PATH descriptors"
             );
         }
-        let source = pinned.snapshot.file.metadata().expect("stat source memfd");
+        let source = fs::metadata(&executable).expect("stat protected executable");
         let retained = executable_capability
             .metadata()
-            .expect("stat retained memfd path");
+            .expect("stat retained executable path");
         assert_eq!(
             (source.dev(), source.ino()),
             (retained.dev(), retained.ino())
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn linux_sandboxed_protected_executable_starts_without_inheriting_memfd() {
+        let dir = TestDir::new();
+        let output = File::open(&dir.0).expect("open retained output directory");
+        let executable = dunce::canonicalize("/bin/sh").expect("canonical /bin/sh");
+        let pinned = PinnedExecutable::pin(&executable).expect("pin protected shell");
+        let mut command = pinned
+            .spawn_linux_sandboxed_command(output.as_raw_fd())
+            .expect("build Landlock command from protected executable");
+        assert!(
+            command.inherited_snapshot.is_none(),
+            "sandboxed child must not inherit the sealed admission memfd"
+        );
+        command
+            .command_mut()
+            .args(["-c", "printf 'landlock-protected-path\\n'"]);
+        let result = command.output().expect("run protected shell in Landlock");
+        assert!(result.status.success(), "{result:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&result.stdout),
+            "landlock-protected-path\n"
         );
     }
 

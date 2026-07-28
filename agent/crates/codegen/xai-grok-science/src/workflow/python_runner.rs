@@ -267,6 +267,17 @@ impl StepRunner for PythonLoopRunner {
         // Exactly the environment the invocation names, plus deterministic
         // interpreter settings. `env_clear` first: an empty map means an empty
         // environment, never an inherited one.
+        #[cfg(target_os = "linux")]
+        let mut pinned_command = self
+            .executable
+            .spawn_linux_sandboxed_command(child_paths.output_fd())
+            .map_err(|error| {
+                permanent(
+                    ErrorClass::PolicyViolation,
+                    format!("cannot install Linux workflow sandbox: {error}"),
+                )
+            })?;
+        #[cfg(not(target_os = "linux"))]
         let mut pinned_command = self.executable.spawn_command().map_err(|error| {
             permanent(
                 ErrorClass::RunnerError,
@@ -283,15 +294,6 @@ impl StepRunner for PythonLoopRunner {
                 permanent(
                     ErrorClass::PolicyViolation,
                     format!("cannot install macOS workflow sandbox: {error}"),
-                )
-            })?;
-        #[cfg(target_os = "linux")]
-        pinned_command
-            .enable_os_sandbox(child_paths.output_fd())
-            .map_err(|error| {
-                permanent(
-                    ErrorClass::PolicyViolation,
-                    format!("cannot install Linux workflow sandbox: {error}"),
                 )
             })?;
         #[cfg(not(any(target_os = "macos", target_os = "linux")))]
@@ -478,7 +480,7 @@ impl StepRunner for PythonLoopRunner {
 mod tests {
     use super::*;
     use crate::project::model::ProjectId;
-    use crate::workflow::admission::{KernelAdmissionRequest, probe_kernel};
+    use crate::workflow::admission::{probe_kernel, KernelAdmissionRequest};
     use crate::workflow::executor::{
         ExecutionPolicy, WorkflowExecutionRequest, WorkflowExecutor, WorkflowState,
     };
