@@ -134,10 +134,25 @@ async function run() {
     artifactId: 'a1',
     expectedSha256: REG_SHA,
     mimeType: 'text/csv',
-  })) as { access: { ok: boolean }; path?: string }
+  })) as {
+    access: { ok: boolean }
+    contentBase64?: string
+    byteLength?: number
+    sha256?: string
+    mimeType?: string
+    path?: unknown
+  }
   await test('preview handler allows matching trusted session', () => {
     ok(allowed.access.ok, `expected ok, got ${JSON.stringify(allowed)}`)
-    strictEqual(allowed.path, REG_FIXTURE)
+    strictEqual(allowed.path, undefined, 'verified preview must not return a reopenable path')
+    strictEqual(
+      Buffer.from(allowed.contentBase64 ?? '', 'base64').toString('utf8'),
+      'reg,a1\n',
+      'handler must return the exact bytes read and hashed from its open file handle',
+    )
+    strictEqual(allowed.byteLength, Buffer.byteLength('reg,a1\n'))
+    strictEqual(allowed.sha256, REG_SHA)
+    strictEqual(allowed.mimeType, 'text/csv')
   })
 
   setTrustedPreviewContext({ ownerId: 'evil', projectId: 'p1' })
