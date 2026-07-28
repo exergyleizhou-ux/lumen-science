@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "generator": "scripts/generate-science-status.py",
   "doc": "Machine-generated product status. Derived from the source tree and git only. Prose documents must point here rather than restate status. Regenerate with: python3 scripts/generate-science-status.py",
-  "sourceCommit": "fe03bfc658409924104a85db6729e75b497833d1",
-  "sourceCommitEpoch": 1785236538,
-  "sourceCommitIso": "2026-07-28T19:02:18+08:00",
+  "sourceCommit": "d93303eb731cc38b0057c24df20bc26f7fa8ce85",
+  "sourceCommitEpoch": 1785269711,
+  "sourceCommitIso": "2026-07-29T04:15:11+08:00",
   "gateVocabulary": {
     "states": [
       "pass",
@@ -175,7 +175,7 @@
         "usesVerifyTag": false,
         "sourceDateEpochFromCommit": false,
         "sourceDateEpochFromWallClock": false,
-        "lineCount": 474
+        "lineCount": 481
       }
     },
     "desktopCiAllowsTypecheckFailure": false
@@ -266,12 +266,13 @@
           "x.ai/science/review_record",
           "x.ai/science/run_csv",
           "x.ai/science/seq_analyze",
+          "x.ai/science/skill_quarantine_import",
           "x.ai/science/ssh_scp_fixture",
           "x.ai/science/workflow_dry_run",
           "x.ai/science/workflow_execute",
           "x.ai/science/workflow_validate"
         ],
-        "acpMethodCount": 29
+        "acpMethodCount": 30
       },
       "go": {
         "path": "packs/science",

@@ -573,13 +573,13 @@ await test('handshake reaches ready and injects sessionId into science calls', a
   await manager.stop()
 })
 
-await test('a caller-supplied sessionId is never overwritten', async () => {
+await test('a caller-supplied sessionId cannot override the manager-owned actor', async () => {
   const manager = sessionManager('good')
   await manager.start()
   const result = (await manager.callScience('project_get', { sessionId: 'caller-owned' })) as {
     params: Record<string, unknown>
   }
-  strictEqual(result.params.sessionId, 'caller-owned')
+  strictEqual(result.params.sessionId, 'fake-session-1')
   await manager.stop()
 })
 
