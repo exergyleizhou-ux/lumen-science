@@ -87,21 +87,45 @@ pub fn finish_kernel_admission(
     match finish_allowed_kernel_admission(store, &ticket, request) {
         Ok(result) => Ok(result),
         Err(error) => {
-            let detail = error.to_string();
-            let _ = store.append_event(
+            let cleanup_error = store
+                .discard_running_outputs(
+                    &ticket.project_id,
+                    &ticket.run_id,
+                    &ticket.owner_id,
+                    &ticket.call_id,
+                    &[Path::new("kernel-admission.json")],
+                )
+                .err();
+            let detail = match &cleanup_error {
+                Some(cleanup_error) => format!(
+                    "{error}; kernel admission artifact cleanup also failed: {cleanup_error}"
+                ),
+                None => error.to_string(),
+            };
+            let _ = store.append_recoverable_commit_event(
                 &ticket.run_id,
                 "SessionActor",
                 "kernel_admission.failed",
-                serde_json::json!({ "reason": detail }),
+                serde_json::json!({
+                    "reason": detail,
+                    "artifact_cleanup": if cleanup_error.is_none() {
+                        "completed"
+                    } else {
+                        "failed_non_serviceable"
+                    },
+                }),
             );
             store
-                .transition(&ticket.run_id, RunState::Failed, Some(detail))
+                .transition(&ticket.run_id, RunState::Failed, Some(detail.clone()))
                 .map_err(|terminal_error| {
                     ScienceError::Invalid(format!(
                         "kernel admission failed ({error}) and its Failed terminal could not be persisted: {terminal_error}"
                     ))
                 })?;
-            Err(error)
+            match cleanup_error {
+                Some(_) => Err(ScienceError::Invalid(detail)),
+                None => Err(error),
+            }
         }
     }
 }
@@ -145,8 +169,23 @@ fn finish_allowed_kernel_admission(
         tool: "kernel-admission-v1 inside SessionActor".into(),
         environment: BTreeMap::from([
             ("authority".into(), "SessionActor".into()),
+            (
+                "execution_network_requirement".into(),
+                if request.policy.require_no_network {
+                    "network_disabled_required".into()
+                } else {
+                    "operator_policy_allows_network".into()
+                },
+            ),
+            (
+                "identity_probe_authorization".into(),
+                "operator_authorized_via_session_permission".into(),
+            ),
+            (
+                "identity_probe_network".into(),
+                "not_enforced_during_identity_probe".into(),
+            ),
             ("kernel_kind".into(), format!("{:?}", request.kind)),
-            ("network".into(), "disabled".into()),
             ("verdict".into(), status.into()),
         ]),
     })?;
@@ -241,7 +280,10 @@ mod tests {
             approval_policy: "production-session-permission".into(),
             tool_profile: "science-kernel-admission-v1".into(),
             artifact_root: root.join("science-store").join("runs"),
-            environment: BTreeMap::from([("network".into(), "disabled".into())]),
+            environment: BTreeMap::from([(
+                "network".into(),
+                "not_enforced_during_identity_probe".into(),
+            )]),
         }
     }
 
@@ -325,6 +367,27 @@ mod tests {
         assert_eq!(result.evidence.len(), 1);
         assert_eq!(result.provenance.len(), 1);
         assert_eq!(result.approvals[0].decision, ApprovalDecision::Allow);
+        assert_eq!(
+            result.provenance[0]
+                .environment
+                .get("identity_probe_network")
+                .map(String::as_str),
+            Some("not_enforced_during_identity_probe")
+        );
+        assert_eq!(
+            result.provenance[0]
+                .environment
+                .get("identity_probe_authorization")
+                .map(String::as_str),
+            Some("operator_authorized_via_session_permission")
+        );
+        assert!(
+            !result.provenance[0]
+                .environment
+                .values()
+                .any(|value| value == "disabled"),
+            "identity-probe provenance must not claim network enforcement"
+        );
         let bytes = store
             .artifact_bytes(
                 &ticket.project_id,
@@ -361,6 +424,47 @@ mod tests {
         assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
         assert!(store.evidence(&ticket.run_id).unwrap().is_empty());
         assert!(store.provenance(&ticket.run_id).unwrap().is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn post_artifact_commit_failure_rolls_back_registration_and_bytes() {
+        let temp = tempdir().unwrap();
+        let store_root = temp.path().join("science-store");
+        let store = ScienceStore::new(&store_root);
+        let path = script(temp.path(), "python3", "#!/bin/sh\necho 'Python 3.12.0'\n");
+        let ticket = begin_kernel_admission(&store, context(temp.path(), "p", "alice")).unwrap();
+        crate::csv::mark_allowed(&store, &ticket).unwrap();
+
+        fs::write(
+            store_root
+                .join("runs")
+                .join(&ticket.run_id.0)
+                .join("evidence.json"),
+            b"{invalid-json",
+        )
+        .unwrap();
+
+        assert!(finish_kernel_admission(&store, ticket.clone(), &request(&path)).is_err());
+        assert_eq!(
+            store.load_run(&ticket.run_id).unwrap().state,
+            RunState::Failed
+        );
+        assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
+        assert!(
+            !store_root
+                .join("runs")
+                .join(&ticket.run_id.0)
+                .join("artifacts")
+                .join("kernel-admission.json")
+                .exists(),
+            "failed commit left kernel-admission bytes behind"
+        );
+        assert!(store.evidence(&ticket.run_id).unwrap().is_empty());
+        assert!(
+            store.provenance(&ticket.run_id).unwrap().is_empty(),
+            "provenance committed before the injected evidence failure was not rolled back"
+        );
     }
 
     #[cfg(unix)]

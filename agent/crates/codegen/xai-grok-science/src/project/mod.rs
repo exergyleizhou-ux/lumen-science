@@ -1,4 +1,5 @@
 pub mod claim;
+pub(crate) mod capability;
 pub mod evidence_graph;
 pub mod migration;
 pub mod model;

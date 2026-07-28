@@ -125,7 +125,10 @@ try {
   })
 
   await test('x.ai/science/project_list answers over the real wire', async () => {
-    const result = await manager.callScience('project_list', { storeRoot })
+    const result = await manager.callScience('project_list', {
+      storeRoot,
+      ownerId: 'live-test-owner',
+    })
     console.log(`LIVE project_list -> ${JSON.stringify(result)}`)
     ok(Array.isArray(result), `expected an array of projects, got ${JSON.stringify(result)}`)
   })
@@ -300,6 +303,7 @@ try {
   await test('project_list now returns the project the desktop created', async () => {
     const listed = (await approving.callScience('project_list', {
       storeRoot,
+      ownerId: 'live-test-owner',
     })) as unknown[]
     console.log(`LIVE project_list -> ${listed.length} project(s)`)
     strictEqual(listed.length, 1, `expected 1 project, got ${JSON.stringify(listed)}`)

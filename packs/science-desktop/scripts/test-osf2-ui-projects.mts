@@ -91,6 +91,7 @@ async function run() {
         artifact_id: 'from-list',
         path: LIST_FIXTURE,
         sha256: LIST_SHA,
+        run_id: 'ui-default-run',
       },
     ],
   })
@@ -193,7 +194,10 @@ async function run() {
   })
   await test('preview after open', () => {
     ok(prev.access.ok, JSON.stringify(prev))
-    strictEqual(prev.path, LIST_FIXTURE)
+    strictEqual(
+      Buffer.from(prev.contentBase64 ?? '', 'base64').toString(),
+      '{"from": "list"}\n',
+    )
   })
 
   // OS banned channels still banned

@@ -1144,7 +1144,7 @@ fn find_orfs_with_table(seq: &str, min_aa: usize, table: TranslationTable) -> Ve
         }
     }
 
-    out.sort_by(|left, right| right.length_bp.cmp(&left.length_bp));
+    out.sort_by_key(|orf| std::cmp::Reverse(orf.length_bp));
     out.truncate(50);
     out
 }
@@ -2193,6 +2193,9 @@ use crate::{
 use chrono::Utc;
 use std::path::Path;
 
+const ANALYSIS_ARTIFACT_PATH: &str = "analysis.json";
+const REPORT_ARTIFACT_PATH: &str = "report.md";
+
 /// Phase one: create the durable run and its pending approval BEFORE the
 /// permission manager is awaited, so every allow/deny/timeout/cancel has a
 /// record to finish rather than vanishing.
@@ -2305,6 +2308,72 @@ pub fn finish_analysis_with_options(
     source_bytes: &[u8],
     options: &SeqAnalyzeOptions,
 ) -> crate::Result<SeqAnalyzeResult> {
+    // Authorization is the first finish-side operation. Validation, parsing,
+    // analysis and persistence are all execution and must not happen for a
+    // forged ticket or before the durable Allow decision.
+    let run = store.load_run(&ticket.run_id)?;
+    if ticket.project_id != run.context.project_id
+        || ticket.owner_id != run.context.owner_id
+        || run.state != RunState::Running
+        || store
+            .approvals(&ticket.run_id)?
+            .iter()
+            .find(|approval| approval.call_id == ticket.call_id)
+            .is_none_or(|approval| approval.decision != ApprovalDecision::Allow)
+    {
+        return Err(ScienceError::Invalid(
+            "seq analysis requires an allowed running run".into(),
+        ));
+    }
+
+    match finish_allowed_analysis(store, &ticket, source_path, source_bytes, options) {
+        Ok(result) => Ok(result),
+        Err(error) => {
+            let detail = error.to_string();
+            let cleanup = discard_failed_analysis_outputs(store, &ticket);
+            let failure_detail = match &cleanup {
+                Ok(()) => detail.clone(),
+                Err(cleanup_error) => {
+                    format!("{detail}; failed to discard partial outputs: {cleanup_error}")
+                }
+            };
+            let _ = store.append_event(
+                &ticket.run_id,
+                "SessionActor",
+                "analysis.failed",
+                serde_json::json!({ "reason": failure_detail }),
+            );
+            let run = store.load_run(&ticket.run_id)?;
+            if run.state != RunState::Failed {
+                store
+                    .transition(
+                        &ticket.run_id,
+                        RunState::Failed,
+                        Some(failure_detail.clone()),
+                    )
+                    .map_err(|terminal_error| {
+                        ScienceError::Invalid(format!(
+                            "seq analysis failed ({error}) and its Failed terminal could not be persisted: {terminal_error}"
+                        ))
+                    })?;
+            }
+            cleanup.map_err(|cleanup_error| {
+                ScienceError::Invalid(format!(
+                    "seq analysis failed ({error}) and partial outputs could not be discarded: {cleanup_error}"
+                ))
+            })?;
+            Err(error)
+        }
+    }
+}
+
+fn finish_allowed_analysis(
+    store: &ScienceStore,
+    ticket: &ScienceRunTicket,
+    source_path: &Path,
+    source_bytes: &[u8],
+    options: &SeqAnalyzeOptions,
+) -> crate::Result<SeqAnalyzeResult> {
     let table = translation_table(options.translation_table_id).ok_or_else(|| {
         ScienceError::Invalid(format!(
             "unsupported NCBI translation table {}",
@@ -2318,21 +2387,7 @@ pub fn finish_analysis_with_options(
             "restriction digest enzymes must use canonical names and catalog order".into(),
         ));
     }
-    // The same guard the csv path uses: only an allowed, running run may
-    // commit output. Without it a caller could finish a run it never got
-    // permission for.
     let run = store.load_run(&ticket.run_id)?;
-    if run.state != RunState::Running
-        || store
-            .approvals(&ticket.run_id)?
-            .iter()
-            .find(|approval| approval.call_id == ticket.call_id)
-            .is_none_or(|approval| approval.decision != ApprovalDecision::Allow)
-    {
-        return Err(ScienceError::Invalid(
-            "seq analysis output requires an allowed running run".into(),
-        ));
-    }
     if run.context.environment.get("translation_table_id")
         != Some(&options.translation_table_id.to_string())
         || run.context.environment.get("translation_table_name") != Some(&table.name.to_string())
@@ -2341,28 +2396,14 @@ pub fn finish_analysis_with_options(
         || run.context.environment.get("restriction_digest_enzymes")
             != Some(&digest_enzymes.join(","))
     {
-        let error = "seq analysis options do not match the durably approved run".to_string();
-        let _ = store.transition(&ticket.run_id, RunState::Failed, Some(error.clone()));
-        return Err(ScienceError::Invalid(error));
+        return Err(ScienceError::Invalid(
+            "seq analysis options do not match the durably approved run".into(),
+        ));
     }
 
-    let text = String::from_utf8_lossy(source_bytes);
-    let records = match parse_fasta(&text) {
-        Ok(records) => records,
-        Err(error) => {
-            // A malformed input is a FAILED run, not a silent error: the run
-            // record must say what happened to the permission that was granted.
-            let _ = store.transition(&ticket.run_id, RunState::Failed, Some(error.clone()));
-            return Err(ScienceError::Invalid(error));
-        }
-    };
-    let analysis = match analyze_with_options(&records, source_bytes, options) {
-        Ok(analysis) => analysis,
-        Err(error) => {
-            let _ = store.transition(&ticket.run_id, RunState::Failed, Some(error.clone()));
-            return Err(ScienceError::Invalid(error));
-        }
-    };
+    let records = parse_analysis_input(source_path, source_bytes).map_err(ScienceError::Invalid)?;
+    let analysis =
+        analyze_with_options(&records, source_bytes, options).map_err(ScienceError::Invalid)?;
     let report = markdown_report(
         &analysis,
         source_path
@@ -2377,7 +2418,7 @@ pub fn finish_analysis_with_options(
         &ticket.run_id,
         &ticket.owner_id,
         ticket.call_id.clone(),
-        Path::new("analysis.json"),
+        Path::new(ANALYSIS_ARTIFACT_PATH),
         &analysis_json,
         "application/json",
         "table",
@@ -2386,8 +2427,8 @@ pub fn finish_analysis_with_options(
         &ticket.project_id,
         &ticket.run_id,
         &ticket.owner_id,
-        ticket.call_id,
-        Path::new("report.md"),
+        ticket.call_id.clone(),
+        Path::new(REPORT_ARTIFACT_PATH),
         report.as_bytes(),
         "text/markdown",
         "document",
@@ -2455,25 +2496,119 @@ pub fn finish_analysis_with_options(
             ],
         }),
     )?;
-    let run = store.transition(&ticket.run_id, RunState::Succeeded, None)?;
-    store.append_event(
-        &ticket.run_id,
-        "HostVerification",
-        "run.succeeded",
-        serde_json::json!({}),
-    )?;
+    // Gather the complete response before the terminal write. After Succeeded
+    // is durable no fallible operation remains, so success cannot be returned
+    // for a partially assembled result and a late error cannot strand Running.
+    let artifacts = store.artifacts(&ticket.run_id)?;
+    let evidence = store.evidence(&ticket.run_id)?;
+    let provenance = store.provenance(&ticket.run_id)?;
+    let approvals = store.approvals(&ticket.run_id)?;
     let events = store.events_after(&ticket.run_id, 0, 1_000)?;
+    let replay_after = events.last().map_or(0, |event| event.seq);
+    let records = analysis.records.len();
+    let run = store.transition(&ticket.run_id, RunState::Succeeded, None)?;
 
     Ok(SeqAnalyzeResult {
-        records: analysis.records.len(),
-        artifacts: store.artifacts(&ticket.run_id)?,
-        evidence: store.evidence(&ticket.run_id)?,
-        provenance: store.provenance(&ticket.run_id)?,
-        approvals: store.approvals(&ticket.run_id)?,
-        replay_after: events.last().map_or(0, |event| event.seq),
+        records,
+        artifacts,
+        evidence,
+        provenance,
+        approvals,
+        replay_after,
         run,
         analysis,
     })
+}
+
+fn parse_analysis_input(source_path: &Path, source_bytes: &[u8]) -> Result<Vec<Record>, String> {
+    let text = std::str::from_utf8(source_bytes)
+        .map_err(|error| format!("sequence input is not valid UTF-8: {error}"))?;
+    let is_fastq_path = source_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            extension.eq_ignore_ascii_case("fastq") || extension.eq_ignore_ascii_case("fq")
+        });
+    if is_fastq_path || text.trim_start().starts_with('@') {
+        parse_fastq(text)
+    } else {
+        parse_fasta(text)
+    }
+}
+
+fn parse_fastq(raw: &str) -> Result<Vec<Record>, String> {
+    let lines: Vec<&str> = raw.lines().collect();
+    if lines.is_empty() || !lines.len().is_multiple_of(4) {
+        return Err("malformed FASTQ: expected complete four-line records".into());
+    }
+    let mut records = Vec::with_capacity(lines.len() / 4);
+    for (index, record) in lines.chunks_exact(4).enumerate() {
+        let header = record[0]
+            .strip_prefix('@')
+            .ok_or_else(|| format!("malformed FASTQ record {}: missing @ header", index + 1))?
+            .trim();
+        if header.is_empty() {
+            return Err(format!(
+                "malformed FASTQ record {}: empty header",
+                index + 1
+            ));
+        }
+        if !record[2].starts_with('+') {
+            return Err(format!(
+                "malformed FASTQ record {}: missing + separator",
+                index + 1
+            ));
+        }
+        if record[1].chars().count() != record[3].chars().count() {
+            return Err(format!(
+                "malformed FASTQ record {}: sequence and quality lengths differ",
+                index + 1
+            ));
+        }
+        let (sequence, gaps_removed) = normalize_seq_with_gaps(record[1]);
+        if sequence.is_empty() {
+            return Err(format!(
+                "malformed FASTQ record {}: empty sequence",
+                index + 1
+            ));
+        }
+        let (id, description) =
+            if let Some((offset, ch)) = header.char_indices().find(|(_, ch)| ch.is_whitespace()) {
+                (
+                    header[..offset].to_string(),
+                    header[offset + ch.len_utf8()..].trim().to_string(),
+                )
+            } else {
+                (header.to_string(), String::new())
+            };
+        records.push(Record {
+            id,
+            description,
+            kind: detect_kind(&sequence),
+            sequence,
+            gaps_removed,
+        });
+    }
+    Ok(records)
+}
+
+/// Remove bytes and registrations for artifacts this finish created before
+/// failing. The Failed run and `analysis.failed` event remain the audit trace,
+/// while artifact listing and byte service both see no successful output.
+fn discard_failed_analysis_outputs(
+    store: &ScienceStore,
+    ticket: &ScienceRunTicket,
+) -> crate::Result<()> {
+    store.discard_running_outputs(
+        &ticket.project_id,
+        &ticket.run_id,
+        &ticket.owner_id,
+        &ticket.call_id,
+        &[
+            Path::new(ANALYSIS_ARTIFACT_PATH),
+            Path::new(REPORT_ARTIFACT_PATH),
+        ],
+    )
 }
 
 #[cfg(test)]
@@ -2514,6 +2649,10 @@ mod protocol_tests {
             finish_analysis(&store, ticket.clone(), Path::new("input.fa"), FASTA).is_err(),
             "finish without Allow must fail"
         );
+        assert_eq!(
+            store.load_run(&ticket.run_id).unwrap().state,
+            RunState::AwaitingApproval
+        );
         assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
         assert!(store.evidence(&ticket.run_id).unwrap().is_empty());
         assert!(store.provenance(&ticket.run_id).unwrap().is_empty());
@@ -2543,6 +2682,74 @@ mod protocol_tests {
             assert!(store.evidence(&ticket.run_id).unwrap().is_empty());
             assert!(store.provenance(&ticket.run_id).unwrap().is_empty());
         }
+    }
+
+    #[test]
+    fn malformed_fasta_and_fastq_fail_without_outputs() {
+        for (source_path, source_bytes) in [
+            (Path::new("malformed.fasta"), b">empty\n".as_slice()),
+            (
+                Path::new("malformed.fastq"),
+                b"@seq\nACGT\n+\n!!!\n".as_slice(),
+            ),
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let store = ScienceStore::new(temp.path().join("science-store"));
+            let ticket =
+                begin_analysis(&store, context(temp.path(), "project-a", "alice")).unwrap();
+            crate::csv::mark_allowed(&store, &ticket).unwrap();
+
+            assert!(
+                finish_analysis(&store, ticket.clone(), source_path, source_bytes,).is_err(),
+                "{} was accepted",
+                source_path.display()
+            );
+            assert_eq!(
+                store.load_run(&ticket.run_id).unwrap().state,
+                RunState::Failed
+            );
+            assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
+            assert!(store.evidence(&ticket.run_id).unwrap().is_empty());
+            assert!(store.provenance(&ticket.run_id).unwrap().is_empty());
+        }
+    }
+
+    #[test]
+    fn artifact_write_failure_fails_run_and_disables_partial_output_service() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path().join("science-store"));
+        let ticket = begin_analysis(&store, context(temp.path(), "project-a", "alice")).unwrap();
+        crate::csv::mark_allowed(&store, &ticket).unwrap();
+
+        // The first artifact is committed, then publishing report.md fails
+        // because its target is a directory. This exercises the real
+        // mid-commit failure boundary rather than a preflight error.
+        let artifact_root = store
+            .root()
+            .join("runs")
+            .join(&ticket.run_id.0)
+            .join("artifacts");
+        std::fs::create_dir(artifact_root.join(REPORT_ARTIFACT_PATH)).unwrap();
+
+        assert!(finish_analysis(&store, ticket.clone(), Path::new("input.fa"), FASTA).is_err());
+        assert_eq!(
+            store.load_run(&ticket.run_id).unwrap().state,
+            RunState::Failed
+        );
+        assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
+        assert!(
+            store
+                .artifact_bytes(
+                    &ticket.project_id,
+                    &ticket.run_id,
+                    &ticket.owner_id,
+                    Path::new(ANALYSIS_ARTIFACT_PATH),
+                )
+                .is_err(),
+            "a failed run's partial analysis artifact remained serviceable"
+        );
+        assert!(store.evidence(&ticket.run_id).unwrap().is_empty());
+        assert!(store.provenance(&ticket.run_id).unwrap().is_empty());
     }
 
     #[test]
@@ -2636,9 +2843,11 @@ mod protocol_tests {
             &swapped,
         )
         .unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("options do not match the durably approved run"));
+        assert!(
+            error
+                .to_string()
+                .contains("options do not match the durably approved run")
+        );
         assert_eq!(
             store.load_run(&ticket.run_id).unwrap().state,
             RunState::Failed
@@ -2678,9 +2887,11 @@ mod protocol_tests {
             &swapped,
         )
         .unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("options do not match the durably approved run"));
+        assert!(
+            error
+                .to_string()
+                .contains("options do not match the durably approved run")
+        );
         assert_eq!(
             store.load_run(&ticket.run_id).unwrap().state,
             RunState::Failed
@@ -2720,9 +2931,11 @@ mod protocol_tests {
             &swapped,
         )
         .unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("options do not match the durably approved run"));
+        assert!(
+            error
+                .to_string()
+                .contains("options do not match the durably approved run")
+        );
         assert_eq!(
             store.load_run(&ticket.run_id).unwrap().state,
             RunState::Failed

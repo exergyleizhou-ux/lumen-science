@@ -430,6 +430,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
       const bundle = (await callTool('project_get', {
         storeRoot: SCIENCE_STORE_DIR,
         projectId: bound.projectId,
+        ownerId: bound.ownerId,
       })) as { project?: { research_question?: string } }
       researchQuestion = bundle?.project?.research_question
     } catch {

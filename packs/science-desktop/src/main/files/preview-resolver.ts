@@ -23,6 +23,8 @@ import type { TrustedPreviewContext } from './session-identity'
 
 // ── Types ────────────────────────────────────────────────────────
 
+const MAX_PREVIEW_BYTES = 16 * 1024 * 1024
+
 export interface PreviewFileRequest {
   /** Client-supplied artifact id (never a filesystem path) */
   artifactId: string
@@ -32,9 +34,11 @@ export interface PreviewFileRequest {
 
 export interface PreviewFileResult {
   access: AccessResult
-  path?: string
   mimeType?: string
   sha256?: string
+  /** Exact verified bytes from the same file-handle read that was hashed. */
+  contentBase64?: string
+  byteLength?: number
 }
 
 export interface PreviewFileRecord {
@@ -63,8 +67,9 @@ export interface PreviewFileStore {
  * Resolve a preview file request through the artifact_id authority gate.
  *
  * Fails closed: rejects wrong owner, wrong project, hash mismatch,
- * empty identifiers, and unknown artifact ids. Only returns a file path
- * after ALL access checks pass against trusted session context.
+ * empty identifiers, and unknown artifact ids. It never returns the backing
+ * path: the result contains the exact bytes hashed on the already-open handle,
+ * so the renderer cannot reopen a swapped path after verification.
  */
 export async function resolvePreview(
   req: PreviewFileRequest,
@@ -123,8 +128,27 @@ export async function resolvePreview(
   // missing or silently-modified artifact as previewable, and the claim would
   // only fail later, somewhere the reason is gone. Re-hashing here makes the
   // content address mean what it says every time it is used.
+  let handle: fs.FileHandle | undefined
   try {
-    const bytes = await fs.readFile(resolved.path)
+    handle = await fs.open(resolved.path, 'r')
+    const stat = await handle.stat()
+    if (!stat.isFile() || stat.size > MAX_PREVIEW_BYTES) {
+      return {
+        access: {
+          ok: false,
+          reason: `artifact preview must be a regular file no larger than ${MAX_PREVIEW_BYTES} bytes`,
+        },
+      }
+    }
+    const bytes = await handle.readFile()
+    if (bytes.length > MAX_PREVIEW_BYTES) {
+      return {
+        access: {
+          ok: false,
+          reason: `artifact preview exceeds ${MAX_PREVIEW_BYTES} bytes`,
+        },
+      }
+    }
     const actual = createHash('sha256').update(bytes).digest('hex')
     if (actual !== resolved.sha256) {
       return {
@@ -134,19 +158,21 @@ export async function resolvePreview(
         },
       }
     }
-  } catch (e: unknown) {
+    return {
+      access: { ok: true },
+      mimeType: req.mimeType,
+      sha256: actual,
+      contentBase64: bytes.toString('base64'),
+      byteLength: bytes.length,
+    }
+  } catch {
     return {
       access: {
         ok: false,
-        reason: `artifact file unreadable at its recorded path: ${(e as Error).message}`,
+        reason: 'artifact bytes are unavailable',
       },
     }
-  }
-
-  return {
-    access: { ok: true },
-    path: resolved.path,
-    mimeType: req.mimeType,
-    sha256: resolved.sha256,
+  } finally {
+    await handle?.close().catch(() => undefined)
   }
 }

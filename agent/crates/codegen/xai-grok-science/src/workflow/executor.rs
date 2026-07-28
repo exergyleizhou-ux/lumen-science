@@ -40,16 +40,19 @@ use super::{
     AcceptanceCondition, CachePolicy, ComputeEnvironment, FailAction, ReuseKey, StepKind,
     WorkflowSpec, WorkflowStep,
 };
+use crate::project::capability::PinnedDirectory;
 use crate::project::model::ProjectId;
-use crate::project::store::{ProjectStore, write_lock_for};
+#[cfg(test)]
+use crate::project::store::ProjectStore;
+use crate::project::store::write_lock_for;
 use crate::{Result, ScienceError};
 use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+#[cfg(test)]
+use std::fs;
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
-    io::Write,
     path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
@@ -74,6 +77,48 @@ fn validate_step_id(step_id: &str) -> std::result::Result<(), String> {
     }
     if step_id == "." || step_id == ".." {
         return Err(format!("step id '{step_id}' is reserved"));
+    }
+    Ok(())
+}
+
+fn validate_run_id(run_id: &str) -> Result<()> {
+    if run_id.len() != 32
+        || !run_id
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(ScienceError::Invalid(
+            "workflow run id must be exactly 32 lowercase hex characters".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_commit_key(commit_key: &str) -> Result<()> {
+    if commit_key.len() != 64
+        || !commit_key
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(ScienceError::Invalid(
+            "workflow commit key must be exactly 64 lowercase hex characters".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_workflow_record_stem(stem: &str, field: &str) -> Result<()> {
+    if stem.is_empty()
+        || stem.len() > 128
+        || stem == "."
+        || stem == ".."
+        || !stem.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_' || byte == b'.'
+        })
+    {
+        return Err(ScienceError::Invalid(format!(
+            "{field} must be 1..=128 [A-Za-z0-9._-] characters and not dot traversal"
+        )));
     }
     Ok(())
 }
@@ -578,7 +623,11 @@ pub struct WorkflowExecutionRequest {
 /// fsync + atomic-rename + per-root write lock discipline as `ProjectStore`.
 #[derive(Debug, Clone)]
 pub struct WorkflowExecutor {
+    #[cfg(test)]
     root: PathBuf,
+    /// Retained once at construction. Every durable workflow record is opened
+    /// relative to this capability, never by reopening `root`.
+    confined: std::result::Result<Arc<PinnedDirectory>, Arc<str>>,
     clock: Arc<dyn Clock>,
     runner: Arc<dyn StepRunner>,
     policy: ExecutionPolicy,
@@ -591,9 +640,34 @@ pub struct WorkflowExecutor {
 impl WorkflowExecutor {
     pub fn new(root: impl Into<PathBuf>, environment: ComputeEnvironment) -> Self {
         let root = root.into();
+        let confined = PinnedDirectory::open_or_create(&root)
+            .map(Arc::new)
+            .map_err(|error| Arc::<str>::from(error.to_string()));
+        Self::from_capability(root, environment, confined)
+    }
+
+    /// Construct a product executor whose retained store root is proven to be
+    /// the same directory as a canonical path below `workspace`.
+    pub fn new_confined(
+        root: impl Into<PathBuf>,
+        workspace: &Path,
+        environment: ComputeEnvironment,
+    ) -> Result<Self> {
+        let root = root.into();
+        let confined = Arc::new(PinnedDirectory::open_or_create_within(&root, workspace)?);
+        Ok(Self::from_capability(root, environment, Ok(confined)))
+    }
+
+    fn from_capability(
+        root: PathBuf,
+        environment: ComputeEnvironment,
+        confined: std::result::Result<Arc<PinnedDirectory>, Arc<str>>,
+    ) -> Self {
         let writes = write_lock_for(&root);
         Self {
+            #[cfg(test)]
             root,
+            confined,
             clock: Arc::new(SystemClock),
             runner: Arc::new(UnboundStepRunner),
             policy: ExecutionPolicy::default(),
@@ -655,28 +729,29 @@ impl WorkflowExecutor {
     // ── Paths ─────────────────────────────────────────────────────
 
     fn run_dir(&self, run_id: &str) -> PathBuf {
-        self.root.join("workflow-runs").join(run_id)
+        PathBuf::from("workflow-runs").join(run_id)
     }
     fn run_path(&self, run_id: &str) -> PathBuf {
         self.run_dir(run_id).join("run.json")
     }
-    fn attempts_dir(&self, run_id: &str) -> PathBuf {
+    fn attempts_relative(&self, run_id: &str) -> PathBuf {
         self.run_dir(run_id).join("attempts")
     }
+    #[cfg(test)]
+    fn attempts_dir(&self, run_id: &str) -> PathBuf {
+        self.root.join(self.attempts_relative(run_id))
+    }
     fn attempt_path(&self, run_id: &str, attempt_id: &str) -> PathBuf {
-        self.attempts_dir(run_id).join(format!("{attempt_id}.json"))
+        self.attempts_relative(run_id)
+            .join(format!("{attempt_id}.json"))
     }
     /// Commits are keyed by content, not by run, so a later run of the same
     /// step with the same inputs finds the same artifact.
     fn commit_path(&self, commit_key: &str) -> PathBuf {
-        self.root
-            .join("workflow-commits")
-            .join(format!("{commit_key}.json"))
+        PathBuf::from("workflow-commits").join(format!("{commit_key}.json"))
     }
     fn operation_path(&self, operation_id: &str) -> PathBuf {
-        self.root
-            .join("workflow-operations")
-            .join(format!("{operation_id}.json"))
+        PathBuf::from("workflow-operations").join(format!("{operation_id}.json"))
     }
 
     fn guard(&self) -> Result<std::sync::MutexGuard<'_, ()>> {
@@ -685,9 +760,32 @@ impl WorkflowExecutor {
             .map_err(|_| ScienceError::Invalid("workflow store write lock poisoned".into()))
     }
 
+    fn confined(&self) -> Result<&PinnedDirectory> {
+        self.confined.as_deref().map_err(|error| {
+            ScienceError::Invalid(format!("workflow store capability is unavailable: {error}"))
+        })
+    }
+
+    fn read_record<T: for<'de> Deserialize<'de>>(&self, path: &Path) -> Result<Option<T>> {
+        self.confined()?
+            .read_optional(path)?
+            .map(|bytes| Ok(serde_json::from_slice(&bytes)?))
+            .transpose()
+    }
+
+    fn require_record<T: for<'de> Deserialize<'de>>(
+        &self,
+        path: &Path,
+        description: &str,
+    ) -> Result<T> {
+        self.read_record(path)?
+            .ok_or_else(|| ScienceError::Invalid(format!("{description} not found")))
+    }
+
     fn write_record<T: Serialize>(&self, path: &Path, value: &T) -> Result<()> {
         let _guard = self.guard()?;
-        ProjectStore::write_json(path, value)
+        self.confined()?
+            .replace_atomic(path, &serde_json::to_vec_pretty(value)?)
     }
 
     // ── Public API ────────────────────────────────────────────────
@@ -711,12 +809,23 @@ impl WorkflowExecutor {
             match self.reserve_operation(request, &run_id)? {
                 OperationReservation::Fresh => {
                     let run = self.new_draft(request, &run_id)?;
-                    ProjectStore::write_json(&self.run_path(&run_id), &run)?;
+                    self.confined()?.replace_atomic(
+                        &self.run_path(&run_id),
+                        &serde_json::to_vec_pretty(&run)?,
+                    )?;
                     OperationOutcome::Fresh(Box::new(run))
                 }
                 OperationReservation::Replay(record) => {
-                    let run: WorkflowRunRecord =
-                        ProjectStore::read_json(&self.run_path(&record.run_id))?;
+                    validate_run_id(&record.run_id)?;
+                    let run: WorkflowRunRecord = self
+                        .require_record(&self.run_path(&record.run_id), "reserved workflow run")?;
+                    if run.run_id != record.run_id
+                        || run.operation_id != record.operation_id
+                        || run.session_id != record.session_id
+                        || run.owner_id != record.owner_id
+                    {
+                        return Err(ScienceError::Ownership);
+                    }
                     OperationOutcome::Replay(Box::new(record), Box::new(run))
                 }
             }
@@ -768,15 +877,19 @@ impl WorkflowExecutor {
     /// In-flight attempts become `Interrupted` and are **not** re-executed:
     /// the step may already have had an effect that was never recorded.
     pub fn recover_run(&self, run_id: &str) -> Result<WorkflowRecoveryReport> {
+        validate_run_id(run_id)?;
         let mut report = WorkflowRecoveryReport {
             run_id: run_id.to_string(),
             ..Default::default()
         };
         let run_path = self.run_path(run_id);
-        if !run_path.is_file() {
+        let Some(mut run): Option<WorkflowRunRecord> = self.read_record(&run_path)? else {
             return Err(ScienceError::Invalid(format!(
                 "workflow run not found: {run_id}"
             )));
+        };
+        if run.run_id != run_id {
+            return Err(ScienceError::Ownership);
         }
 
         for mut attempt in self.load_attempts(run_id)? {
@@ -793,7 +906,6 @@ impl WorkflowExecutor {
             }
         }
 
-        let mut run: WorkflowRunRecord = ProjectStore::read_json(&run_path)?;
         report.run_state_before = Some(run.state);
         if !run.state.terminal() {
             let at = self.clock.now();
@@ -808,34 +920,43 @@ impl WorkflowExecutor {
             self.write_record(&run_path, &run)?;
         }
         report.run_state_after = Some(run.state);
-        report.stale_temp_files_removed = sweep_temp_files(&self.run_dir(run_id))?
-            + sweep_temp_files(&self.attempts_dir(run_id))?;
+        report.stale_temp_files_removed = self.sweep_temp_files(&self.run_dir(run_id))?
+            + self.sweep_temp_files(&self.attempts_relative(run_id))?;
         Ok(report)
     }
 
     pub fn load_run(&self, run_id: &str) -> Result<WorkflowRunRecord> {
+        validate_run_id(run_id)?;
         let path = self.run_path(run_id);
-        if !path.is_file() {
-            return Err(ScienceError::Invalid(format!(
-                "workflow run not found: {run_id}"
-            )));
+        let run: WorkflowRunRecord = self.require_record(&path, "workflow run")?;
+        if run.run_id != run_id {
+            return Err(ScienceError::Ownership);
         }
-        ProjectStore::read_json(&path)
+        Ok(run)
     }
 
     pub fn load_attempts(&self, run_id: &str) -> Result<Vec<StepAttempt>> {
-        let dir = self.attempts_dir(run_id);
+        validate_run_id(run_id)?;
+        let dir = self.attempts_relative(run_id);
         let mut attempts = Vec::new();
-        if !dir.is_dir() {
-            return Ok(attempts);
-        }
-        let mut paths: Vec<PathBuf> = fs::read_dir(&dir)?
-            .filter_map(|entry| entry.ok().map(|e| e.path()))
-            .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("json"))
-            .collect();
-        paths.sort();
-        for path in paths {
-            attempts.push(ProjectStore::read_json(&path)?);
+        for name in self.confined()?.list_names(&dir)? {
+            let Some(name_text) = name.to_str() else {
+                return Err(ScienceError::Invalid(
+                    "workflow attempt file name must be UTF-8".into(),
+                ));
+            };
+            let Some(stem) = name_text.strip_suffix(".json") else {
+                continue;
+            };
+            validate_workflow_record_stem(stem, "workflow attempt id")?;
+            let path = dir.join(&name);
+            let attempt: StepAttempt =
+                self.require_record(&path, "listed workflow attempt record")?;
+            if attempt.run_id != run_id || attempt.attempt_id != stem {
+                return Err(ScienceError::Ownership);
+            }
+            validate_step_id(&attempt.step_id).map_err(ScienceError::Invalid)?;
+            attempts.push(attempt);
         }
         attempts.sort_by(|a, b| {
             (a.step_id.as_str(), a.attempt_number).cmp(&(b.step_id.as_str(), b.attempt_number))
@@ -844,11 +965,16 @@ impl WorkflowExecutor {
     }
 
     pub fn load_commit(&self, commit_key: &str) -> Result<Option<ArtifactCommit>> {
+        validate_commit_key(commit_key)?;
         let path = self.commit_path(commit_key);
-        if !path.is_file() {
-            return Ok(None);
+        let commit: Option<ArtifactCommit> = self.read_record(&path)?;
+        if commit
+            .as_ref()
+            .is_some_and(|record| record.commit_key != commit_key)
+        {
+            return Err(ScienceError::Ownership);
         }
-        Ok(Some(ProjectStore::read_json(&path)?))
+        Ok(commit)
     }
 
     /// The reservation an operation id already holds, if any.
@@ -865,27 +991,38 @@ impl WorkflowExecutor {
         // an operation id into a directory traversal.
         crate::project::mutation::validate_operation_id(operation_id)?;
         let path = self.operation_path(operation_id);
-        if !path.is_file() {
-            return Ok(None);
+        let operation: Option<WorkflowOperationRecord> = self.read_record(&path)?;
+        if operation
+            .as_ref()
+            .is_some_and(|record| record.operation_id != operation_id)
+        {
+            return Err(ScienceError::Ownership);
         }
-        Ok(Some(ProjectStore::read_json(&path)?))
+        Ok(operation)
     }
 
     /// Every artifact commit under this root, oldest key first.
     pub fn list_commits(&self) -> Result<Vec<ArtifactCommit>> {
-        let dir = self.root.join("workflow-commits");
+        let dir = PathBuf::from("workflow-commits");
         let mut commits = Vec::new();
-        if !dir.is_dir() {
-            return Ok(commits);
+        for name in self.confined()?.list_names(&dir)? {
+            let Some(name_text) = name.to_str() else {
+                return Err(ScienceError::Invalid(
+                    "workflow commit file name must be UTF-8".into(),
+                ));
+            };
+            let Some(stem) = name_text.strip_suffix(".json") else {
+                continue;
+            };
+            validate_commit_key(stem)?;
+            let commit: ArtifactCommit =
+                self.require_record(&dir.join(&name), "listed workflow commit")?;
+            if commit.commit_key != stem {
+                return Err(ScienceError::Ownership);
+            }
+            commits.push(commit);
         }
-        let mut paths: Vec<PathBuf> = fs::read_dir(&dir)?
-            .filter_map(|entry| entry.ok().map(|e| e.path()))
-            .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("json"))
-            .collect();
-        paths.sort();
-        for path in paths {
-            commits.push(ProjectStore::read_json(&path)?);
-        }
+        commits.sort_by(|left, right| left.commit_key.cmp(&right.commit_key));
         Ok(commits)
     }
 
@@ -896,10 +1033,9 @@ impl WorkflowExecutor {
         request: &WorkflowExecutionRequest,
         run_id: &str,
     ) -> Result<OperationReservation> {
+        crate::project::mutation::validate_operation_id(&request.operation_id)?;
+        validate_run_id(run_id)?;
         let path = self.operation_path(&request.operation_id);
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
         let record = WorkflowOperationRecord {
             operation_id: request.operation_id.clone(),
             session_id: request.session_id.clone(),
@@ -911,24 +1047,17 @@ impl WorkflowExecutor {
         let bytes = serde_json::to_vec_pretty(&record)?;
         // `create_new` is the reservation: the filesystem, not a lock we hold,
         // decides which of two racing executions owns this operation id.
-        match fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-        {
-            Ok(mut file) => {
-                file.write_all(&bytes)?;
-                file.sync_all()?;
-                if let Some(parent) = path.parent() {
-                    crate::sync_dir(parent);
+        match self.confined()?.write_new_atomic(&path, &bytes) {
+            Ok(()) => Ok(OperationReservation::Fresh),
+            Err(ScienceError::Io(error)) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                let existing: WorkflowOperationRecord =
+                    self.require_record(&path, "reserved workflow operation")?;
+                if existing.operation_id != request.operation_id {
+                    return Err(ScienceError::Ownership);
                 }
-                Ok(OperationReservation::Fresh)
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                let existing: WorkflowOperationRecord = ProjectStore::read_json(&path)?;
                 Ok(OperationReservation::Replay(existing))
             }
-            Err(error) => Err(error.into()),
+            Err(error) => Err(error),
         }
     }
 
@@ -1446,14 +1575,16 @@ impl WorkflowExecutor {
         attempt_id: &str,
         manifest: &BTreeMap<String, String>,
     ) -> Result<ArtifactCommit> {
+        validate_commit_key(commit_key)?;
+        validate_step_id(step_id).map_err(ScienceError::Invalid)?;
+        validate_workflow_record_stem(attempt_id, "workflow attempt id")?;
         let _guard = self.guard()?;
         let path = self.commit_path(commit_key);
-        if path.is_file() {
-            // Already committed. Do not write a second artifact.
-            return ProjectStore::read_json(&path);
-        }
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
+        if let Some(existing) = self.read_record::<ArtifactCommit>(&path)? {
+            if existing.commit_key != commit_key {
+                return Err(ScienceError::Ownership);
+            }
+            return Ok(existing);
         }
         let commit = ArtifactCommit {
             schema_version: WORKFLOW_RUN_SCHEMA_VERSION,
@@ -1468,23 +1599,17 @@ impl WorkflowExecutor {
         let bytes = serde_json::to_vec_pretty(&commit)?;
         // `create_new` again, so two executors racing on one key cannot both
         // believe they committed.
-        match fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-        {
-            Ok(mut file) => {
-                file.write_all(&bytes)?;
-                file.sync_all()?;
-                if let Some(parent) = path.parent() {
-                    crate::sync_dir(parent);
+        match self.confined()?.write_new_atomic(&path, &bytes) {
+            Ok(()) => Ok(commit),
+            Err(ScienceError::Io(error)) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                let existing: ArtifactCommit =
+                    self.require_record(&path, "winning workflow commit")?;
+                if existing.commit_key != commit_key {
+                    return Err(ScienceError::Ownership);
                 }
-                Ok(commit)
+                Ok(existing)
             }
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                ProjectStore::read_json(&path)
-            }
-            Err(error) => Err(error.into()),
+            Err(error) => Err(error),
         }
     }
 
@@ -1559,6 +1684,21 @@ impl WorkflowExecutor {
             replayed: false,
             recovered: false,
         })
+    }
+
+    /// Remove only this store's capability-relative durable-write temp files.
+    fn sweep_temp_files(&self, dir: &Path) -> Result<usize> {
+        let mut removed = 0;
+        for name in self.confined()?.list_names(dir)? {
+            let Some(name) = name.to_str() else { continue };
+            if name.starts_with(".project-")
+                && name.ends_with(".tmp")
+                && self.confined()?.remove_file(&dir.join(name))?
+            {
+                removed += 1;
+            }
+        }
+        Ok(removed)
     }
 }
 
@@ -1713,24 +1853,194 @@ fn attempt_id(run_id: &str, step_id: &str, attempt_number: u32) -> String {
     format!("{run_id}-{step_id}-{attempt_number:04}")
 }
 
-/// Remove temp files left by a durable write that died before its rename.
-fn sweep_temp_files(dir: &Path) -> Result<usize> {
-    if !dir.is_dir() {
-        return Ok(0);
-    }
-    let mut removed = 0;
-    for entry in fs::read_dir(dir)? {
-        let path = entry?.path();
-        let is_temp = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| name.starts_with(ProjectStore::temp_prefix()));
-        if is_temp && path.is_file() {
-            fs::remove_file(&path)?;
-            removed += 1;
+#[cfg(all(test, unix))]
+mod confinement_tests {
+    use super::*;
+    use crate::workflow::{NetworkPolicy, ResourceLimits};
+    use std::{collections::BTreeMap, fs, os::unix::fs::symlink};
+    use tempfile::tempdir;
+
+    fn environment() -> ComputeEnvironment {
+        ComputeEnvironment {
+            environment_id: "confinement-test".into(),
+            os: "test".into(),
+            architecture: "test".into(),
+            lumen_binary_hash: "test".into(),
+            rust_lock_hash: None,
+            python_hash: None,
+            r_hash: None,
+            julia_hash: None,
+            dependency_lock_hash: "test".into(),
+            locale: "C".into(),
+            timezone: "UTC".into(),
+            environment_allowlist: Vec::new(),
+            cpu_identity: None,
+            gpu_identity: None,
+            deterministic_flags: Vec::new(),
+            network_policy: NetworkPolicy::None,
+            container_digest: None,
         }
     }
-    Ok(removed)
+
+    fn request(operation_id: &str) -> WorkflowExecutionRequest {
+        WorkflowExecutionRequest {
+            operation_id: operation_id.into(),
+            session_id: "session-1".into(),
+            owner_id: "owner-1".into(),
+            spec: WorkflowSpec {
+                workflow_id: "workflow-1".into(),
+                project_id: ProjectId("project-1".into()),
+                name: "confinement".into(),
+                steps: Vec::new(),
+                parameters: BTreeMap::new(),
+                permissions: Vec::new(),
+                resources: ResourceLimits {
+                    max_concurrent_steps: 1,
+                    max_total_duration_secs: 1,
+                    max_memory_mb: 1,
+                    max_disk_mb: 1,
+                },
+                schema_version: 1,
+            },
+        }
+    }
+
+    #[test]
+    fn retained_workflow_root_ignores_renamed_path_and_outside_symlink() {
+        let workspace = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        let root = workspace.path().join("store");
+        let retained = workspace.path().join("retained");
+        let executor = WorkflowExecutor::new(&root, environment());
+        let run_id = "a".repeat(32);
+
+        fs::rename(&root, &retained).unwrap();
+        symlink(outside.path(), &root).unwrap();
+        executor
+            .write_record(
+                &executor.run_path(&run_id),
+                &serde_json::json!({"run_id": run_id}),
+            )
+            .unwrap();
+
+        assert!(
+            outside.path().read_dir().unwrap().next().is_none(),
+            "root pathname replacement redirected workflow bytes outside"
+        );
+        assert!(
+            retained
+                .join("workflow-runs")
+                .join("a".repeat(32))
+                .join("run.json")
+                .is_file(),
+            "retained workflow capability did not receive the record"
+        );
+    }
+
+    #[test]
+    fn workflow_parent_symlinks_fail_without_outside_bytes_or_sweep() {
+        let workspace = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        let root = workspace.path().join("store");
+        fs::create_dir_all(&root).unwrap();
+        for name in ["workflow-runs", "workflow-operations", "workflow-commits"] {
+            let target = outside.path().join(name);
+            fs::create_dir_all(&target).unwrap();
+            symlink(&target, root.join(name)).unwrap();
+        }
+        let sentinel = outside
+            .path()
+            .join("workflow-runs")
+            .join(".project-sentinel.tmp");
+        fs::write(&sentinel, b"outside").unwrap();
+
+        let executor = WorkflowExecutor::new(&root, environment());
+        let run_id = "b".repeat(32);
+        assert!(
+            executor
+                .write_record(
+                    &executor.run_path(&run_id),
+                    &serde_json::json!({"run_id": run_id})
+                )
+                .is_err()
+        );
+        assert!(
+            executor
+                .write_record(
+                    &executor.attempt_path(&run_id, &format!("{run_id}-step-0001")),
+                    &serde_json::json!({"attempt": 1})
+                )
+                .is_err()
+        );
+        assert!(
+            executor
+                .reserve_operation(&request("operation-1"), &run_id)
+                .is_err()
+        );
+        assert!(
+            executor
+                .commit_output(
+                    &"c".repeat(64),
+                    "workflow-1",
+                    "step",
+                    &format!("{run_id}-step-0001"),
+                    &BTreeMap::new(),
+                )
+                .is_err()
+        );
+        assert!(
+            executor
+                .sweep_temp_files(&executor.run_dir(&run_id))
+                .is_err()
+        );
+        assert_eq!(fs::read(&sentinel).unwrap(), b"outside");
+        assert_eq!(
+            fs::read_dir(outside.path().join("workflow-operations"))
+                .unwrap()
+                .count(),
+            0
+        );
+        assert_eq!(
+            fs::read_dir(outside.path().join("workflow-commits"))
+                .unwrap()
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn public_workflow_record_lookups_reject_path_stems() {
+        let workspace = tempdir().unwrap();
+        let executor = WorkflowExecutor::new(workspace.path().join("store"), environment());
+
+        for invalid in ["../escape", "/absolute", ".", "..", "é", "a/b"] {
+            assert!(executor.load_run(invalid).is_err());
+            assert!(executor.load_attempts(invalid).is_err());
+            assert!(executor.recover_run(invalid).is_err());
+            assert!(executor.lookup_operation(invalid).is_err());
+            assert!(executor.load_commit(invalid).is_err());
+        }
+        assert!(
+            workspace.path().join("escape").symlink_metadata().is_err(),
+            "invalid workflow record ids caused an outside side effect"
+        );
+    }
+
+    #[test]
+    fn confined_executor_constructor_rejects_outside_and_symlink_roots() {
+        let workspace = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        assert!(
+            WorkflowExecutor::new_confined(outside.path(), workspace.path(), environment()).is_err()
+        );
+
+        let linked = workspace.path().join("linked-store");
+        symlink(outside.path(), &linked).unwrap();
+        assert!(
+            WorkflowExecutor::new_confined(&linked, workspace.path(), environment()).is_err()
+        );
+        assert!(outside.path().read_dir().unwrap().next().is_none());
+    }
 }
 
 #[cfg(test)]

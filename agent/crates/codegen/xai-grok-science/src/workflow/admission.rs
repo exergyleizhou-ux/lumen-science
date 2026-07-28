@@ -24,12 +24,13 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     fmt, fs,
-    io::Read,
+    io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::{Child, Command, Stdio},
     thread,
     time::{Duration, Instant},
 };
+use uuid::Uuid;
 
 /// Largest version-probe output kept. A hostile or broken interpreter must not
 /// be able to stream unbounded bytes into an admission record.
@@ -53,35 +54,75 @@ pub enum RejectionReason {
     /// A relative or bare-name interpreter would be resolved through `PATH`,
     /// which is not a pinned identity: the same spelling can name a different
     /// binary in another process.
-    InterpreterPathNotAbsolute { path: String },
-    InterpreterNotFound { path: String },
-    InterpreterNotAFile { path: String, file_type: String },
-    InterpreterNotExecutable { path: String },
+    InterpreterPathNotAbsolute {
+        path: String,
+    },
+    InterpreterNotFound {
+        path: String,
+    },
+    InterpreterNotAFile {
+        path: String,
+        file_type: String,
+    },
+    InterpreterNotExecutable {
+        path: String,
+    },
     /// The path resolved (through symlinks) outside the root the caller
     /// pinned the kernel to.
-    InterpreterOutsideAllowedRoot { resolved: String, allowed_root: String },
+    InterpreterOutsideAllowedRoot {
+        resolved: String,
+        allowed_root: String,
+    },
     /// The caller asserted a digest that is not 64 lowercase hex characters,
     /// optionally `sha256:`-prefixed. Nothing can be verified against it.
-    SuppliedDigestMalformed { field: String, value: String },
-    ExecutableHashMismatch { supplied: String, probed: String },
+    SuppliedDigestMalformed {
+        field: String,
+        value: String,
+    },
+    ExecutableHashMismatch {
+        supplied: String,
+        probed: String,
+    },
     /// The bytes changed after the executable was hashed but before the
     /// admission record could be committed. The version and digest therefore
     /// do not describe one stable identity.
-    InterpreterChangedDuringProbe { before: String, after: String },
-    PackageLockHashMismatch { supplied: String, probed: String },
+    InterpreterChangedDuringProbe {
+        before: String,
+        after: String,
+    },
+    PackageLockHashMismatch {
+        supplied: String,
+        probed: String,
+    },
     /// The dependency lock changed while the interpreter probe was running.
     /// Do not bind a version observation to a different package set.
-    PackageLockChangedDuringProbe { before: String, after: String },
+    PackageLockChangedDuringProbe {
+        before: String,
+        after: String,
+    },
     /// A package-lock digest was asserted with no lock file to hash, so the
     /// assertion cannot be checked. Fail closed rather than accept it.
-    PackageLockUnverifiable { supplied: String },
-    PackageLockNotAFile { path: String },
-    VersionProbeSpawnFailed { detail: String },
-    VersionProbeTimedOut { timeout_ms: u64 },
-    VersionProbeExitNonZero { exit_code: Option<i32>, output_excerpt: String },
+    PackageLockUnverifiable {
+        supplied: String,
+    },
+    PackageLockNotAFile {
+        path: String,
+    },
+    VersionProbeSpawnFailed {
+        detail: String,
+    },
+    VersionProbeTimedOut {
+        timeout_ms: u64,
+    },
+    VersionProbeExitNonZero {
+        exit_code: Option<i32>,
+        output_excerpt: String,
+    },
     VersionProbeEmptyOutput,
     /// Argv that could carry a NUL or a line break is refused before spawn.
-    VersionProbeArgsInvalid { detail: String },
+    VersionProbeArgsInvalid {
+        detail: String,
+    },
 }
 
 impl RejectionReason {
@@ -118,7 +159,10 @@ impl fmt::Display for RejectionReason {
             ),
             Self::InterpreterNotFound { path } => write!(f, "interpreter '{path}' does not exist"),
             Self::InterpreterNotAFile { path, file_type } => {
-                write!(f, "interpreter '{path}' is a {file_type}, not a regular file")
+                write!(
+                    f,
+                    "interpreter '{path}' is a {file_type}, not a regular file"
+                )
             }
             Self::InterpreterNotExecutable { path } => {
                 write!(f, "interpreter '{path}' has no execute permission")
@@ -130,10 +174,9 @@ impl fmt::Display for RejectionReason {
                 f,
                 "interpreter resolves to '{resolved}', outside the allowed root '{allowed_root}'"
             ),
-            Self::SuppliedDigestMalformed { field, value } => write!(
-                f,
-                "supplied {field} '{value}' is not a sha256 hex digest"
-            ),
+            Self::SuppliedDigestMalformed { field, value } => {
+                write!(f, "supplied {field} '{value}' is not a sha256 hex digest")
+            }
             Self::ExecutableHashMismatch { supplied, probed } => write!(
                 f,
                 "executable hash mismatch: supplied {supplied}, probed {probed}"
@@ -458,12 +501,11 @@ fn probe_inner(
 
     // 5. Verify — never echo — a supplied executable digest.
     if let Some(supplied) = &request.supplied_executable_hash {
-        let supplied = normalise_digest(supplied).ok_or_else(|| {
-            RejectionReason::SuppliedDigestMalformed {
+        let supplied =
+            normalise_digest(supplied).ok_or_else(|| RejectionReason::SuppliedDigestMalformed {
                 field: "executableHash".into(),
                 value: supplied.clone(),
-            }
-        })?;
+            })?;
         if supplied != executable_hash {
             return Err(RejectionReason::ExecutableHashMismatch {
                 supplied,
@@ -478,17 +520,15 @@ fn probe_inner(
     let package_lock_hash = match &request.package_lock_path {
         Some(path) => {
             let lock_display = path.display().to_string();
-            let lock_meta = fs::symlink_metadata(path).map_err(|_| {
-                RejectionReason::PackageLockNotAFile {
+            let lock_meta =
+                fs::symlink_metadata(path).map_err(|_| RejectionReason::PackageLockNotAFile {
                     path: lock_display.clone(),
-                }
-            })?;
+                })?;
             if !lock_meta.is_file() {
                 return Err(RejectionReason::PackageLockNotAFile { path: lock_display });
             }
-            hash_file(path).map_err(|_| RejectionReason::PackageLockNotAFile {
-                path: lock_display,
-            })?
+            hash_file(path)
+                .map_err(|_| RejectionReason::PackageLockNotAFile { path: lock_display })?
         }
         None => {
             if let Some(supplied) = &request.supplied_package_lock_hash {
@@ -502,12 +542,11 @@ fn probe_inner(
         }
     };
     if let Some(supplied) = &request.supplied_package_lock_hash {
-        let supplied = normalise_digest(supplied).ok_or_else(|| {
-            RejectionReason::SuppliedDigestMalformed {
+        let supplied =
+            normalise_digest(supplied).ok_or_else(|| RejectionReason::SuppliedDigestMalformed {
                 field: "packageLockHash".into(),
                 value: supplied.clone(),
-            }
-        })?;
+            })?;
         if supplied != package_lock_hash {
             return Err(RejectionReason::PackageLockHashMismatch {
                 supplied,
@@ -651,9 +690,13 @@ fn normalise_digest(value: &str) -> Option<String> {
 
 /// Execute the interpreter to read its version, killing it at the deadline.
 ///
-/// stdout and stderr are drained on their own threads: polling `try_wait`
-/// while a child fills a pipe buffer would deadlock, and a kernel that prints
-/// a banner before its version does exactly that.
+/// Output goes to bounded, parent-owned temporary files rather than pipes.
+/// A forked descendant can inherit a pipe after the direct child exits and
+/// make a reader-thread join hang forever; a regular file has no EOF wait.
+/// On Unix the probe starts in its own process group. Every exit path kills
+/// that group before returning and reaps the direct child; orphaned
+/// descendants may briefly remain as non-running zombies until the OS reaps
+/// them, but cannot keep the capture open or continue executing.
 fn run_version_probe(
     executable: &Path,
     argv: &[String],
@@ -667,53 +710,58 @@ fn run_version_probe(
         }
     }
 
-    let mut child = Command::new(executable)
+    let mut stdout = ProbeCapture::new("stdout").map_err(probe_io_error)?;
+    let mut stderr = ProbeCapture::new("stderr").map_err(probe_io_error)?;
+    let stdout_stdio = stdout.stdio().map_err(probe_io_error)?;
+    let stderr_stdio = stderr.stdio().map_err(probe_io_error)?;
+
+    let mut command = Command::new(executable);
+    command
         .args(argv)
         .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(stdout_stdio)
+        .stderr(stderr_stdio)
         // A stable locale keeps the recorded version string reproducible.
         .env("LC_ALL", "C")
-        .env("LANG", "C")
+        .env("LANG", "C");
+    configure_probe_process(&mut command);
+    let mut child = command
         .spawn()
         .map_err(|error| RejectionReason::VersionProbeSpawnFailed {
             detail: error.to_string(),
         })?;
 
-    let stdout = child.stdout.take();
-    let stderr = child.stderr.take();
-    let stdout_reader = thread::spawn(move || read_capped(stdout));
-    let stderr_reader = thread::spawn(move || read_capped(stderr));
-
     let started = Instant::now();
     let status = loop {
         match child.try_wait() {
-            Ok(Some(status)) => break Some(status),
+            Ok(Some(status)) => {
+                terminate_probe_processes(&mut child).map_err(probe_io_error)?;
+                break status;
+            }
             Ok(None) => {}
             Err(error) => {
-                let _ = child.kill();
-                let _ = child.wait();
+                let termination_error = terminate_probe_processes(&mut child).err();
                 return Err(RejectionReason::VersionProbeSpawnFailed {
-                    detail: error.to_string(),
+                    detail: match termination_error {
+                        Some(termination_error) => format!(
+                            "{error}; process-group termination also failed: {termination_error}"
+                        ),
+                        None => error.to_string(),
+                    },
                 });
             }
         }
         if started.elapsed() >= timeout {
-            let _ = child.kill();
-            let _ = child.wait();
-            break None;
+            terminate_probe_processes(&mut child).map_err(probe_io_error)?;
+            return Err(RejectionReason::VersionProbeTimedOut {
+                timeout_ms: timeout.as_millis() as u64,
+            });
         }
         thread::sleep(Duration::from_millis(5));
     };
 
-    let out = stdout_reader.join().unwrap_or_default();
-    let err = stderr_reader.join().unwrap_or_default();
-
-    let Some(status) = status else {
-        return Err(RejectionReason::VersionProbeTimedOut {
-            timeout_ms: timeout.as_millis() as u64,
-        });
-    };
+    let out = stdout.read_capped().map_err(probe_io_error)?;
+    let err = stderr.read_capped().map_err(probe_io_error)?;
 
     // Python <=3.3 wrote `-V` to stderr, R and Julia write to stdout: read both.
     let combined = format!("{out}\n{err}");
@@ -738,20 +786,136 @@ fn run_version_probe(
     Ok(version)
 }
 
-fn read_capped<R: Read>(source: Option<R>) -> String {
-    let Some(mut source) = source else {
-        return String::new();
-    };
-    let mut buffer = Vec::new();
-    let mut chunk = [0u8; 8192];
-    while buffer.len() < MAX_PROBE_OUTPUT_BYTES {
-        match source.read(&mut chunk) {
-            Ok(0) | Err(_) => break,
-            Ok(read) => buffer.extend_from_slice(&chunk[..read]),
-        }
+fn probe_io_error(error: std::io::Error) -> RejectionReason {
+    RejectionReason::VersionProbeSpawnFailed {
+        detail: error.to_string(),
     }
-    buffer.truncate(MAX_PROBE_OUTPUT_BYTES);
-    String::from_utf8_lossy(&buffer).into_owned()
+}
+
+struct ProbeCapture {
+    path: PathBuf,
+    file: Option<fs::File>,
+}
+
+impl ProbeCapture {
+    fn new(stream: &str) -> std::io::Result<Self> {
+        use std::fs::OpenOptions;
+        #[cfg(unix)]
+        use std::os::unix::fs::OpenOptionsExt;
+
+        for _ in 0..16 {
+            let path = std::env::temp_dir().join(format!(
+                "lumen-science-kernel-probe-{}-{stream}-{}",
+                std::process::id(),
+                Uuid::now_v7()
+            ));
+            let mut options = OpenOptions::new();
+            options.read(true).write(true).create_new(true);
+            #[cfg(unix)]
+            options.mode(0o600);
+            match options.open(&path) {
+                Ok(file) => {
+                    return Ok(Self {
+                        path,
+                        file: Some(file),
+                    });
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(error),
+            }
+        }
+        Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            "could not allocate a unique kernel probe capture",
+        ))
+    }
+
+    fn stdio(&self) -> std::io::Result<Stdio> {
+        Ok(Stdio::from(
+            self.file
+                .as_ref()
+                .ok_or_else(|| std::io::Error::other("probe capture is closed"))?
+                .try_clone()?,
+        ))
+    }
+
+    fn read_capped(&mut self) -> std::io::Result<String> {
+        let file = self
+            .file
+            .as_mut()
+            .ok_or_else(|| std::io::Error::other("probe capture is closed"))?;
+        file.seek(SeekFrom::Start(0))?;
+        let mut buffer = Vec::new();
+        file.take(MAX_PROBE_OUTPUT_BYTES as u64)
+            .read_to_end(&mut buffer)?;
+        Ok(String::from_utf8_lossy(&buffer).into_owned())
+    }
+}
+
+impl Drop for ProbeCapture {
+    fn drop(&mut self) {
+        self.file.take();
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+#[cfg(unix)]
+fn configure_probe_process(command: &mut Command) {
+    use std::os::unix::process::CommandExt;
+
+    // SAFETY: the closure performs only async-signal-safe libc calls before
+    // exec. It does not allocate or acquire locks.
+    unsafe {
+        command.pre_exec(|| {
+            if libc::setpgid(0, 0) == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            let mut limit = libc::rlimit {
+                rlim_cur: 0,
+                rlim_max: 0,
+            };
+            if libc::getrlimit(libc::RLIMIT_FSIZE, &mut limit) == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            let bounded_output = limit.rlim_max.min(MAX_PROBE_OUTPUT_BYTES as libc::rlim_t);
+            limit.rlim_cur = bounded_output;
+            limit.rlim_max = bounded_output;
+            if libc::setrlimit(libc::RLIMIT_FSIZE, &limit) == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+}
+
+#[cfg(not(unix))]
+fn configure_probe_process(_command: &mut Command) {}
+
+#[cfg(unix)]
+fn terminate_probe_processes(child: &mut Child) -> std::io::Result<()> {
+    let process_group = -(child.id() as libc::pid_t);
+    // SAFETY: `process_group` is the negative PID assigned by the setpgid
+    // pre-exec hook, so this targets only this probe's process group.
+    let killed = unsafe { libc::kill(process_group, libc::SIGKILL) };
+    let kill_error = (killed == -1).then(std::io::Error::last_os_error);
+    let _ = child.kill();
+    let wait_result = child.wait();
+    if let Some(error) = kill_error
+        && error.raw_os_error() != Some(libc::ESRCH)
+    {
+        return Err(error);
+    }
+    wait_result.map(|_| ())
+}
+
+#[cfg(not(unix))]
+fn terminate_probe_processes(child: &mut Child) -> std::io::Result<()> {
+    // A regular-file capture still prevents the inherited-pipe hang on
+    // Windows. std does not provide a Job Object API, so this can only reap
+    // the direct child; product acceptance must not claim Windows process-tree
+    // confinement until a Job Object implementation is added.
+    let _ = child.kill();
+    child.wait().map(|_| ())
 }
 
 fn excerpt(text: &str) -> String {
@@ -787,6 +951,30 @@ mod tests {
         fs::write(&path, body).unwrap();
         fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
         path
+    }
+
+    #[cfg(unix)]
+    fn process_is_still_running(pid: libc::pid_t) -> bool {
+        // `kill(pid, 0)` reports true for zombies, so it cannot by itself
+        // prove that a SIGKILLed descendant is still executing.
+        // SAFETY: signal 0 performs no mutation and probes the child-reported
+        // PID only.
+        if unsafe { libc::kill(pid, 0) } == -1
+            && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
+        {
+            return false;
+        }
+        let output = Command::new("ps")
+            .args(["-o", "state=", "-p", &pid.to_string()])
+            .output()
+            .expect("ps must be available for the Unix process-state assertion");
+        if !output.status.success() {
+            // The process disappeared between kill(0) and ps.
+            return false;
+        }
+        let state = String::from_utf8_lossy(&output.stdout);
+        let state = state.trim();
+        !state.is_empty() && !state.starts_with('Z')
     }
 
     fn reason(admission: &KernelAdmission) -> &RejectionReason {
@@ -849,10 +1037,8 @@ mod tests {
     fn supplied_executable_hash_mismatch_is_rejected() {
         let dir = tempdir().unwrap();
         let path = script(dir.path(), "python3", "#!/bin/sh\necho 'Python 3.12.0'\n");
-        let admission = probe_kernel(
-            &request(&path).with_supplied_executable_hash("b".repeat(64)),
-        )
-        .unwrap();
+        let admission =
+            probe_kernel(&request(&path).with_supplied_executable_hash("b".repeat(64))).unwrap();
         let reason = reason(&admission);
         assert_eq!(reason.code(), "executable_hash_mismatch");
         // The supplied digest must not survive into the record.
@@ -886,8 +1072,7 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
         }
-        let admission =
-            probe_kernel(&request(&path).with_supplied_executable_hash("abc")).unwrap();
+        let admission = probe_kernel(&request(&path).with_supplied_executable_hash("abc")).unwrap();
         // On non-unix the executable check fires first; either way it is a
         // rejection and never an admission.
         assert_eq!(admission.admission_status, AdmissionStatus::Rejected);
@@ -900,11 +1085,50 @@ mod tests {
     fn version_probe_timeout_is_rejected() {
         let dir = tempdir().unwrap();
         let path = script(dir.path(), "slow", "#!/bin/sh\nsleep 30\n");
-        let admission = probe_kernel(
-            &request(&path).with_probe_timeout(Duration::from_millis(300)),
-        )
-        .unwrap();
+        let started = Instant::now();
+        let admission =
+            probe_kernel(&request(&path).with_probe_timeout(Duration::from_millis(300))).unwrap();
         assert_eq!(reason(&admission).code(), "version_probe_timed_out");
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "forked probe descendants held the timeout path open"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn inherited_probe_output_does_not_block_after_direct_child_exits() {
+        let dir = tempdir().unwrap();
+        let descendant_pid = dir.path().join("descendant.pid");
+        let path = script(
+            dir.path(),
+            "forking",
+            &format!(
+                "#!/bin/sh\nsleep 30 &\nprintf '%s' \"$!\" > '{}'\necho 'Python 3.12.0'\n",
+                descendant_pid.display()
+            ),
+        );
+        let started = Instant::now();
+        let admission =
+            probe_kernel(&request(&path).with_probe_timeout(Duration::from_secs(2))).unwrap();
+        assert_eq!(
+            admission.admission_status,
+            AdmissionStatus::Admitted,
+            "{admission:?}"
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(3),
+            "inherited output handle delayed probe completion"
+        );
+        let pid: libc::pid_t = fs::read_to_string(descendant_pid).unwrap().parse().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while process_is_still_running(pid) && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            !process_is_still_running(pid),
+            "forked descendant remained runnable after process-group termination"
+        );
     }
 
     #[cfg(unix)]
@@ -933,12 +1157,15 @@ mod tests {
         use std::os::unix::fs::symlink;
         let outside = tempdir().unwrap();
         let inside = tempdir().unwrap();
-        let real = script(outside.path(), "python3", "#!/bin/sh\necho 'Python 3.12.0'\n");
+        let real = script(
+            outside.path(),
+            "python3",
+            "#!/bin/sh\necho 'Python 3.12.0'\n",
+        );
         let link = inside.path().join("python3");
         symlink(&real, &link).unwrap();
 
-        let admission =
-            probe_kernel(&request(&link).with_allowed_root(inside.path())).unwrap();
+        let admission = probe_kernel(&request(&link).with_allowed_root(inside.path())).unwrap();
         assert_eq!(
             reason(&admission).code(),
             "interpreter_outside_allowed_root"
@@ -946,7 +1173,11 @@ mod tests {
 
         // The same interpreter inside the root is admitted, so the rejection
         // is about confinement and not about symlinks in general.
-        let confined = script(inside.path(), "python3-real", "#!/bin/sh\necho 'Python 3.12.0'\n");
+        let confined = script(
+            inside.path(),
+            "python3-real",
+            "#!/bin/sh\necho 'Python 3.12.0'\n",
+        );
         let confined_link = inside.path().join("python3-link");
         symlink(&confined, &confined_link).unwrap();
         let ok = probe_kernel(
@@ -964,8 +1195,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = script(dir.path(), "python3", "#!/bin/sh\necho 'Python 3.12.0'\n");
         let admission =
-            probe_kernel(&request(&path).with_supplied_package_lock_hash("c".repeat(64)))
-                .unwrap();
+            probe_kernel(&request(&path).with_supplied_package_lock_hash("c".repeat(64))).unwrap();
         assert_eq!(reason(&admission).code(), "package_lock_unverifiable");
     }
 

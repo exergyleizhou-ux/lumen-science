@@ -222,14 +222,15 @@ export const ResearchShell = (): React.JSX.Element => {
     try {
       const res = (await lumen.previewByArtifact({ artifactId })) as {
         access?: { ok?: boolean; reason?: string }
-        path?: string
         sha256?: string
+        contentBase64?: string
+        byteLength?: number
       }
       if (!res.access?.ok) {
         setPreviewMeta(res.access?.reason ?? 'denied')
         return
       }
-      setPreviewMeta(`ok path=${res.path ?? '?'} sha256=${res.sha256 ?? '?'}`)
+      setPreviewMeta(`ok bytes=${res.byteLength ?? '?'} sha256=${res.sha256 ?? '?'}`)
     } catch (e: unknown) {
       // A failed preview is a result to show, never an unhandled rejection.
       setPreviewMeta((e as Error)?.message || String(e))

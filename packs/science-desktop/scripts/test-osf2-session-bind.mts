@@ -130,7 +130,7 @@ async function run() {
   )
   await test('seed+bind: preview resolves seeded artifact', () => {
     ok(preview.access.ok, JSON.stringify(preview))
-    strictEqual(preview.path, OUT_CSV)
+    strictEqual(Buffer.from(preview.contentBase64 ?? '', 'base64').toString(), 'out,csv\n')
   })
 
   // Cross-owner still blocked even with seed
@@ -239,7 +239,7 @@ async function run() {
   })
   await test('ipc: preview after bind+seed works', () => {
     ok(prev.access.ok, JSON.stringify(prev))
-    strictEqual(prev.path, IPC_CSV)
+    strictEqual(Buffer.from(prev.contentBase64 ?? '', 'base64').toString(), 'ipc,a1\n')
   })
 
   const unbindHandler = handlers.get('files:unbind-session')!

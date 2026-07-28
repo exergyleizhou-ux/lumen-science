@@ -130,8 +130,13 @@ async function runTests() {
   )
   await test('resolve: trusted owner+project + hash match', () => {
     ok(okResolve.access.ok)
-    strictEqual(okResolve.path, A1_PATH)
     strictEqual(okResolve.mimeType, 'text/csv')
+    ok(!('path' in okResolve), 'verified previews must never expose a reopenable path')
+    strictEqual(okResolve.byteLength, Buffer.byteLength('a1,csv,fixture\n'))
+    strictEqual(
+      Buffer.from(okResolve.contentBase64 ?? '', 'base64').toString(),
+      'a1,csv,fixture\n',
+    )
   })
 
   const crossOwner = await resolvePreview(
@@ -142,7 +147,7 @@ async function runTests() {
   await test('resolve: rejects cross-owner even if client only sends artifactId', () => {
     ok(!crossOwner.access.ok)
     ok(crossOwner.access.reason!.includes('owner'))
-    strictEqual(crossOwner.path, undefined)
+    strictEqual(crossOwner.contentBase64, undefined)
   })
 
   const crossProj = await resolvePreview(
@@ -197,7 +202,10 @@ async function runTests() {
   )
   await test('product: loadArtifactPreview ok with trusted session', () => {
     ok(product.access.ok, `expected ok got ${JSON.stringify(product)}`)
-    strictEqual(product.path, A1_PATH)
+    strictEqual(
+      Buffer.from(product.contentBase64 ?? '', 'base64').toString(),
+      'a1,csv,fixture\n',
+    )
   })
 
   clearTrustedPreviewContext()
@@ -231,6 +239,11 @@ async function runTests() {
     ok(src.includes('TrustedPreviewContext') || src.includes('trusted:'))
     // Must not compare request owner to itself (the prior theater bug)
     ok(!/assertArtifactPreviewAccess\(\s*\{[^}]*ownerId:\s*req\.ownerId[^}]*\},\s*\{\s*ownerId:\s*req\.ownerId/s.test(src))
+  })
+  await test('preview result is bytes-only with no post-hash reopen seam', () => {
+    ok(src.includes('contentBase64'))
+    ok(src.includes('handle.readFile()'))
+    ok(!src.includes('path: resolved.path'))
   })
 
   const ipcSrc = fs.readFileSync('src/main/ipc.ts', 'utf-8')
@@ -284,7 +297,7 @@ async function runTests() {
     const gone = await resolvePreview({ artifactId: 'x' }, driftStore, trusted)
     await test('a deleted artifact is not previewable', () => {
       ok(!gone.access.ok)
-      ok((gone.access.reason ?? '').includes('unreadable'), gone.access.reason)
+      ok((gone.access.reason ?? '').includes('unavailable'), gone.access.reason)
     })
   }
 

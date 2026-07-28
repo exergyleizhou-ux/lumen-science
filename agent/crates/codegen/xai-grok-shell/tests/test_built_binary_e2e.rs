@@ -1474,8 +1474,7 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             "analysis: {analysis}"
         );
         assert_eq!(
-            analysis["translation_table"]["name"],
-            "Vertebrate Mitochondrial",
+            analysis["translation_table"]["name"], "Vertebrate Mitochondrial",
             "analysis: {analysis}"
         );
         let table_two_orf = analysis["records"][1]["orfs"]
@@ -1489,10 +1488,7 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
                     && orf["stop_codon"] == "AGA"
             })
             .expect("table 2 forward ORF terminated by AGA");
-        assert_eq!(
-            table_two_orf["amino_acids"], 30,
-            "analysis: {analysis}"
-        );
+        assert_eq!(table_two_orf["amino_acids"], 30, "analysis: {analysis}");
         assert_eq!(
             result["provenance"][0]["environment"]["algorithm_source_commit"],
             xai_grok_science::seqbench::MOTIF_COMMIT,
@@ -1503,13 +1499,11 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             "result: {result}"
         );
         assert_eq!(
-            result["provenance"][0]["environment"]["restriction_topology"],
-            "circular",
+            result["provenance"][0]["environment"]["restriction_topology"], "circular",
             "result: {result}"
         );
         assert_eq!(
-            result["provenance"][0]["environment"]["restriction_digest_enzymes"],
-            "EcoRI",
+            result["provenance"][0]["environment"]["restriction_digest_enzymes"], "EcoRI",
             "result: {result}"
         );
         assert_eq!(
@@ -1517,13 +1511,11 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             "result: {result}"
         );
         assert_eq!(
-            result["run"]["context"]["environment"]["restriction_topology"],
-            "circular",
+            result["run"]["context"]["environment"]["restriction_topology"], "circular",
             "result: {result}"
         );
         assert_eq!(
-            result["run"]["context"]["environment"]["restriction_digest_enzymes"],
-            "EcoRI",
+            result["run"]["context"]["environment"]["restriction_digest_enzymes"], "EcoRI",
             "result: {result}"
         );
         assert!(
@@ -1570,9 +1562,8 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             serde_json::from_str(response.0.get()).expect("artifact_list returned JSON");
         let listed = listed.as_array().expect("artifact_list array");
         assert_eq!(listed.len(), durable_artifacts.len());
-        let expected_run_root =
-            std::fs::canonicalize(artifact_root.join("runs").join(&run_id.0))
-                .expect("canonical run root");
+        let expected_run_root = std::fs::canonicalize(artifact_root.join("runs").join(&run_id.0))
+            .expect("canonical run root");
         for item in listed {
             let sha = item["sha256"].as_str().expect("listed sha256");
             assert_eq!(item["artifact_id"], sha);
@@ -1888,6 +1879,156 @@ async fn test_stdio_science_seq_analyze_denied_writes_nothing() {
                 .join("seqbench")
                 .exists(),
             "denied request wrote the legacy loose artifact directory"
+        );
+    })
+    .await;
+}
+
+/// If the production permission request is never answered, the actor must
+/// persist TimedOut and must not start sequence analysis or publish outputs.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_seq_analyze_permission_timeout_writes_nothing() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let artifact_root = workdir.path().join("science-seq-timeout-store");
+        let source = workdir.path().join("micro.fasta");
+        std::fs::copy(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../xai-grok-science/fixtures/micro.fasta"
+            ),
+            &source,
+        )
+        .expect("copy fixed sequence fixture");
+
+        let client = GrokStdioClient::spawn_with_permission_response(
+            &server,
+            workdir.path(),
+            PermissionResponse::NeverRespond,
+        )
+        .await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+        let timed_out = client
+            .ext_method(
+                "x.ai/science/seq_analyze",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": "science-seq-project",
+                    "ownerId": "science-owner",
+                    "artifactRoot": artifact_root,
+                    "sourcePath": source,
+                    "approvalTimeoutMs": 100,
+                }),
+            )
+            .await;
+        assert!(
+            timed_out.is_err(),
+            "timed-out analysis returned success: {timed_out:?}"
+        );
+        assert_eq!(client.permission_request_count(), 1);
+
+        let runs = std::fs::read_dir(artifact_root.join("runs"))
+            .expect("timeout must leave a durable run")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("read durable runs");
+        assert_eq!(runs.len(), 1);
+        let run_id = xai_grok_science::RunId::new(
+            runs[0]
+                .file_name()
+                .to_str()
+                .expect("UTF-8 run id")
+                .to_owned(),
+        );
+        let store = xai_grok_science::ScienceStore::new(&artifact_root);
+        assert_eq!(
+            store.load_run(&run_id).expect("reopen timed-out run").state,
+            xai_grok_science::RunState::TimedOut
+        );
+        assert!(store.artifacts(&run_id).expect("artifacts").is_empty());
+        assert!(store.evidence(&run_id).expect("evidence").is_empty());
+        assert!(store.provenance(&run_id).expect("provenance").is_empty());
+        assert!(
+            !artifact_root
+                .join("science-seq-project")
+                .join("seqbench")
+                .exists(),
+            "timed-out request wrote the legacy loose artifact directory"
+        );
+    })
+    .await;
+}
+
+/// Input parsing happens only after Allow. A malformed source therefore must
+/// close the already-durable run as Failed without publishing partial output.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_seq_analyze_malformed_input_fails_without_outputs() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let artifact_root = workdir.path().join("science-seq-malformed-store");
+        let source = workdir.path().join("empty.fasta");
+        std::fs::write(&source, b"").expect("write malformed sequence fixture");
+
+        let client = GrokStdioClient::spawn(&server, workdir.path()).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+        let failed = client
+            .ext_method(
+                "x.ai/science/seq_analyze",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": "science-seq-project",
+                    "ownerId": "science-owner",
+                    "artifactRoot": artifact_root,
+                    "sourcePath": source,
+                    "approvalTimeoutMs": 5_000,
+                }),
+            )
+            .await;
+        assert!(
+            failed.is_err(),
+            "malformed analysis returned success: {failed:?}"
+        );
+        assert_eq!(client.permission_request_count(), 1);
+
+        let runs = std::fs::read_dir(artifact_root.join("runs"))
+            .expect("parse failure must leave a durable run")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("read durable runs");
+        assert_eq!(runs.len(), 1);
+        let run_id = xai_grok_science::RunId::new(
+            runs[0]
+                .file_name()
+                .to_str()
+                .expect("UTF-8 run id")
+                .to_owned(),
+        );
+        let store = xai_grok_science::ScienceStore::new(&artifact_root);
+        assert_eq!(
+            store.load_run(&run_id).expect("reopen failed run").state,
+            xai_grok_science::RunState::Failed
+        );
+        assert_eq!(
+            store.approvals(&run_id).expect("approval")[0].decision,
+            xai_grok_science::ApprovalDecision::Allow
+        );
+        assert!(store.artifacts(&run_id).expect("artifacts").is_empty());
+        assert!(store.evidence(&run_id).expect("evidence").is_empty());
+        assert!(store.provenance(&run_id).expect("provenance").is_empty());
+        assert!(
+            !artifact_root
+                .join("science-seq-project")
+                .join("seqbench")
+                .exists(),
+            "parse failure wrote the legacy loose artifact directory"
         );
     })
     .await;
@@ -3001,24 +3142,54 @@ fn test_connector_registry_active_40_inventory_42() {
     assert_eq!(inventory.len(), 42, "full disposition inventory must be 42");
 
     let expected_active: std::collections::BTreeSet<&str> = [
-        "pubmed", "chembl", "crossref", "uniprot", "europepmc", "openalex",
-        "semantic-scholar", "arxiv", "biorxiv",
-        "rcsb-pdb", "pdbe", "alphafold", "interpro", "sifts",
-        "pubchem", "bindingdb", "gtopdb", "surechembl", "chebi",
-        "ensembl", "ncbi-gene", "dbsnp", "clinvar", "gnomad", "ucsc", "mygene", "myvariant",
-        "reactome", "string-db", "intact", "wikipathways", "opentargets",
-        "geo", "arrayexpress", "gtex", "hpa", "expression-atlas", "single-cell-atlas", "depmap",
+        "pubmed",
+        "chembl",
+        "crossref",
+        "uniprot",
+        "europepmc",
+        "openalex",
+        "semantic-scholar",
+        "arxiv",
+        "biorxiv",
+        "rcsb-pdb",
+        "pdbe",
+        "alphafold",
+        "interpro",
+        "sifts",
+        "pubchem",
+        "bindingdb",
+        "gtopdb",
+        "surechembl",
+        "chebi",
+        "ensembl",
+        "ncbi-gene",
+        "dbsnp",
+        "clinvar",
+        "gnomad",
+        "ucsc",
+        "mygene",
+        "myvariant",
+        "reactome",
+        "string-db",
+        "intact",
+        "wikipathways",
+        "opentargets",
+        "geo",
+        "arrayexpress",
+        "gtex",
+        "hpa",
+        "expression-atlas",
+        "single-cell-atlas",
+        "depmap",
         "eutils",
     ]
     .into_iter()
     .collect();
 
-    let actual_active: std::collections::BTreeSet<&str> =
-        registry.iter().map(|d| d.id).collect();
+    let actual_active: std::collections::BTreeSet<&str> = registry.iter().map(|d| d.id).collect();
     assert_eq!(expected_active, actual_active);
 
-    let rejected_ids: std::collections::BTreeSet<&str> =
-        rejected.iter().map(|d| d.id).collect();
+    let rejected_ids: std::collections::BTreeSet<&str> = rejected.iter().map(|d| d.id).collect();
     assert_eq!(
         rejected_ids,
         ["biogrid", "kegg"].into_iter().collect(),
@@ -3102,11 +3273,97 @@ async fn test_stdio_science_project_mutation_is_actor_gated_and_idempotent() {
         let project_id = first["projectId"].as_str().expect("projectId").to_owned();
         assert!(!project_id.is_empty());
 
+        // Read authority is owner-scoped too. The creator can reopen and list
+        // the project without another permission prompt; a different owner
+        // receives neither the bundle nor a project-list disclosure.
+        let permissions_after_create = client.permission_request_count();
+        let owned_project: serde_json::Value = serde_json::from_str(
+            client
+                .ext_method(
+                    "x.ai/science/project_get",
+                    serde_json::json!({
+                        "sessionId": session_id.0.as_ref(),
+                        "ownerId": "science-owner",
+                        "storeRoot": store_root,
+                        "projectId": project_id.as_str(),
+                    }),
+                )
+                .await
+                .expect("owner could not reopen project")
+                .0
+                .get(),
+        )
+        .expect("project_get returned JSON");
+        assert_eq!(
+            owned_project["project"]["project_id"], project_id,
+            "project_get returned the wrong project: {owned_project}"
+        );
+        assert!(
+            client
+                .ext_method(
+                    "x.ai/science/project_get",
+                    serde_json::json!({
+                        "sessionId": session_id.0.as_ref(),
+                        "ownerId": "other-owner",
+                        "storeRoot": store_root,
+                        "projectId": project_id.as_str(),
+                    }),
+                )
+                .await
+                .is_err(),
+            "foreign owner reopened the project"
+        );
+        let owned_projects: serde_json::Value = serde_json::from_str(
+            client
+                .ext_method(
+                    "x.ai/science/project_list",
+                    serde_json::json!({
+                        "sessionId": session_id.0.as_ref(),
+                        "ownerId": "science-owner",
+                        "storeRoot": store_root,
+                    }),
+                )
+                .await
+                .expect("owner could not list projects")
+                .0
+                .get(),
+        )
+        .expect("project_list returned JSON");
+        assert!(
+            owned_projects
+                .as_array()
+                .is_some_and(|projects| projects.iter().any(|project| {
+                    project["project_id"] == serde_json::Value::String(project_id.clone())
+                })),
+            "owned project missing from project_list: {owned_projects}"
+        );
+        let foreign_projects: serde_json::Value = serde_json::from_str(
+            client
+                .ext_method(
+                    "x.ai/science/project_list",
+                    serde_json::json!({
+                        "sessionId": session_id.0.as_ref(),
+                        "ownerId": "other-owner",
+                        "storeRoot": store_root,
+                    }),
+                )
+                .await
+                .expect("foreign project_list should return an undisclosing empty list")
+                .0
+                .get(),
+        )
+        .expect("foreign project_list returned JSON");
+        assert_eq!(foreign_projects, serde_json::json!([]));
+        assert_eq!(
+            client.permission_request_count(),
+            permissions_after_create,
+            "read-only project queries asked for permission"
+        );
+
         // A newly-created project has no run yet. The desktop still asks for
         // its configured default run when opening it; the Rust list query must
         // return an honest empty list after verifying project ownership, not
         // turn every new project into a seed error.
-        let permissions_after_create = client.permission_request_count();
         let empty: serde_json::Value = serde_json::from_str(
             client
                 .ext_method(
@@ -3182,7 +3439,10 @@ async fn test_stdio_science_project_mutation_is_actor_gated_and_idempotent() {
         )
         .expect("replay returned JSON");
         assert_eq!(replay["replayed"], true, "replay: {replay}");
-        assert_eq!(replay["projectId"], project_id, "replay created a new project");
+        assert_eq!(
+            replay["projectId"], project_id,
+            "replay created a new project"
+        );
 
         // A different operation id is a different mutation and must create a
         // second project — otherwise the check above would pass trivially.
@@ -3374,10 +3634,15 @@ async fn test_stdio_science_project_mutation_relative_store_is_workspace_bound()
             response["runtimeAuthority"],
             "SessionActor-gated ACP adapter"
         );
-        let store = xai_grok_science::project::ProjectStore::new(
-            workdir.path().join("science-store"),
+        let store =
+            xai_grok_science::project::ProjectStore::new(workdir.path().join("science-store"));
+        assert_eq!(
+            store
+                .list_projects()
+                .expect("relative store projects")
+                .len(),
+            1
         );
-        assert_eq!(store.list_projects().expect("relative store projects").len(), 1);
     })
     .await;
 }
@@ -3493,6 +3758,7 @@ async fn test_stdio_science_operator_gate_snapshot_denies_read_and_mutation_befo
                 "x.ai/science/project_list",
                 serde_json::json!({
                     "sessionId": session_id.0.as_ref(),
+                    "ownerId": "science-owner",
                     "storeRoot": store_root,
                 }),
             )
@@ -3799,6 +4065,72 @@ async fn test_stdio_science_project_migrate_refusal_writes_no_project() {
     .await;
 }
 
+/// Disabling only `migration_chain` must stop the legacy endpoint before a
+/// durable authority run, permission prompt, project, or operation is opened.
+/// `research_project` intentionally remains at its compiled preview default.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_project_migrate_requires_migration_chain_gate() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let store_root = workdir.path().join("science-migration-disabled-store");
+        let home = tempfile::TempDir::new().expect("create temp home");
+        let lumen_dir = home.path().join(".lumen");
+        std::fs::create_dir_all(&lumen_dir).expect("create isolated Lumen home");
+        std::fs::write(
+            lumen_dir.join("config.toml"),
+            "[science_features]\nmigration_chain = \"disabled\"\n",
+        )
+        .expect("write migration-only disabled config");
+
+        let client = GrokStdioClient::spawn_with_home(&server, workdir.path(), home).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+        let rejected = client
+            .ext_method(
+                "x.ai/science/project_migrate",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "ownerId": "science-owner",
+                    "storeRoot": store_root,
+                    "runId": "legacy-run-disabled",
+                    "title": "Must not exist",
+                    "question": "Did the migration-only gate stop this?",
+                    "operationId": "op-migrate-disabled",
+                    "approvalTimeoutMs": 5_000,
+                }),
+            )
+            .await
+            .expect_err("migration_chain-disabled request was accepted");
+        let error = format!("{rejected:?}");
+        assert!(
+            error.contains("feature disabled: migration_chain"),
+            "migration was rejected for the wrong reason: {error}"
+        );
+        assert_eq!(
+            client.permission_request_count(),
+            0,
+            "disabled migration reached the permission seam"
+        );
+        assert!(
+            !store_root.join("runs").exists(),
+            "disabled migration opened a durable run"
+        );
+        assert!(
+            !store_root.join("projects").exists(),
+            "disabled migration created a project"
+        );
+        assert!(
+            !store_root.join("operations").exists(),
+            "disabled migration burned its operation id"
+        );
+    })
+    .await;
+}
+
 /// The shipped review endpoint must not be a preview echo. It reopens a
 /// succeeded source run after permission, hashes the registered bytes, writes
 /// one durable project review, and commits a manifest/evidence/provenance
@@ -3817,7 +4149,6 @@ async fn test_stdio_science_review_record_is_actor_gated_artifact_bound_and_idem
         let client = GrokStdioClient::spawn(&server, &workspace).await;
         client.initialize_with_timeout().await;
         let session_id = client.create_session_with_timeout(&workspace).await;
-
         let created: serde_json::Value = serde_json::from_str(
             client
                 .ext_method(
@@ -3838,7 +4169,10 @@ async fn test_stdio_science_review_record_is_actor_gated_artifact_bound_and_idem
                 .get(),
         )
         .expect("project create JSON");
-        let project_id = created["projectId"].as_str().expect("project id").to_owned();
+        let project_id = created["projectId"]
+            .as_str()
+            .expect("project id")
+            .to_owned();
 
         // Seed a genuine succeeded ScienceStore run. The review request cites
         // only its run id + digest; Rust must resolve and rehash the bytes.
@@ -3935,7 +4269,10 @@ async fn test_stdio_science_review_record_is_actor_gated_artifact_bound_and_idem
                 .get(),
         )
         .expect("review response JSON");
-        assert_eq!(response["runtimeAuthority"], "SessionActor-gated ACP adapter");
+        assert_eq!(
+            response["runtimeAuthority"],
+            "SessionActor-gated ACP adapter"
+        );
         assert_eq!(response["kind"], "review_record");
         assert_eq!(response["replayed"], false);
         assert_eq!(response["result"]["project_id"], project_id);
@@ -3951,8 +4288,7 @@ async fn test_stdio_science_review_record_is_actor_gated_artifact_bound_and_idem
         );
 
         let project_store = xai_grok_science::project::ProjectStore::new(&store_root);
-        let project_id_typed =
-            xai_grok_science::project::ProjectId(project_id.clone());
+        let project_id_typed = xai_grok_science::project::ProjectId(project_id.clone());
         let reviews = project_store
             .list_reviews(&project_id_typed)
             .expect("reopen reviews");
@@ -3964,8 +4300,7 @@ async fn test_stdio_science_review_record_is_actor_gated_artifact_bound_and_idem
         assert_eq!(review_runs.len(), 1, "review must open one authority run");
         let authority_run = xai_grok_science::RunId::new(review_runs[0].clone());
         assert_eq!(
-            response["result"]["authority_run_id"],
-            authority_run.0,
+            response["result"]["authority_run_id"], authority_run.0,
             "review record must bind the actor run that authorized it"
         );
         assert_eq!(
@@ -3988,11 +4323,9 @@ async fn test_stdio_science_review_record_is_actor_gated_artifact_bound_and_idem
         assert_eq!(manifests[0].relative_path, Path::new("review_record.json"));
         assert_eq!(science_store.evidence(&authority_run).unwrap().len(), 1);
         assert_eq!(science_store.provenance(&authority_run).unwrap().len(), 1);
-        let verified = xai_grok_science::review::verify_for_goal_completion(
-            &science_store,
-            &authority_run,
-        )
-        .expect("host-verify review authority run");
+        let verified =
+            xai_grok_science::review::verify_for_goal_completion(&science_store, &authority_run)
+                .expect("host-verify review authority run");
         assert_eq!(verified.artifact_count, 1);
         assert_eq!(verified.evidence_count, 1);
         assert_eq!(verified.provenance_count, 1);
@@ -4155,7 +4488,10 @@ async fn test_stdio_science_review_record_denied_writes_no_review_or_artifact() 
                 }),
             )
             .await;
-        assert!(denied.is_err(), "denied review returned success: {denied:?}");
+        assert!(
+            denied.is_err(),
+            "denied review returned success: {denied:?}"
+        );
         assert!(
             project_store
                 .list_reviews(&project.project_id)
@@ -4175,7 +4511,11 @@ async fn test_stdio_science_review_record_denied_writes_no_review_or_artifact() 
             .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
             .filter(|id| id != &source_run.0)
             .collect();
-        assert_eq!(run_ids.len(), 1, "denial must have one durable authority run");
+        assert_eq!(
+            run_ids.len(),
+            1,
+            "denial must have one durable authority run"
+        );
         let denied_run = xai_grok_science::RunId::new(run_ids[0].clone());
         let denied_record = science_store.load_run(&denied_run).unwrap();
         assert!(matches!(
@@ -4185,6 +4525,278 @@ async fn test_stdio_science_review_record_denied_writes_no_review_or_artifact() 
         assert!(science_store.artifacts(&denied_run).unwrap().is_empty());
         assert!(science_store.evidence(&denied_run).unwrap().is_empty());
         assert!(science_store.provenance(&denied_run).unwrap().is_empty());
+    })
+    .await;
+}
+
+/// Kernel identity probing is execution: the rebuilt product must route it
+/// through the SessionActor and production permission seam before hashing or
+/// spawning the interpreter, then commit its assessment to the Science store.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_kernel_admission_is_actor_gated_and_store_owned() {
+    let Some(python) = workflow_python3() else {
+        panic!("no python3 on PATH: kernel admission must probe a real interpreter");
+    };
+    with_local_set(|| async move {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let workspace = std::fs::canonicalize(workdir.path()).expect("canonical workspace");
+        let store_root = workspace.join("science-kernel-store");
+        let client = GrokStdioClient::spawn(&server, &workspace).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(&workspace).await;
+        let created: serde_json::Value = serde_json::from_str(
+            client
+                .ext_method(
+                    "x.ai/science/project_create",
+                    serde_json::json!({
+                        "sessionId": session_id.0.as_ref(),
+                        "ownerId": "science-owner",
+                        "storeRoot": store_root,
+                        "title": "Kernel admission project",
+                        "researchQuestion": "Can the actor admit this local interpreter?",
+                        "operationId": "op-kernel-project-create",
+                        "approvalTimeoutMs": 5_000,
+                    }),
+                )
+                .await
+                .expect("actor-gated project_create failed")
+                .0
+                .get(),
+        )
+        .expect("project_create returned JSON");
+        let project_id = created["projectId"]
+            .as_str()
+            .expect("project_create returned projectId")
+            .to_owned();
+        assert_eq!(client.permission_request_count(), 1);
+        let runs_before_boundaries = std::fs::read_dir(store_root.join("runs"))
+            .expect("project create must leave an authority run")
+            .count();
+
+        // Syntax and session boundaries must fail before a durable run or
+        // permission prompt. This rejects an ACP-only probe bypass.
+        for (label, params) in [
+            (
+                "relative interpreter",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "ownerId": "science-owner",
+                    "projectId": project_id.clone(),
+                    "storeRoot": store_root,
+                    "kernelId": "python-relative",
+                    "kind": "python",
+                    "interpreterPath": "python3",
+                }),
+            ),
+            (
+                "unknown session",
+                serde_json::json!({
+                    "sessionId": "forged-session",
+                    "ownerId": "science-owner",
+                    "projectId": project_id.clone(),
+                    "storeRoot": store_root,
+                    "kernelId": "python-forged",
+                    "kind": "python",
+                    "interpreterPath": python,
+                }),
+            ),
+        ] {
+            let error = client
+                .ext_method("x.ai/science/kernel_admission", params)
+                .await
+                .expect_err("invalid kernel admission was accepted");
+            assert_ne!(
+                error.code,
+                acp::ErrorCode::MethodNotFound,
+                "{label} reached an unwired endpoint"
+            );
+        }
+        assert_eq!(client.permission_request_count(), 1);
+        assert_eq!(
+            std::fs::read_dir(store_root.join("runs")).unwrap().count(),
+            runs_before_boundaries,
+            "invalid kernel admission opened another durable run"
+        );
+
+        let response = tokio::time::timeout(
+            Duration::from_secs(60),
+            client.ext_method(
+                "x.ai/science/kernel_admission",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "ownerId": "science-owner",
+                    "projectId": project_id.clone(),
+                    "storeRoot": store_root,
+                    "kernelId": "python-product",
+                    "kind": "python",
+                    "interpreterPath": python,
+                    "probeTimeoutMs": 30_000,
+                    "approvalTimeoutMs": 5_000,
+                }),
+            ),
+        )
+        .await
+        .expect("kernel admission timed out")
+        .unwrap_or_else(|error| {
+            panic!(
+                "kernel admission failed: {error:?}\nstderr:\n{}",
+                client.stderr()
+            )
+        });
+        let result: serde_json::Value =
+            serde_json::from_str(response.0.get()).expect("kernel admission returned JSON");
+        assert_eq!(result["runtimeAuthority"], "SessionActor-gated ACP adapter");
+        assert_eq!(result["state"], "succeeded", "result: {result}");
+        assert_eq!(
+            result["admission"]["admission_status"], "Admitted",
+            "result: {result}"
+        );
+        assert!(
+            result["admission"]["executable_hash"]
+                .as_str()
+                .is_some_and(|hash| hash.len() == 64),
+            "missing probed executable hash: {result}"
+        );
+        assert_eq!(result["artifacts"].as_array().map(Vec::len), Some(1));
+        assert_eq!(result["evidence"].as_array().map(Vec::len), Some(1));
+        assert_eq!(result["provenance"].as_array().map(Vec::len), Some(1));
+        assert_eq!(result["approvals"][0]["decision"], "allow");
+        assert_eq!(client.permission_request_count(), 2);
+
+        let run_id = xai_grok_science::RunId::new(
+            result["runId"].as_str().expect("durable authority run id"),
+        );
+        let store = xai_grok_science::ScienceStore::new(&store_root);
+        assert_eq!(
+            store.load_run(&run_id).expect("reopen kernel run").state,
+            xai_grok_science::RunState::Succeeded
+        );
+        let artifacts = store.artifacts(&run_id).expect("reopen artifacts");
+        assert_eq!(artifacts.len(), 1);
+        assert_eq!(
+            artifacts[0].relative_path,
+            Path::new("kernel-admission.json")
+        );
+        let bytes = store
+            .artifact_bytes(
+                &xai_grok_science::ProjectId::new(project_id),
+                &run_id,
+                "science-owner",
+                &artifacts[0].relative_path,
+            )
+            .expect("reopen registered kernel artifact");
+        assert_eq!(format!("{:x}", Sha256::digest(bytes)), artifacts[0].sha256);
+        assert!(
+            !store_root.join("kernel-admission.json").exists(),
+            "kernel admission wrote a loose artifact outside the run store"
+        );
+    })
+    .await;
+}
+
+/// Cancelling the real permission prompt must close the durable authority run
+/// without probing the interpreter or registering any scientific output.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_kernel_admission_denied_writes_nothing() {
+    let Some(python) = workflow_python3() else {
+        panic!("no python3 on PATH: kernel admission must name a real interpreter");
+    };
+    with_local_set(|| async move {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let workspace = std::fs::canonicalize(workdir.path()).expect("canonical workspace");
+        let store_root = workspace.join("science-kernel-denied-store");
+        let creator = GrokStdioClient::spawn(&server, &workspace).await;
+        creator.initialize_with_timeout().await;
+        let creator_session = creator.create_session_with_timeout(&workspace).await;
+        let created: serde_json::Value = serde_json::from_str(
+            creator
+                .ext_method(
+                    "x.ai/science/project_create",
+                    serde_json::json!({
+                        "sessionId": creator_session.0.as_ref(),
+                        "ownerId": "science-owner",
+                        "storeRoot": store_root,
+                        "title": "Denied kernel admission project",
+                        "researchQuestion": "Must denial leave no kernel output?",
+                        "operationId": "op-kernel-denied-project-create",
+                        "approvalTimeoutMs": 5_000,
+                    }),
+                )
+                .await
+                .expect("actor-gated project_create failed")
+                .0
+                .get(),
+        )
+        .expect("project_create returned JSON");
+        let project_id = created["projectId"]
+            .as_str()
+            .expect("project_create returned projectId")
+            .to_owned();
+        assert_eq!(creator.permission_request_count(), 1);
+        drop(creator);
+
+        let runs_before: std::collections::BTreeSet<_> = std::fs::read_dir(store_root.join("runs"))
+            .expect("project create must leave an authority run")
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        let client = GrokStdioClient::spawn_with_permission_response(
+            &server,
+            &workspace,
+            PermissionResponse::Reject,
+        )
+        .await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(&workspace).await;
+        let denied = client
+            .ext_method(
+                "x.ai/science/kernel_admission",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "ownerId": "science-owner",
+                    "projectId": project_id,
+                    "storeRoot": store_root,
+                    "kernelId": "python-denied",
+                    "kind": "python",
+                    "interpreterPath": python,
+                    "probeTimeoutMs": 30_000,
+                    "approvalTimeoutMs": 5_000,
+                }),
+            )
+            .await;
+        assert!(
+            denied.is_err(),
+            "denied kernel admission returned success: {denied:?}"
+        );
+        assert_eq!(client.permission_request_count(), 1);
+
+        let runs_after: std::collections::BTreeSet<_> = std::fs::read_dir(store_root.join("runs"))
+            .expect("denial must leave a durable run")
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        let denied_runs: Vec<_> = runs_after.difference(&runs_before).collect();
+        assert_eq!(denied_runs.len(), 1);
+        let run_id =
+            xai_grok_science::RunId::new(denied_runs[0].to_str().expect("UTF-8 run id").to_owned());
+        let store = xai_grok_science::ScienceStore::new(&store_root);
+        assert_eq!(
+            store.load_run(&run_id).expect("reopen denied run").state,
+            xai_grok_science::RunState::Cancelled
+        );
+        assert!(store.artifacts(&run_id).expect("artifacts").is_empty());
+        assert!(store.evidence(&run_id).expect("evidence").is_empty());
+        assert!(store.provenance(&run_id).expect("provenance").is_empty());
+        assert!(
+            !store_root.join("kernel-admission.json").exists(),
+            "denied kernel admission wrote a loose artifact"
+        );
     })
     .await;
 }
@@ -4272,7 +4884,9 @@ fn attempt_dirs(output_root: &Path, run_id: &str, step_id: &str) -> Vec<String> 
 #[ignore] // requires pre-built binary
 async fn test_stdio_science_workflow_execute_is_actor_gated_and_idempotent() {
     let Some(python) = workflow_python3() else {
-        panic!("no python3 on PATH: this test proves a real interpreter runs, so it cannot be skipped into a pass");
+        panic!(
+            "no python3 on PATH: this test proves a real interpreter runs, so it cannot be skipped into a pass"
+        );
     };
     with_local_set(|| async move {
         let server = MockInferenceServer::start()
@@ -4342,7 +4956,9 @@ async fn test_stdio_science_workflow_execute_is_actor_gated_and_idempotent() {
             .as_object()
             .unwrap_or_else(|| panic!("no commit manifest: {first}"));
         assert!(
-            manifest.values().any(|d| d == &Value::String(expected_stdout.clone())),
+            manifest
+                .values()
+                .any(|d| d == &Value::String(expected_stdout.clone())),
             "stdout not committed with its true digest: {manifest:?}"
         );
         assert!(
@@ -4413,7 +5029,11 @@ async fn test_stdio_science_workflow_execute_is_actor_gated_and_idempotent() {
         .expect("second returned JSON");
         assert_eq!(second["replayed"], false, "second: {second}");
         assert_eq!(second["state"], "succeeded", "second: {second}");
-        assert_ne!(second["runId"], Value::String(run_id), "second run reused the first run id");
+        assert_ne!(
+            second["runId"],
+            Value::String(run_id),
+            "second run reused the first run id"
+        );
         // Content-addressed commits: the same cell with the same inputs commits
         // once, so the second run REUSES rather than duplicating the artifact.
         assert_eq!(
@@ -4429,7 +5049,9 @@ async fn test_stdio_science_workflow_execute_is_actor_gated_and_idempotent() {
 #[ignore] // requires pre-built binary
 async fn test_stdio_science_workflow_execute_fails_closed() {
     let Some(python) = workflow_python3() else {
-        panic!("no python3 on PATH: this test proves a real interpreter runs, so it cannot be skipped into a pass");
+        panic!(
+            "no python3 on PATH: this test proves a real interpreter runs, so it cannot be skipped into a pass"
+        );
     };
     with_local_set(|| async move {
         let server = MockInferenceServer::start()
@@ -4458,8 +5080,7 @@ async fn test_stdio_science_workflow_execute_fails_closed() {
                 }),
             )
             .await;
-        let missing_op = missing_op
-            .expect_err("workflow_execute without operationId was accepted");
+        let missing_op = missing_op.expect_err("workflow_execute without operationId was accepted");
         // Not merely "an error": a binary with no `workflow_execute` at all
         // would also error, and this test would then pass while proving
         // nothing. The refusal must come from parameter validation.
@@ -4484,8 +5105,8 @@ async fn test_stdio_science_workflow_execute_fails_closed() {
                 }),
             )
             .await;
-        let wrong_session = wrong_session
-            .expect_err("workflow_execute with an unknown session was accepted");
+        let wrong_session =
+            wrong_session.expect_err("workflow_execute with an unknown session was accepted");
         assert_ne!(
             wrong_session.code,
             acp::ErrorCode::MethodNotFound,
@@ -4510,7 +5131,9 @@ async fn test_stdio_science_workflow_execute_fails_closed() {
 #[ignore] // requires pre-built binary
 async fn test_stdio_science_workflow_execute_denied_runs_nothing() {
     let Some(python) = workflow_python3() else {
-        panic!("no python3 on PATH: this test proves a real interpreter runs, so it cannot be skipped into a pass");
+        panic!(
+            "no python3 on PATH: this test proves a real interpreter runs, so it cannot be skipped into a pass"
+        );
     };
     with_local_set(|| async move {
         let server = MockInferenceServer::start()
@@ -4572,7 +5195,10 @@ async fn test_stdio_science_workflow_execute_denied_runs_nothing() {
         for name in ["workflow-cells", "workflow-runtime", "workflow-outputs"] {
             let dir = store_root.join(name);
             let count = std::fs::read_dir(&dir).map(Iterator::count).unwrap_or(0);
-            assert_eq!(count, 0, "denied execution left {count} entry/entries in {name}");
+            assert_eq!(
+                count, 0,
+                "denied execution left {count} entry/entries in {name}"
+            );
         }
 
         // The durable Science run exists and records the refusal — a request

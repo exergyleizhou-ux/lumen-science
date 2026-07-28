@@ -136,7 +136,7 @@ jobs:
   rust-science:
     name: Rust xai-grok-science (test + clippy)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: agent
@@ -185,6 +185,40 @@ jobs:
 
       - name: cargo clippy -p xai-grok-science -D warnings
         run: cargo clippy -p xai-grok-science --all-targets --locked -- -D warnings
+
+      # Unit tests prove the protocol functions in-process. These selected
+      # product tests prove that the shipped `lumen` composition root exposes
+      # the same authority chain over ACP stdio: SessionActor, production
+      # permission prompt, durable terminal state, and store-owned artifacts.
+      # Every test is offline and uses the local mock inference server.
+      - name: Build Lumen composition-root binary
+        run: cargo build -p xai-grok-pager-bin --bin lumen --locked
+
+      - name: Required offline Science built-binary authority proofs
+        env:
+          GROK_BINARY: ${{ github.workspace }}/agent/target/debug/lumen
+        run: |
+          set -euo pipefail
+          tests=(
+            test_stdio_science_seq_analyze_is_actor_gated_and_store_owned
+            test_stdio_science_seq_analyze_boundaries_fail_closed
+            test_stdio_science_seq_analyze_denied_writes_nothing
+            test_stdio_science_seq_analyze_permission_timeout_writes_nothing
+            test_stdio_science_seq_analyze_malformed_input_fails_without_outputs
+            test_stdio_science_project_mutation_is_actor_gated_and_idempotent
+            test_stdio_science_project_mutation_denied_writes_nothing
+            test_stdio_science_project_migrate_is_actor_gated_and_idempotent
+            test_stdio_science_project_migrate_refusal_writes_no_project
+            test_stdio_science_project_migrate_requires_migration_chain_gate
+            test_stdio_science_review_record_is_actor_gated_artifact_bound_and_idempotent
+            test_stdio_science_review_record_denied_writes_no_review_or_artifact
+            test_stdio_science_kernel_admission_is_actor_gated_and_store_owned
+            test_stdio_science_kernel_admission_denied_writes_nothing
+          )
+          for test_name in "${tests[@]}"; do
+            cargo test -p xai-grok-shell --test test_built_binary_e2e --locked \
+              "$test_name" -- --ignored --exact --test-threads=1
+          done
 
   build:
     name: Cross-compile (${{ matrix.target.os }}-${{ matrix.target.arch }})

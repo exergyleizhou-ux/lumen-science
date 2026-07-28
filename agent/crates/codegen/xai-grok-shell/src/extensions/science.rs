@@ -37,38 +37,248 @@ fn internal(error: impl std::fmt::Display) -> acp::Error {
     acp::Error::internal_error().data(error.to_string())
 }
 
+#[cfg(unix)]
 fn canonical_dir_within(path: PathBuf, workspace: &std::path::Path) -> Result<PathBuf, acp::Error> {
-    use std::path::Component;
+    canonical_dir_within_unix(path, workspace, |_| Ok(()))
+}
 
-    if path
-        .components()
-        .any(|part| matches!(part, Component::CurDir | Component::ParentDir))
-    {
-        return Err(acp::Error::invalid_params()
-            .data("science path must contain no dot components"));
-    }
-    let workspace = dunce::canonicalize(workspace).map_err(internal)?;
-    let path = if path.is_absolute() {
-        path
-    } else {
-        workspace.join(path)
+/// Create a directory beneath a pinned workspace descriptor.
+///
+/// The callback is a deterministic test seam invoked after each child
+/// descriptor is opened. Production supplies a no-op. Even if a pathname is
+/// renamed and replaced by a symlink in that seam, subsequent operations stay
+/// relative to the retained descriptor.
+#[cfg(unix)]
+fn canonical_dir_within_unix(
+    path: PathBuf,
+    workspace: &std::path::Path,
+    mut after_component_open: impl FnMut(&std::path::Path) -> std::io::Result<()>,
+) -> Result<PathBuf, acp::Error> {
+    use std::{
+        ffi::{CString, OsStr},
+        fs::{File, OpenOptions},
+        os::{
+            fd::{AsRawFd as _, FromRawFd as _},
+            unix::{
+                ffi::OsStrExt as _,
+                fs::{MetadataExt as _, OpenOptionsExt as _},
+            },
+        },
+        path::Component,
     };
-    let mut existing = path.as_path();
-    while !existing.exists() {
-        existing = existing.parent().ok_or_else(|| {
-            acp::Error::invalid_params().data("science path has no existing ancestor")
+
+    fn invalid(message: impl Into<String>) -> acp::Error {
+        acp::Error::invalid_params().data(message.into())
+    }
+
+    fn validate_components(path: &std::path::Path) -> Result<(), acp::Error> {
+        if path
+            .components()
+            .any(|part| matches!(part, Component::CurDir | Component::ParentDir))
+        {
+            return Err(invalid("science path must contain no dot components"));
+        }
+        Ok(())
+    }
+
+    fn relative_to_workspace(
+        path: &std::path::Path,
+        workspace: &std::path::Path,
+    ) -> Result<PathBuf, acp::Error> {
+        if !path.is_absolute() {
+            validate_components(path)?;
+            return Ok(path.to_path_buf());
+        }
+        validate_components(path)?;
+        if let Ok(relative) = path.strip_prefix(workspace) {
+            return Ok(relative.to_path_buf());
+        }
+
+        // Preserve platform aliases such as macOS `/var` -> `/private/var`
+        // without using that pathname for any write. The canonical existing
+        // ancestor is used only to derive a descriptor-relative component
+        // list; mkdir/open below starts again from the pinned workspace.
+        let mut existing = path;
+        while std::fs::symlink_metadata(existing)
+            .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+        {
+            existing = existing
+                .parent()
+                .ok_or_else(|| invalid("science path has no existing ancestor"))?;
+        }
+        let canonical_existing = dunce::canonicalize(existing).map_err(internal)?;
+        let existing_relative = canonical_existing
+            .strip_prefix(workspace)
+            .map_err(|_| invalid("science path must be inside session cwd"))?;
+        let unresolved = path
+            .strip_prefix(existing)
+            .map_err(|_| invalid("science path cannot be resolved beneath session cwd"))?;
+        let relative = existing_relative.join(unresolved);
+        validate_components(&relative)?;
+        Ok(relative)
+    }
+
+    fn name(name: &OsStr) -> Result<CString, acp::Error> {
+        CString::new(name.as_bytes()).map_err(|_| invalid("science path component contains NUL"))
+    }
+
+    fn open_child(directory: &File, child: &OsStr) -> Result<File, acp::Error> {
+        let child = name(child)?;
+        // SAFETY: the retained directory descriptor and NUL-terminated child
+        // name are live for the duration of the call.
+        let fd = unsafe {
+            libc::openat(
+                directory.as_raw_fd(),
+                child.as_ptr(),
+                libc::O_RDONLY
+                    | libc::O_DIRECTORY
+                    | libc::O_CLOEXEC
+                    | libc::O_NOFOLLOW
+                    | libc::O_NONBLOCK,
+            )
+        };
+        if fd < 0 {
+            return Err(internal(std::io::Error::last_os_error()));
+        }
+        // SAFETY: a nonnegative openat result transfers one owned descriptor.
+        Ok(unsafe { File::from_raw_fd(fd) })
+    }
+
+    fn create_child(directory: &File, child: &OsStr) -> Result<(), acp::Error> {
+        let child = name(child)?;
+        // SAFETY: the retained directory descriptor and NUL-terminated child
+        // name are live for the duration of the call.
+        if unsafe { libc::mkdirat(directory.as_raw_fd(), child.as_ptr(), 0o700) } == 0 {
+            return Ok(());
+        }
+        let error = std::io::Error::last_os_error();
+        if error.kind() == std::io::ErrorKind::AlreadyExists {
+            Ok(())
+        } else {
+            Err(internal(error))
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn handle_path(directory: &File) -> Result<PathBuf, acp::Error> {
+        use std::os::unix::ffi::OsStringExt as _;
+
+        let mut buffer = vec![0_u8; libc::PATH_MAX as usize];
+        // SAFETY: F_GETPATH writes at most PATH_MAX bytes into this writable
+        // buffer for the live descriptor.
+        if unsafe {
+            libc::fcntl(
+                directory.as_raw_fd(),
+                libc::F_GETPATH,
+                buffer.as_mut_ptr().cast::<libc::c_char>(),
+            )
+        } < 0
+        {
+            return Err(internal(std::io::Error::last_os_error()));
+        }
+        let end = buffer.iter().position(|byte| *byte == 0).ok_or_else(|| {
+            internal(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "directory handle path was not NUL terminated",
+            ))
         })?;
+        Ok(PathBuf::from(std::ffi::OsString::from_vec(
+            buffer[..end].to_vec(),
+        )))
     }
-    let existing = dunce::canonicalize(existing).map_err(internal)?;
-    if !existing.starts_with(&workspace) {
-        return Err(acp::Error::invalid_params().data("science path must be inside session cwd"));
+
+    #[cfg(target_os = "linux")]
+    fn handle_path(directory: &File) -> Result<PathBuf, acp::Error> {
+        let link = std::fs::read_link(format!("/proc/self/fd/{}", directory.as_raw_fd()))
+            .map_err(internal)?;
+        if link.as_os_str().as_bytes().ends_with(b" (deleted)") {
+            return Err(invalid(
+                "science directory was unlinked during provisioning",
+            ));
+        }
+        dunce::canonicalize(link).map_err(internal)
     }
-    std::fs::create_dir_all(&path).map_err(internal)?;
-    let canonical = dunce::canonicalize(path).map_err(internal)?;
-    if !canonical.starts_with(&workspace) {
-        return Err(acp::Error::invalid_params().data("science path must be inside session cwd"));
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    fn handle_path(_directory: &File) -> Result<PathBuf, acp::Error> {
+        Err(acp::Error::internal_error()
+            .data("secure science directory handle verification is unsupported on this Unix"))
     }
-    Ok(canonical)
+
+    fn same_directory(left: &File, right: &File) -> Result<bool, acp::Error> {
+        let left = left.metadata().map_err(internal)?;
+        let right = right.metadata().map_err(internal)?;
+        Ok(left.is_dir()
+            && right.is_dir()
+            && left.dev() == right.dev()
+            && left.ino() == right.ino())
+    }
+
+    validate_components(&path)?;
+    let workspace = dunce::canonicalize(workspace).map_err(internal)?;
+    if !workspace.is_absolute() || !workspace.is_dir() {
+        return Err(invalid(
+            "science workspace must resolve to an absolute directory",
+        ));
+    }
+    let relative = relative_to_workspace(&path, &workspace)?;
+
+    let mut options = OpenOptions::new();
+    options
+        .read(true)
+        .custom_flags(libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    let workspace_directory = options.open(&workspace).map_err(internal)?;
+    let pinned_workspace = handle_path(&workspace_directory)?;
+    if pinned_workspace != workspace {
+        return Err(invalid(
+            "science workspace identity changed during provisioning",
+        ));
+    }
+
+    let mut current = workspace_directory;
+    let mut opened_relative = PathBuf::new();
+    for component in relative.components() {
+        let Component::Normal(component) = component else {
+            return Err(invalid(
+                "science path must contain only normal relative components",
+            ));
+        };
+        create_child(&current, component)?;
+        let child = open_child(&current, component)?;
+        if !child.metadata().map_err(internal)?.is_dir() {
+            return Err(invalid("science path component is not a directory"));
+        }
+        current = child;
+        opened_relative.push(component);
+        after_component_open(&opened_relative).map_err(internal)?;
+    }
+
+    let final_path = handle_path(&current)?;
+    if !final_path.starts_with(&pinned_workspace) {
+        return Err(invalid(
+            "science directory escaped the pinned session workspace",
+        ));
+    }
+    let reopened = options.open(&final_path).map_err(internal)?;
+    if !same_directory(&current, &reopened)? {
+        return Err(invalid(
+            "science directory identity changed during final verification",
+        ));
+    }
+    Ok(final_path)
+}
+
+/// Non-Unix builds fail closed until directory-relative creation and
+/// reparse-point/handle-identity verification are implemented for that
+/// platform. Keeping the older `create_dir_all` flow here would preserve
+/// function while knowingly retaining the same TOCTOU escape.
+#[cfg(not(unix))]
+fn canonical_dir_within(
+    _path: PathBuf,
+    _workspace: &std::path::Path,
+) -> Result<PathBuf, acp::Error> {
+    Err(acp::Error::internal_error()
+        .data("secure science directory provisioning is not implemented on this platform"))
 }
 
 /// Resolve an existing directory inside the session workspace without writing.
@@ -165,6 +375,43 @@ mod canonical_dir_tests {
 
         assert!(canonical_dir_within(target.clone(), &workspace).is_err());
         assert!(!outside.join("must-not-be-created").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn directory_confinement_keeps_creation_on_pinned_ancestor_after_swap() {
+        use super::canonical_dir_within_unix;
+
+        let workspace = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let workspace = std::fs::canonicalize(workspace.path()).unwrap();
+        let outside = std::fs::canonicalize(outside.path()).unwrap();
+        let original = workspace.join("ancestor");
+        let pinned = workspace.join("ancestor-pinned");
+        std::fs::create_dir(&original).unwrap();
+
+        let mut swapped = false;
+        let resolved = canonical_dir_within_unix(
+            original.join("created-after-swap"),
+            &workspace,
+            |opened_relative| {
+                if !swapped && opened_relative == std::path::Path::new("ancestor") {
+                    std::fs::rename(&original, &pinned)?;
+                    std::os::unix::fs::symlink(&outside, &original)?;
+                    swapped = true;
+                }
+                Ok(())
+            },
+        )
+        .unwrap();
+
+        assert!(swapped, "the deterministic ancestor-swap seam did not run");
+        assert_eq!(resolved, pinned.join("created-after-swap"));
+        assert!(resolved.is_dir());
+        assert!(
+            !outside.join("created-after-swap").exists(),
+            "descriptor-relative mkdir escaped through the replacement symlink"
+        );
     }
 }
 
@@ -554,7 +801,7 @@ async fn handle_artifact_list(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtRe
         .map_err(internal)?;
     let workspace = dunce::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_existing_dir_within(params.store_root, &workspace)?;
-    let store = ScienceStore::new(&store_root);
+    let store = ScienceStore::new_confined(&store_root, &workspace).map_err(internal)?;
     let project_id = ProjectId::new(params.project_id);
     let run_id = RunId::new(params.run_id);
     let items = match store.load_run(&run_id) {
@@ -571,21 +818,20 @@ async fn handle_artifact_list(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtRe
         // list only after checking its durable owner record; otherwise a
         // missing run would become a project-existence or ownership probe.
         Err(ScienceError::Io(ref error)) if error.kind() == std::io::ErrorKind::NotFound => {
-            let project_store = xai_grok_science::project::ProjectStore::new(&store_root)
-                .with_gates(handle.science_feature_gates.clone());
-            match project_store
-                .load_project(&xai_grok_science::project::ProjectId(project_id.0.clone()))
-            {
+            let project_store =
+                xai_grok_science::project::ProjectStore::new_confined(&store_root, &workspace)
+                    .map_err(internal)?
+                    .with_gates(handle.science_feature_gates.clone());
+            match project_store.assert_project_owner(
+                &xai_grok_science::project::ProjectId(project_id.0.clone()),
+                &params.owner_id,
+            ) {
                 // `default` is the desktop catalog's explicit no-run sentinel.
                 // The durable project aggregate does not mint a default run,
                 // so this exception must remain narrower than "any missing
                 // run": an arbitrary absent run id is not evidence that the
                 // caller is opening a newly-created project.
-                Ok(project)
-                    if project.owner_id.0 == params.owner_id && run_id.0 == "default" =>
-                {
-                    Ok(Vec::new())
-                }
+                Ok(()) if run_id.0 == "default" => Ok(Vec::new()),
                 _ => Err(ScienceError::Ownership),
             }
         }
@@ -634,6 +880,14 @@ async fn run_project_mutation(
     let handle = agent
         .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
+    // Fail a disabled mutation before path provisioning creates even an empty
+    // store/run directory. The SessionActor repeats this check as the sole
+    // execution authority; this adapter-side preflight only keeps rejected
+    // requests observationally read-only.
+    handle
+        .science_feature_gates
+        .require_all(mutation.required_features())
+        .map_err(internal)?;
     let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
     let project_root = canonical_dir_within(store_root, &workspace)?;
     let run_root = canonical_dir_within(project_root.join("runs"), &workspace)?;
@@ -695,7 +949,8 @@ async fn run_project_mutation(
     agent
         .run_science_project_mutation(
             &session_id,
-            ScienceStore::new(project_root.clone()),
+            ScienceStore::new_confined(&project_root, &context.workspace_root)
+                .map_err(internal)?,
             project_root,
             context,
             request,
@@ -811,20 +1066,27 @@ struct ProjectGetParams {
     session_id: String,
     store_root: PathBuf,
     project_id: String,
+    owner_id: String,
 }
 
 async fn handle_project_get(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: ProjectGetParams = parse_params(args)?;
+    if params.owner_id.is_empty() {
+        return Err(acp::Error::invalid_params().data("ownerId is required"));
+    }
     let session_id = acp::SessionId::new(params.session_id);
     let handle = agent
         .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
     let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root)
+    let store = xai_grok_science::project::ProjectStore::new_confined(&store_root, &workspace)
+        .map_err(internal)?
         .with_gates(handle.science_feature_gates.clone());
     let pid = xai_grok_science::project::ProjectId(params.project_id);
-    let bundle = store.load_bundle(&pid).map_err(internal)?;
+    let bundle = store
+        .load_bundle_for_owner(&pid, &params.owner_id)
+        .map_err(internal)?;
     to_raw_response(&bundle)
 }
 
@@ -864,14 +1126,12 @@ async fn handle_project_assert_membership(agent: &MvpAgent, args: &acp::ExtReque
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
     let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root)
+    let store = xai_grok_science::project::ProjectStore::new_confined(&store_root, &workspace)
+        .map_err(internal)?
         .with_gates(handle.science_feature_gates.clone());
     let pid = xai_grok_science::project::ProjectId(params.project_id.clone());
 
-    let member = match store.load_project(&pid) {
-        Ok(project) => project.owner_id.0 == params.owner_id,
-        Err(_) => false,
-    };
+    let member = store.assert_project_owner(&pid, &params.owner_id).is_ok();
 
     to_raw_response(&serde_json::json!({
         "ok": member,
@@ -889,19 +1149,26 @@ async fn handle_project_assert_membership(agent: &MvpAgent, args: &acp::ExtReque
 struct ProjectListParams {
     session_id: String,
     store_root: PathBuf,
+    owner_id: String,
 }
 
 async fn handle_project_list(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: ProjectListParams = parse_params(args)?;
+    if params.owner_id.is_empty() {
+        return Err(acp::Error::invalid_params().data("ownerId is required"));
+    }
     let session_id = acp::SessionId::new(params.session_id);
     let handle = agent
         .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
     let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root)
+    let store = xai_grok_science::project::ProjectStore::new_confined(&store_root, &workspace)
+        .map_err(internal)?
         .with_gates(handle.science_feature_gates.clone());
-    let projects = store.list_projects().map_err(internal)?;
+    let projects = store
+        .list_projects_for_owner(&params.owner_id)
+        .map_err(internal)?;
     to_raw_response(&projects)
 }
 
@@ -1139,7 +1406,8 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
     let result = agent
         .run_science_seq_analyze(
             &session_id,
-            ScienceStore::new(artifact_root),
+            ScienceStore::new_confined(&context.artifact_root, &context.workspace_root)
+                .map_err(internal)?,
             context,
             xai_grok_science::seqbench::SeqAnalyzeOptions {
                 translation_table_id: params.translation_table_id,
@@ -1183,7 +1451,7 @@ async fn handle_goal_host_verify(agent: &MvpAgent, args: &acp::ExtRequest) -> Ex
     let result = agent
         .verify_science_goal(
             &session_id,
-            ScienceStore::new(store_root),
+            ScienceStore::new_confined(&store_root, &workspace).map_err(internal)?,
             RunId::new(params.run_id),
         )
         .await
@@ -1313,7 +1581,8 @@ async fn handle_ssh_scp_fixture(agent: &MvpAgent, args: &acp::ExtRequest) -> Ext
     let result = agent
         .run_science_ssh_scp_transport(
             &session_id,
-            ScienceStore::new(store_root),
+            ScienceStore::new_confined(&store_root, &context.workspace_root)
+                .map_err(internal)?,
             context,
             policy,
             request,
@@ -1405,7 +1674,8 @@ async fn handle_connector_fetch(agent: &MvpAgent, args: &acp::ExtRequest) -> Ext
     let result = agent
         .run_science_fetch(
             &session_id,
-            ScienceStore::new(store_root),
+            ScienceStore::new_confined(&store_root, &context.workspace_root)
+                .map_err(internal)?,
             context,
             descriptor.id.to_owned(),
             params.query,
@@ -1464,7 +1734,8 @@ async fn handle_import_preview(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtR
     let result = agent
         .run_science_import(
             &session_id,
-            ScienceStore::new(store_root),
+            ScienceStore::new_confined(&store_root, &context.workspace_root)
+                .map_err(internal)?,
             context,
             source_path,
             bytes,
@@ -1515,7 +1786,8 @@ async fn handle_run_csv(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let result = agent
         .run_science_csv(
             &session_id,
-            ScienceStore::new(store_root),
+            ScienceStore::new_confined(&store_root, &context.workspace_root)
+                .map_err(internal)?,
             context,
             fixture_path,
             fixture,
@@ -1530,77 +1802,135 @@ async fn handle_run_csv(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct EvidenceTraceParams { session_id: String, store_root: PathBuf, project_id: String, claim_id: String }
+struct EvidenceTraceParams {
+    session_id: String,
+    store_root: PathBuf,
+    project_id: String,
+    claim_id: String,
+    owner_id: String,
+}
 
 async fn handle_evidence_trace(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: EvidenceTraceParams = parse_params(args)?;
+    if params.owner_id.is_empty() {
+        return Err(acp::Error::invalid_params().data("ownerId is required"));
+    }
     let session_id = acp::SessionId::new(params.session_id);
-    let handle = agent.get_session_handle(&session_id)
+    let handle = agent
+        .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
     let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root)
+    let store = xai_grok_science::project::ProjectStore::new_confined(&store_root, &workspace)
+        .map_err(internal)?
         .with_gates(handle.science_feature_gates.clone());
-    let trace = store.trace_evidence(
-        &xai_grok_science::project::ProjectId(params.project_id), &params.claim_id,
-    ).map_err(internal)?;
+    let project_id = xai_grok_science::project::ProjectId(params.project_id);
+    store
+        .assert_project_owner(&project_id, &params.owner_id)
+        .map_err(internal)?;
+    let trace = store
+        .trace_evidence(&project_id, &params.claim_id)
+        .map_err(internal)?;
     to_raw_response(&trace)
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct EvidenceCompareParams { session_id: String, store_root: PathBuf, project_id: String, claim_a: String, claim_b: String }
+struct EvidenceCompareParams {
+    session_id: String,
+    store_root: PathBuf,
+    project_id: String,
+    claim_a: String,
+    claim_b: String,
+    owner_id: String,
+}
 
 async fn handle_evidence_compare(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: EvidenceCompareParams = parse_params(args)?;
+    if params.owner_id.is_empty() {
+        return Err(acp::Error::invalid_params().data("ownerId is required"));
+    }
     let session_id = acp::SessionId::new(params.session_id);
-    let handle = agent.get_session_handle(&session_id)
+    let handle = agent
+        .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
     let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root)
+    let store = xai_grok_science::project::ProjectStore::new_confined(&store_root, &workspace)
+        .map_err(internal)?
         .with_gates(handle.science_feature_gates.clone());
-    let cmp = store.compare_claims(
-        &xai_grok_science::project::ProjectId(params.project_id), &params.claim_a, &params.claim_b,
-    ).map_err(internal)?;
+    let project_id = xai_grok_science::project::ProjectId(params.project_id);
+    store
+        .assert_project_owner(&project_id, &params.owner_id)
+        .map_err(internal)?;
+    let cmp = store
+        .compare_claims(&project_id, &params.claim_a, &params.claim_b)
+        .map_err(internal)?;
     to_raw_response(&cmp)
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct EvidenceConsistencyParams { session_id: String, store_root: PathBuf, project_id: String }
+struct EvidenceConsistencyParams {
+    session_id: String,
+    store_root: PathBuf,
+    project_id: String,
+    owner_id: String,
+}
 
 async fn handle_evidence_consistency(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: EvidenceConsistencyParams = parse_params(args)?;
+    if params.owner_id.is_empty() {
+        return Err(acp::Error::invalid_params().data("ownerId is required"));
+    }
     let session_id = acp::SessionId::new(params.session_id);
-    let handle = agent.get_session_handle(&session_id)
+    let handle = agent
+        .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
     let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root)
+    let store = xai_grok_science::project::ProjectStore::new_confined(&store_root, &workspace)
+        .map_err(internal)?
         .with_gates(handle.science_feature_gates.clone());
-    let report = store.check_consistency(
-        &xai_grok_science::project::ProjectId(params.project_id),
-    ).map_err(internal)?;
+    let project_id = xai_grok_science::project::ProjectId(params.project_id);
+    store
+        .assert_project_owner(&project_id, &params.owner_id)
+        .map_err(internal)?;
+    let report = store.check_consistency(&project_id).map_err(internal)?;
     to_raw_response(&report)
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct EvidenceReproductionParams { session_id: String, store_root: PathBuf, project_id: String, claim_id: String }
+struct EvidenceReproductionParams {
+    session_id: String,
+    store_root: PathBuf,
+    project_id: String,
+    claim_id: String,
+    owner_id: String,
+}
 
 async fn handle_evidence_reproduction(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: EvidenceReproductionParams = parse_params(args)?;
+    if params.owner_id.is_empty() {
+        return Err(acp::Error::invalid_params().data("ownerId is required"));
+    }
     let session_id = acp::SessionId::new(params.session_id);
-    let handle = agent.get_session_handle(&session_id)
+    let handle = agent
+        .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
     let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(store_root)
+    let store = xai_grok_science::project::ProjectStore::new_confined(&store_root, &workspace)
+        .map_err(internal)?
         .with_gates(handle.science_feature_gates.clone());
-    let status = store.reproduction_status(
-        &xai_grok_science::project::ProjectId(params.project_id), &params.claim_id,
-    ).map_err(internal)?;
+    let project_id = xai_grok_science::project::ProjectId(params.project_id);
+    store
+        .assert_project_owner(&project_id, &params.owner_id)
+        .map_err(internal)?;
+    let status = store
+        .reproduction_status(&project_id, &params.claim_id)
+        .map_err(internal)?;
     to_raw_response(&status)
 }
 
@@ -1676,7 +2006,8 @@ async fn store_handler<T: serde::Serialize>(agent: &MvpAgent, session_id: &str, 
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
     let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
     let sr = canonical_dir_within(store_root, &workspace)?;
-    let store = xai_grok_science::project::ProjectStore::new(sr)
+    let store = xai_grok_science::project::ProjectStore::new_confined(&sr, &workspace)
+        .map_err(internal)?
         .with_gates(handle.science_feature_gates.clone());
     let result = f(&store).map_err(internal)?;
     to_raw_response(&result)
@@ -1836,7 +2167,8 @@ async fn handle_workflow_execute(agent: &MvpAgent, args: &acp::ExtRequest) -> Ex
     let report = agent
         .run_science_workflow_execution(
             &session_id,
-            ScienceStore::new(store_root),
+            ScienceStore::new_confined(&store_root, &context.workspace_root)
+                .map_err(internal)?,
             context,
             binding,
             Duration::from_millis(params.approval_timeout_ms),
@@ -1980,7 +2312,8 @@ async fn handle_kernel_admission(agent: &MvpAgent, args: &acp::ExtRequest) -> Ex
     let result = agent
         .run_science_kernel_admission(
             &session_id,
-            ScienceStore::new(&project_root),
+            ScienceStore::new_confined(&project_root, &context.workspace_root)
+                .map_err(internal)?,
             project_root,
             context,
             request,
@@ -2004,11 +2337,24 @@ async fn handle_kernel_admission(agent: &MvpAgent, args: &acp::ExtRequest) -> Ex
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct ProjRParams { session_id: String, store_root: PathBuf, project_id: String }
+struct ProjRParams {
+    session_id: String,
+    store_root: PathBuf,
+    project_id: String,
+    owner_id: String,
+}
 
 async fn handle_multimodal_index(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: ProjRParams = parse_params(args)?;
-    store_handler(agent, &params.session_id, params.store_root, move |s| s.multimodal_index(&xai_grok_science::project::ProjectId(params.project_id))).await
+    if params.owner_id.is_empty() {
+        return Err(acp::Error::invalid_params().data("ownerId is required"));
+    }
+    store_handler(agent, &params.session_id, params.store_root, move |s| {
+        let project_id = xai_grok_science::project::ProjectId(params.project_id);
+        s.assert_project_owner(&project_id, &params.owner_id)?;
+        s.multimodal_index(&project_id)
+    })
+    .await
 }
 
 #[derive(Debug, Deserialize)]
@@ -2088,11 +2434,23 @@ async fn handle_collaboration_invite(agent: &MvpAgent, args: &acp::ExtRequest) -
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct RcpParams { session_id: String, store_root: PathBuf, project_id: String, hostname: String }
+struct RcpParams {
+    session_id: String,
+    store_root: PathBuf,
+    project_id: String,
+    owner_id: String,
+    hostname: String,
+}
 
 async fn handle_remote_compute_plan(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: RcpParams = parse_params(args)?;
-    store_handler(agent, &params.session_id, params.store_root, move |s| s.remote_compute_plan(
-        &xai_grok_science::project::ProjectId(params.project_id), params.hostname,
-    )).await
+    if params.owner_id.is_empty() {
+        return Err(acp::Error::invalid_params().data("ownerId is required"));
+    }
+    store_handler(agent, &params.session_id, params.store_root, move |s| {
+        let project_id = xai_grok_science::project::ProjectId(params.project_id);
+        s.assert_project_owner(&project_id, &params.owner_id)?;
+        s.remote_compute_plan(&project_id, params.hostname)
+    })
+    .await
 }

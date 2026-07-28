@@ -182,11 +182,9 @@ impl SessionActor {
             .map_err(|_| {
                 crate::session::science_goal::ScienceGoalReviewError::AuditPersistenceFailed
             })?;
-        response
-            .await
-            .map_err(|_| {
-                crate::session::science_goal::ScienceGoalReviewError::AuditPersistenceFailed
-            })?;
+        response.await.map_err(|_| {
+            crate::session::science_goal::ScienceGoalReviewError::AuditPersistenceFailed
+        })?;
         Ok(report)
     }
 
@@ -820,8 +818,11 @@ impl SessionActor {
             &context,
         )?;
         let gates = self.science_feature_gates.clone();
-        let project_store =
-            xai_grok_science::project::ProjectStore::new(&project_root).with_gates(gates.clone());
+        let project_store = xai_grok_science::project::ProjectStore::new_confined(
+            &project_root,
+            std::path::Path::new(&self.session_info.cwd),
+        )?
+        .with_gates(gates.clone());
 
         // Project binding: the run context must name the project actually
         // being mutated, so the durable record cannot point at another one.
@@ -1003,15 +1004,15 @@ impl SessionActor {
             )));
         }
         xai_grok_science::csv::mark_allowed(&prepared.store, &prepared.ticket)?;
-        let project_store = xai_grok_science::project::ProjectStore::new(&prepared.project_root)
-            .with_gates(prepared.gates);
+        let project_store = xai_grok_science::project::ProjectStore::new_confined(
+            &prepared.project_root,
+            std::path::Path::new(&self.session_info.cwd),
+        )?
+        .with_gates(prepared.gates);
         let outcome = match project_store.apply_mutation(&prepared.request) {
             Ok(outcome) => outcome,
             Err(error) => {
-                if review_apply_error_may_have_committed(
-                    &project_store,
-                    &prepared.request,
-                ) {
+                if review_apply_error_may_have_committed(&project_store, &prepared.request) {
                     let _ = prepared.store.append_recoverable_commit_event(
                         &prepared.ticket.run_id,
                         "SessionActor",
@@ -1052,15 +1053,15 @@ impl SessionActor {
                     return Err(error);
                 }
             };
+        if let Some(review) = review {
+            project_store.verify_pending_review_commit(&review)?;
+        }
         append_project_mutation_applied_once(&prepared.store, &prepared.ticket.run_id, &outcome)?;
         prepared.store.transition(
             &prepared.ticket.run_id,
             xai_grok_science::RunState::Succeeded,
             None,
         )?;
-        if let Some(review) = review {
-            project_store.verify_review_record(&review)?;
-        }
         Ok(outcome)
     }
 
@@ -1092,10 +1093,12 @@ impl SessionActor {
             &project_root,
             &context,
         )?;
-        let project_store = xai_grok_science::project::ProjectStore::new(&project_root)
-            .with_gates(self.science_feature_gates.clone());
-        let project_id =
-            xai_grok_science::project::ProjectId(context.project_id.0.clone());
+        let project_store = xai_grok_science::project::ProjectStore::new_confined(
+            &project_root,
+            std::path::Path::new(&self.session_info.cwd),
+        )?
+        .with_gates(self.science_feature_gates.clone());
+        let project_id = xai_grok_science::project::ProjectId(context.project_id.0.clone());
         let project = project_store.load_project(&project_id)?;
         validate_kernel_project_binding(&project, &context)?;
 
@@ -1134,8 +1137,7 @@ impl SessionActor {
                 ));
             }
             let lock_path = dunce::canonicalize(lock_path)?;
-            if !std::fs::metadata(&lock_path)?.is_file()
-                || !lock_path.starts_with(&actor_workspace)
+            if !std::fs::metadata(&lock_path)?.is_file() || !lock_path.starts_with(&actor_workspace)
             {
                 return Err(ScienceError::Invalid(
                     "package lock must be a regular file inside the SessionActor workspace".into(),
@@ -1150,8 +1152,7 @@ impl SessionActor {
             request.kernel_id,
             request.interpreter_path.display()
         );
-        let ticket =
-            xai_grok_science::workflow::begin_kernel_admission(&store, context)?;
+        let ticket = xai_grok_science::workflow::begin_kernel_admission(&store, context)?;
         Ok(PreparedScienceKernelAdmission {
             store,
             ticket,
@@ -1263,10 +1264,11 @@ impl SessionActor {
         // Idempotent replay. The executor is the authority on what a replay
         // returns, so ask it — with no runner bound, so that even if this were
         // somehow not a replay nothing could execute behind the caller's back.
-        let ledger = xai_grok_science::workflow::WorkflowExecutor::new(
+        let ledger = xai_grok_science::workflow::WorkflowExecutor::new_confined(
             &binding.executor_root,
+            std::path::Path::new(&self.session_info.cwd),
             workflow_compute_environment(&binding),
-        );
+        )?;
         if ledger
             .lookup_operation(&binding.execution.operation_id)?
             .is_some()
@@ -1415,10 +1417,12 @@ impl SessionActor {
             std::sync::Arc::new(DirCellSourceStore::new(&binding.cell_source_root)),
             &binding.output_root,
         );
-        let executor = WorkflowExecutor::new(
+        let executor = WorkflowExecutor::new_confined(
             &binding.executor_root,
+            std::path::Path::new(&self.session_info.cwd),
             workflow_compute_environment(binding),
         )
+        .map_err(&failed)?
         .with_policy(policy)
         .with_runner(std::sync::Arc::new(runner))
         .with_kernels(KernelManifest {
@@ -1429,9 +1433,7 @@ impl SessionActor {
         })
         .map_err(&failed)?;
 
-        let report = executor
-            .execute(&binding.execution)
-            .map_err(&failed)?;
+        let report = executor.execute(&binding.execution).map_err(&failed)?;
 
         prepared.store.append_event(
             &prepared.ticket.run_id,
@@ -1789,9 +1791,10 @@ fn recover_interrupted_review_commit(
         replayed: false,
     };
     persist_review_mutation_evidence(store, &ticket, &outcome)?;
+    project_store.verify_pending_review_commit(review)?;
     append_project_mutation_applied_once(store, &ticket.run_id, &outcome)?;
     store.transition(&ticket.run_id, xai_grok_science::RunState::Succeeded, None)?;
-    project_store.verify_review_record(review)
+    Ok(())
 }
 
 fn recover_orphan_review_ledger(
@@ -1808,8 +1811,7 @@ fn recover_orphan_review_ledger(
     // adopted here.
     request.expected_revision = None;
     if let xai_grok_science::project::ProjectMutation::ReviewRecord {
-        authority_run_id,
-        ..
+        authority_run_id, ..
     } = &mut request.mutation
     {
         *authority_run_id = review.authority_run_id.clone();
@@ -1901,13 +1903,8 @@ mod actor_root_tests {
         std::fs::create_dir_all(other_root.join("runs")).unwrap();
         let other_store = xai_grok_science::ScienceStore::new(&other_root);
         assert!(
-            validate_project_mutation_actor_roots(
-                &workspace,
-                &other_store,
-                &project_root,
-                &good,
-            )
-            .is_err(),
+            validate_project_mutation_actor_roots(&workspace, &other_store, &project_root, &good,)
+                .is_err(),
             "actor accepted mismatched ScienceStore and ProjectStore roots"
         );
 
@@ -2085,9 +2082,7 @@ mod actor_root_tests {
         std::fs::remove_file(&events_path).unwrap();
         std::fs::create_dir(&events_path).unwrap();
         let mut retry = request.clone();
-        assert!(
-            recover_orphan_review_ledger(&store, &project_store, &mut retry, &review).is_err()
-        );
+        assert!(recover_orphan_review_ledger(&store, &project_store, &mut retry, &review).is_err());
         assert_eq!(
             store.load_run(&authority_run).unwrap().state,
             xai_grok_science::RunState::Running,

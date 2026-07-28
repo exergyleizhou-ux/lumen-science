@@ -111,7 +111,11 @@ export async function runOsf9ProductPath(opts?: {
     { artifactId: arts[0].id, expectedSha256: arts[0].sha256 },
     { store },
   )
-  push('preview-by-artifact', prev.access.ok === true, prev.path)
+  push(
+    'preview-by-artifact',
+    prev.access.ok === true,
+    `${prev.byteLength ?? 0} verified bytes`,
+  )
 
   // Adversarial: path-style / wrong project
   const cross = await resolvePreview(

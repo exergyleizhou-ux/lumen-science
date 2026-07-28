@@ -9,6 +9,7 @@
 //!
 //! Records only — SessionActor remains sole execution authority.
 
+use super::capability::PinnedDirectory;
 use super::claim::{Claim, ClaimStatus};
 use super::evidence_graph::{
     EdgeKind, EvidenceEdge, EvidenceGraph, EvidenceNode, NodeId, NodeKind, validate_sha256_hex,
@@ -17,18 +18,33 @@ use super::model::{OwnerId, ProjectId, ProjectStatus, ResearchProject, validate_
 use crate::features::{FeatureGates, ScienceFeature};
 use crate::{Result, ScienceError};
 use chrono::{DateTime, Utc};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
-    fs,
-    io::Write,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, MutexGuard, OnceLock},
 };
+#[cfg(test)]
+use std::{fs, io::Write};
 use uuid::Uuid;
 
 /// Prefix for the unique temp files used by durable record writes.
 const TEMP_PREFIX: &str = ".project-";
+
+fn validate_record_stem(value: &str, field: &str) -> Result<()> {
+    if value.is_empty()
+        || value.len() > 128
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    {
+        return Err(ScienceError::Invalid(format!(
+            "{field} must be 1..=128 [A-Za-z0-9_-] characters"
+        )));
+    }
+    Ok(())
+}
 
 /// Process-wide write locks, keyed by store root.
 ///
@@ -47,11 +63,7 @@ pub(crate) fn write_lock_for(root: &Path) -> Arc<Mutex<()>> {
         .get_or_init(|| Mutex::new(HashMap::new()))
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    Arc::clone(
-        locks
-            .entry(key)
-            .or_insert_with(|| Arc::new(Mutex::new(()))),
-    )
+    Arc::clone(locks.entry(key).or_insert_with(|| Arc::new(Mutex::new(()))))
 }
 
 /// What `recover_project` found and repaired after an interrupted mutation.
@@ -99,6 +111,9 @@ pub struct RegisteredArtifact {
 pub struct ProjectStore {
     root: PathBuf,
     gates: FeatureGates,
+    /// Opened once and retained for the lifetime of every clone. Product
+    /// record I/O is relative to this capability, never to `root`.
+    confined: std::result::Result<Arc<PinnedDirectory>, Arc<str>>,
     /// Serialises writers to this root; see [`write_lock_for`].
     writes: Arc<Mutex<()>>,
 }
@@ -114,11 +129,34 @@ impl ProjectStore {
     pub fn new(root: impl Into<PathBuf>) -> Self {
         let root = root.into();
         let writes = write_lock_for(&root);
+        let confined = PinnedDirectory::open_or_create(&root)
+            .map(Arc::new)
+            .map_err(|error| Arc::<str>::from(error.to_string()));
         Self {
             root,
             gates: FeatureGates::default(),
+            confined,
             writes,
         }
+    }
+
+    /// Construct a product store whose retained root capability is proven to
+    /// be the same directory as a canonical path below `workspace`.
+    ///
+    /// Unlike [`ProjectStore::new`], capability acquisition is eager and
+    /// fallible. ACP callers should use this constructor after resolving the
+    /// workspace boundary: a path check followed by `new` would otherwise
+    /// leave an ancestor-swap window between those two operations.
+    pub fn new_confined(root: impl Into<PathBuf>, workspace: &Path) -> Result<Self> {
+        let root = root.into();
+        let writes = write_lock_for(&root);
+        let confined = Arc::new(PinnedDirectory::open_or_create_within(&root, workspace)?);
+        Ok(Self {
+            root,
+            gates: FeatureGates::default(),
+            confined: Ok(confined),
+            writes,
+        })
     }
 
     pub fn with_gates(mut self, gates: FeatureGates) -> Self {
@@ -138,14 +176,67 @@ impl ProjectStore {
         &self.root
     }
 
+    #[cfg(test)]
     pub(super) fn project_dir(&self, id: &ProjectId) -> PathBuf {
         self.root.join("projects").join(&id.0)
     }
 
-    fn ensure_dir(&self, id: &ProjectId) -> Result<PathBuf> {
-        let d = self.project_dir(id);
-        fs::create_dir_all(d.join("claims"))?;
-        Ok(d)
+    fn confined(&self) -> Result<&PinnedDirectory> {
+        self.confined.as_deref().map_err(|error| {
+            ScienceError::Invalid(format!("project store capability is unavailable: {error}"))
+        })
+    }
+
+    fn project_relative(id: &ProjectId) -> Result<PathBuf> {
+        validate_project_id(&id.0)?;
+        Ok(PathBuf::from("projects").join(&id.0))
+    }
+
+    fn project_record(id: &ProjectId, name: &str) -> Result<PathBuf> {
+        Ok(Self::project_relative(id)?.join(name))
+    }
+
+    fn claim_record(id: &ProjectId, claim_id: &str) -> Result<PathBuf> {
+        validate_record_stem(claim_id, "claim id")?;
+        Ok(Self::project_relative(id)?
+            .join("claims")
+            .join(format!("{claim_id}.json")))
+    }
+
+    fn read_confined<T: DeserializeOwned>(&self, relative: &Path) -> Result<Option<T>> {
+        self.confined()?
+            .read_optional(relative)?
+            .map(|bytes| Ok(serde_json::from_slice(&bytes)?))
+            .transpose()
+    }
+
+    fn write_confined<T: Serialize>(&self, relative: &Path, value: &T) -> Result<()> {
+        self.confined()?
+            .replace_atomic(relative, &serde_json::to_vec_pretty(value)?)
+    }
+
+    fn write_new_confined<T: Serialize>(&self, relative: &Path, value: &T) -> Result<()> {
+        self.confined()?
+            .write_new_atomic(relative, &serde_json::to_vec_pretty(value)?)
+    }
+
+    pub(super) fn list_confined(&self, relative: &Path) -> Result<Vec<std::ffi::OsString>> {
+        self.confined()?.list_names(relative)
+    }
+
+    pub(super) fn read_confined_record<T: DeserializeOwned>(
+        &self,
+        relative: &Path,
+    ) -> Result<Option<T>> {
+        self.read_confined(relative)
+    }
+
+    pub(super) fn write_new_confined_record<T: Serialize>(
+        &self,
+        relative: &Path,
+        value: &T,
+    ) -> Result<()> {
+        self.write_new_confined(relative, value)
     }
 
     /// Take the per-root write lock for the duration of one mutation.
@@ -170,6 +261,7 @@ impl ProjectStore {
     /// - temp file removed on any failure, so a failed write leaves no litter.
     ///
     /// Callers must already hold the write guard.
+    #[cfg(test)]
     pub(crate) fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
         let parent = path
             .parent()
@@ -198,6 +290,7 @@ impl ProjectStore {
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T> {
         let bytes = fs::read(path)?;
         Ok(serde_json::from_slice(&bytes)?)
@@ -205,6 +298,7 @@ impl ProjectStore {
 
     /// The temp-file prefix used by [`ProjectStore::write_json`], so other
     /// stores rooted here sweep the same litter after an interrupted write.
+    #[cfg(test)]
     pub(crate) const fn temp_prefix() -> &'static str {
         TEMP_PREFIX
     }
@@ -216,22 +310,25 @@ impl ProjectStore {
     // a multi-file mutation that re-entered a locking method would deadlock.
 
     fn write_project_file(&self, project: &ResearchProject) -> Result<()> {
-        let dir = self.ensure_dir(&project.project_id)?;
-        Self::write_json(&dir.join("project.json"), project)
+        self.write_confined(
+            &Self::project_record(&project.project_id, "project.json")?,
+            project,
+        )
     }
 
     fn write_graph_file(&self, graph: &EvidenceGraph) -> Result<()> {
         graph
             .validate_integrity()
             .map_err(|error| ScienceError::Invalid(format!("evidence graph invalid: {error}")))?;
-        let dir = self.ensure_dir(&graph.project_id)?;
-        Self::write_json(&dir.join("graph.json"), graph)
+        self.write_confined(
+            &Self::project_record(&graph.project_id, "graph.json")?,
+            graph,
+        )
     }
 
     fn write_claim_file(&self, claim: &Claim) -> Result<()> {
-        let dir = self.ensure_dir(&claim.project_id)?;
-        Self::write_json(
-            &dir.join("claims").join(format!("{}.json", claim.claim_id)),
+        self.write_confined(
+            &Self::claim_record(&claim.project_id, &claim.claim_id)?,
             claim,
         )
     }
@@ -273,15 +370,50 @@ impl ProjectStore {
 
     pub fn load_project(&self, project_id: &ProjectId) -> Result<ResearchProject> {
         self.gates.require(ScienceFeature::ResearchProject)?;
-        validate_project_id(&project_id.0)?;
-        let path = self.project_dir(project_id).join("project.json");
-        if !path.is_file() {
-            return Err(ScienceError::Invalid(format!(
-                "project not found: {}",
-                project_id.0
-            )));
+        let path = Self::project_record(project_id, "project.json")?;
+        let project: ResearchProject = self
+            .read_confined(&path)?
+            .ok_or_else(|| ScienceError::Invalid(format!("project not found: {}", project_id.0)))?;
+        if project.project_id != *project_id {
+            return Err(ScienceError::Ownership);
         }
-        Self::read_json(&path)
+        Ok(project)
+    }
+
+    /// Assert that `owner_id` owns `project_id` without exposing whether the
+    /// project exists.
+    ///
+    /// This is the single ownership gate for read-only project and evidence
+    /// queries. A missing record, an unreadable/corrupt record, a record whose
+    /// embedded project id does not match its directory, and an owner mismatch
+    /// all return the same [`ScienceError::Ownership`]. Callers therefore
+    /// cannot use the error shape as a project-existence oracle.
+    pub fn assert_project_owner(&self, project_id: &ProjectId, owner_id: &str) -> Result<()> {
+        self.load_owned_project(project_id, owner_id).map(drop)
+    }
+
+    /// Load and validate the aggregate root behind
+    /// [`ProjectStore::assert_project_owner`].
+    fn load_owned_project(
+        &self,
+        project_id: &ProjectId,
+        owner_id: &str,
+    ) -> Result<ResearchProject> {
+        self.gates.require(ScienceFeature::ResearchProject)?;
+        validate_project_id(&project_id.0)?;
+        if owner_id.is_empty() {
+            return Err(ScienceError::Ownership);
+        }
+
+        let path = Self::project_record(project_id, "project.json")?;
+        let project: ResearchProject = match self.read_confined(&path) {
+            Ok(Some(project)) => project,
+            Ok(None) | Err(_) => return Err(ScienceError::Ownership),
+        };
+        if project.project_id != *project_id || project.owner_id.0 != owner_id {
+            return Err(ScienceError::Ownership);
+        }
+        Ok(project)
     }
 
     pub fn save_project(&self, project: &ResearchProject) -> Result<()> {
@@ -298,12 +430,11 @@ impl ProjectStore {
 
     pub fn load_graph(&self, project_id: &ProjectId) -> Result<EvidenceGraph> {
         self.gates.require(ScienceFeature::EvidenceGraph)?;
-        validate_project_id(&project_id.0)?;
-        let path = self.project_dir(project_id).join("graph.json");
-        if !path.is_file() {
-            return Ok(EvidenceGraph::new(project_id.clone()));
+        let path = Self::project_record(project_id, "graph.json")?;
+        match self.read_confined(&path)? {
+            Some(graph) => Ok(graph),
+            None => Ok(EvidenceGraph::new(project_id.clone())),
         }
-        Self::read_json(&path)
     }
 
     /// Persist a graph. Fails closed if the graph violates its structural
@@ -328,8 +459,8 @@ impl ProjectStore {
     pub fn project_revision(&self, project_id: &ProjectId) -> Result<String> {
         use sha2::{Digest, Sha256};
         validate_project_id(&project_id.0)?;
-        let dir = self.project_dir(project_id);
-        if !dir.join("project.json").is_file() {
+        let project_record = Self::project_record(project_id, "project.json")?;
+        if self.confined()?.read_optional(&project_record)?.is_none() {
             return Err(ScienceError::Invalid(format!(
                 "project not found: {}",
                 project_id.0
@@ -339,44 +470,40 @@ impl ProjectStore {
         hasher.update(project_id.0.as_bytes());
         for name in ["project.json", "graph.json", "artifacts.json"] {
             hasher.update(name.as_bytes());
-            match fs::read(dir.join(name)) {
-                Ok(bytes) => hasher.update(&bytes),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                    hasher.update(b"<absent>")
-                }
-                Err(error) => return Err(error.into()),
+            match self
+                .confined()?
+                .read_optional(&Self::project_record(project_id, name)?)?
+            {
+                Some(bytes) => hasher.update(&bytes),
+                None => hasher.update(b"<absent>"),
             }
         }
         // Child records, in a deterministic order. Reviews must move the
         // project revision just like claims; otherwise a review could be
         // appended behind a caller's compare-and-swap token without conflict.
         for child_name in ["claims", "reviews"] {
-            let child_dir = dir.join(child_name);
-            let mut child_paths: Vec<PathBuf> = Vec::new();
-            if child_dir.is_dir() {
-                for entry in fs::read_dir(&child_dir)? {
-                    let path = entry?.path();
-                    if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
-                        child_paths.push(path);
-                    }
+            let child_dir = Self::project_relative(project_id)?.join(child_name);
+            for name in self.list_confined(&child_dir)? {
+                let path = child_dir.join(&name);
+                if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+                    continue;
                 }
-            }
-            child_paths.sort();
-            for path in child_paths {
                 hasher.update(child_name.as_bytes());
-                if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
+                if let Some(name) = name.to_str() {
                     hasher.update(name.as_bytes());
                 }
-                hasher.update(fs::read(&path)?);
+                let bytes = self.confined()?.read_optional(&path)?.ok_or_else(|| {
+                    ScienceError::Invalid("project child record disappeared during revision".into())
+                })?;
+                hasher.update(bytes);
             }
         }
         Ok(format!("{:x}", hasher.finalize()))
     }
 
-    fn operation_path(&self, operation_id: &str) -> PathBuf {
-        self.root
-            .join("operations")
-            .join(format!("{operation_id}.json"))
+    pub(super) fn operation_relative(operation_id: &str) -> Result<PathBuf> {
+        super::mutation::validate_operation_id(operation_id)?;
+        Ok(PathBuf::from("operations").join(format!("{operation_id}.json")))
     }
 
     /// The durable record of an already-applied operation id, if any.
@@ -385,34 +512,41 @@ impl ProjectStore {
         operation_id: &str,
     ) -> Result<Option<super::mutation::OperationRecord>> {
         super::mutation::validate_operation_id(operation_id)?;
-        let path = self.operation_path(operation_id);
-        if !path.is_file() {
-            return Ok(None);
+        let path = Self::operation_relative(operation_id)?;
+        let record: Option<super::mutation::OperationRecord> = self.read_confined(&path)?;
+        if record
+            .as_ref()
+            .is_some_and(|record| record.operation_id != operation_id)
+        {
+            return Err(ScienceError::Ownership);
         }
-        Ok(Some(Self::read_json(&path)?))
+        Ok(record)
     }
 
     /// Persist the idempotency record for an applied operation.
     /// Caller must hold the write guard.
-    pub(super) fn record_operation(
-        &self,
-        record: &super::mutation::OperationRecord,
-    ) -> Result<()> {
+    pub(super) fn record_operation(&self, record: &super::mutation::OperationRecord) -> Result<()> {
         super::mutation::validate_operation_id(&record.operation_id)?;
-        let path = self.operation_path(&record.operation_id);
-        if path.exists() {
-            return Err(ScienceError::Invalid(format!(
-                "operation {} already recorded",
-                record.operation_id
-            )));
-        }
-        Self::write_json(&path, record)
+        let path = Self::operation_relative(&record.operation_id)?;
+        self.write_new_confined(&path, record).map_err(|error| {
+            if matches!(
+                &error,
+                ScienceError::Io(io) if io.kind() == std::io::ErrorKind::AlreadyExists
+            ) {
+                ScienceError::Invalid(format!(
+                    "operation {} already recorded",
+                    record.operation_id
+                ))
+            } else {
+                error
+            }
+        })
     }
 
     // ── Artifact registry ─────────────────────────────────────────
 
-    fn artifacts_path(&self, project_id: &ProjectId) -> PathBuf {
-        self.project_dir(project_id).join("artifacts.json")
+    fn artifacts_relative(&self, project_id: &ProjectId) -> Result<PathBuf> {
+        Self::project_record(project_id, "artifacts.json")
     }
 
     /// All artifact digests registered against a project, keyed by digest.
@@ -420,12 +554,16 @@ impl ProjectStore {
         &self,
         project_id: &ProjectId,
     ) -> Result<BTreeMap<String, RegisteredArtifact>> {
-        validate_project_id(&project_id.0)?;
-        let path = self.artifacts_path(project_id);
-        if !path.is_file() {
-            return Ok(BTreeMap::new());
+        let path = self.artifacts_relative(project_id)?;
+        let registry: BTreeMap<String, RegisteredArtifact> =
+            self.read_confined(&path)?.unwrap_or_default();
+        if registry
+            .iter()
+            .any(|(sha, record)| record.project_id != *project_id || record.sha256 != *sha)
+        {
+            return Err(ScienceError::Ownership);
         }
-        Self::read_json(&path)
+        Ok(registry)
     }
 
     /// Register an artifact digest against a project so evidence may cite it.
@@ -469,8 +607,7 @@ impl ProjectStore {
             registered_at: Utc::now(),
         };
         registry.insert(sha, record.clone());
-        self.ensure_dir(project_id)?;
-        Self::write_json(&self.artifacts_path(project_id), &registry)?;
+        self.write_confined(&self.artifacts_relative(project_id)?, &registry)?;
         Ok(record)
     }
 
@@ -481,18 +618,19 @@ impl ProjectStore {
         sha: &str,
         exclude: &ProjectId,
     ) -> Result<Option<ProjectId>> {
-        let root = self.root.join("projects");
-        if !root.is_dir() {
-            return Ok(None);
-        }
-        for entry in fs::read_dir(root)? {
-            let entry = entry?;
-            let path = entry.path().join("artifacts.json");
-            if !path.is_file() {
+        for name in self.list_confined(Path::new("projects"))? {
+            let Some(project_name) = name.to_str() else {
+                continue;
+            };
+            if validate_project_id(project_name).is_err() {
                 continue;
             }
-            let registry: BTreeMap<String, RegisteredArtifact> = match Self::read_json(&path) {
-                Ok(registry) => registry,
+            let path = PathBuf::from("projects")
+                .join(project_name)
+                .join("artifacts.json");
+            let registry: BTreeMap<String, RegisteredArtifact> = match self.read_confined(&path) {
+                Ok(Some(registry)) => registry,
+                Ok(None) => continue,
                 // A damaged sibling registry must not mask the real error.
                 Err(_) => continue,
             };
@@ -635,9 +773,7 @@ impl ProjectStore {
             created_at: Utc::now(),
             metadata: BTreeMap::new(),
         };
-        graph
-            .add_node(node)
-            .map_err(ScienceError::Invalid)?;
+        graph.add_node(node).map_err(ScienceError::Invalid)?;
         // Claim record first, then the graph node derived from it.
         self.write_claim_file(&claim)?;
         self.write_graph_file(&graph)?;
@@ -646,30 +782,24 @@ impl ProjectStore {
 
     pub fn load_claim(&self, project_id: &ProjectId, claim_id: &str) -> Result<Claim> {
         self.gates.require(ScienceFeature::ClaimLifecycle)?;
-        let path = self
-            .project_dir(project_id)
-            .join("claims")
-            .join(format!("{claim_id}.json"));
-        if !path.is_file() {
-            return Err(ScienceError::Invalid(format!(
-                "claim not found: {claim_id}"
-            )));
-        }
-        Self::read_json(&path)
+        let path = Self::claim_record(project_id, claim_id)?;
+        self.read_confined(&path)?
+            .ok_or_else(|| ScienceError::Invalid(format!("claim not found: {claim_id}")))
     }
 
     pub fn list_claims(&self, project_id: &ProjectId) -> Result<Vec<Claim>> {
         self.gates.require(ScienceFeature::ClaimLifecycle)?;
-        let dir = self.project_dir(project_id).join("claims");
-        if !dir.is_dir() {
-            return Ok(vec![]);
-        }
+        let dir = Self::project_relative(project_id)?.join("claims");
         let mut out: Vec<Claim> = Vec::new();
-        for entry in fs::read_dir(dir)? {
-            let entry = entry?;
-            let path = entry.path();
+        for name in self.list_confined(&dir)? {
+            let path = dir.join(name);
             if path.extension().and_then(|e| e.to_str()) == Some("json") {
-                let claim: Claim = Self::read_json(&path)?;
+                let claim: Claim = self.read_confined(&path)?.ok_or_else(|| {
+                    ScienceError::Invalid("claim record disappeared during listing".into())
+                })?;
+                if claim.project_id != *project_id {
+                    return Err(ScienceError::Ownership);
+                }
                 out.push(claim);
             }
         }
@@ -708,7 +838,14 @@ impl ProjectStore {
         run_id: Option<String>,
     ) -> Result<(Claim, EvidenceGraph)> {
         let _guard = self.write_guard()?;
-        self.attach_evidence_inner(project_id, owner_id, claim_id, artifact_sha256, label, run_id)
+        self.attach_evidence_inner(
+            project_id,
+            owner_id,
+            claim_id,
+            artifact_sha256,
+            label,
+            run_id,
+        )
     }
 
     /// Caller must hold the write guard.
@@ -774,9 +911,7 @@ impl ProjectStore {
                 created_at: Utc::now(),
                 metadata: BTreeMap::new(),
             };
-            graph
-                .add_node(art_node)
-                .map_err(ScienceError::Invalid)?;
+            graph.add_node(art_node).map_err(ScienceError::Invalid)?;
         }
 
         let edge = EvidenceEdge {
@@ -824,16 +959,20 @@ impl ProjectStore {
         let _guard = self.write_guard()?;
         let mut report = ProjectRecoveryReport::default();
 
-        let dir = self.project_dir(project_id);
-        if !dir.join("project.json").is_file() {
+        let dir = Self::project_relative(project_id)?;
+        if self
+            .confined()?
+            .read_optional(&dir.join("project.json"))?
+            .is_none()
+        {
             return Err(ScienceError::Invalid(format!(
                 "project not found: {}",
                 project_id.0
             )));
         }
-        report.stale_temp_files_removed = Self::sweep_temp_files(&dir)?
-            + Self::sweep_temp_files(&dir.join("claims"))?
-            + Self::sweep_temp_files(&dir.join("reviews"))?;
+        report.stale_temp_files_removed = self.sweep_temp_files(&dir)?
+            + self.sweep_temp_files(&dir.join("claims"))?
+            + self.sweep_temp_files(&dir.join("reviews"))?;
 
         let claims = self.list_claims(project_id)?;
         let mut graph = self.load_graph(project_id)?;
@@ -847,7 +986,9 @@ impl ProjectStore {
         let orphans: Vec<NodeId> = graph
             .nodes
             .values()
-            .filter(|node| matches!(node.kind, NodeKind::Claim) && !known_nodes.contains(&node.node_id))
+            .filter(|node| {
+                matches!(node.kind, NodeKind::Claim) && !known_nodes.contains(&node.node_id)
+            })
             .map(|node| node.node_id.clone())
             .collect();
         for node_id in orphans {
@@ -883,9 +1024,9 @@ impl ProjectStore {
 
         // 3. Edges whose endpoints no longer exist.
         let before = graph.edges.len();
-        graph
-            .edges
-            .retain(|edge| graph.nodes.contains_key(&edge.source) && graph.nodes.contains_key(&edge.target));
+        graph.edges.retain(|edge| {
+            graph.nodes.contains_key(&edge.source) && graph.nodes.contains_key(&edge.target)
+        });
         report.orphan_edges_removed = before - graph.edges.len();
         graph_changed |= report.orphan_edges_removed > 0;
 
@@ -920,17 +1061,14 @@ impl ProjectStore {
     }
 
     /// Remove temp files left by a write that died before its rename.
-    fn sweep_temp_files(dir: &Path) -> Result<usize> {
-        if !dir.is_dir() {
-            return Ok(0);
-        }
+    fn sweep_temp_files(&self, dir: &Path) -> Result<usize> {
         let mut removed = 0;
-        for entry in fs::read_dir(dir)? {
-            let entry = entry?;
-            let name = entry.file_name();
+        for name in self.list_confined(dir)? {
             let Some(name) = name.to_str() else { continue };
-            if name.starts_with(TEMP_PREFIX) && name.ends_with(".tmp") {
-                fs::remove_file(entry.path())?;
+            if name.starts_with(TEMP_PREFIX)
+                && name.ends_with(".tmp")
+                && self.confined()?.remove_file(&dir.join(name))?
+            {
                 removed += 1;
             }
         }
@@ -945,20 +1083,86 @@ impl ProjectStore {
         })
     }
 
+    /// Load a complete project bundle for its owner.
+    ///
+    /// The aggregate root is ownership-checked before any graph or claim bytes
+    /// are returned. Missing projects and foreign projects intentionally share
+    /// the same [`ScienceError::Ownership`] result.
+    pub fn load_bundle_for_owner(
+        &self,
+        project_id: &ProjectId,
+        owner_id: &str,
+    ) -> Result<ProjectBundle> {
+        let project = self.load_owned_project(project_id, owner_id)?;
+        Ok(ProjectBundle {
+            project,
+            graph: self.load_graph(project_id)?,
+            claims: self.list_claims(project_id)?,
+        })
+    }
+
     pub fn list_projects(&self) -> Result<Vec<ResearchProject>> {
         self.gates.require(ScienceFeature::ResearchProject)?;
-        let root = self.root.join("projects");
-        if !root.is_dir() {
-            return Ok(vec![]);
-        }
         let mut out: Vec<ResearchProject> = Vec::new();
-        for entry in fs::read_dir(root)? {
-            let entry = entry?;
-            let pj = entry.path().join("project.json");
-            if pj.is_file() {
-                let project: ResearchProject = Self::read_json(&pj)?;
+        for name in self.list_confined(Path::new("projects"))? {
+            let Some(project_name) = name.to_str() else {
+                continue;
+            };
+            if validate_project_id(project_name).is_err() {
+                continue;
+            }
+            let pj = PathBuf::from("projects")
+                .join(project_name)
+                .join("project.json");
+            if let Some(project) = self.read_confined::<ResearchProject>(&pj)? {
+                if project.project_id.0 != project_name {
+                    return Err(ScienceError::Ownership);
+                }
                 out.push(project);
             }
+        }
+        out.sort_by(|a, b| a.project_id.0.cmp(&b.project_id.0));
+        Ok(out)
+    }
+
+    /// List only projects owned by `owner_id`.
+    ///
+    /// Foreign projects are filtered out rather than reported as errors, so
+    /// an empty result does not reveal whether the store is empty or contains
+    /// projects owned by somebody else. Unreadable records are omitted because
+    /// their ownership cannot be proven.
+    pub fn list_projects_for_owner(&self, owner_id: &str) -> Result<Vec<ResearchProject>> {
+        self.gates.require(ScienceFeature::ResearchProject)?;
+        if owner_id.is_empty() {
+            return Err(ScienceError::Ownership);
+        }
+        let mut out: Vec<ResearchProject> = Vec::new();
+        for name in self.list_confined(Path::new("projects"))? {
+            let Some(project_name) = name.to_str() else {
+                continue;
+            };
+            if validate_project_id(project_name).is_err() {
+                continue;
+            }
+            let project_path = PathBuf::from("projects")
+                .join(project_name)
+                .join("project.json");
+            let Ok(Some(project)): Result<Option<ResearchProject>> =
+                self.read_confined(&project_path)
+            else {
+                // A record whose owner cannot be established must never be
+                // exposed through an owner-scoped listing.
+                continue;
+            };
+            if project.owner_id.0 != owner_id {
+                continue;
+            }
+            if validate_project_id(&project.project_id.0).is_err()
+                || project_name != project.project_id.0
+            {
+                continue;
+            }
+            out.push(project);
         }
         out.sort_by(|a, b| a.project_id.0.cmp(&b.project_id.0));
         Ok(out)
@@ -1016,9 +1220,331 @@ mod tests {
         ));
 
         // bad hash fail closed
-        assert!(store
-            .attach_evidence(&p.project_id, "owner-1", &claim.claim_id, "nope", "x", None)
-            .is_err());
+        assert!(
+            store
+                .attach_evidence(&p.project_id, "owner-1", &claim.claim_id, "nope", "x", None)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn owner_scoped_bundle_hides_foreign_and_missing_projects() {
+        let dir = tempdir().unwrap();
+        let store = ProjectStore::new(dir.path());
+        let project = store
+            .create_project("owner-1", "Private project", "Private question")
+            .unwrap();
+        store
+            .propose_claim(&project.project_id, "owner-1", "private claim", "scientist")
+            .unwrap();
+
+        let owned = store
+            .load_bundle_for_owner(&project.project_id, "owner-1")
+            .unwrap();
+        assert_eq!(owned.project.project_id, project.project_id);
+        assert_eq!(owned.claims.len(), 1);
+
+        assert!(matches!(
+            store.load_bundle_for_owner(&project.project_id, "owner-2"),
+            Err(ScienceError::Ownership)
+        ));
+        assert!(matches!(
+            store.load_bundle_for_owner(&ProjectId("missing-project".into()), "owner-2"),
+            Err(ScienceError::Ownership)
+        ));
+        assert!(matches!(
+            store.load_bundle_for_owner(&project.project_id, ""),
+            Err(ScienceError::Ownership)
+        ));
+    }
+
+    #[test]
+    fn owner_scoped_list_filters_foreign_projects_without_disclosure() {
+        let dir = tempdir().unwrap();
+        let store = ProjectStore::new(dir.path());
+        let owned = store.create_project("owner-1", "Owned", "Q1").unwrap();
+        let foreign = store.create_project("owner-2", "Foreign", "Q2").unwrap();
+
+        let owner_projects = store.list_projects_for_owner("owner-1").unwrap();
+        assert_eq!(owner_projects.len(), 1);
+        assert_eq!(owner_projects[0].project_id, owned.project_id);
+        assert!(
+            owner_projects
+                .iter()
+                .all(|project| project.project_id != foreign.project_id)
+        );
+        assert!(
+            store
+                .list_projects_for_owner("unknown-owner")
+                .unwrap()
+                .is_empty(),
+            "an empty owner scope must not disclose foreign projects"
+        );
+        assert!(matches!(
+            store.list_projects_for_owner(""),
+            Err(ScienceError::Ownership)
+        ));
+    }
+
+    #[test]
+    fn evidence_query_ownership_assertion_rejects_foreign_owner() {
+        let dir = tempdir().unwrap();
+        let store = ProjectStore::new(dir.path());
+        let project = store
+            .create_project("owner-1", "Evidence", "Private evidence?")
+            .unwrap();
+        store
+            .propose_claim(
+                &project.project_id,
+                "owner-1",
+                "private evidence claim",
+                "scientist",
+            )
+            .unwrap();
+
+        // Evidence-query adapters must call this assertion before loading a
+        // claim or graph. Foreign and missing projects have the same terminal
+        // error, so the assertion cannot be used as an existence oracle.
+        assert!(
+            store
+                .assert_project_owner(&project.project_id, "owner-1")
+                .is_ok()
+        );
+        assert!(matches!(
+            store.assert_project_owner(&project.project_id, "owner-2"),
+            Err(ScienceError::Ownership)
+        ));
+        assert!(matches!(
+            store.assert_project_owner(&ProjectId("missing-project".into()), "owner-2"),
+            Err(ScienceError::Ownership)
+        ));
+        assert!(matches!(
+            store.assert_project_owner(&project.project_id, ""),
+            Err(ScienceError::Ownership)
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn owner_scoped_reads_never_follow_project_record_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let store = ProjectStore::new(dir.path().join("store"));
+        let outside = ProjectStore::new(dir.path().join("outside"));
+        let foreign = outside
+            .create_project("owner-1", "Outside", "Must stay outside")
+            .unwrap();
+        let projects = store.root.join("projects");
+        fs::create_dir_all(&projects).unwrap();
+        symlink(
+            outside.project_dir(&foreign.project_id),
+            projects.join(&foreign.project_id.0),
+        )
+        .unwrap();
+
+        assert!(matches!(
+            store.load_bundle_for_owner(&foreign.project_id, "owner-1"),
+            Err(ScienceError::Ownership)
+        ));
+        assert!(
+            store.list_projects_for_owner("owner-1").unwrap().is_empty(),
+            "owner-scoped list followed a symlinked project directory"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn product_writes_refuse_symlinked_parent_without_outside_bytes() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let root = dir.path().join("store");
+        let outside = dir.path().join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        let store = ProjectStore::new(&root);
+        symlink(&outside, root.join("projects")).unwrap();
+
+        assert!(
+            store
+                .create_project("owner-1", "Escaped?", "Must not escape")
+                .is_err(),
+            "a symlinked projects directory accepted a product write"
+        );
+        assert_eq!(
+            fs::read_dir(&outside).unwrap().count(),
+            0,
+            "the rejected project write created bytes outside the pinned root"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn pinned_root_survives_ancestor_path_swap_without_redirection() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let root = dir.path().join("store");
+        let retained = dir.path().join("retained-store");
+        let outside = dir.path().join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        let store = ProjectStore::new(&root);
+
+        fs::rename(&root, &retained).unwrap();
+        symlink(&outside, &root).unwrap();
+
+        let project = store
+            .create_project("owner-1", "Pinned", "Where do the bytes land?")
+            .unwrap();
+        assert!(
+            outside.read_dir().unwrap().next().is_none(),
+            "a root pathname swap redirected bytes outside the retained capability"
+        );
+        assert!(
+            retained
+                .join("projects")
+                .join(&project.project_id.0)
+                .join("project.json")
+                .is_file(),
+            "the retained directory capability did not receive the project record"
+        );
+        assert_eq!(
+            store.load_project(&project.project_id).unwrap().project_id,
+            project.project_id,
+            "reads did not remain bound to the same retained root"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn confined_constructor_proves_root_identity_inside_workspace() {
+        use std::os::unix::fs::symlink;
+
+        let workspace = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        let root = workspace.path().join("store");
+        let retained = workspace.path().join("retained-store");
+        let store = ProjectStore::new_confined(&root, workspace.path()).unwrap();
+
+        fs::rename(&root, &retained).unwrap();
+        symlink(outside.path(), &root).unwrap();
+        let project = store
+            .create_project("owner-1", "Pinned", "Retained capability?")
+            .unwrap();
+
+        assert!(
+            outside.path().read_dir().unwrap().next().is_none(),
+            "a confined store followed its replaced root pathname"
+        );
+        assert!(
+            retained
+                .join("projects")
+                .join(project.project_id.0)
+                .join("project.json")
+                .is_file()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn confined_constructor_rejects_outside_and_symlink_roots() {
+        use std::os::unix::fs::symlink;
+
+        let workspace = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        assert!(ProjectStore::new_confined(outside.path(), workspace.path()).is_err());
+
+        let linked = workspace.path().join("linked-store");
+        symlink(outside.path(), &linked).unwrap();
+        assert!(ProjectStore::new_confined(&linked, workspace.path()).is_err());
+        assert!(
+            outside.path().read_dir().unwrap().next().is_none(),
+            "a rejected confined constructor wrote outside its workspace"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn final_record_symlink_is_replaced_without_touching_target() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let root = dir.path().join("store");
+        let outside = dir.path().join("outside.json");
+        fs::write(&outside, b"outside-sentinel").unwrap();
+        let store = ProjectStore::new(&root);
+        let mut project = store
+            .create_project("owner-1", "Before", "Is publication confined?")
+            .unwrap();
+        let project_path = store.project_dir(&project.project_id).join("project.json");
+        fs::remove_file(&project_path).unwrap();
+        symlink(&outside, &project_path).unwrap();
+
+        project.title = "After".into();
+        store.save_project(&project).unwrap();
+
+        assert_eq!(
+            fs::read(&outside).unwrap(),
+            b"outside-sentinel",
+            "atomic publication followed a final-record symlink"
+        );
+        assert_eq!(
+            store.load_project(&project.project_id).unwrap().title,
+            "After"
+        );
+        assert!(
+            !fs::symlink_metadata(project_path)
+                .unwrap()
+                .file_type()
+                .is_symlink(),
+            "the safe publication did not replace the symlink entry"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn operation_ledger_parent_symlink_fails_before_mutation() {
+        use crate::project::{MutationRequest, ProjectMutation};
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let root = dir.path().join("store");
+        let outside = dir.path().join("outside-operations");
+        fs::create_dir_all(&outside).unwrap();
+        let store = ProjectStore::new(&root);
+        let project = store
+            .create_project("owner-1", "Before", "Original question")
+            .unwrap();
+        let revision = store.project_revision(&project.project_id).unwrap();
+        symlink(&outside, root.join("operations")).unwrap();
+
+        let request = MutationRequest {
+            operation_id: "op-symlink-ledger".into(),
+            session_id: "session-1".into(),
+            owner_id: "owner-1".into(),
+            expected_revision: Some(revision),
+            mutation: ProjectMutation::QuestionUpdate {
+                project_id: project.project_id.clone(),
+                research_question: "Redirected question".into(),
+            },
+        };
+        assert!(
+            store.apply_mutation(&request).is_err(),
+            "a symlinked operation ledger accepted a mutation"
+        );
+        assert_eq!(
+            store
+                .load_project(&project.project_id)
+                .unwrap()
+                .research_question,
+            "Original question",
+            "operation-ledger confinement failed after mutating aggregate state"
+        );
+        assert_eq!(
+            fs::read_dir(&outside).unwrap().count(),
+            0,
+            "the rejected operation wrote outside the retained store"
+        );
     }
 
     /// Set up a project with one claim and one registered artifact.
@@ -1059,10 +1585,22 @@ mod tests {
         }
 
         let graph = store.load_graph(&p.project_id).unwrap();
-        assert!(graph.nodes.contains_key(&ProjectStore::artifact_node_id(&first)));
-        assert!(graph.nodes.contains_key(&ProjectStore::artifact_node_id(&second)));
+        assert!(
+            graph
+                .nodes
+                .contains_key(&ProjectStore::artifact_node_id(&first))
+        );
+        assert!(
+            graph
+                .nodes
+                .contains_key(&ProjectStore::artifact_node_id(&second))
+        );
         // claim node + two distinct artifact nodes
-        assert_eq!(graph.nodes.len(), 3, "prefix collision collapsed two artifacts");
+        assert_eq!(
+            graph.nodes.len(),
+            3,
+            "prefix collision collapsed two artifacts"
+        );
         assert_eq!(graph.edges.len(), 2);
     }
 
@@ -1071,11 +1609,11 @@ mod tests {
         let dir = tempdir().unwrap();
         let (store, p, claim, _) = seeded(dir.path());
         for bad in [
-            "a".repeat(16),  // the old minimum — now rejected
-            "a".repeat(63),  // too short
-            "a".repeat(65),  // too long
-            "A".repeat(64),  // uppercase is not normalised
-            "g".repeat(64),  // non-hex
+            "a".repeat(16), // the old minimum — now rejected
+            "a".repeat(63), // too short
+            "a".repeat(65), // too long
+            "A".repeat(64), // uppercase is not normalised
+            "g".repeat(64), // non-hex
             format!("sha256:{}", "a".repeat(57)),
             String::new(),
         ] {
@@ -1132,9 +1670,11 @@ mod tests {
             store.attach_evidence(&p.project_id, "intruder", "claim-x", sha.clone(), "l", None),
             Err(ScienceError::Ownership)
         ));
-        assert!(store
-            .attach_evidence(&p.project_id, "o", "claim-does-not-exist", sha, "l", None)
-            .is_err());
+        assert!(
+            store
+                .attach_evidence(&p.project_id, "o", "claim-does-not-exist", sha, "l", None)
+                .is_err()
+        );
     }
 
     #[test]
@@ -1143,12 +1683,16 @@ mod tests {
         let store = ProjectStore::new(dir.path());
         let p = store.create_project("o", "T", "Q").unwrap();
 
-        assert!(store
-            .register_artifact(&p.project_id, "o", "a".repeat(16), "l", None)
-            .is_err());
-        assert!(store
-            .register_artifact(&p.project_id, "o", "A".repeat(64), "l", None)
-            .is_err());
+        assert!(
+            store
+                .register_artifact(&p.project_id, "o", "a".repeat(16), "l", None)
+                .is_err()
+        );
+        assert!(
+            store
+                .register_artifact(&p.project_id, "o", "A".repeat(64), "l", None)
+                .is_err()
+        );
         assert!(matches!(
             store.register_artifact(&p.project_id, "intruder", "a".repeat(64), "l", None),
             Err(ScienceError::Ownership)
@@ -1274,7 +1818,12 @@ mod tests {
                     let store = ProjectStore::new(&root);
                     for index in 0..PER_THREAD {
                         store
-                            .propose_claim(&project_id, "o", format!("claim {thread}/{index}"), "sci")
+                            .propose_claim(
+                                &project_id,
+                                "o",
+                                format!("claim {thread}/{index}"),
+                                "sci",
+                            )
                             .unwrap();
                         let sha = format!("{thread:02x}{index:02x}{}", "0".repeat(60));
                         store
@@ -1292,7 +1841,11 @@ mod tests {
         assert_eq!(graph.nodes.len(), total, "graph nodes were lost");
         for claim in &claims {
             let node = claim.evidence_node_id.clone().unwrap();
-            assert!(graph.nodes.contains_key(&node), "missing node for {}", claim.claim_id);
+            assert!(
+                graph.nodes.contains_key(&node),
+                "missing node for {}",
+                claim.claim_id
+            );
         }
         assert_eq!(
             setup.list_artifacts(&project_id).unwrap().len(),
@@ -1343,7 +1896,11 @@ mod tests {
         let graph = setup.load_graph(&project.project_id).unwrap();
         assert_eq!(graph.edges.len(), digests.len(), "edges were lost");
         for sha in &digests {
-            assert!(graph.nodes.contains_key(&ProjectStore::artifact_node_id(sha)));
+            assert!(
+                graph
+                    .nodes
+                    .contains_key(&ProjectStore::artifact_node_id(sha))
+            );
         }
         assert_eq!(
             setup
@@ -1362,7 +1919,11 @@ mod tests {
         let claim = store.propose_claim(&p.project_id, "o", "s", "sci").unwrap();
 
         // Crash point: claim record landed, graph write never did.
-        clobber_graph(&store, &p.project_id, &EvidenceGraph::new(p.project_id.clone()));
+        clobber_graph(
+            &store,
+            &p.project_id,
+            &EvidenceGraph::new(p.project_id.clone()),
+        );
 
         let report = store.recover_project(&p.project_id).unwrap();
         assert!(report.repaired());
@@ -1401,7 +1962,10 @@ mod tests {
         let report = store.recover_project(&p.project_id).unwrap();
         assert_eq!(report.claims_advanced, vec![claim.claim_id.clone()]);
         assert_eq!(
-            store.load_claim(&p.project_id, &claim.claim_id).unwrap().status,
+            store
+                .load_claim(&p.project_id, &claim.claim_id)
+                .unwrap()
+                .status,
             ClaimStatus::EvidenceAttached
         );
     }
@@ -1465,7 +2029,9 @@ mod tests {
         let project_dir = store.project_dir(&p.project_id);
         fs::write(project_dir.join(format!("{TEMP_PREFIX}dead.tmp")), b"{}").unwrap();
         fs::write(
-            project_dir.join("claims").join(format!("{TEMP_PREFIX}dead.tmp")),
+            project_dir
+                .join("claims")
+                .join(format!("{TEMP_PREFIX}dead.tmp")),
             b"{}",
         )
         .unwrap();
@@ -1518,9 +2084,10 @@ mod tests {
     fn feature_gate_blocks_when_disabled() {
         let dir = tempdir().unwrap();
         let mut store = ProjectStore::new(dir.path());
-        store
-            .gates_mut()
-            .set(ScienceFeature::ResearchProject, crate::features::GateState::Disabled);
+        store.gates_mut().set(
+            ScienceFeature::ResearchProject,
+            crate::features::GateState::Disabled,
+        );
         assert!(matches!(
             store.create_project("o", "t", "q"),
             Err(ScienceError::FeatureDisabled(_))

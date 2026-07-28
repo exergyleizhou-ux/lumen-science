@@ -267,7 +267,7 @@ test('the run\'s artifacts are previewable and reviewable — the evidence chain
   await page.getByRole('button', { name: 'Preview', exact: true }).click()
   await expect
     .poll(async () => page.locator('#panel-evidence pre').textContent(), { timeout: 15_000 })
-    .toContain('ok path=')
+    .toContain('ok bytes=')
   const meta = (await page.locator('#panel-evidence pre').textContent()) ?? ''
   // The record's hash is the id itself — content addressing, visibly.
   expect(meta).toContain(sha!)

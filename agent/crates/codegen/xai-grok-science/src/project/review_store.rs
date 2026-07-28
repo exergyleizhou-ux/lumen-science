@@ -124,10 +124,30 @@ impl ProjectStore {
         Ok(())
     }
 
+    fn reviews_relative(&self, project_id: &ProjectId) -> crate::Result<PathBuf> {
+        super::model::validate_project_id(&project_id.0)?;
+        Ok(PathBuf::from("projects")
+            .join(&project_id.0)
+            .join("reviews"))
+    }
+
+    fn review_relative(
+        &self,
+        project_id: &ProjectId,
+        operation_id: &str,
+    ) -> crate::Result<PathBuf> {
+        super::mutation::validate_operation_id(operation_id)?;
+        Ok(self
+            .reviews_relative(project_id)?
+            .join(format!("{operation_id}.json")))
+    }
+
+    #[cfg(test)]
     fn reviews_dir(&self, project_id: &ProjectId) -> PathBuf {
         self.project_dir(project_id).join("reviews")
     }
 
+    #[cfg(test)]
     fn review_path(&self, project_id: &ProjectId, operation_id: &str) -> PathBuf {
         self.reviews_dir(project_id)
             .join(format!("{operation_id}.json"))
@@ -157,23 +177,16 @@ impl ProjectStore {
         self.gates().require(ScienceFeature::Collaboration)?;
         self.gates().require(ScienceFeature::ReviewPackage)?;
         let project = self.load_project(project_id)?;
-        let dir = self.reviews_dir(project_id);
-        if !dir.is_dir() {
-            return Ok(Vec::new());
-        }
+        let dir = self.reviews_relative(project_id)?;
         let mut records = Vec::new();
-        for entry in std::fs::read_dir(dir)? {
-            let entry = entry?;
-            let path = entry.path();
+        for name in self.list_confined(&dir)? {
+            let path = dir.join(name);
             if path.extension().and_then(|value| value.to_str()) != Some("json") {
                 continue;
             }
-            if !entry.file_type()?.is_file() {
-                return Err(ScienceError::Invalid(
-                    "review ledger contains a non-regular JSON entry".into(),
-                ));
-            }
-            let record: ReviewRecord = Self::read_json(&path)?;
+            let record: ReviewRecord = self.read_confined_record(&path)?.ok_or_else(|| {
+                ScienceError::Invalid("review ledger entry disappeared during listing".into())
+            })?;
             if record.project_id != *project_id || record.owner_id != project.owner_id.0 {
                 return Err(ScienceError::Ownership);
             }
@@ -198,18 +211,10 @@ impl ProjectStore {
     ) -> crate::Result<Option<ReviewRecord>> {
         super::mutation::validate_operation_id(operation_id)?;
         super::model::validate_project_id(&project_id.0)?;
-        let path = self.review_path(project_id, operation_id);
-        let metadata = match std::fs::symlink_metadata(&path) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => return Err(error.into()),
+        let path = self.review_relative(project_id, operation_id)?;
+        let Some(record): Option<ReviewRecord> = self.read_confined_record(&path)? else {
+            return Ok(None);
         };
-        if !metadata.file_type().is_file() {
-            return Err(ScienceError::Invalid(
-                "project review ledger entry is not a regular file".into(),
-            ));
-        }
-        let record: ReviewRecord = Self::read_json(&path)?;
         if record.project_id != *project_id || record.operation_id != operation_id {
             return Err(ScienceError::Ownership);
         }
@@ -389,38 +394,28 @@ impl ProjectStore {
             recorded_at: Utc::now(),
         };
 
-        let path = self.review_path(project_id, operation_id);
-        match std::fs::symlink_metadata(&path) {
-            Ok(metadata) => {
-                if !metadata.file_type().is_file() {
-                    return Err(ScienceError::Invalid(
-                        "review operation path is not a regular file".into(),
-                    ));
-                }
-                let existing: ReviewRecord = Self::read_json(&path)?;
-                if existing.operation_id == record.operation_id
-                    && existing.project_id == record.project_id
-                    && existing.owner_id == record.owner_id
-                    && existing.session_id == record.session_id
-                    && existing.reviewer_id == record.reviewer_id
-                    && existing.verdict == record.verdict
-                    && existing.summary == record.summary
-                    && existing.claim_id == record.claim_id
-                    && existing.source_run_id == record.source_run_id
-                    && existing.authority_run_id == record.authority_run_id
-                    && existing.artifacts == record.artifacts
-                    && existing.evidence_fingerprint == record.evidence_fingerprint
-                {
-                    return Ok(existing);
-                }
-                return Err(ScienceError::Invalid(format!(
-                    "review operation {operation_id} already exists with different content"
-                )));
+        let path = self.review_relative(project_id, operation_id)?;
+        if let Some(existing) = self.read_confined_record::<ReviewRecord>(&path)? {
+            if existing.operation_id == record.operation_id
+                && existing.project_id == record.project_id
+                && existing.owner_id == record.owner_id
+                && existing.session_id == record.session_id
+                && existing.reviewer_id == record.reviewer_id
+                && existing.verdict == record.verdict
+                && existing.summary == record.summary
+                && existing.claim_id == record.claim_id
+                && existing.source_run_id == record.source_run_id
+                && existing.authority_run_id == record.authority_run_id
+                && existing.artifacts == record.artifacts
+                && existing.evidence_fingerprint == record.evidence_fingerprint
+            {
+                return Ok(existing);
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error.into()),
+            return Err(ScienceError::Invalid(format!(
+                "review operation {operation_id} already exists with different content"
+            )));
         }
-        Self::write_json(&path, &record)?;
+        self.write_new_confined_record(&path, &record)?;
         Ok(record)
     }
 
@@ -450,14 +445,11 @@ impl ProjectStore {
         if project.owner_id.0 != record.owner_id || record.reviewer_id != record.owner_id {
             return Err(ScienceError::Ownership);
         }
-        let ledger_path = self.review_path(&record.project_id, &record.operation_id);
-        let ledger_metadata = std::fs::symlink_metadata(&ledger_path)?;
-        if !ledger_metadata.file_type().is_file() {
-            return Err(ScienceError::Invalid(
-                "project review ledger entry is not a regular file".into(),
-            ));
-        }
-        let ledger_record: ReviewRecord = Self::read_json(&ledger_path)?;
+        let ledger_path = self.review_relative(&record.project_id, &record.operation_id)?;
+        let ledger_record: ReviewRecord =
+            self.read_confined_record(&ledger_path)?.ok_or_else(|| {
+                ScienceError::Invalid("project review ledger entry is missing".into())
+            })?;
         if ledger_record != *record {
             return Err(ScienceError::Invalid(
                 "project review ledger does not match its operation result".into(),
@@ -584,12 +576,31 @@ impl ProjectStore {
         Ok(())
     }
 
+    /// Verify the complete manifest/evidence/provenance commit while the
+    /// authority run is still Running. The SessionActor calls this before its
+    /// final Succeeded transition.
+    pub fn verify_pending_review_commit(&self, record: &ReviewRecord) -> crate::Result<()> {
+        self.verify_review_commit(record, RunState::Running)
+    }
+
     /// Fail closed unless the review's own authority run is complete and its
     /// manifest/evidence/provenance exactly bind the project-ledger record.
     pub fn verify_review_record(&self, record: &ReviewRecord) -> crate::Result<()> {
+        self.verify_review_commit(record, RunState::Succeeded)
+    }
+
+    fn verify_review_commit(
+        &self,
+        record: &ReviewRecord,
+        authority_state: RunState,
+    ) -> crate::Result<()> {
         let (science_store, authority_run) =
-            self.verify_review_record_binding(record, RunState::Succeeded)?;
-        crate::review::verify_for_goal_completion(&science_store, &authority_run)?;
+            self.verify_review_record_binding(record, authority_state)?;
+        if authority_state == RunState::Running {
+            crate::review::verify_before_successful_commit(&science_store, &authority_run)?;
+        } else {
+            crate::review::verify_for_goal_completion(&science_store, &authority_run)?;
+        }
         let artifacts = science_store.artifacts(&authority_run)?;
         let [manifest] = artifacts.as_slice() else {
             return Err(ScienceError::Invalid(
@@ -606,12 +617,22 @@ impl ProjectStore {
                 "review authority run has no canonical review manifest metadata".into(),
             ));
         }
-        let manifest_bytes = science_store.artifact_bytes(
-            &crate::ProjectId::new(record.project_id.0.clone()),
-            &authority_run,
-            &record.owner_id,
-            &manifest.relative_path,
-        )?;
+        let project_id = crate::ProjectId::new(record.project_id.0.clone());
+        let manifest_bytes = if authority_state == RunState::Running {
+            science_store.running_artifact_bytes(
+                &project_id,
+                &authority_run,
+                &record.owner_id,
+                &manifest.relative_path,
+            )?
+        } else {
+            science_store.artifact_bytes(
+                &project_id,
+                &authority_run,
+                &record.owner_id,
+                &manifest.relative_path,
+            )?
+        };
         let manifest_record: ReviewRecord = serde_json::from_slice(&manifest_bytes)?;
         if manifest_record != *record {
             return Err(ScienceError::Invalid(
@@ -786,9 +807,73 @@ mod tests {
         science_store
             .add_provenance(record.expected_provenance())
             .unwrap();
+        fixture
+            .project_store
+            .verify_pending_review_commit(record)
+            .unwrap();
         science_store
             .transition(&fixture.authority_run_id, RunState::Succeeded, None)
             .unwrap();
+    }
+
+    #[test]
+    fn review_cannot_succeed_before_preterminal_commit_verification() {
+        let fixture = fixture();
+        let outcome = fixture
+            .project_store
+            .apply_mutation(&review_request(&fixture, "op-review-preterminal-tamper"))
+            .unwrap();
+        let record: ReviewRecord = serde_json::from_value(outcome.result).unwrap();
+        let science_store = ScienceStore::new(&fixture.store_root);
+        let manifest = serde_json::to_vec_pretty(&record).unwrap();
+        let artifact = science_store
+            .put_artifact(
+                &ScienceProjectId::new(fixture.project_id.0.clone()),
+                &fixture.authority_run_id,
+                "owner-1",
+                CallId::new("science_project_mutation"),
+                Path::new("review_record.json"),
+                &manifest,
+                "application/json",
+                "actor-owned durable review record",
+            )
+            .unwrap();
+        science_store
+            .add_evidence(record.expected_evidence(artifact.sha256))
+            .unwrap();
+        science_store
+            .add_provenance(record.expected_provenance())
+            .unwrap();
+
+        let manifest_path = fixture
+            .store_root
+            .join("runs")
+            .join(&fixture.authority_run_id.0)
+            .join("artifacts/review_record.json");
+        std::fs::write(&manifest_path, br#"{"forged":true}"#).unwrap();
+
+        assert!(
+            fixture
+                .project_store
+                .verify_pending_review_commit(&record)
+                .is_err(),
+            "tampered review commit passed its preterminal authority check"
+        );
+        assert_eq!(
+            science_store
+                .load_run(&fixture.authority_run_id)
+                .unwrap()
+                .state,
+            RunState::Running,
+            "failed preterminal verification must not expose Succeeded"
+        );
+        assert!(
+            fixture
+                .project_store
+                .list_reviews(&fixture.project_id)
+                .is_err(),
+            "a running authority commit must not expose a durable review"
+        );
     }
 
     #[test]
@@ -1002,5 +1087,69 @@ mod tests {
                 "a symlinked review ledger entry was followed"
             );
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn review_ledger_parent_symlink_cannot_redirect_read_or_write() {
+        use std::os::unix::fs::symlink;
+
+        let write_fixture = fixture();
+        let request = review_request(&write_fixture, "op-review-parent-symlink");
+        let outside = write_fixture._root.path().join("outside-reviews");
+        std::fs::create_dir_all(&outside).unwrap();
+        symlink(
+            &outside,
+            write_fixture
+                .project_store
+                .reviews_dir(&write_fixture.project_id),
+        )
+        .unwrap();
+
+        assert!(
+            write_fixture
+                .project_store
+                .apply_mutation(&request)
+                .is_err(),
+            "a symlinked review parent accepted a ledger write"
+        );
+        assert_eq!(
+            std::fs::read_dir(&outside).unwrap().count(),
+            0,
+            "the rejected review write created bytes outside the project store"
+        );
+        assert!(
+            write_fixture
+                .project_store
+                .lookup_operation("op-review-parent-symlink")
+                .unwrap()
+                .is_none(),
+            "a rejected review write still committed its operation ledger"
+        );
+
+        let read_fixture = fixture();
+        let outcome = read_fixture
+            .project_store
+            .apply_mutation(&review_request(&read_fixture, "op-review-parent-read"))
+            .unwrap();
+        let record: ReviewRecord = serde_json::from_value(outcome.result).unwrap();
+        complete_authority_run(&read_fixture, &record);
+        let reviews = read_fixture
+            .project_store
+            .reviews_dir(&read_fixture.project_id);
+        let retained = read_fixture._root.path().join("retained-reviews");
+        let forged = read_fixture._root.path().join("forged-reviews");
+        std::fs::rename(&reviews, &retained).unwrap();
+        std::fs::create_dir_all(&forged).unwrap();
+        ProjectStore::write_json(&forged.join("forged.json"), &record).unwrap();
+        symlink(&forged, &reviews).unwrap();
+
+        assert!(
+            read_fixture
+                .project_store
+                .list_reviews(&read_fixture.project_id)
+                .is_err(),
+            "review listing followed a replaced parent-directory symlink"
+        );
     }
 }
