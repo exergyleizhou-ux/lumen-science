@@ -4934,6 +4934,29 @@ fn attempt_dirs(output_root: &Path, run_id: &str, step_id: &str) -> Vec<String> 
     names
 }
 
+fn assert_workflow_cas_blob(store_root: &Path, digest: &str, expected: &[u8]) {
+    assert_eq!(digest.len(), 64, "CAS digest must be SHA-256: {digest}");
+    assert!(
+        digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
+        "CAS digest must be lowercase hex: {digest}"
+    );
+    let bytes = std::fs::read(
+        store_root
+            .join("workflow-artifacts")
+            .join("sha256")
+            .join(digest),
+    )
+    .unwrap_or_else(|error| panic!("cannot read workflow CAS blob {digest}: {error}"));
+    assert_eq!(
+        format!("{:x}", Sha256::digest(&bytes)),
+        digest,
+        "workflow CAS path does not match its physical bytes"
+    );
+    assert_eq!(bytes, expected, "workflow CAS stored unexpected bytes");
+}
+
 /// A workflow executes through the SessionActor, and replaying its operation
 /// id returns the recorded outcome without running the kernel a second time.
 #[tokio::test]
@@ -5031,20 +5054,23 @@ async fn test_stdio_science_workflow_execute_is_actor_gated_and_idempotent() {
 
         // The committed manifest must contain the bytes the cell actually
         // wrote. Recomputed here, not read back from the record claiming it.
+        let expected_result = format!("{:x}", Sha256::digest(b"{\"mean\": 1.5}"));
         let expected_stdout = format!("{:x}", Sha256::digest(b"acp-computed\n"));
         let manifest = first["commits"][0]["outputManifest"]
             .as_object()
             .unwrap_or_else(|| panic!("no commit manifest: {first}"));
-        assert!(
-            manifest
-                .values()
-                .any(|d| d == &Value::String(expected_stdout.clone())),
+        assert_eq!(
+            manifest.get("result.json"),
+            Some(&Value::String(expected_result.clone())),
+            "result bytes are not committed under their true digest: {manifest:?}"
+        );
+        assert_eq!(
+            manifest.get("stdout.txt"),
+            Some(&Value::String(expected_stdout.clone())),
             "stdout not committed with its true digest: {manifest:?}"
         );
-        assert!(
-            manifest.keys().any(|k| k.ends_with("result.json")),
-            "the file the cell wrote is missing: {manifest:?}"
-        );
+        assert_workflow_cas_blob(&store_root, &expected_result, b"{\"mean\": 1.5}");
+        assert_workflow_cas_blob(&store_root, &expected_stdout, b"acp-computed\n");
 
         let run_id = first["runId"].as_str().expect("runId").to_owned();
         let attempt_id = first["attempts"][0]["attemptId"]
@@ -5150,12 +5176,260 @@ async fn test_stdio_science_workflow_execute_is_actor_gated_and_idempotent() {
             Value::String(run_id),
             "second run reused the first run id"
         );
-        // Content-addressed commits: the same cell with the same inputs commits
-        // once, so the second run REUSES rather than duplicating the artifact.
+        // NoCache means a fresh operation owns a fresh authority commit even
+        // when the immutable CAS can deduplicate identical physical bytes.
+        assert_eq!(
+            second["artifactsCommitted"], 1,
+            "fresh NoCache execution did not own its commit: {second}"
+        );
+        assert_eq!(second["stepsReused"], 0, "NoCache reused a step: {second}");
+        assert_ne!(
+            second["commits"][0]["commitKey"], first["commits"][0]["commitKey"],
+            "separate NoCache runs shared an authority commit"
+        );
+        assert_eq!(
+            second["commits"][0]["committedByAttempt"], second["attempts"][0]["attemptId"],
+            "second NoCache commit does not belong to its own attempt"
+        );
+        let second_run_id = second["runId"].as_str().expect("second runId");
+        let second_attempt_id = second["attempts"][0]["attemptId"]
+            .as_str()
+            .expect("second attemptId");
+        assert_eq!(
+            attempt_dirs(&output_root, second_run_id, "compute"),
+            vec![second_attempt_id.to_owned()],
+            "fresh NoCache run did not execute exactly once"
+        );
+        let second_manifest = second["commits"][0]["outputManifest"]
+            .as_object()
+            .unwrap_or_else(|| panic!("no second commit manifest: {second}"));
+        assert_eq!(second_manifest, manifest);
+        assert_workflow_cas_blob(&store_root, &expected_result, b"{\"mean\": 1.5}");
+        assert_workflow_cas_blob(&store_root, &expected_stdout, b"acp-computed\n");
+    })
+    .await;
+}
+
+/// Deterministic reuse is allowed only while the exact store-owned CAS bytes
+/// still match their address. A corrupt blob must fail through the real ACP
+/// composition root without running the kernel again.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_workflow_deterministic_reuse_refuses_tampered_cas() {
+    let Some(python) = workflow_python3() else {
+        panic!("no protected python3 available: deterministic CAS product proof cannot be skipped");
+    };
+    with_local_set(|| async move {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let store_root = workdir.path().join("science-store");
+        let client = GrokStdioClient::spawn(&server, workdir.path()).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+
+        let created: Value = serde_json::from_str(
+            client
+                .ext_method(
+                    "x.ai/science/project_create",
+                    serde_json::json!({
+                        "sessionId": session_id.0.as_ref(),
+                        "ownerId": "science-owner",
+                        "storeRoot": store_root,
+                        "title": "Workflow CAS integrity project",
+                        "researchQuestion": "Does deterministic reuse verify physical bytes?",
+                        "operationId": "op-wf-cas-project-create",
+                        "approvalTimeoutMs": 30_000,
+                    }),
+                )
+                .await
+                .expect("actor-gated CAS project_create failed")
+                .0
+                .get(),
+        )
+        .expect("CAS project_create returned JSON");
+        let project_id = created["projectId"]
+            .as_str()
+            .expect("CAS project_create returned projectId")
+            .to_owned();
+
+        let params = |operation_id: &str| {
+            let mut spec = workflow_spec("wf-acp-deterministic-cas", &project_id, WORKFLOW_CELL);
+            spec["steps"][0]["cache_policy"] = serde_json::json!("DeterministicReuse");
+            serde_json::json!({
+                "sessionId": session_id.0.as_ref(),
+                "ownerId": "science-owner",
+                "storeRoot": store_root,
+                "operationId": operation_id,
+                "workflowSpec": spec,
+                "interpreterPath": python,
+                "kernelId": "py-acp-deterministic-cas",
+                "allowKernelSteps": true,
+                "probeTimeoutMs": 60_000,
+                "approvalTimeoutMs": 30_000,
+            })
+        };
+
+        let first: Value = serde_json::from_str(
+            tokio::time::timeout(
+                Duration::from_secs(120),
+                client.ext_method("x.ai/science/workflow_execute", params("op-wf-cas-first")),
+            )
+            .await
+            .expect("first deterministic workflow timed out")
+            .expect("first deterministic workflow failed")
+            .0
+            .get(),
+        )
+        .expect("first deterministic workflow returned JSON");
+        assert_eq!(first["state"], "succeeded", "first: {first}");
+        let first_run_id = first["runId"].as_str().expect("first workflow runId");
+        let first_attempt = first["attempts"][0]["attemptId"]
+            .as_str()
+            .expect("first workflow attemptId");
+        let output_root = store_root.join("workflow-outputs");
+        assert_eq!(
+            attempt_dirs(&output_root, first_run_id, "compute"),
+            vec![first_attempt.to_owned()]
+        );
+        let digest = first["commits"][0]["outputManifest"]["result.json"]
+            .as_str()
+            .expect("result.json digest")
+            .to_owned();
+        assert_workflow_cas_blob(&store_root, &digest, b"{\"mean\": 1.5}");
+        std::fs::write(
+            store_root
+                .join("workflow-artifacts")
+                .join("sha256")
+                .join(&digest),
+            b"tampered",
+        )
+        .expect("tamper CAS fixture");
+
+        let authority_runs_before: std::collections::BTreeSet<String> =
+            std::fs::read_dir(store_root.join("runs"))
+                .expect("authority runs before tamper")
+                .map(|entry| {
+                    entry
+                        .expect("authority run entry")
+                        .file_name()
+                        .to_string_lossy()
+                        .into_owned()
+                })
+                .collect();
+        let permissions_before = client.permission_request_count();
+        let second = tokio::time::timeout(
+            Duration::from_secs(120),
+            client.ext_method(
+                "x.ai/science/workflow_execute",
+                params("op-wf-cas-tampered"),
+            ),
+        )
+        .await
+        .expect("tampered deterministic workflow timed out");
+        let second: Value = serde_json::from_str(
+            second
+                .expect("ACP adapter failed before returning durable workflow failure")
+                .0
+                .get(),
+        )
+        .expect("tampered workflow returned JSON");
+        assert_eq!(
+            second["state"], "failed",
+            "tampered CAS was served as success: {second}"
+        );
         assert_eq!(
             second["artifactsCommitted"], 0,
-            "an identical step committed a second artifact: {second}"
+            "failed reuse published an artifact commit: {second}"
         );
+        assert_eq!(
+            client.permission_request_count(),
+            permissions_before + 1,
+            "fresh operation did not traverse the actor permission gate"
+        );
+
+        let operation: xai_grok_science::workflow::WorkflowOperationRecord =
+            serde_json::from_slice(
+                &std::fs::read(
+                    store_root
+                        .join("workflow-operations")
+                        .join("op-wf-cas-tampered.json"),
+                )
+                .expect("read tampered workflow operation record"),
+            )
+            .expect("parse tampered workflow operation record");
+        let workflow_run: xai_grok_science::workflow::WorkflowRunRecord = serde_json::from_slice(
+            &std::fs::read(
+                store_root
+                    .join("workflow-runs")
+                    .join(&operation.run_id)
+                    .join("run.json"),
+            )
+            .expect("read tampered workflow run record"),
+        )
+        .expect("parse tampered workflow run record");
+        assert_eq!(
+            workflow_run.state,
+            xai_grok_science::workflow::WorkflowState::Failed
+        );
+        assert!(workflow_run.finished_at.is_some());
+        assert!(
+            workflow_run
+                .failure
+                .as_deref()
+                .is_some_and(|failure| failure.contains("stored bytes hash")),
+            "workflow failure did not record CAS corruption: {workflow_run:?}"
+        );
+        let attempts: Vec<xai_grok_science::workflow::StepAttempt> = std::fs::read_dir(
+            store_root
+                .join("workflow-runs")
+                .join(&operation.run_id)
+                .join("attempts"),
+        )
+        .expect("read tampered workflow attempts")
+        .map(|entry| {
+            let entry = entry.expect("attempt entry");
+            serde_json::from_slice(
+                &std::fs::read(entry.path()).expect("read workflow attempt record"),
+            )
+            .expect("parse workflow attempt record")
+        })
+        .collect();
+        assert_eq!(attempts.len(), 1);
+        assert_eq!(
+            attempts[0].terminal_state,
+            Some(xai_grok_science::workflow::AttemptState::Failed)
+        );
+        assert_eq!(
+            attempts[0].error_class,
+            Some(xai_grok_science::workflow::ErrorClass::PolicyViolation)
+        );
+        assert!(
+            attempt_dirs(&output_root, &operation.run_id, "compute").is_empty(),
+            "CAS rejection ran a second kernel attempt"
+        );
+
+        let authority_runs_after: std::collections::BTreeSet<String> =
+            std::fs::read_dir(store_root.join("runs"))
+                .expect("authority runs after tamper")
+                .map(|entry| {
+                    entry
+                        .expect("authority run entry")
+                        .file_name()
+                        .to_string_lossy()
+                        .into_owned()
+                })
+                .collect();
+        let new_authority_runs: Vec<_> = authority_runs_after
+            .difference(&authority_runs_before)
+            .cloned()
+            .collect();
+        assert_eq!(new_authority_runs.len(), 1);
+        let authority_run = xai_grok_science::ScienceStore::new(&store_root)
+            .load_run(&xai_grok_science::RunId::new(new_authority_runs[0].clone()))
+            .expect("load failed authority run");
+        assert_eq!(authority_run.state, xai_grok_science::RunState::Failed);
     })
     .await;
 }

@@ -324,6 +324,13 @@ impl RetainedOutputDirectory {
 pub struct WorkflowOutputSnapshot {
     /// Slash-separated relative file name to lowercase SHA-256.
     pub artifacts: BTreeMap<String, String>,
+    /// The exact bytes behind `artifacts`.
+    ///
+    /// The workflow executor, not the runner, is the authority that hashes
+    /// and publishes these bytes into its immutable artifact store. Keeping
+    /// the bytes in the retained-directory snapshot prevents a runner from
+    /// claiming a digest for content the executor never observed.
+    pub artifact_bytes: BTreeMap<String, Vec<u8>>,
     pub bytes_produced: u64,
 }
 
@@ -333,6 +340,7 @@ fn snapshot(directory: &PinnedDirectory) -> Result<WorkflowOutputSnapshot> {
 
 fn snapshot_bounded(directory: &PinnedDirectory, max_bytes: u64) -> Result<WorkflowOutputSnapshot> {
     let mut artifacts = BTreeMap::new();
+    let mut artifact_bytes = BTreeMap::new();
     let mut bytes_produced = 0u64;
     for (relative, bytes) in directory.snapshot_nofollow_bounded(max_bytes)? {
         let name = snapshot_name(&relative)?;
@@ -341,10 +349,12 @@ fn snapshot_bounded(directory: &PinnedDirectory, max_bytes: u64) -> Result<Workf
             .ok_or_else(|| {
                 ScienceError::Invalid("workflow output snapshot byte count overflowed".into())
             })?;
-        artifacts.insert(name, hex_sha256(&bytes));
+        artifacts.insert(name.clone(), hex_sha256(&bytes));
+        artifact_bytes.insert(name, bytes);
     }
     Ok(WorkflowOutputSnapshot {
         artifacts,
+        artifact_bytes,
         bytes_produced,
     })
 }

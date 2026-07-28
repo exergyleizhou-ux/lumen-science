@@ -8,13 +8,13 @@
 //!
 //! ## Guarantees
 //!
-//! - **At-least-once step execution, exactly-once artifact commit.** An
-//!   attempt record is written *before* the step runs and finalised after, so
-//!   a crash in between leaves a non-terminal attempt rather than a silent
-//!   gap. A step may therefore run more than once. Its output is committed
-//!   under a content-addressed commit key, and a key that is already
-//!   committed is never committed again — a retried step cannot produce a
-//!   second artifact.
+//! - **At-least-once step execution, exactly-once accepted-output commit.** An
+//!   attempt record is written *before* cache verification or work and
+//!   finalised after, so a crash leaves a non-terminal attempt rather than a
+//!   silent gap. The executor hashes the runner's exact bytes into its own
+//!   immutable CAS. Only accepted output may publish a commit. Deterministic
+//!   reuse is scoped to owner, session, project, workflow, step, environment
+//!   and policy; NoCache additionally scopes each commit to its run.
 //! - **Operation-id deduplication.** Re-executing one operation id replays the
 //!   recorded run instead of running the workflow again.
 //! - **Bounded retry on an injected clock.** Backoff never reads the wall
@@ -61,7 +61,7 @@ use std::{
     time::Duration,
 };
 
-pub const WORKFLOW_RUN_SCHEMA_VERSION: u32 = 1;
+pub const WORKFLOW_RUN_SCHEMA_VERSION: u32 = 2;
 
 /// Step ids become directory and file name components, so they are kept to a
 /// boring alphabet rather than sanitised after the fact.
@@ -290,8 +290,12 @@ pub struct StepPlan {
 /// What a step produced.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct StepOutput {
-    /// Artifact path → SHA-256 hex. This is the manifest that gets committed.
-    pub artifacts: BTreeMap<String, String>,
+    /// Artifact path → exact bytes.
+    ///
+    /// A runner is not trusted to supply digests. The executor hashes these
+    /// bytes itself and publishes them into its store-owned immutable CAS only
+    /// after every acceptance rule has passed.
+    pub artifacts: BTreeMap<String, Vec<u8>>,
     pub exit_code: Option<i32>,
     pub bytes_produced: u64,
 }
@@ -485,6 +489,10 @@ pub struct StepAttempt {
     pub environment_hash: String,
     pub policy_hash: String,
     pub reuse_key_hash: String,
+    /// Exact durable commit this attempt published or reused. It stays `None`
+    /// for rejected, failed, cancelled and interrupted attempts.
+    #[serde(default)]
+    pub commit_key: Option<String>,
     pub started_at: DateTime<Utc>,
     pub finished_at: Option<DateTime<Utc>>,
     /// `None` while the attempt is in flight. A `None` found on restart is
@@ -502,12 +510,28 @@ impl StepAttempt {
 }
 
 /// The exactly-once ledger entry for a step's output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ArtifactCommitState {
+    Prepared,
+    Committed,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ArtifactCommit {
     pub schema_version: u32,
+    pub state: ArtifactCommitState,
     pub commit_key: String,
+    pub owner_id: String,
+    pub session_id: String,
+    pub project_id: ProjectId,
+    /// The run that originally published this commit. Deterministic reuse may
+    /// reference it from a later run, but NoCache keys include this run id.
+    pub run_id: String,
     pub workflow_id: String,
     pub step_id: String,
+    pub cache_policy: CachePolicy,
+    pub reuse_key_hash: String,
     pub output_manifest: BTreeMap<String, String>,
     pub output_manifest_hash: String,
     pub committed_at: DateTime<Utc>,
@@ -556,6 +580,7 @@ pub struct WorkflowRunRecord {
 /// The idempotency record for one execution request.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkflowOperationRecord {
+    pub schema_version: u32,
     pub operation_id: String,
     pub session_id: String,
     pub owner_id: String,
@@ -766,10 +791,13 @@ impl WorkflowExecutor {
         self.attempts_relative(run_id)
             .join(format!("{attempt_id}.json"))
     }
-    /// Commits are keyed by content, not by run, so a later run of the same
-    /// step with the same inputs finds the same artifact.
     fn commit_path(&self, commit_key: &str) -> PathBuf {
         PathBuf::from("workflow-commits").join(format!("{commit_key}.json"))
+    }
+    fn artifact_path(&self, sha256: &str) -> PathBuf {
+        PathBuf::from("workflow-artifacts")
+            .join("sha256")
+            .join(sha256)
     }
     fn operation_path(&self, operation_id: &str) -> PathBuf {
         PathBuf::from("workflow-operations").join(format!("{operation_id}.json"))
@@ -840,6 +868,7 @@ impl WorkflowExecutor {
                     validate_run_id(&record.run_id)?;
                     let run: WorkflowRunRecord = self
                         .require_record(&self.run_path(&record.run_id), "reserved workflow run")?;
+                    self.validate_run_record(&run, &record.run_id)?;
                     let requested_spec_hash = spec_hash(&request.spec)?;
                     let requested_environment_hash = self.environment.identity_hash();
                     let requested_policy_hash = self.policy.policy_hash();
@@ -927,9 +956,7 @@ impl WorkflowExecutor {
                 "workflow run not found: {run_id}"
             )));
         };
-        if run.run_id != run_id {
-            return Err(ScienceError::Ownership);
-        }
+        self.validate_run_record(&run, run_id)?;
 
         for mut attempt in self.load_attempts(run_id)? {
             if attempt.in_flight() {
@@ -967,9 +994,7 @@ impl WorkflowExecutor {
         validate_run_id(run_id)?;
         let path = self.run_path(run_id);
         let run: WorkflowRunRecord = self.require_record(&path, "workflow run")?;
-        if run.run_id != run_id {
-            return Err(ScienceError::Ownership);
-        }
+        self.validate_run_record(&run, run_id)?;
         Ok(run)
     }
 
@@ -990,10 +1015,7 @@ impl WorkflowExecutor {
             let path = dir.join(&name);
             let attempt: StepAttempt =
                 self.require_record(&path, "listed workflow attempt record")?;
-            if attempt.run_id != run_id || attempt.attempt_id != stem {
-                return Err(ScienceError::Ownership);
-            }
-            validate_step_id(&attempt.step_id).map_err(ScienceError::Invalid)?;
+            self.validate_attempt_record(&attempt, run_id, stem)?;
             attempts.push(attempt);
         }
         attempts.sort_by(|a, b| {
@@ -1004,15 +1026,12 @@ impl WorkflowExecutor {
 
     pub fn load_commit(&self, commit_key: &str) -> Result<Option<ArtifactCommit>> {
         validate_commit_key(commit_key)?;
+        let _guard = self.guard()?;
         let path = self.commit_path(commit_key);
-        let commit: Option<ArtifactCommit> = self.read_record(&path)?;
-        if commit
-            .as_ref()
-            .is_some_and(|record| record.commit_key != commit_key)
-        {
-            return Err(ScienceError::Ownership);
-        }
-        Ok(commit)
+        let Some(commit): Option<ArtifactCommit> = self.read_record(&path)? else {
+            return Ok(None);
+        };
+        Ok(Some(self.resolve_commit_locked(commit, commit_key)?))
     }
 
     /// The reservation an operation id already holds, if any.
@@ -1030,11 +1049,8 @@ impl WorkflowExecutor {
         crate::project::mutation::validate_operation_id(operation_id)?;
         let path = self.operation_path(operation_id);
         let operation: Option<WorkflowOperationRecord> = self.read_record(&path)?;
-        if operation
-            .as_ref()
-            .is_some_and(|record| record.operation_id != operation_id)
-        {
-            return Err(ScienceError::Ownership);
+        if let Some(record) = &operation {
+            self.validate_operation_record(record, operation_id)?;
         }
         Ok(operation)
     }
@@ -1053,11 +1069,9 @@ impl WorkflowExecutor {
                 continue;
             };
             validate_commit_key(stem)?;
-            let commit: ArtifactCommit =
-                self.require_record(&dir.join(&name), "listed workflow commit")?;
-            if commit.commit_key != stem {
-                return Err(ScienceError::Ownership);
-            }
+            let commit = self.load_commit(stem)?.ok_or_else(|| {
+                ScienceError::Invalid(format!("listed workflow commit {stem} disappeared"))
+            })?;
             commits.push(commit);
         }
         commits.sort_by(|left, right| left.commit_key.cmp(&right.commit_key));
@@ -1075,6 +1089,7 @@ impl WorkflowExecutor {
         validate_run_id(run_id)?;
         let path = self.operation_path(&request.operation_id);
         let record = WorkflowOperationRecord {
+            schema_version: WORKFLOW_RUN_SCHEMA_VERSION,
             operation_id: request.operation_id.clone(),
             session_id: request.session_id.clone(),
             owner_id: request.owner_id.clone(),
@@ -1090,9 +1105,7 @@ impl WorkflowExecutor {
             Err(ScienceError::Io(error)) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                 let existing: WorkflowOperationRecord =
                     self.require_record(&path, "reserved workflow operation")?;
-                if existing.operation_id != request.operation_id {
-                    return Err(ScienceError::Ownership);
-                }
+                self.validate_operation_record(&existing, &request.operation_id)?;
                 Ok(OperationReservation::Replay(existing))
             }
             Err(error) => Err(error),
@@ -1178,6 +1191,16 @@ impl WorkflowExecutor {
         let mut operations: BTreeMap<String, StepOperation> = BTreeMap::new();
         for step_id in &step_order {
             let step = by_id[step_id.as_str()];
+            if step.cache_policy == CachePolicy::LocalReuse {
+                run.refused_steps.push(RefusedStep {
+                    step_id: step.step_id.clone(),
+                    kind: step.kind,
+                    error_class: ErrorClass::PolicyViolation,
+                    detail: "LocalReuse has no authority-scoped durable semantics and is disabled"
+                        .into(),
+                });
+                continue;
+            }
             if !self.policy.allowed_step_kinds.contains(&step.kind) {
                 run.refused_steps.push(RefusedStep {
                     step_id: step.step_id.clone(),
@@ -1245,7 +1268,19 @@ impl WorkflowExecutor {
 
             let step = by_id[step_id.as_str()];
             let operation = operations[step_id].clone();
-            match self.run_step(spec, step, operation, &run, &outputs)? {
+            let step_outcome = match self.run_step(spec, step, operation, &run, &outputs) {
+                Ok(outcome) => outcome,
+                Err(error) => {
+                    return self.finish(
+                        &mut run,
+                        WorkflowState::Failed,
+                        Some(format!(
+                            "step '{step_id}' failed while publishing durable output: {error}"
+                        )),
+                    );
+                }
+            };
+            match step_outcome {
                 StepOutcome::Succeeded {
                     output_manifest_hash,
                 } => {
@@ -1400,7 +1435,7 @@ impl WorkflowExecutor {
         let mut parameters = spec.parameters.clone();
         parameters.extend(step.parameters.clone());
         let parameter_hash = hash_map(&parameters);
-        let implementation_hash = implementation_hash(step);
+        let implementation_hash = execution_contract_hash(spec, step, &operation)?;
         let reuse_key = ReuseKey {
             input_artifact_hashes: inputs.clone(),
             step_implementation_version: implementation_hash.clone(),
@@ -1411,7 +1446,16 @@ impl WorkflowExecutor {
             renderer_build_id: None,
         };
         let reuse_key_hash = reuse_key.compute_hash();
-        let commit_key = commit_key(&spec.workflow_id, &step.step_id, &reuse_key_hash);
+        let commit_key = commit_key_for(
+            &run.owner_id,
+            &run.session_id,
+            &spec.project_id,
+            &spec.workflow_id,
+            &step.step_id,
+            step.cache_policy,
+            &reuse_key_hash,
+            &run.run_id,
+        );
 
         let max_attempts = step
             .retry_policy
@@ -1442,6 +1486,7 @@ impl WorkflowExecutor {
                 environment_hash: run.environment_hash.clone(),
                 policy_hash: run.policy_hash.clone(),
                 reuse_key_hash: reuse_key_hash.clone(),
+                commit_key: None,
                 started_at: self.clock.now(),
                 finished_at: None,
                 terminal_state: None,
@@ -1451,12 +1496,32 @@ impl WorkflowExecutor {
             };
             let attempt_path = self.attempt_path(&run.run_id, &attempt_id);
 
+            // Durable *before* either cache verification or work. A corrupt
+            // reusable commit is itself a failed attempt, not an unrecorded
+            // executor error.
+            self.write_record(&attempt_path, &attempt)?;
+
             // A deterministic-reuse step whose commit already exists does not
             // run at all: the artifact is already there and is the same one.
-            if step.cache_policy == CachePolicy::DeterministicReuse
-                && let Some(existing) = self.load_commit(&commit_key)?
-            {
+            let reusable = if step.cache_policy == CachePolicy::DeterministicReuse {
+                match self.load_reusable_commit(&commit_key, run, step, &reuse_key_hash) {
+                    Ok(existing) => existing,
+                    Err(error) => {
+                        attempt.terminal_state = Some(AttemptState::Failed);
+                        attempt.error_class = Some(ErrorClass::PolicyViolation);
+                        attempt.error_detail =
+                            Some(format!("artifact reuse failed closed: {error}"));
+                        attempt.finished_at = Some(self.clock.now());
+                        self.write_record(&attempt_path, &attempt)?;
+                        return Err(error);
+                    }
+                }
+            } else {
+                None
+            };
+            if let Some(existing) = reusable {
                 attempt.terminal_state = Some(AttemptState::Reused);
+                attempt.commit_key = Some(existing.commit_key.clone());
                 attempt.output_manifest_hash = Some(existing.output_manifest_hash.clone());
                 attempt.finished_at = Some(self.clock.now());
                 self.write_record(&attempt_path, &attempt)?;
@@ -1464,11 +1529,6 @@ impl WorkflowExecutor {
                     output_manifest_hash: existing.output_manifest_hash,
                 });
             }
-
-            // Durable *before* the work: a crash from here on leaves an
-            // in-flight attempt that recovery can see, which is what makes
-            // "at least once" a statement about a record and not a hope.
-            self.write_record(&attempt_path, &attempt)?;
 
             let plan = StepPlan {
                 workflow_id: spec.workflow_id.clone(),
@@ -1500,23 +1560,63 @@ impl WorkflowExecutor {
             // the retryable failure that the exhaustion check below reports.
             let retryable_failure: (ErrorClass, String) = match outcome {
                 Ok(output) => {
-                    // Record what happened before judging it: the artifact
-                    // exists whether or not acceptance likes it, and the
-                    // commit key is what keeps a retry from making a second.
-                    let commit = self.commit_output(
-                        &commit_key,
-                        &spec.workflow_id,
-                        &step.step_id,
-                        &attempt_id,
-                        &output.artifacts,
-                    )?;
-                    attempt.output_manifest_hash = Some(commit.output_manifest_hash.clone());
-
+                    if let Err(detail) = validate_step_output(spec, &output) {
+                        attempt.terminal_state = Some(AttemptState::Failed);
+                        attempt.error_class = Some(ErrorClass::PolicyViolation);
+                        attempt.error_detail = Some(detail.clone());
+                        attempt.finished_at = Some(self.clock.now());
+                        self.write_record(&attempt_path, &attempt)?;
+                        return Ok(StepOutcome::Failed {
+                            class: ErrorClass::PolicyViolation,
+                            detail,
+                        });
+                    }
                     match evaluate_acceptance(step, &output) {
                         AcceptanceVerdict::Accepted => {
-                            attempt.terminal_state = Some(AttemptState::Succeeded);
-                            attempt.finished_at = Some(self.clock.now());
-                            self.write_record(&attempt_path, &attempt)?;
+                            let commit = match self.commit_output(
+                                &commit_key,
+                                run,
+                                step,
+                                &reuse_key_hash,
+                                &attempt_id,
+                                &output.artifacts,
+                            ) {
+                                Ok(commit) => commit,
+                                Err(error) => {
+                                    // A prepared record is an accepted-output
+                                    // certificate whose recovery must remain
+                                    // possible. Do not overwrite its in-flight
+                                    // origin with Failed and permanently poison
+                                    // the immutable key.
+                                    if self
+                                        .read_record::<ArtifactCommit>(
+                                            &self.commit_path(&commit_key),
+                                        )?
+                                        .is_none()
+                                    {
+                                        attempt.terminal_state = Some(AttemptState::Failed);
+                                        attempt.error_class = Some(ErrorClass::PolicyViolation);
+                                        attempt.error_detail = Some(format!(
+                                            "artifact publication failed closed: {error}"
+                                        ));
+                                        attempt.finished_at = Some(self.clock.now());
+                                        self.write_record(&attempt_path, &attempt)?;
+                                    }
+                                    return Err(error);
+                                }
+                            };
+                            if commit.committed_by_attempt != attempt_id {
+                                // Another accepted attempt won the exact same
+                                // commit while this runner was executing. This
+                                // attempt still ran, so record Succeeded (not
+                                // Reused) while pointing at the winner.
+                                attempt.commit_key = Some(commit.commit_key.clone());
+                                attempt.output_manifest_hash =
+                                    Some(commit.output_manifest_hash.clone());
+                                attempt.terminal_state = Some(AttemptState::Succeeded);
+                                attempt.finished_at = Some(self.clock.now());
+                                self.write_record(&attempt_path, &attempt)?;
+                            }
                             return Ok(StepOutcome::Succeeded {
                                 output_manifest_hash: commit.output_manifest_hash,
                             });
@@ -1530,7 +1630,7 @@ impl WorkflowExecutor {
                                     attempt.terminal_state = Some(AttemptState::Skipped);
                                     self.write_record(&attempt_path, &attempt)?;
                                     return Ok(StepOutcome::Succeeded {
-                                        output_manifest_hash: commit.output_manifest_hash,
+                                        output_manifest_hash: hash_map(&BTreeMap::new()),
                                     });
                                 }
                                 FailAction::PauseForApproval => {
@@ -1602,37 +1702,334 @@ impl WorkflowExecutor {
         }
     }
 
-    /// Commit a step's output exactly once.
+    fn load_reusable_commit(
+        &self,
+        commit_key: &str,
+        run: &WorkflowRunRecord,
+        step: &WorkflowStep,
+        reuse_key_hash: &str,
+    ) -> Result<Option<ArtifactCommit>> {
+        let Some(commit) = self.load_commit(commit_key)? else {
+            return Ok(None);
+        };
+        if commit.owner_id != run.owner_id
+            || commit.session_id != run.session_id
+            || commit.project_id != run.project_id
+            || commit.workflow_id != run.workflow_id
+            || commit.step_id != step.step_id
+            || commit.cache_policy != CachePolicy::DeterministicReuse
+            || commit.reuse_key_hash != reuse_key_hash
+        {
+            return Err(ScienceError::Ownership);
+        }
+        Ok(Some(commit))
+    }
+
+    fn validate_operation_record(
+        &self,
+        operation: &WorkflowOperationRecord,
+        expected_operation_id: &str,
+    ) -> Result<()> {
+        crate::project::mutation::validate_operation_id(expected_operation_id)?;
+        if operation.schema_version != WORKFLOW_RUN_SCHEMA_VERSION
+            || operation.operation_id != expected_operation_id
+            || operation.session_id.is_empty()
+            || operation.owner_id.is_empty()
+            || operation.workflow_id.is_empty()
+        {
+            return Err(ScienceError::Ownership);
+        }
+        validate_run_id(&operation.run_id)?;
+        Ok(())
+    }
+
+    fn validate_run_record(&self, run: &WorkflowRunRecord, expected_run_id: &str) -> Result<()> {
+        validate_run_id(expected_run_id)?;
+        if run.schema_version != WORKFLOW_RUN_SCHEMA_VERSION
+            || run.run_id != expected_run_id
+            || run.session_id.is_empty()
+            || run.owner_id.is_empty()
+            || run.workflow_id.is_empty()
+            || run.project_id.0.is_empty()
+            || run.state_history.is_empty()
+            || run.state_history.last().map(|transition| transition.state) != Some(run.state)
+            || (run.state.terminal() != run.finished_at.is_some())
+        {
+            return Err(ScienceError::Ownership);
+        }
+        crate::project::mutation::validate_operation_id(&run.operation_id)?;
+        for digest in [&run.spec_hash, &run.environment_hash, &run.policy_hash] {
+            validate_commit_key(digest)?;
+        }
+        for step_id in &run.step_order {
+            validate_step_id(step_id).map_err(ScienceError::Invalid)?;
+        }
+        Ok(())
+    }
+
+    fn validate_attempt_record(
+        &self,
+        attempt: &StepAttempt,
+        expected_run_id: &str,
+        expected_attempt_id: &str,
+    ) -> Result<()> {
+        validate_run_id(expected_run_id)?;
+        validate_workflow_record_stem(expected_attempt_id, "workflow attempt id")?;
+        validate_step_id(&attempt.step_id).map_err(ScienceError::Invalid)?;
+        if attempt.schema_version != WORKFLOW_RUN_SCHEMA_VERSION
+            || attempt.run_id != expected_run_id
+            || attempt.attempt_id != expected_attempt_id
+            || attempt.workflow_id.is_empty()
+            || attempt.attempt_number == 0
+            || attempt.attempt_id
+                != attempt_id(&attempt.run_id, &attempt.step_id, attempt.attempt_number)
+            || (attempt.terminal_state.is_some() != attempt.finished_at.is_some())
+        {
+            return Err(ScienceError::Ownership);
+        }
+        for digest in [
+            &attempt.input_manifest_hash,
+            &attempt.parameter_hash,
+            &attempt.implementation_hash,
+            &attempt.environment_hash,
+            &attempt.policy_hash,
+            &attempt.reuse_key_hash,
+        ] {
+            validate_commit_key(digest)?;
+        }
+        if let Some(digest) = &attempt.output_manifest_hash {
+            validate_commit_key(digest)?;
+        }
+        if let Some(commit_key) = &attempt.commit_key {
+            validate_commit_key(commit_key)?;
+        }
+        let committed_terminal = matches!(
+            attempt.terminal_state,
+            Some(AttemptState::Succeeded | AttemptState::Reused)
+        );
+        if committed_terminal
+            != (attempt.commit_key.is_some() && attempt.output_manifest_hash.is_some())
+        {
+            return Err(ScienceError::Ownership);
+        }
+        Ok(())
+    }
+
+    fn validate_commit_record(&self, commit: &ArtifactCommit, commit_key: &str) -> Result<()> {
+        if commit.schema_version != WORKFLOW_RUN_SCHEMA_VERSION
+            || commit.commit_key != commit_key
+            || commit.owner_id.is_empty()
+            || commit.session_id.is_empty()
+            || commit.project_id.0.is_empty()
+            || commit.workflow_id.is_empty()
+            || commit.reuse_key_hash.len() != 64
+            || commit.cache_policy == CachePolicy::LocalReuse
+        {
+            return Err(ScienceError::Ownership);
+        }
+        validate_run_id(&commit.run_id)?;
+        validate_step_id(&commit.step_id).map_err(ScienceError::Invalid)?;
+        validate_commit_key(&commit.reuse_key_hash)?;
+        let expected_key = commit_key_for(
+            &commit.owner_id,
+            &commit.session_id,
+            &commit.project_id,
+            &commit.workflow_id,
+            &commit.step_id,
+            commit.cache_policy,
+            &commit.reuse_key_hash,
+            &commit.run_id,
+        );
+        if expected_key != commit.commit_key
+            || hash_map(&commit.output_manifest) != commit.output_manifest_hash
+        {
+            return Err(ScienceError::Ownership);
+        }
+        for digest in commit.output_manifest.values() {
+            validate_commit_key(digest)?;
+        }
+        Ok(())
+    }
+
+    /// Finish a two-phase commit while the store write guard is held.
     ///
-    /// The commit key is content-addressed, so a retry, a resumed run or a
-    /// second run of the same step with the same inputs all land on the same
-    /// key — and the first record written is the one that stands.
+    /// `Prepared` is written only after acceptance and CAS publication. If the
+    /// process stops before the origin attempt and final state are written, a
+    /// later reader can therefore deterministically finish the same accepted
+    /// transaction instead of poisoning this immutable commit key forever.
+    fn resolve_commit_locked(
+        &self,
+        mut commit: ArtifactCommit,
+        commit_key: &str,
+    ) -> Result<ArtifactCommit> {
+        self.validate_commit_record(&commit, commit_key)?;
+        self.verify_commit_artifacts(&commit)?;
+        if commit.state == ArtifactCommitState::Committed {
+            self.verify_commit_origin(&commit)?;
+            return Ok(commit);
+        }
+
+        let attempt_path = self.attempt_path(&commit.run_id, &commit.committed_by_attempt);
+        let mut attempt: StepAttempt =
+            self.require_record(&attempt_path, "prepared workflow commit origin attempt")?;
+        self.validate_attempt_record(&attempt, &commit.run_id, &commit.committed_by_attempt)?;
+        match attempt.terminal_state {
+            None if attempt.commit_key.is_none() && attempt.output_manifest_hash.is_none() => {
+                attempt.commit_key = Some(commit.commit_key.clone());
+                attempt.output_manifest_hash = Some(commit.output_manifest_hash.clone());
+                attempt.terminal_state = Some(AttemptState::Succeeded);
+                attempt.finished_at = Some(commit.committed_at);
+                self.confined()?
+                    .replace_atomic(&attempt_path, &serde_json::to_vec_pretty(&attempt)?)?;
+            }
+            Some(AttemptState::Succeeded)
+                if attempt.commit_key.as_deref() == Some(commit.commit_key.as_str())
+                    && attempt.output_manifest_hash.as_deref()
+                        == Some(commit.output_manifest_hash.as_str()) => {}
+            _ => return Err(ScienceError::Ownership),
+        }
+
+        commit.state = ArtifactCommitState::Committed;
+        self.confined()?.replace_atomic(
+            &self.commit_path(commit_key),
+            &serde_json::to_vec_pretty(&commit)?,
+        )?;
+        self.verify_commit_origin(&commit)?;
+        Ok(commit)
+    }
+
+    fn verify_commit_origin(&self, commit: &ArtifactCommit) -> Result<()> {
+        if commit.state != ArtifactCommitState::Committed {
+            return Err(ScienceError::Ownership);
+        }
+        let attempt_path = self.attempt_path(&commit.run_id, &commit.committed_by_attempt);
+        let attempt: StepAttempt =
+            self.require_record(&attempt_path, "workflow commit origin attempt")?;
+        self.validate_attempt_record(&attempt, &commit.run_id, &commit.committed_by_attempt)?;
+        if attempt.workflow_id != commit.workflow_id
+            || attempt.step_id != commit.step_id
+            || attempt.reuse_key_hash != commit.reuse_key_hash
+            || attempt.commit_key.as_deref() != Some(commit.commit_key.as_str())
+            || attempt.output_manifest_hash.as_deref() != Some(commit.output_manifest_hash.as_str())
+            || attempt.terminal_state != Some(AttemptState::Succeeded)
+        {
+            return Err(ScienceError::Ownership);
+        }
+        let run = self.load_run(&commit.run_id)?;
+        if run.owner_id != commit.owner_id
+            || run.session_id != commit.session_id
+            || run.project_id != commit.project_id
+            || run.workflow_id != commit.workflow_id
+            || attempt.environment_hash != run.environment_hash
+            || attempt.policy_hash != run.policy_hash
+        {
+            return Err(ScienceError::Ownership);
+        }
+        Ok(())
+    }
+
+    fn verify_commit_artifacts(&self, commit: &ArtifactCommit) -> Result<()> {
+        for (name, digest) in &commit.output_manifest {
+            let bytes = self
+                .confined()?
+                .read_optional(&self.artifact_path(digest))?
+                .ok_or_else(|| {
+                    ScienceError::Invalid(format!(
+                        "workflow artifact '{name}' ({digest}) is missing from the immutable store"
+                    ))
+                })?;
+            let actual = hex_sha256(&bytes);
+            if actual != *digest {
+                return Err(ScienceError::Invalid(format!(
+                    "workflow artifact '{name}' expected {digest}, but stored bytes hash to {actual}"
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    fn publish_artifact(&self, digest: &str, bytes: &[u8]) -> Result<()> {
+        validate_commit_key(digest)?;
+        let path = self.artifact_path(digest);
+        match self.confined()?.write_new_atomic(&path, bytes) {
+            Ok(()) => Ok(()),
+            Err(ScienceError::Io(error)) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                let existing = self.confined()?.read_optional(&path)?.ok_or_else(|| {
+                    ScienceError::Invalid(format!(
+                        "workflow artifact {digest} disappeared during immutable publication"
+                    ))
+                })?;
+                let actual = hex_sha256(&existing);
+                if actual == digest {
+                    Ok(())
+                } else {
+                    Err(ScienceError::Invalid(format!(
+                        "workflow artifact {digest} already contains bytes hashing to {actual}"
+                    )))
+                }
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Publish accepted output into the immutable CAS and commit it exactly
+    /// once under the authority-scoped key.
     fn commit_output(
         &self,
         commit_key: &str,
-        workflow_id: &str,
-        step_id: &str,
+        run: &WorkflowRunRecord,
+        step: &WorkflowStep,
+        reuse_key_hash: &str,
         attempt_id: &str,
-        manifest: &BTreeMap<String, String>,
+        artifacts: &BTreeMap<String, Vec<u8>>,
     ) -> Result<ArtifactCommit> {
         validate_commit_key(commit_key)?;
-        validate_step_id(step_id).map_err(ScienceError::Invalid)?;
+        validate_step_id(&step.step_id).map_err(ScienceError::Invalid)?;
         validate_workflow_record_stem(attempt_id, "workflow attempt id")?;
         let _guard = self.guard()?;
         let path = self.commit_path(commit_key);
+        let manifest: BTreeMap<String, String> = artifacts
+            .iter()
+            .map(|(name, bytes)| (name.clone(), hex_sha256(bytes)))
+            .collect();
         if let Some(existing) = self.read_record::<ArtifactCommit>(&path)? {
-            if existing.commit_key != commit_key {
+            let existing = self.resolve_commit_locked(existing, commit_key)?;
+            if existing.owner_id != run.owner_id
+                || existing.session_id != run.session_id
+                || existing.project_id != run.project_id
+                || existing.workflow_id != run.workflow_id
+                || existing.step_id != step.step_id
+                || existing.cache_policy != step.cache_policy
+                || existing.reuse_key_hash != reuse_key_hash
+                || (step.cache_policy == CachePolicy::NoCache && existing.run_id != run.run_id)
+                || existing.output_manifest != manifest
+            {
                 return Err(ScienceError::Ownership);
             }
             return Ok(existing);
         }
+        for (name, bytes) in artifacts {
+            if name.is_empty() || name.as_bytes().contains(&0) {
+                return Err(ScienceError::Invalid(
+                    "workflow artifact names must be non-empty and contain no NUL bytes".into(),
+                ));
+            }
+            self.publish_artifact(&hex_sha256(bytes), bytes)?;
+        }
         let commit = ArtifactCommit {
             schema_version: WORKFLOW_RUN_SCHEMA_VERSION,
+            state: ArtifactCommitState::Prepared,
             commit_key: commit_key.to_string(),
-            workflow_id: workflow_id.to_string(),
-            step_id: step_id.to_string(),
-            output_manifest_hash: hash_map(manifest),
-            output_manifest: manifest.clone(),
+            owner_id: run.owner_id.clone(),
+            session_id: run.session_id.clone(),
+            project_id: run.project_id.clone(),
+            run_id: run.run_id.clone(),
+            workflow_id: run.workflow_id.clone(),
+            step_id: step.step_id.clone(),
+            cache_policy: step.cache_policy,
+            reuse_key_hash: reuse_key_hash.to_string(),
+            output_manifest_hash: hash_map(&manifest),
+            output_manifest: manifest,
             committed_at: self.clock.now(),
             committed_by_attempt: attempt_id.to_string(),
         };
@@ -1640,11 +2037,21 @@ impl WorkflowExecutor {
         // `create_new` again, so two executors racing on one key cannot both
         // believe they committed.
         match self.confined()?.write_new_atomic(&path, &bytes) {
-            Ok(()) => Ok(commit),
+            Ok(()) => self.resolve_commit_locked(commit, commit_key),
             Err(ScienceError::Io(error)) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                 let existing: ArtifactCommit =
                     self.require_record(&path, "winning workflow commit")?;
-                if existing.commit_key != commit_key {
+                let existing = self.resolve_commit_locked(existing, commit_key)?;
+                if existing.owner_id != run.owner_id
+                    || existing.session_id != run.session_id
+                    || existing.project_id != run.project_id
+                    || existing.workflow_id != run.workflow_id
+                    || existing.step_id != step.step_id
+                    || existing.cache_policy != step.cache_policy
+                    || existing.reuse_key_hash != reuse_key_hash
+                    || (step.cache_policy == CachePolicy::NoCache && existing.run_id != run.run_id)
+                    || existing.output_manifest != commit.output_manifest
+                {
                     return Err(ScienceError::Ownership);
                 }
                 Ok(existing)
@@ -1689,23 +2096,46 @@ impl WorkflowExecutor {
     }
 
     fn build_report(&self, run: &WorkflowRunRecord) -> Result<WorkflowRunReport> {
+        self.validate_run_record(run, &run.run_id)?;
         let attempts = self.load_attempts(&run.run_id)?;
+        if attempts.iter().any(|attempt| {
+            attempt.workflow_id != run.workflow_id
+                || attempt.environment_hash != run.environment_hash
+                || attempt.policy_hash != run.policy_hash
+        }) {
+            return Err(ScienceError::Ownership);
+        }
         let steps_reused = attempts
             .iter()
             .filter(|a| a.terminal_state == Some(AttemptState::Reused))
             .count();
         let commit_keys: BTreeSet<String> = attempts
             .iter()
-            .filter_map(|a| a.output_manifest_hash.as_ref())
+            .filter_map(|a| a.commit_key.as_ref())
             .cloned()
             .collect();
-        let commits: Vec<ArtifactCommit> = self
-            .list_commits()?
-            .into_iter()
-            .filter(|c| {
-                c.workflow_id == run.workflow_id && commit_keys.contains(&c.output_manifest_hash)
-            })
-            .collect();
+        let mut commits = Vec::with_capacity(commit_keys.len());
+        for commit_key in commit_keys {
+            let commit = self.load_commit(&commit_key)?.ok_or_else(|| {
+                ScienceError::Invalid(format!(
+                    "workflow attempt references missing commit {commit_key}"
+                ))
+            })?;
+            if commit.owner_id != run.owner_id
+                || commit.session_id != run.session_id
+                || commit.project_id != run.project_id
+                || commit.workflow_id != run.workflow_id
+                || !attempts.iter().any(|attempt| {
+                    attempt.commit_key.as_deref() == Some(commit.commit_key.as_str())
+                        && attempt.step_id == commit.step_id
+                        && attempt.output_manifest_hash.as_deref()
+                            == Some(commit.output_manifest_hash.as_str())
+                })
+            {
+                return Err(ScienceError::Ownership);
+            }
+            commits.push(commit);
+        }
         let artifacts_committed = commits
             .iter()
             .filter(|commit| {
@@ -1839,6 +2269,50 @@ fn evaluate_acceptance(step: &WorkflowStep, output: &StepOutput) -> AcceptanceVe
     AcceptanceVerdict::Accepted
 }
 
+/// Recompute every runner-supplied size claim and constrain artifact names
+/// before acceptance or CAS publication. A `StepRunner` is an execution seam,
+/// not a storage authority.
+fn validate_step_output(
+    spec: &WorkflowSpec,
+    output: &StepOutput,
+) -> std::result::Result<(), String> {
+    let mut observed_bytes = 0u64;
+    for (name, bytes) in &output.artifacts {
+        let safe_name = !name.is_empty()
+            && name.len() <= 4096
+            && !name.starts_with('/')
+            && !name.contains(['\0', '\\'])
+            && name
+                .split('/')
+                .all(|component| !component.is_empty() && component != "." && component != "..");
+        if !safe_name {
+            return Err(format!(
+                "runner returned unsafe workflow artifact name '{name}'"
+            ));
+        }
+        observed_bytes = observed_bytes
+            .checked_add(bytes.len() as u64)
+            .ok_or_else(|| "runner artifact byte count overflowed".to_string())?;
+    }
+    if observed_bytes != output.bytes_produced {
+        return Err(format!(
+            "runner claimed {} output bytes but supplied {observed_bytes}",
+            output.bytes_produced
+        ));
+    }
+    let max_bytes = spec
+        .resources
+        .max_disk_mb
+        .checked_mul(1024 * 1024)
+        .ok_or_else(|| "workflow max_disk_mb overflows bytes".to_string())?;
+    if observed_bytes > max_bytes {
+        return Err(format!(
+            "runner supplied {observed_bytes} output bytes, exceeding the workflow {max_bytes} byte disk limit"
+        ));
+    }
+    Ok(())
+}
+
 // ── Hashing helpers ───────────────────────────────────────────────
 
 fn hex_sha256(bytes: &[u8]) -> String {
@@ -1857,25 +2331,65 @@ fn hash_map(map: &BTreeMap<String, String>) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-fn implementation_hash(step: &WorkflowStep) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(format!("{:?}", step.kind).as_bytes());
-    hasher.update(step.connector_id.as_deref().unwrap_or("").as_bytes());
-    hasher.update(step.notebook_cell.as_deref().unwrap_or("").as_bytes());
-    format!("{:x}", hasher.finalize())
+fn execution_contract_hash(
+    spec: &WorkflowSpec,
+    step: &WorkflowStep,
+    operation: &StepOperation,
+) -> Result<String> {
+    // The reuse identity must cover every contract that can change whether
+    // these bytes are safe to serve. In particular, acceptance rules and
+    // resource/permission ceilings cannot be omitted: doing so would let a
+    // commit accepted under an older, weaker contract bypass the new one.
+    let mut operation_contract = operation.clone();
+    if let StepOperation::KernelCell { kernel, .. } = &mut operation_contract {
+        // Probe time and the descriptive actor identity are provenance, not
+        // execution semantics. Including them makes every fresh admission a
+        // different cache key and silently disables deterministic reuse.
+        kernel.admitted_at = None;
+        kernel.admitted_by = None;
+    }
+    let bytes = serde_json::to_vec(&(
+        "workflow-execution-contract-v1",
+        step,
+        operation_contract,
+        &spec.resources,
+        &spec.permissions,
+    ))?;
+    Ok(hex_sha256(&bytes))
 }
 
 fn spec_hash(spec: &WorkflowSpec) -> Result<String> {
     Ok(hex_sha256(&serde_json::to_vec(spec)?))
 }
 
-fn commit_key(workflow_id: &str, step_id: &str, reuse_key_hash: &str) -> String {
+fn commit_key_for(
+    owner_id: &str,
+    session_id: &str,
+    project_id: &ProjectId,
+    workflow_id: &str,
+    step_id: &str,
+    cache_policy: CachePolicy,
+    reuse_key_hash: &str,
+    run_id: &str,
+) -> String {
     let mut hasher = Sha256::new();
+    hasher.update(owner_id.len().to_le_bytes());
+    hasher.update(owner_id.as_bytes());
+    hasher.update(session_id.len().to_le_bytes());
+    hasher.update(session_id.as_bytes());
+    hasher.update(project_id.0.len().to_le_bytes());
+    hasher.update(project_id.0.as_bytes());
     hasher.update(workflow_id.as_bytes());
     hasher.update([0]);
     hasher.update(step_id.as_bytes());
     hasher.update([0]);
+    hasher.update(format!("{cache_policy:?}").as_bytes());
+    hasher.update([0]);
     hasher.update(reuse_key_hash.as_bytes());
+    if cache_policy == CachePolicy::NoCache {
+        hasher.update([0]);
+        hasher.update(run_id.as_bytes());
+    }
     format!("{:x}", hasher.finalize())
 }
 
@@ -2013,17 +2527,43 @@ mod confinement_tests {
                 .reserve_operation(&request("operation-1"), &run_id)
                 .is_err()
         );
-        assert!(
+        assert!({
+            let authority_request = request("operation-2");
+            let run = executor.new_draft(&authority_request, &run_id).unwrap();
+            let step = WorkflowStep {
+                step_id: "step".into(),
+                kind: StepKind::Renderer,
+                connector_id: None,
+                notebook_cell: None,
+                inputs: Vec::new(),
+                parameters: BTreeMap::new(),
+                timeout_secs: 1,
+                retry_policy: None,
+                cache_policy: CachePolicy::NoCache,
+                acceptance_rules: Vec::new(),
+            };
+            let reuse_key_hash = "d".repeat(64);
+            let key = commit_key_for(
+                &run.owner_id,
+                &run.session_id,
+                &run.project_id,
+                &run.workflow_id,
+                &step.step_id,
+                step.cache_policy,
+                &reuse_key_hash,
+                &run.run_id,
+            );
             executor
                 .commit_output(
-                    &"c".repeat(64),
-                    "workflow-1",
-                    "step",
+                    &key,
+                    &run,
+                    &step,
+                    &reuse_key_hash,
                     &format!("{run_id}-step-0001"),
                     &BTreeMap::new(),
                 )
                 .is_err()
-        );
+        });
         assert!(
             executor
                 .sweep_temp_files(&executor.run_dir(&run_id))

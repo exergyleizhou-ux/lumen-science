@@ -6,7 +6,7 @@ use super::*;
 use crate::workflow::{
     AcceptanceCondition, AcceptanceRule, NetworkPolicy, ResourceLimits, RetryPolicy,
 };
-use std::sync::atomic::AtomicU32;
+use std::sync::{Barrier, atomic::AtomicU32};
 use tempfile::{TempDir, tempdir};
 
 // ── Fixtures ──────────────────────────────────────────────────────
@@ -118,14 +118,37 @@ impl StepRunner for ScriptedRunner {
     }
 }
 
+#[derive(Debug)]
+struct BarrierRunner {
+    calls: AtomicU32,
+    barrier: Barrier,
+}
+
+impl BarrierRunner {
+    fn new(parties: usize) -> Self {
+        Self {
+            calls: AtomicU32::new(0),
+            barrier: Barrier::new(parties),
+        }
+    }
+}
+
+impl StepRunner for BarrierRunner {
+    fn run(&self, _plan: &StepPlan) -> std::result::Result<StepOutput, StepFailure> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        self.barrier.wait();
+        Ok(output(&[("out.json", "same accepted bytes")]))
+    }
+}
+
 fn output(artifacts: &[(&str, &str)]) -> StepOutput {
     StepOutput {
         artifacts: artifacts
             .iter()
-            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+            .map(|(k, v)| ((*k).to_string(), v.as_bytes().to_vec()))
             .collect(),
         exit_code: Some(0),
-        bytes_produced: 42,
+        bytes_produced: artifacts.iter().map(|(_, value)| value.len() as u64).sum(),
     }
 }
 
@@ -414,12 +437,9 @@ fn a_kernel_step_plan_is_argv_never_a_shell_line() {
 
 // ── At-least-once execution, exactly-once commit ──────────────────
 
-/// The core guarantee. The step runs twice — its acceptance rule fails and
-/// says to retry — and produces byte-identical output both times. The commit
-/// key is content-addressed, so the second run of the step does not create a
-/// second artifact.
+/// Rejected output is evidence of an attempt, never a published artifact.
 #[test]
-fn a_retried_step_does_not_produce_a_second_artifact() {
+fn a_retried_but_never_accepted_step_produces_no_commit() {
     let harness = Harness::new();
     let runner = Arc::new(ScriptedRunner::always_ok());
     let executor = harness.executor(runner.clone());
@@ -453,16 +473,14 @@ fn a_retried_step_does_not_produce_a_second_artifact() {
     let commits = executor.list_commits().unwrap();
     assert_eq!(
         commits.len(),
-        1,
-        "a retried step committed a second artifact: {commits:#?}"
+        0,
+        "acceptance-rejected output became a durable commit: {commits:#?}"
     );
-    // The winner is the first attempt; the retry read the record instead of
-    // replacing it.
-    assert_eq!(commits[0].committed_by_attempt, attempts[0].attempt_id);
-    // Both attempts point at the same output manifest.
-    assert_eq!(
-        attempts[0].output_manifest_hash,
-        attempts[1].output_manifest_hash
+    assert!(attempts.iter().all(|attempt| attempt.commit_key.is_none()));
+    assert!(
+        attempts
+            .iter()
+            .all(|attempt| attempt.output_manifest_hash.is_none())
     );
     assert_eq!(report.state(), WorkflowState::Failed);
 }
@@ -552,6 +570,408 @@ fn deterministic_reuse_skips_a_step_whose_commit_already_exists() {
     assert_eq!(executor.list_commits().unwrap().len(), 1);
 }
 
+#[test]
+fn executor_hashes_exact_runner_bytes_into_the_store_owned_cas() {
+    let harness = Harness::new();
+    let runner = Arc::new(ScriptedRunner::new(vec![Ok(output(&[(
+        "result.bin",
+        "exact artifact bytes",
+    )]))]));
+    let executor = harness.executor(runner);
+
+    let report = executor
+        .execute(&request(
+            "op-cas-bytes",
+            spec(vec![step("fetch", StepKind::ConnectorFetch, &[])]),
+        ))
+        .unwrap();
+    let commit = &report.commits[0];
+    let expected_bytes = b"exact artifact bytes";
+    let expected_digest = hex_sha256(expected_bytes);
+    assert_eq!(commit.output_manifest["result.bin"], expected_digest);
+    assert_eq!(
+        fs::read(harness.root.join(executor.artifact_path(&expected_digest))).unwrap(),
+        expected_bytes
+    );
+}
+
+#[test]
+fn runner_byte_count_claim_is_recomputed_before_cas_publication() {
+    let harness = Harness::new();
+    let runner = Arc::new(ScriptedRunner::new(vec![Ok(StepOutput {
+        artifacts: BTreeMap::from([("result.bin".into(), b"real bytes".to_vec())]),
+        exit_code: Some(0),
+        bytes_produced: 1,
+    })]));
+    let executor = harness.executor(runner);
+
+    let report = executor
+        .execute(&request(
+            "op-cas-byte-count-lie",
+            spec(vec![step("fetch", StepKind::ConnectorFetch, &[])]),
+        ))
+        .unwrap();
+    assert_eq!(report.state(), WorkflowState::Failed);
+    assert!(report.commits.is_empty());
+    assert_eq!(
+        report.attempts_for("fetch")[0].error_class,
+        Some(ErrorClass::PolicyViolation)
+    );
+    assert!(
+        !harness.root.join("workflow-artifacts").exists(),
+        "unverified bytes reached the CAS"
+    );
+}
+
+#[test]
+fn unsafe_runner_artifact_name_is_rejected_before_cas_publication() {
+    let harness = Harness::new();
+    let runner = Arc::new(ScriptedRunner::new(vec![Ok(StepOutput {
+        artifacts: BTreeMap::from([("../outside".into(), b"payload".to_vec())]),
+        exit_code: Some(0),
+        bytes_produced: 7,
+    })]));
+    let executor = harness.executor(runner);
+
+    let report = executor
+        .execute(&request(
+            "op-cas-unsafe-name",
+            spec(vec![step("fetch", StepKind::ConnectorFetch, &[])]),
+        ))
+        .unwrap();
+    assert_eq!(report.state(), WorkflowState::Failed);
+    assert!(report.commits.is_empty());
+    assert!(
+        report
+            .run
+            .failure
+            .as_deref()
+            .is_some_and(|failure| failure.contains("unsafe workflow artifact name"))
+    );
+    assert!(
+        !harness.root.join("workflow-artifacts").exists(),
+        "unsafe artifact name reached the CAS"
+    );
+}
+
+#[test]
+fn deterministic_reuse_fails_durably_when_a_cas_blob_is_tampered() {
+    let harness = Harness::new();
+    let runner = Arc::new(ScriptedRunner::always_ok());
+    let executor = harness.executor(runner.clone());
+    let mut reusable = step("fetch", StepKind::ConnectorFetch, &[]);
+    reusable.cache_policy = CachePolicy::DeterministicReuse;
+
+    let first = executor
+        .execute(&request("op-cas-tamper-1", spec(vec![reusable.clone()])))
+        .unwrap();
+    let digest = first.commits[0].output_manifest["out.json"].clone();
+    fs::write(
+        harness.root.join(executor.artifact_path(&digest)),
+        b"tampered",
+    )
+    .unwrap();
+
+    let second = executor
+        .execute(&request("op-cas-tamper-2", spec(vec![reusable])))
+        .unwrap();
+    assert_eq!(second.state(), WorkflowState::Failed);
+    assert_eq!(runner.calls(), 1, "corrupt CAS must never run or reuse");
+    let attempt = second.attempts_for("fetch")[0];
+    assert_eq!(attempt.terminal_state, Some(AttemptState::Failed));
+    assert_eq!(attempt.error_class, Some(ErrorClass::PolicyViolation));
+    assert!(
+        second
+            .run
+            .failure
+            .as_deref()
+            .is_some_and(|failure| failure.contains("stored bytes hash")),
+        "failure was not durable: {:?}",
+        second.run.failure
+    );
+}
+
+#[test]
+fn deterministic_reuse_fails_durably_when_a_cas_blob_is_deleted() {
+    let harness = Harness::new();
+    let runner = Arc::new(ScriptedRunner::always_ok());
+    let executor = harness.executor(runner.clone());
+    let mut reusable = step("fetch", StepKind::ConnectorFetch, &[]);
+    reusable.cache_policy = CachePolicy::DeterministicReuse;
+
+    let first = executor
+        .execute(&request("op-cas-delete-1", spec(vec![reusable.clone()])))
+        .unwrap();
+    let digest = first.commits[0].output_manifest["out.json"].clone();
+    fs::remove_file(harness.root.join(executor.artifact_path(&digest))).unwrap();
+
+    let second = executor
+        .execute(&request("op-cas-delete-2", spec(vec![reusable])))
+        .unwrap();
+    assert_eq!(second.state(), WorkflowState::Failed);
+    assert_eq!(runner.calls(), 1, "missing CAS must never run or reuse");
+    let attempt = second.attempts_for("fetch")[0];
+    assert_eq!(attempt.terminal_state, Some(AttemptState::Failed));
+    assert_eq!(attempt.error_class, Some(ErrorClass::PolicyViolation));
+    assert!(
+        second
+            .run
+            .failure
+            .as_deref()
+            .is_some_and(|failure| failure.contains("is missing")),
+        "failure was not durable: {:?}",
+        second.run.failure
+    );
+}
+
+#[test]
+fn deterministic_reuse_refuses_a_commit_whose_origin_attempt_is_not_succeeded() {
+    let harness = Harness::new();
+    let runner = Arc::new(ScriptedRunner::always_ok());
+    let executor = harness.executor(runner.clone());
+    let mut reusable = step("fetch", StepKind::ConnectorFetch, &[]);
+    reusable.cache_policy = CachePolicy::DeterministicReuse;
+
+    let first = executor
+        .execute(&request(
+            "op-origin-attempt-1",
+            spec(vec![reusable.clone()]),
+        ))
+        .unwrap();
+    let origin = &first.attempts[0];
+    let path = harness
+        .root
+        .join(executor.attempt_path(&first.run.run_id, &origin.attempt_id));
+    let mut forged: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    forged["terminal_state"] = serde_json::json!("failed");
+    fs::write(&path, serde_json::to_vec_pretty(&forged).unwrap()).unwrap();
+
+    let second = executor
+        .execute(&request("op-origin-attempt-2", spec(vec![reusable])))
+        .unwrap();
+    assert_eq!(second.state(), WorkflowState::Failed);
+    assert_eq!(
+        runner.calls(),
+        1,
+        "commit with a forged origin attempt was reused or re-executed"
+    );
+    assert_eq!(
+        second.attempts_for("fetch")[0].error_class,
+        Some(ErrorClass::PolicyViolation)
+    );
+}
+
+#[test]
+fn prepared_commit_is_recovered_to_one_succeeded_origin_and_committed_state() {
+    let harness = Harness::new();
+    let executor = harness.executor(Arc::new(ScriptedRunner::always_ok()));
+    let mut reusable = step("fetch", StepKind::ConnectorFetch, &[]);
+    reusable.cache_policy = CachePolicy::DeterministicReuse;
+    let first = executor
+        .execute(&request("op-prepared-recovery", spec(vec![reusable])))
+        .unwrap();
+    let mut commit = first.commits[0].clone();
+    commit.state = ArtifactCommitState::Prepared;
+    executor
+        .write_record(&executor.commit_path(&commit.commit_key), &commit)
+        .unwrap();
+
+    let mut origin = first.attempts[0].clone();
+    origin.commit_key = None;
+    origin.output_manifest_hash = None;
+    origin.terminal_state = None;
+    origin.finished_at = None;
+    executor
+        .write_record(
+            &executor.attempt_path(&origin.run_id, &origin.attempt_id),
+            &origin,
+        )
+        .unwrap();
+
+    let recovered = executor
+        .load_commit(&commit.commit_key)
+        .unwrap()
+        .expect("prepared commit");
+    assert_eq!(recovered.state, ArtifactCommitState::Committed);
+    let recovered_origin = executor.load_attempts(&origin.run_id).unwrap().remove(0);
+    assert_eq!(
+        recovered_origin.terminal_state,
+        Some(AttemptState::Succeeded)
+    );
+    assert_eq!(
+        recovered_origin.commit_key.as_deref(),
+        Some(commit.commit_key.as_str())
+    );
+}
+
+#[test]
+fn concurrent_deterministic_publish_never_exposes_a_half_committed_origin() {
+    let harness = Harness::new();
+    let runner = Arc::new(BarrierRunner::new(2));
+    let executor = harness.executor(runner.clone());
+    let mut reusable = step("fetch", StepKind::ConnectorFetch, &[]);
+    reusable.cache_policy = CachePolicy::DeterministicReuse;
+    let workflow = spec(vec![reusable]);
+
+    let left_executor = executor.clone();
+    let left_workflow = workflow.clone();
+    let left = std::thread::spawn(move || {
+        left_executor.execute(&request("op-concurrent-publish-left", left_workflow))
+    });
+    let right_executor = executor.clone();
+    let right = std::thread::spawn(move || {
+        right_executor.execute(&request("op-concurrent-publish-right", workflow))
+    });
+    let left = left.join().unwrap().unwrap();
+    let right = right.join().unwrap().unwrap();
+
+    assert_eq!(runner.calls.load(Ordering::SeqCst), 2);
+    assert_eq!(left.state(), WorkflowState::Succeeded);
+    assert_eq!(right.state(), WorkflowState::Succeeded);
+    assert_eq!(
+        left.attempts[0].terminal_state,
+        Some(AttemptState::Succeeded)
+    );
+    assert_eq!(
+        right.attempts[0].terminal_state,
+        Some(AttemptState::Succeeded)
+    );
+    assert_eq!(left.commits[0].commit_key, right.commits[0].commit_key);
+    assert_eq!(executor.list_commits().unwrap().len(), 1);
+}
+
+#[test]
+fn durable_v1_run_and_operation_records_fail_closed_without_rewrite() {
+    let harness = Harness::new();
+    let executor = harness.executor(Arc::new(ScriptedRunner::always_ok()));
+    let workflow = spec(vec![step("fetch", StepKind::ConnectorFetch, &[])]);
+    let report = executor
+        .execute(&request("op-schema-v1", workflow.clone()))
+        .unwrap();
+    let run_path = harness.root.join(executor.run_path(&report.run.run_id));
+    let operation_path = harness.root.join(executor.operation_path("op-schema-v1"));
+
+    for path in [&run_path, &operation_path] {
+        let mut record: serde_json::Value =
+            serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+        record["schema_version"] = serde_json::json!(1);
+        fs::write(path, serde_json::to_vec_pretty(&record).unwrap()).unwrap();
+    }
+    let run_before = fs::read(&run_path).unwrap();
+    let operation_before = fs::read(&operation_path).unwrap();
+
+    assert!(executor.load_run(&report.run.run_id).is_err());
+    assert!(executor.lookup_operation("op-schema-v1").is_err());
+    assert!(
+        executor
+            .execute(&request("op-schema-v1", workflow))
+            .is_err()
+    );
+    assert_eq!(fs::read(&run_path).unwrap(), run_before);
+    assert_eq!(fs::read(&operation_path).unwrap(), operation_before);
+}
+
+#[test]
+fn no_cache_runs_publish_distinct_commits_and_reports_are_exact() {
+    let harness = Harness::new();
+    let runner = Arc::new(ScriptedRunner::always_ok());
+    let executor = harness.executor(runner.clone());
+    let workflow = spec(vec![step("fetch", StepKind::ConnectorFetch, &[])]);
+
+    let first = executor
+        .execute(&request("op-no-cache-1", workflow.clone()))
+        .unwrap();
+    let second = executor
+        .execute(&request("op-no-cache-2", workflow.clone()))
+        .unwrap();
+    assert_eq!(runner.calls(), 2);
+    assert_eq!(first.commits.len(), 1);
+    assert_eq!(second.commits.len(), 1);
+    assert_ne!(first.commits[0].commit_key, second.commits[0].commit_key);
+    assert_ne!(first.commits[0].run_id, second.commits[0].run_id);
+    assert_eq!(executor.list_commits().unwrap().len(), 2);
+
+    let replayed_first = executor
+        .execute(&request("op-no-cache-1", workflow))
+        .unwrap();
+    assert!(replayed_first.replayed);
+    assert_eq!(replayed_first.commits.len(), 1);
+    assert_eq!(
+        replayed_first.commits[0].commit_key, first.commits[0].commit_key,
+        "report selected another run's equal-manifest commit"
+    );
+}
+
+#[test]
+fn deterministic_reuse_is_scoped_to_owner_project_and_session() {
+    let harness = Harness::new();
+    let runner = Arc::new(ScriptedRunner::always_ok());
+    let executor = harness.executor(runner.clone());
+    let mut reusable = step("fetch", StepKind::ConnectorFetch, &[]);
+    reusable.cache_policy = CachePolicy::DeterministicReuse;
+    let base = spec(vec![reusable]);
+
+    let first = executor
+        .execute(&request("op-scope-base", base.clone()))
+        .unwrap();
+
+    let mut other_project = base.clone();
+    other_project.project_id = ProjectId("proj-other".into());
+    let project_report = executor
+        .execute(&request("op-scope-project", other_project))
+        .unwrap();
+
+    let mut session_request = request("op-scope-session", base);
+    session_request.session_id = "session-2".into();
+    let session_report = executor.execute(&session_request).unwrap();
+
+    let mut owner_request = request("op-scope-owner", session_request.spec.clone());
+    owner_request.owner_id = "owner-2".into();
+    let owner_report = executor.execute(&owner_request).unwrap();
+
+    assert_eq!(runner.calls(), 4, "authority scopes must not share commits");
+    assert_eq!(first.steps_reused, 0);
+    assert_eq!(project_report.steps_reused, 0);
+    assert_eq!(session_report.steps_reused, 0);
+    assert_eq!(owner_report.steps_reused, 0);
+    assert_ne!(
+        first.commits[0].commit_key,
+        project_report.commits[0].commit_key
+    );
+    assert_ne!(
+        first.commits[0].commit_key,
+        session_report.commits[0].commit_key
+    );
+    assert_ne!(
+        first.commits[0].commit_key,
+        owner_report.commits[0].commit_key
+    );
+    assert_eq!(project_report.commits[0].project_id.0, "proj-other");
+    assert_eq!(session_report.commits[0].session_id, "session-2");
+    assert_eq!(owner_report.commits[0].owner_id, "owner-2");
+}
+
+#[test]
+fn local_reuse_is_refused_before_the_runner_or_commit_store() {
+    let harness = Harness::new();
+    let runner = Arc::new(ScriptedRunner::always_ok());
+    let executor = harness.executor(runner.clone());
+    let mut local = step("fetch", StepKind::ConnectorFetch, &[]);
+    local.cache_policy = CachePolicy::LocalReuse;
+
+    let report = executor
+        .execute(&request("op-local-reuse", spec(vec![local])))
+        .unwrap();
+    assert_eq!(report.state(), WorkflowState::Failed);
+    assert_eq!(runner.calls(), 0);
+    assert!(report.attempts.is_empty());
+    assert!(report.commits.is_empty());
+    assert_eq!(
+        report.run.refused_steps[0].error_class,
+        ErrorClass::PolicyViolation
+    );
+}
+
 /// Reuse is keyed on content: change a parameter and the step runs again.
 #[test]
 fn changing_a_parameter_defeats_reuse() {
@@ -576,6 +996,38 @@ fn changing_a_parameter_defeats_reuse() {
     assert_eq!(second.steps_reused, 0);
     assert_eq!(runner.calls(), 2, "a different parameter is different work");
     assert_eq!(executor.list_commits().unwrap().len(), 2);
+}
+
+#[test]
+fn changing_acceptance_contract_defeats_reuse() {
+    let harness = Harness::new();
+    let runner = Arc::new(ScriptedRunner::always_ok());
+    let executor = harness.executor(runner.clone());
+
+    let mut original = step("fetch", StepKind::ConnectorFetch, &[]);
+    original.cache_policy = CachePolicy::DeterministicReuse;
+    executor
+        .execute(&request(
+            "op-acceptance-contract-1",
+            spec(vec![original.clone()]),
+        ))
+        .unwrap();
+
+    let mut stricter = original;
+    stricter.acceptance_rules.push(AcceptanceRule {
+        condition: AcceptanceCondition::ArtifactCount(1),
+        on_fail: FailAction::Abort,
+    });
+    let second = executor
+        .execute(&request("op-acceptance-contract-2", spec(vec![stricter])))
+        .unwrap();
+    assert_eq!(second.state(), WorkflowState::Succeeded);
+    assert_eq!(second.steps_reused, 0);
+    assert_eq!(
+        runner.calls(),
+        2,
+        "a changed acceptance contract reused output accepted under older rules"
+    );
 }
 
 // ── Operation-id deduplication ────────────────────────────────────
@@ -937,6 +1389,7 @@ fn wedge_a_run_in_flight(executor: &WorkflowExecutor, run_id: &str) {
     attempt.terminal_state = None;
     attempt.finished_at = None;
     attempt.output_manifest_hash = None;
+    attempt.commit_key = None;
     executor
         .write_record(&executor.attempt_path(run_id, &attempt.attempt_id), attempt)
         .unwrap();
@@ -945,6 +1398,11 @@ fn wedge_a_run_in_flight(executor: &WorkflowExecutor, run_id: &str) {
     run.state = WorkflowState::Running;
     run.finished_at = None;
     run.failure = None;
+    run.state_history.push(WorkflowStateTransition {
+        state: WorkflowState::Running,
+        at: executor.clock.now(),
+        note: Some("test crash fixture".into()),
+    });
     executor
         .write_record(&executor.run_path(run_id), &run)
         .unwrap();
@@ -1060,6 +1518,14 @@ fn an_unevaluable_custom_rule_fails_closed() {
             .contains("cannot be evaluated"),
         "an unevaluable rule must not be reported as passing"
     );
+    assert!(report.commits.is_empty());
+    assert!(executor.list_commits().unwrap().is_empty());
+    assert!(
+        fs::read_dir(harness.root.join("workflow-artifacts/sha256"))
+            .map(|mut entries| entries.next().is_none())
+            .unwrap_or(true),
+        "acceptance-rejected bytes were published into the CAS"
+    );
 }
 
 #[test]
@@ -1089,7 +1555,7 @@ fn an_empty_output_fails_an_output_not_empty_rule() {
 fn a_missing_exit_code_cannot_satisfy_exit_code_zero() {
     let harness = Harness::new();
     let executor = harness.executor(Arc::new(ScriptedRunner::new(vec![Ok(StepOutput {
-        artifacts: BTreeMap::from([("out".into(), "aa".into())]),
+        artifacts: BTreeMap::from([("out".into(), b"aa".to_vec())]),
         exit_code: None,
         bytes_produced: 1,
     })])));
@@ -1233,18 +1699,22 @@ fn reuse_key_hash_covers_every_field_that_matches_compares() {
     let mut different_parameter = base.clone();
     different_parameter.parameters = BTreeMap::from([("k".into(), "other".into())]);
     assert_ne!(base.compute_hash(), different_parameter.compute_hash());
+    assert!(!base.matches(&different_parameter));
 
     let mut different_policy = base.clone();
     different_policy.policy_version = "p2".into();
     assert_ne!(base.compute_hash(), different_policy.compute_hash());
+    assert!(!base.matches(&different_policy));
 
     let mut different_connector = base.clone();
     different_connector.connector_version = Some("pubmed@2".into());
     assert_ne!(base.compute_hash(), different_connector.compute_hash());
+    assert!(!base.matches(&different_connector));
 
     let mut different_renderer = base.clone();
     different_renderer.renderer_build_id = Some("r2".into());
     assert_ne!(base.compute_hash(), different_renderer.compute_hash());
+    assert!(!base.matches(&different_renderer));
 }
 
 #[test]

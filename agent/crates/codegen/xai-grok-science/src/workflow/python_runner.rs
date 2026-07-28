@@ -467,7 +467,7 @@ impl StepRunner for PythonLoopRunner {
         }
 
         Ok(StepOutput {
-            artifacts: snapshot.artifacts,
+            artifacts: snapshot.artifact_bytes,
             exit_code: Some(0),
             bytes_produced: snapshot.bytes_produced,
         })

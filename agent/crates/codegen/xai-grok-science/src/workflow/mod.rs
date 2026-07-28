@@ -18,11 +18,11 @@ pub use admission::{
     probe_pinned_kernel,
 };
 pub use executor::{
-    ArtifactCommit, AttemptState, Clock, ErrorClass, ExecutionPolicy, KernelInvocation,
-    ManualClock, RefusedStep, StepAttempt, StepFailure, StepOperation, StepOutput, StepPlan,
-    StepRunner, SystemClock, UnboundStepRunner, WorkflowExecutionRequest, WorkflowExecutor,
-    WorkflowOperationRecord, WorkflowRecoveryReport, WorkflowRunRecord, WorkflowRunReport,
-    WorkflowState,
+    ArtifactCommit, ArtifactCommitState, AttemptState, Clock, ErrorClass, ExecutionPolicy,
+    KernelInvocation, ManualClock, RefusedStep, StepAttempt, StepFailure, StepOperation,
+    StepOutput, StepPlan, StepRunner, SystemClock, UnboundStepRunner, WorkflowExecutionRequest,
+    WorkflowExecutor, WorkflowOperationRecord, WorkflowRecoveryReport, WorkflowRunRecord,
+    WorkflowRunReport, WorkflowState,
 };
 pub use io::{
     AttemptOutputCapability, RetainedOutputDirectory, WorkflowChildPaths, WorkflowIoCapability,
@@ -294,6 +294,8 @@ impl ReuseKey {
             && self.compute_environment_hash == other.compute_environment_hash
             && self.parameters == other.parameters
             && self.policy_version == other.policy_version
+            && self.connector_version == other.connector_version
+            && self.renderer_build_id == other.renderer_build_id
     }
 }
 
