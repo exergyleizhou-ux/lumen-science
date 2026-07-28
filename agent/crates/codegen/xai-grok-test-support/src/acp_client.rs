@@ -71,6 +71,9 @@ struct TextCapture {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PermissionResponse {
     AllowOnce,
+    /// Hold the real ACP permission request open so a product test can mutate
+    /// hostile external state during the AwaitingApproval window.
+    AllowAfter(Duration),
     Reject,
     NeverRespond,
 }
@@ -90,13 +93,15 @@ impl acp::Client for TestAcpClient {
         self.capture
             .permission_request_count
             .fetch_add(1, Ordering::SeqCst);
-        if self.permission_response == PermissionResponse::NeverRespond {
-            std::future::pending::<()>().await;
-        }
-        if self.permission_response == PermissionResponse::Reject {
-            return Ok(acp::RequestPermissionResponse::new(
-                acp::RequestPermissionOutcome::Cancelled,
-            ));
+        match self.permission_response {
+            PermissionResponse::NeverRespond => std::future::pending::<()>().await,
+            PermissionResponse::Reject => {
+                return Ok(acp::RequestPermissionResponse::new(
+                    acp::RequestPermissionOutcome::Cancelled,
+                ));
+            }
+            PermissionResponse::AllowAfter(delay) => tokio::time::sleep(delay).await,
+            PermissionResponse::AllowOnce => {}
         }
         // Auto-approve: pick AllowOnce if available, otherwise first option.
         let outcome = args

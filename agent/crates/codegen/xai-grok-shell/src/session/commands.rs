@@ -274,12 +274,6 @@ pub struct ScienceWorkflowBinding {
     pub(crate) execution: xai_grok_science::workflow::WorkflowExecutionRequest,
     /// Root for the durable run / attempt / commit / operation records.
     pub(crate) executor_root: std::path::PathBuf,
-    /// Content-addressed cell source store the runner reads from.
-    pub(crate) cell_source_root: std::path::PathBuf,
-    /// Root under which each attempt gets its own output directory.
-    pub(crate) output_root: std::path::PathBuf,
-    /// Where the embedded exec-loop driver is materialised.
-    pub(crate) runtime_root: std::path::PathBuf,
     pub(crate) kernel_id: String,
     pub(crate) kernel_kind: xai_grok_science::workflow::KernelKind,
     /// Absolute path to the interpreter. Probed by the actor, never by the
@@ -301,6 +295,15 @@ pub struct PreparedScienceWorkflowExecution {
     pub(crate) store: xai_grok_science::ScienceStore,
     pub(crate) ticket: xai_grok_science::csv::ScienceRunTicket,
     pub(crate) binding: ScienceWorkflowBinding,
+    /// Exact store root retained before permission; ledger, cells, and outputs
+    /// all remain descriptor-relative to it after Allow.
+    pub(crate) io: xai_grok_science::workflow::WorkflowIoCapability,
+    /// Ledger constructed from the same retained root and policy used for
+    /// replay. Finish consumes this instead of reopening a pathname.
+    pub(crate) executor: xai_grok_science::workflow::WorkflowExecutor,
+    /// Non-serializable executable bytes pinned before permission. Admission
+    /// and every kernel spawn consume this exact capability.
+    pub(crate) executable: std::sync::Arc<xai_grok_science::workflow::PinnedExecutable>,
     /// Human-readable target used in the permission prompt.
     pub(crate) target: String,
     /// This operation id already ran: the recorded report, returned without a

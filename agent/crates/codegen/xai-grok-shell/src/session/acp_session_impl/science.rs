@@ -1281,11 +1281,24 @@ impl SessionActor {
         // Idempotent replay. The executor is the authority on what a replay
         // returns, so ask it — with no runner bound, so that even if this were
         // somehow not a replay nothing could execute behind the caller's back.
-        let ledger = xai_grok_science::workflow::WorkflowExecutor::new_confined(
+        let io = xai_grok_science::workflow::WorkflowIoCapability::open_existing_confined(
             &binding.executor_root,
             std::path::Path::new(&self.session_info.cwd),
-            workflow_compute_environment(&binding),
-        )?
+        )?;
+        let executable = std::sync::Arc::new(
+            xai_grok_science::workflow::PinnedExecutable::pin(&binding.interpreter_path).map_err(
+                |error| {
+                    ScienceError::Invalid(format!(
+                        "cannot retain workflow interpreter bytes: {error}"
+                    ))
+                },
+            )?,
+        );
+        let ledger = xai_grok_science::workflow::WorkflowExecutor::from_io(
+            &binding.executor_root,
+            &io,
+            workflow_compute_environment(&binding, Some(executable.sha256())),
+        )
         .with_policy(workflow_execution_policy(&binding));
         if ledger
             .lookup_operation(&binding.execution.operation_id)?
@@ -1300,18 +1313,24 @@ impl SessionActor {
                     owner_id: context.owner_id.clone(),
                     call_id: xai_grok_science::CallId::new("science_workflow_execute"),
                 },
-                target: workflow_permission_target(&binding),
+                target: workflow_permission_target(&binding, &executable),
                 binding,
+                io,
+                executor: ledger,
+                executable,
                 replayed: Some(report),
             });
         }
 
-        let target = workflow_permission_target(&binding);
+        let target = workflow_permission_target(&binding, &executable);
         let ticket = begin_workflow_execution_run(&store, context, &binding)?;
         Ok(PreparedScienceWorkflowExecution {
             store,
             ticket,
             binding,
+            io,
+            executor: ledger,
+            executable,
             target,
             replayed: None,
         })
@@ -1321,8 +1340,10 @@ impl SessionActor {
     /// decision.
     ///
     /// Everything that touches the filesystem or spawns a process lives on this
-    /// side of the gate — materialising the exec-loop driver, staging cell
-    /// sources, probing the kernel, and the run itself. A denied, cancelled or
+    /// side of the gate — staging cell sources, probing the pinned kernel, and
+    /// the run itself. The exec-loop bytes are compiled into the Rust binary
+    /// and passed with `python -c`; there is no runtime file to swap. A denied,
+    /// cancelled or
     /// timed-out request therefore leaves no execution record, no attempt and
     /// no artifact commit; only the closed Science run that says it was refused.
     ///
@@ -1338,52 +1359,45 @@ impl SessionActor {
     ) -> xai_grok_science::Result<xai_grok_science::workflow::WorkflowRunReport> {
         use xai_grok_science::ScienceError;
         use xai_grok_science::workflow::{
-            AdmissionStatus, DirCellSourceStore, KernelAdmissionRequest, KernelManifest,
-            PythonLoopRunner, StepKind, WorkflowExecutor, WorkflowState,
-            materialize_python_loop_script, probe_kernel,
+            AdmissionStatus, KernelAdmissionRequest, KernelManifest, PythonLoopRunner, StepKind,
+            WorkflowState, probe_pinned_kernel,
         };
 
-        if let Some(report) = prepared.replayed {
+        let PreparedScienceWorkflowExecution {
+            store,
+            ticket,
+            binding,
+            io,
+            executor,
+            executable,
+            replayed,
+            ..
+        } = prepared;
+        if let Some(report) = replayed {
             return Ok(report);
         }
         if decision != xai_grok_science::ApprovalDecision::Allow {
-            let terminal = xai_grok_science::csv::finish_without_execution(
-                &prepared.store,
-                &prepared.ticket,
-                decision,
-                reason,
-            )?;
+            let terminal =
+                xai_grok_science::csv::finish_without_execution(&store, &ticket, decision, reason)?;
             return Err(ScienceError::Invalid(format!(
                 "science run {} finished {:?}",
-                prepared.ticket.run_id.0, terminal.state
+                ticket.run_id.0, terminal.state
             )));
         }
-        xai_grok_science::csv::mark_allowed(&prepared.store, &prepared.ticket)?;
+        xai_grok_science::csv::mark_allowed(&store, &ticket)?;
 
-        let binding = &prepared.binding;
+        let binding = &binding;
         let failed = |error: ScienceError| -> ScienceError {
             let _ = xai_grok_science::csv::fail_running(
-                &prepared.store,
-                &prepared.ticket,
+                &store,
+                &ticket,
                 format!("workflow execution rejected: {error}"),
             );
             error
         };
 
-        // The driver script, from the bytes compiled into this binary.
-        let loop_script = match materialize_python_loop_script(&binding.runtime_root) {
-            Ok(path) => path,
-            Err(error) => {
-                return Err(failed(ScienceError::Invalid(format!(
-                    "cannot materialise the kernel exec-loop: {error}"
-                ))));
-            }
-        };
-
         // Stage every cell body the spec carries into the content-addressed
-        // source store. The runner re-hashes whatever it loads, so this is a
-        // delivery step, not a trust step: a source that does not hash to the
-        // digest the plan names still fails the step.
+        // store through the exact root retained before permission.
         for step in &binding.execution.spec.steps {
             if step.kind != StepKind::NotebookCell {
                 continue;
@@ -1392,9 +1406,7 @@ impl SessionActor {
                 continue;
             };
             let digest = format!("{:x}", sha2::Sha256::digest(source.as_bytes()));
-            if let Err(error) = std::fs::create_dir_all(&binding.cell_source_root)
-                .and_then(|()| std::fs::write(binding.cell_source_root.join(digest), source))
-            {
+            if let Err(error) = io.stage_cell(&digest, source.as_bytes()) {
                 return Err(failed(ScienceError::Invalid(format!(
                     "cannot stage the source of step '{}': {error}",
                     step.step_id
@@ -1404,7 +1416,7 @@ impl SessionActor {
 
         // Probe the interpreter. This RUNS it, which is why it is here and not
         // in `prepare_*`.
-        let admission = probe_kernel(
+        let admission = probe_pinned_kernel(
             &KernelAdmissionRequest::new(
                 binding.kernel_id.clone(),
                 binding.kernel_kind,
@@ -1412,6 +1424,7 @@ impl SessionActor {
             )
             .with_admitted_by(format!("session-actor:{}", self.session_info.id.0))
             .with_probe_timeout(binding.probe_timeout),
+            &executable,
         )
         .map_err(&failed)?;
         if admission.admission_status != AdmissionStatus::Admitted {
@@ -1421,36 +1434,21 @@ impl SessionActor {
             ))));
         }
 
-        // `ExecutionPolicy::default()` omits NotebookCell so that running
-        // arbitrary code is a decision. The decision arrives in the request and
-        // is applied here; the default itself is never lowered.
-        let policy = workflow_execution_policy(binding);
-
-        let runner = PythonLoopRunner::new(
-            loop_script,
-            std::sync::Arc::new(DirCellSourceStore::new(&binding.cell_source_root)),
-            &binding.output_root,
-        );
-        let executor = WorkflowExecutor::new_confined(
-            &binding.executor_root,
-            std::path::Path::new(&self.session_info.cwd),
-            workflow_compute_environment(binding),
-        )
-        .map_err(&failed)?
-        .with_policy(policy)
-        .with_runner(std::sync::Arc::new(runner))
-        .with_kernels(KernelManifest {
-            kernels: vec![admission],
-            default_python: None,
-            default_r: None,
-            default_julia: None,
-        })
-        .map_err(&failed)?;
+        let runner = PythonLoopRunner::new(io.share(), executable);
+        let executor = executor
+            .with_runner(std::sync::Arc::new(runner))
+            .with_kernels(KernelManifest {
+                kernels: vec![admission],
+                default_python: None,
+                default_r: None,
+                default_julia: None,
+            })
+            .map_err(&failed)?;
 
         let report = executor.execute(&binding.execution).map_err(&failed)?;
 
-        prepared.store.append_event(
-            &prepared.ticket.run_id,
+        store.append_event(
+            &ticket.run_id,
             "SessionActor",
             "workflow.execution.finished",
             serde_json::json!({
@@ -1470,9 +1468,7 @@ impl SessionActor {
         } else {
             xai_grok_science::RunState::Failed
         };
-        prepared
-            .store
-            .transition(&prepared.ticket.run_id, terminal, None)?;
+        store.transition(&ticket.run_id, terminal, None)?;
         Ok(report)
     }
 }
@@ -1482,12 +1478,15 @@ impl SessionActor {
 /// workflow ran".
 fn workflow_permission_target(
     binding: &crate::session::commands::ScienceWorkflowBinding,
+    executable: &xai_grok_science::workflow::PinnedExecutable,
 ) -> String {
     format!(
-        "execute workflow '{}' ({} step(s)) on {}",
+        "execute workflow '{}' ({} step(s)) on {} [sha256:{}; {}]",
         binding.execution.spec.workflow_id,
         binding.execution.spec.steps.len(),
-        binding.interpreter_path.display()
+        binding.interpreter_path.display(),
+        &executable.sha256()[..12],
+        executable.backend(),
     )
 }
 
@@ -1501,6 +1500,7 @@ fn workflow_permission_target(
 /// over with a plausible-looking hash.
 fn workflow_compute_environment(
     binding: &crate::session::commands::ScienceWorkflowBinding,
+    executable_sha256: Option<&str>,
 ) -> xai_grok_science::workflow::ComputeEnvironment {
     xai_grok_science::workflow::ComputeEnvironment {
         environment_id: format!("session-actor:{}", binding.kernel_id),
@@ -1508,9 +1508,15 @@ fn workflow_compute_environment(
         architecture: std::env::consts::ARCH.to_string(),
         lumen_binary_hash: format!("version:{}", xai_grok_version::VERSION),
         rust_lock_hash: None,
-        python_hash: None,
-        r_hash: None,
-        julia_hash: None,
+        python_hash: (binding.kernel_kind == xai_grok_science::workflow::KernelKind::Python)
+            .then(|| executable_sha256.map(|hash| format!("sha256:{hash}")))
+            .flatten(),
+        r_hash: (binding.kernel_kind == xai_grok_science::workflow::KernelKind::R)
+            .then(|| executable_sha256.map(|hash| format!("sha256:{hash}")))
+            .flatten(),
+        julia_hash: (binding.kernel_kind == xai_grok_science::workflow::KernelKind::Julia)
+            .then(|| executable_sha256.map(|hash| format!("sha256:{hash}")))
+            .flatten(),
         dependency_lock_hash: format!("version:{}", xai_grok_version::VERSION),
         locale: "C".into(),
         timezone: "UTC".into(),

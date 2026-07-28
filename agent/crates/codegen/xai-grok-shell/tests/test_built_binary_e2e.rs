@@ -4848,11 +4848,38 @@ async fn test_stdio_science_kernel_admission_denied_writes_nothing() {
 /// A real python3, or the test does not run. A stub interpreter would prove
 /// only that a stub was called.
 fn workflow_python3() -> Option<PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        for framework in [
+            "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework",
+            "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework",
+        ] {
+            let Ok(entries) = std::fs::read_dir(Path::new(framework).join("Versions")) else {
+                continue;
+            };
+            let mut versions: Vec<_> = entries
+                .filter_map(Result::ok)
+                .map(|entry| entry.path())
+                .collect();
+            versions.sort();
+            versions.reverse();
+            for version in versions {
+                let path = version.join("Resources/Python.app/Contents/MacOS/Python");
+                if path.is_file() {
+                    return Some(path);
+                }
+            }
+        }
+        return None;
+    }
+    #[cfg(not(target_os = "macos"))]
     let out = Command::new("sh")
         .args(["-c", "command -v python3"])
         .output()
         .ok()?;
+    #[cfg(not(target_os = "macos"))]
     let path = PathBuf::from(String::from_utf8(out.stdout).ok()?.trim());
+    #[cfg(not(target_os = "macos"))]
     path.is_absolute().then_some(path)
 }
 
@@ -5133,6 +5160,157 @@ async fn test_stdio_science_workflow_execute_is_actor_gated_and_idempotent() {
     .await;
 }
 
+/// The permission wait is an adversarial window, not a trusted pause. Replacing
+/// both the store pathname and interpreter pathname after the real ACP prompt
+/// appears must not redirect the eventual Allow.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_workflow_execute_retains_store_and_interpreter_across_approval() {
+    use std::os::unix::fs::{PermissionsExt, symlink};
+
+    let Some(python) = workflow_python3() else {
+        panic!("no python3 on PATH: retained-executable product proof cannot be skipped");
+    };
+    with_local_set(|| async move {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let store_root = workdir.path().join("science-store");
+
+        // Create the owned project in a separate normal session so the delayed
+        // permission below belongs only to workflow execution.
+        let creator = GrokStdioClient::spawn(&server, workdir.path()).await;
+        creator.initialize_with_timeout().await;
+        let creator_session = creator.create_session_with_timeout(workdir.path()).await;
+        let created: Value = serde_json::from_str(
+            creator
+                .ext_method(
+                    "x.ai/science/project_create",
+                    serde_json::json!({
+                        "sessionId": creator_session.0.as_ref(),
+                        "ownerId": "science-owner",
+                        "storeRoot": store_root,
+                        "title": "Approval capability project",
+                        "researchQuestion": "Do retained capabilities survive hostile path swaps?",
+                        "operationId": "op-wf-capability-project-create",
+                        "approvalTimeoutMs": 30_000,
+                    }),
+                )
+                .await
+                .expect("create capability project")
+                .0
+                .get(),
+        )
+        .expect("project_create JSON");
+        let project_id = created["projectId"].as_str().expect("projectId").to_owned();
+        drop(creator);
+
+        let interpreter = workdir.path().join("approved-python3");
+        std::fs::copy(&python, &interpreter).expect("copy approved interpreter");
+        std::fs::set_permissions(&interpreter, std::fs::Permissions::from_mode(0o755))
+            .expect("make approved interpreter executable");
+        let original_interpreter = workdir.path().join("approved-python3-original");
+        let malicious_marker = workdir.path().join("malicious-interpreter-ran");
+        let retained_store = workdir.path().join("science-store-retained");
+        let outside = workdir.path().join("outside-store");
+        std::fs::create_dir(&outside).expect("outside directory");
+
+        let client = GrokStdioClient::spawn_with_permission_response(
+            &server,
+            workdir.path(),
+            PermissionResponse::AllowAfter(Duration::from_millis(800)),
+        )
+        .await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+        let params = serde_json::json!({
+            "sessionId": session_id.0.as_ref(),
+            "ownerId": "science-owner",
+            "storeRoot": store_root,
+            "operationId": "op-wf-capability-swap",
+            "workflowSpec": workflow_spec(
+                "wf-capability-swap",
+                &project_id,
+                WORKFLOW_CELL,
+            ),
+            "interpreterPath": interpreter,
+            "kernelId": "py-capability-swap",
+            "allowKernelSteps": true,
+            "probeTimeoutMs": 60_000,
+            "approvalTimeoutMs": 30_000,
+        });
+
+        let request = async {
+            tokio::time::timeout(
+                Duration::from_secs(120),
+                client.ext_method("x.ai/science/workflow_execute", params),
+            )
+            .await
+            .expect("capability workflow timed out")
+        };
+        let attack = async {
+            for _ in 0..200 {
+                if client.permission_request_count() == 1 {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+            assert_eq!(
+                client.permission_request_count(),
+                1,
+                "workflow never reached the real permission prompt"
+            );
+            std::fs::rename(&store_root, &retained_store)
+                .expect("rename approved store during permission");
+            symlink(&outside, &store_root).expect("replace store path with outside symlink");
+
+            std::fs::rename(&interpreter, &original_interpreter)
+                .expect("rename approved interpreter during permission");
+            std::fs::write(
+                &interpreter,
+                format!(
+                    "#!/bin/sh\nprintf pwned > '{}'\nexit 97\n",
+                    malicious_marker.display()
+                ),
+            )
+            .expect("write replacement interpreter");
+            std::fs::set_permissions(&interpreter, std::fs::Permissions::from_mode(0o755))
+                .expect("make replacement executable");
+        };
+        let (response, ()) = tokio::join!(request, attack);
+        let response = response.unwrap_or_else(|error| {
+            panic!(
+                "retained-capability workflow failed: {error:?}\nstderr:\n{}",
+                client.stderr()
+            )
+        });
+        let result: Value = serde_json::from_str(response.0.get()).expect("workflow_execute JSON");
+        assert_eq!(result["state"], "succeeded", "result: {result}");
+        assert!(
+            !malicious_marker.exists(),
+            "replacement interpreter bytes were executed"
+        );
+        assert!(
+            std::fs::read_dir(&outside)
+                .expect("read outside")
+                .next()
+                .is_none(),
+            "replacement store symlink received workflow bytes"
+        );
+        assert!(
+            retained_store.join("workflow-runs").is_dir(),
+            "workflow ledger did not remain on the retained store"
+        );
+        assert!(
+            retained_store.join("workflow-outputs").is_dir(),
+            "kernel output did not remain on the retained store"
+        );
+    })
+    .await;
+}
+
 /// `operationId` is required, and a denied permission executes nothing.
 #[tokio::test]
 #[ignore] // requires pre-built binary
@@ -5311,8 +5489,9 @@ async fn test_stdio_science_workflow_execute_denied_runs_nothing() {
             !store_root.join("workflow-operations").exists(),
             "denied execution burned the operation id"
         );
-        // Cell staging, driver materialisation and per-attempt output all live
-        // behind the gate. The adapter must not even create their directories.
+        // Cell staging and per-attempt output live behind the gate. The
+        // workflow-runtime directory is also forbidden: the driver is compiled
+        // into Rust and must never reappear as a swappable loose file.
         for name in ["workflow-cells", "workflow-runtime", "workflow-outputs"] {
             let dir = store_root.join(name);
             assert!(
@@ -5347,6 +5526,106 @@ async fn test_stdio_science_workflow_execute_denied_runs_nothing() {
             store.approvals(&run.context.run_id).unwrap()[0].decision,
             xai_grok_science::ApprovalDecision::Cancel
         );
+    })
+    .await;
+}
+
+/// macOS must reject an interpreter from a user-writable path before the
+/// production permission seam. Pinned bytes alone are insufficient there:
+/// dyld and framework dependencies also have to come from a protected managed
+/// runtime.
+#[cfg(target_os = "macos")]
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_workflow_execute_macos_rejects_unprotected_interpreter_before_permission()
+ {
+    let Some(protected_python) = workflow_python3() else {
+        panic!("protected macOS Python runtime is unavailable");
+    };
+    with_local_set(|| async move {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let store_root = workdir.path().join("science-store");
+
+        let creator = GrokStdioClient::spawn(&server, workdir.path()).await;
+        creator.initialize_with_timeout().await;
+        let creator_session = creator.create_session_with_timeout(workdir.path()).await;
+        let created: Value = serde_json::from_str(
+            creator
+                .ext_method(
+                    "x.ai/science/project_create",
+                    serde_json::json!({
+                        "sessionId": creator_session.0.as_ref(),
+                        "ownerId": "science-owner",
+                        "storeRoot": store_root,
+                        "title": "Protected runtime project",
+                        "researchQuestion": "Does macOS reject a user-controlled runtime before approval?",
+                        "operationId": "op-wf-macos-runtime-project",
+                        "approvalTimeoutMs": 30_000,
+                    }),
+                )
+                .await
+                .expect("create protected-runtime project")
+                .0
+                .get(),
+        )
+        .expect("project_create JSON");
+        let project_id = created["projectId"].as_str().expect("projectId").to_owned();
+        drop(creator);
+
+        let unprotected = workdir.path().join("user-controlled-python");
+        std::fs::copy(&protected_python, &unprotected).expect("copy Python into user path");
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&unprotected, std::fs::Permissions::from_mode(0o755))
+            .expect("make copied Python executable");
+
+        let client = GrokStdioClient::spawn(&server, workdir.path()).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+        let result = client
+            .ext_method(
+                "x.ai/science/workflow_execute",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "ownerId": "science-owner",
+                    "storeRoot": store_root,
+                    "operationId": "op-wf-macos-unprotected-runtime",
+                    "workflowSpec": workflow_spec(
+                        "wf-macos-unprotected-runtime",
+                        &project_id,
+                        WORKFLOW_CELL,
+                    ),
+                    "interpreterPath": unprotected,
+                    "kernelId": "py-macos-unprotected",
+                    "allowKernelSteps": true,
+                    "probeTimeoutMs": 60_000,
+                    "approvalTimeoutMs": 30_000,
+                }),
+            )
+            .await;
+        assert!(
+            result.is_err(),
+            "user-controlled macOS interpreter reached execution"
+        );
+        assert_eq!(
+            client.permission_request_count(),
+            0,
+            "unsafe interpreter reached the permission seam"
+        );
+        for name in [
+            "workflow-runs",
+            "workflow-operations",
+            "workflow-commits",
+            "workflow-cells",
+            "workflow-outputs",
+        ] {
+            assert!(
+                !store_root.join(name).exists(),
+                "unsafe interpreter provisioned {name}"
+            );
+        }
     })
     .await;
 }

@@ -3,9 +3,11 @@
 
 pub mod admission;
 pub mod executor;
+mod io;
 pub mod kernel;
 mod kernel_admission_protocol;
 pub mod package;
+mod pinned_executable;
 pub mod python_runner;
 
 #[cfg(test)]
@@ -13,6 +15,7 @@ mod e2e_tests;
 
 pub use admission::{
     KernelAdmissionRequest, KernelPolicy, RejectionReason, default_resource_cap, probe_kernel,
+    probe_pinned_kernel,
 };
 pub use executor::{
     ArtifactCommit, AttemptState, Clock, ErrorClass, ExecutionPolicy, KernelInvocation,
@@ -20,6 +23,10 @@ pub use executor::{
     StepRunner, SystemClock, UnboundStepRunner, WorkflowExecutionRequest, WorkflowExecutor,
     WorkflowOperationRecord, WorkflowRecoveryReport, WorkflowRunRecord, WorkflowRunReport,
     WorkflowState,
+};
+pub use io::{
+    AttemptOutputCapability, RetainedOutputDirectory, WorkflowChildPaths, WorkflowIoCapability,
+    WorkflowOutputSnapshot,
 };
 pub use kernel::{
     AdmissionStatus, KernelAdmission, KernelKind, KernelManifest, ReproductionAttempt,
@@ -29,9 +36,8 @@ pub use kernel_admission_protocol::{
     KernelAdmissionResult, begin_kernel_admission, finish_kernel_admission,
 };
 pub use package::{ArtifactManifest, InputManifest, WorkflowPackage};
-pub use python_runner::{
-    CellSourceStore, DirCellSourceStore, PythonLoopRunner, materialize_python_loop_script,
-};
+pub use pinned_executable::PinnedExecutable;
+pub use python_runner::PythonLoopRunner;
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

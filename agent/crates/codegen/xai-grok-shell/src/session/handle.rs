@@ -168,6 +168,68 @@ pub struct SessionHandle {
     pub scheduler_handle:
         Option<xai_grok_tools::implementations::grok_build::scheduler::types::SchedulerHandle>,
 }
+
+/// Cancellation safety for the interval between durable admission and the
+/// permission decision.
+///
+/// Dropping the caller future must not strand a Science run in
+/// `AwaitingApproval`. The guard owns the prepared capability bundle and, if
+/// normal control flow never takes it, sends the same actor-only Finish command
+/// with a terminal Cancel decision. The response is intentionally detached:
+/// the SessionActor remains the sole authority that closes the durable run.
+struct PendingScienceWorkflowApproval {
+    cmd_tx: mpsc::UnboundedSender<SessionCommand>,
+    prepared: Option<crate::session::commands::PreparedScienceWorkflowExecution>,
+}
+
+impl PendingScienceWorkflowApproval {
+    fn new(
+        cmd_tx: mpsc::UnboundedSender<SessionCommand>,
+        prepared: crate::session::commands::PreparedScienceWorkflowExecution,
+    ) -> Self {
+        Self {
+            cmd_tx,
+            prepared: Some(prepared),
+        }
+    }
+
+    fn prepared(&self) -> &crate::session::commands::PreparedScienceWorkflowExecution {
+        self.prepared
+            .as_ref()
+            .expect("workflow approval guard must remain armed")
+    }
+
+    fn take(mut self) -> crate::session::commands::PreparedScienceWorkflowExecution {
+        self.prepared
+            .take()
+            .expect("workflow approval guard must remain armed")
+    }
+}
+
+impl Drop for PendingScienceWorkflowApproval {
+    fn drop(&mut self) {
+        let Some(prepared) = self.prepared.take() else {
+            return;
+        };
+        let (respond_to, _response) = oneshot::channel();
+        if self
+            .cmd_tx
+            .send(SessionCommand::FinishScienceWorkflowExecution(Box::new(
+                crate::session::commands::FinishScienceWorkflowExecution {
+                    prepared,
+                    decision: xai_grok_science::ApprovalDecision::Cancel,
+                    reason: "workflow permission wait was cancelled before a decision".into(),
+                    respond_to,
+                },
+            )))
+            .is_err()
+        {
+            tracing::warn!(
+                "session actor unavailable while cancelling a pending Science workflow approval"
+            );
+        }
+    }
+}
 impl SessionHandle {
     /// S4 product path for the deterministic offline Science micro-loop.
     /// Approval is requested from the existing session-scoped Lumen permission
@@ -842,10 +904,11 @@ impl SessionHandle {
                 )
                 .await;
         }
+        let pending = PendingScienceWorkflowApproval::new(self.cmd_tx.clone(), prepared);
 
         let call_id = acp::ToolCallId::new(std::sync::Arc::from(format!(
             "science-workflow-execute-{}",
-            prepared.ticket.run_id.0
+            pending.prepared().ticket.run_id.0
         )));
         let update = acp::ToolCallUpdate::new(
             call_id,
@@ -853,13 +916,14 @@ impl SessionHandle {
                 .kind(Some(acp::ToolKind::Execute))
                 .title(Some(format!(
                     "Lumen Science workflow execution: {}",
-                    prepared.binding.execution.spec.workflow_id
+                    pending.prepared().binding.execution.spec.workflow_id
                 ))),
         );
+        let permission_target = pending.prepared().target.clone();
         let permission = tokio::time::timeout(
             approval_timeout,
             self.permission_handle.request(
-                AccessKind::Bash(prepared.target.clone()),
+                AccessKind::Bash(permission_target),
                 update,
                 Some(self.info.id.0.to_string()),
                 None,
@@ -892,6 +956,7 @@ impl SessionHandle {
                 format!("permission requires follow-up: {message}"),
             ),
         };
+        let prepared = pending.take();
         self.finish_science_workflow_execution(prepared, decision, reason)
             .await
     }
@@ -1315,5 +1380,130 @@ impl SessionHandle {
                 "feedback persistence channel closed; entry dropped",
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod workflow_approval_cancellation_tests {
+    use super::*;
+    use std::collections::BTreeMap;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use xai_grok_science::workflow::{
+        ComputeEnvironment, NetworkPolicy, PinnedExecutable, ResourceLimits,
+        WorkflowExecutionRequest, WorkflowExecutor, WorkflowIoCapability, WorkflowSpec,
+    };
+
+    fn prepared(
+        workspace: &std::path::Path,
+    ) -> crate::session::commands::PreparedScienceWorkflowExecution {
+        let store_root = workspace.join("science-store");
+        std::fs::create_dir(&store_root).unwrap();
+        let store = xai_grok_science::ScienceStore::new(&store_root);
+        let context = xai_grok_science::RunContext {
+            run_id: xai_grok_science::RunId::new_v7(),
+            project_id: xai_grok_science::ProjectId::new("project-cancel-guard"),
+            session_id: "session-cancel-guard".into(),
+            owner_id: "owner-cancel-guard".into(),
+            workspace_root: workspace.to_path_buf(),
+            provider: "test".into(),
+            approval_policy: "test".into(),
+            tool_profile: "test".into(),
+            artifact_root: store_root.join("artifacts"),
+            environment: BTreeMap::new(),
+        };
+        let ticket = xai_grok_science::csv::begin_fixture(&store, context).unwrap();
+        let io = WorkflowIoCapability::open_existing_confined(&store_root, workspace).unwrap();
+        let environment = ComputeEnvironment {
+            environment_id: "cancel-guard".into(),
+            os: std::env::consts::OS.into(),
+            architecture: std::env::consts::ARCH.into(),
+            lumen_binary_hash: "test".into(),
+            rust_lock_hash: None,
+            python_hash: None,
+            r_hash: None,
+            julia_hash: None,
+            dependency_lock_hash: "test".into(),
+            locale: "C".into(),
+            timezone: "UTC".into(),
+            environment_allowlist: Vec::new(),
+            cpu_identity: None,
+            gpu_identity: None,
+            deterministic_flags: Vec::new(),
+            network_policy: NetworkPolicy::None,
+            container_digest: None,
+        };
+        let executor = WorkflowExecutor::from_io(&store_root, &io, environment);
+        let executable = Arc::new(
+            PinnedExecutable::pin(PathBuf::from("/bin/sh")).expect("pin protected test executable"),
+        );
+        let spec = WorkflowSpec {
+            workflow_id: "workflow-cancel-guard".into(),
+            project_id: xai_grok_science::project::ProjectId("project-cancel-guard".into()),
+            name: "cancellation guard".into(),
+            steps: Vec::new(),
+            parameters: BTreeMap::new(),
+            permissions: Vec::new(),
+            resources: ResourceLimits {
+                max_concurrent_steps: 1,
+                max_total_duration_secs: 30,
+                max_memory_mb: 128,
+                max_disk_mb: 1,
+            },
+            schema_version: WorkflowSpec::CURRENT_SCHEMA_VERSION,
+        };
+        crate::session::commands::PreparedScienceWorkflowExecution {
+            store,
+            ticket,
+            binding: crate::session::commands::ScienceWorkflowBinding {
+                execution: WorkflowExecutionRequest {
+                    operation_id: "operation-cancel-guard".into(),
+                    session_id: "session-cancel-guard".into(),
+                    owner_id: "owner-cancel-guard".into(),
+                    spec,
+                },
+                executor_root: store_root,
+                kernel_id: "kernel-cancel-guard".into(),
+                kernel_kind: xai_grok_science::workflow::KernelKind::Python,
+                interpreter_path: PathBuf::from("/bin/sh"),
+                probe_timeout: std::time::Duration::from_secs(1),
+                allow_kernel_steps: true,
+            },
+            io,
+            executor,
+            executable,
+            target: "test cancellation guard".into(),
+            replayed: None,
+        }
+    }
+
+    #[test]
+    fn dropping_permission_wait_enqueues_actor_cancel_finish() {
+        let workspace = tempfile::tempdir().unwrap();
+        let prepared = prepared(workspace.path());
+        let run_id = prepared.ticket.run_id.clone();
+        let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel();
+
+        drop(PendingScienceWorkflowApproval::new(cmd_tx, prepared));
+
+        let command = cmd_rx
+            .try_recv()
+            .expect("drop must enqueue an actor Finish command");
+        let SessionCommand::FinishScienceWorkflowExecution(command) = command else {
+            panic!("drop enqueued the wrong SessionCommand");
+        };
+        assert_eq!(command.prepared.ticket.run_id, run_id);
+        assert_eq!(command.decision, xai_grok_science::ApprovalDecision::Cancel);
+        assert!(command.reason.contains("cancelled before a decision"));
+        assert_eq!(
+            command
+                .prepared
+                .store
+                .load_run(&run_id)
+                .expect("durable awaiting run")
+                .state,
+            xai_grok_science::RunState::AwaitingApproval,
+            "the handle must enqueue actor work, never mutate the store directly"
+        );
     }
 }

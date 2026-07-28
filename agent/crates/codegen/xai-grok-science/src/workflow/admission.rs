@@ -19,6 +19,7 @@
 //! probe* and are never copied into the record.
 
 use super::kernel::{AdmissionStatus, KernelAdmission, KernelKind, ResourceCap};
+use super::pinned_executable::PinnedExecutable;
 use crate::{Result, ScienceError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -399,12 +400,145 @@ pub fn probe_kernel(request: &KernelAdmissionRequest) -> Result<KernelAdmission>
     }
 }
 
+/// Probe the exact executable capability retained by the SessionActor.
+///
+/// Unlike [`probe_kernel`], this never reopens `request.interpreter_path`.
+/// The path remains evidence and a confinement input; hashing, version
+/// execution, and the later workflow runner all use the same non-serializable
+/// [`PinnedExecutable`].
+pub fn probe_pinned_kernel(
+    request: &KernelAdmissionRequest,
+    executable: &PinnedExecutable,
+) -> Result<KernelAdmission> {
+    if request.kernel_id.trim().is_empty() {
+        return Err(ScienceError::Invalid("kernel_id is required".into()));
+    }
+    if request.admitted_by.trim().is_empty() {
+        return Err(ScienceError::Invalid(
+            "admitted_by is required: an admission needs an authority".into(),
+        ));
+    }
+    if request.probe_timeout.is_zero() {
+        return Err(ScienceError::Invalid(
+            "probe_timeout must be greater than zero".into(),
+        ));
+    }
+
+    match probe_pinned_inner(request, executable) {
+        Ok(probed) => Ok(admitted_record(request, probed)),
+        Err(reason) => Ok(rejected_record(request, reason)),
+    }
+}
+
 /// Everything the probe learned about a kernel that passed.
 struct ProbedKernel {
     resolved_path: PathBuf,
     executable_hash: String,
     package_lock_hash: String,
     exact_version: String,
+}
+
+fn probe_pinned_inner(
+    request: &KernelAdmissionRequest,
+    executable: &PinnedExecutable,
+) -> std::result::Result<ProbedKernel, RejectionReason> {
+    let resolved = executable.canonical_path();
+    let resolved_display = resolved.display().to_string();
+    if !request.interpreter_path.is_absolute() {
+        return Err(RejectionReason::InterpreterPathNotAbsolute {
+            path: request.interpreter_path.display().to_string(),
+        });
+    }
+    if !executable.matches_source_path(&request.interpreter_path) {
+        return Err(RejectionReason::InterpreterNotAFile {
+            path: request.interpreter_path.display().to_string(),
+            file_type: "does not identify the actor-retained executable".into(),
+        });
+    }
+    if let Some(root) = &request.allowed_root {
+        let allowed = dunce::canonicalize(root)
+            .or_else(|_| std::path::absolute(root))
+            .unwrap_or_else(|_| root.clone());
+        if !resolved.starts_with(&allowed) {
+            return Err(RejectionReason::InterpreterOutsideAllowedRoot {
+                resolved: resolved_display.clone(),
+                allowed_root: allowed.display().to_string(),
+            });
+        }
+    }
+
+    let executable_hash = executable.sha256().to_string();
+    if let Some(supplied) = &request.supplied_executable_hash {
+        let supplied =
+            normalise_digest(supplied).ok_or_else(|| RejectionReason::SuppliedDigestMalformed {
+                field: "executableHash".into(),
+                value: supplied.clone(),
+            })?;
+        if supplied != executable_hash {
+            return Err(RejectionReason::ExecutableHashMismatch {
+                supplied,
+                probed: executable_hash,
+            });
+        }
+    }
+
+    let package_lock_hash = match &request.package_lock_path {
+        Some(path) => {
+            let lock_display = path.display().to_string();
+            let lock_meta =
+                fs::symlink_metadata(path).map_err(|_| RejectionReason::PackageLockNotAFile {
+                    path: lock_display.clone(),
+                })?;
+            if !lock_meta.is_file() {
+                return Err(RejectionReason::PackageLockNotAFile { path: lock_display });
+            }
+            hash_file(path)
+                .map_err(|_| RejectionReason::PackageLockNotAFile { path: lock_display })?
+        }
+        None => {
+            if let Some(supplied) = &request.supplied_package_lock_hash {
+                return Err(RejectionReason::PackageLockUnverifiable {
+                    supplied: supplied.clone(),
+                });
+            }
+            NO_PACKAGE_LOCK.to_string()
+        }
+    };
+    if let Some(supplied) = &request.supplied_package_lock_hash {
+        let supplied =
+            normalise_digest(supplied).ok_or_else(|| RejectionReason::SuppliedDigestMalformed {
+                field: "packageLockHash".into(),
+                value: supplied.clone(),
+            })?;
+        if supplied != package_lock_hash {
+            return Err(RejectionReason::PackageLockHashMismatch {
+                supplied,
+                probed: package_lock_hash,
+            });
+        }
+    }
+
+    let exact_version =
+        run_pinned_version_probe(executable, &request.version_argv(), request.probe_timeout)?;
+    if let Some(lock_path) = &request.package_lock_path {
+        let lock_hash_after =
+            hash_file(lock_path).map_err(|_| RejectionReason::PackageLockNotAFile {
+                path: lock_path.display().to_string(),
+            })?;
+        if package_lock_hash != lock_hash_after {
+            return Err(RejectionReason::PackageLockChangedDuringProbe {
+                before: package_lock_hash,
+                after: lock_hash_after,
+            });
+        }
+    }
+
+    Ok(ProbedKernel {
+        resolved_path: resolved.to_path_buf(),
+        executable_hash,
+        package_lock_hash,
+        exact_version,
+    })
 }
 
 fn probe_inner(
@@ -702,6 +836,64 @@ fn run_version_probe(
     argv: &[String],
     timeout: Duration,
 ) -> std::result::Result<String, RejectionReason> {
+    validate_version_argv(argv)?;
+    let mut stdout = ProbeCapture::new("stdout").map_err(probe_io_error)?;
+    let mut stderr = ProbeCapture::new("stderr").map_err(probe_io_error)?;
+    let stdout_stdio = stdout.stdio().map_err(probe_io_error)?;
+    let stderr_stdio = stderr.stdio().map_err(probe_io_error)?;
+    let mut command = Command::new(executable);
+    command
+        .args(argv)
+        .stdin(Stdio::null())
+        .stdout(stdout_stdio)
+        .stderr(stderr_stdio)
+        .env("LC_ALL", "C")
+        .env("LANG", "C");
+    configure_probe_process(&mut command);
+    let child = command
+        .spawn()
+        .map_err(|error| RejectionReason::VersionProbeSpawnFailed {
+            detail: error.to_string(),
+        })?;
+    complete_version_probe(child, &mut stdout, &mut stderr, timeout)
+}
+
+fn run_pinned_version_probe(
+    executable: &PinnedExecutable,
+    argv: &[String],
+    timeout: Duration,
+) -> std::result::Result<String, RejectionReason> {
+    validate_version_argv(argv)?;
+    let mut stdout = ProbeCapture::new("stdout").map_err(probe_io_error)?;
+    let mut stderr = ProbeCapture::new("stderr").map_err(probe_io_error)?;
+    let stdout_stdio = stdout.stdio().map_err(probe_io_error)?;
+    let stderr_stdio = stderr.stdio().map_err(probe_io_error)?;
+    let mut pinned =
+        executable
+            .spawn_command()
+            .map_err(|error| RejectionReason::VersionProbeSpawnFailed {
+                detail: error.to_string(),
+            })?;
+    pinned
+        .command_mut()
+        .args(argv)
+        .stdin(Stdio::null())
+        .stdout(stdout_stdio)
+        .stderr(stderr_stdio)
+        .env("LC_ALL", "C")
+        .env("LANG", "C");
+    configure_probe_process(pinned.command_mut());
+    let child = pinned
+        .spawn()
+        .map_err(|error| RejectionReason::VersionProbeSpawnFailed {
+            detail: error.to_string(),
+        })?;
+    // `pinned` remains alive until the child has been spawned. On Linux the
+    // child inherited its memfd; on macOS exec opened the private snapshot.
+    complete_version_probe(child, &mut stdout, &mut stderr, timeout)
+}
+
+fn validate_version_argv(argv: &[String]) -> std::result::Result<(), RejectionReason> {
     for arg in argv {
         if arg.contains('\0') || arg.contains('\n') || arg.contains('\r') {
             return Err(RejectionReason::VersionProbeArgsInvalid {
@@ -709,28 +901,15 @@ fn run_version_probe(
             });
         }
     }
+    Ok(())
+}
 
-    let mut stdout = ProbeCapture::new("stdout").map_err(probe_io_error)?;
-    let mut stderr = ProbeCapture::new("stderr").map_err(probe_io_error)?;
-    let stdout_stdio = stdout.stdio().map_err(probe_io_error)?;
-    let stderr_stdio = stderr.stdio().map_err(probe_io_error)?;
-
-    let mut command = Command::new(executable);
-    command
-        .args(argv)
-        .stdin(Stdio::null())
-        .stdout(stdout_stdio)
-        .stderr(stderr_stdio)
-        // A stable locale keeps the recorded version string reproducible.
-        .env("LC_ALL", "C")
-        .env("LANG", "C");
-    configure_probe_process(&mut command);
-    let mut child = command
-        .spawn()
-        .map_err(|error| RejectionReason::VersionProbeSpawnFailed {
-            detail: error.to_string(),
-        })?;
-
+fn complete_version_probe(
+    mut child: Child,
+    stdout: &mut ProbeCapture,
+    stderr: &mut ProbeCapture,
+    timeout: Duration,
+) -> std::result::Result<String, RejectionReason> {
     let started = Instant::now();
     let status = loop {
         match child.try_wait() {
@@ -987,6 +1166,52 @@ mod tests {
             .rejection_reason
             .as_ref()
             .expect("a rejection must carry a reason")
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn pinned_probe_uses_retained_bytes_after_the_original_path_is_replaced() {
+        let dir = tempdir().unwrap();
+        let path = script(dir.path(), "python", "#!/bin/sh\nprintf 'Pinned 1.0\\n'\n");
+        let original = fs::read(&path).unwrap();
+        let pinned = PinnedExecutable::pin(&path).expect("pin executable");
+
+        fs::rename(&path, dir.path().join("approved-original")).unwrap();
+        script(
+            dir.path(),
+            "python",
+            "#!/bin/sh\nprintf 'Replacement 9.9\\n'\n",
+        );
+
+        let admission = probe_pinned_kernel(
+            &request(&path).with_version_probe_args(std::iter::empty::<&str>()),
+            &pinned,
+        )
+        .expect("probe pinned executable");
+        assert_eq!(admission.admission_status, AdmissionStatus::Admitted);
+        assert_eq!(admission.exact_version, "Pinned 1.0");
+        assert_eq!(
+            admission.executable_hash,
+            format!("{:x}", Sha256::digest(&original))
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn pinned_probe_does_not_reopen_a_missing_original_path() {
+        let dir = tempdir().unwrap();
+        let path = script(dir.path(), "python", "#!/bin/sh\nprintf 'Pinned 1.0\\n'\n");
+        let pinned = PinnedExecutable::pin(&path).expect("pin executable");
+        fs::rename(&path, dir.path().join("approved-original")).unwrap();
+        assert!(!path.exists(), "the approved pathname must be absent");
+
+        let admission = probe_pinned_kernel(
+            &request(&path).with_version_probe_args(std::iter::empty::<&str>()),
+            &pinned,
+        )
+        .expect("probe retained executable without reopening its old path");
+        assert_eq!(admission.admission_status, AdmissionStatus::Admitted);
+        assert_eq!(admission.exact_version, "Pinned 1.0");
     }
 
     // ── Negative cases ────────────────────────────────────────────

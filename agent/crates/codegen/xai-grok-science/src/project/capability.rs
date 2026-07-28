@@ -10,13 +10,11 @@
 use crate::{Result, ScienceError};
 #[cfg(unix)]
 use std::ffi::OsStr;
-#[cfg(windows)]
-use std::path::PathBuf;
 use std::{
     ffi::OsString,
     fs,
     io::{Read, Write},
-    path::{Component, Path},
+    path::{Component, Path, PathBuf},
 };
 use uuid::Uuid;
 
@@ -68,6 +66,24 @@ impl PinnedDirectory {
             }
             Err(error) => return Err(error.into()),
         }
+        Self::open_existing(path)
+    }
+
+    fn open_existing(path: &Path) -> Result<Self> {
+        match fs::symlink_metadata(path) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(ScienceError::Invalid(
+                    "project store root must not be a symlink".into(),
+                ));
+            }
+            Ok(metadata) if !metadata.is_dir() => {
+                return Err(ScienceError::Invalid(
+                    "project store root must be a directory".into(),
+                ));
+            }
+            Ok(_) => {}
+            Err(error) => return Err(error.into()),
+        }
         let canonical = dunce::canonicalize(path)?;
         if !canonical.is_absolute() {
             return Err(ScienceError::Invalid(
@@ -94,6 +110,40 @@ impl PinnedDirectory {
             }
         }
         Ok(current)
+    }
+
+    /// Retain an already-provisioned directory below `workspace`.
+    ///
+    /// Unlike [`Self::open_or_create_within`], this never creates the root.
+    /// Approval-gated callers use it during prepare so a denied request cannot
+    /// leave a directory behind merely by asking for permission.
+    pub(crate) fn open_existing_within(path: &Path, workspace: &Path) -> Result<Self> {
+        use std::os::unix::fs::MetadataExt as _;
+
+        let canonical_workspace = dunce::canonicalize(workspace)?;
+        if !canonical_workspace.is_absolute() {
+            return Err(ScienceError::Invalid(
+                "workspace must resolve to an absolute path".into(),
+            ));
+        }
+        let opened = Self::open_existing(path)?;
+        let canonical_path = dunce::canonicalize(path)?;
+        if !canonical_path.starts_with(&canonical_workspace) {
+            return Err(ScienceError::Invalid(
+                "project store root escapes the canonical workspace".into(),
+            ));
+        }
+        let reopened = Self::open_existing(&canonical_path)?;
+        let opened_metadata = opened.file.metadata()?;
+        let reopened_metadata = reopened.file.metadata()?;
+        if opened_metadata.dev() != reopened_metadata.dev()
+            || opened_metadata.ino() != reopened_metadata.ino()
+        {
+            return Err(ScienceError::Invalid(
+                "project store root identity changed during confinement".into(),
+            ));
+        }
+        Ok(opened)
     }
 
     /// Open `path` once, retain that exact directory, and prove that the
@@ -241,6 +291,100 @@ impl PinnedDirectory {
             }
             Err(error) => Err(error),
         }
+    }
+
+    /// Create descendants relative to this retained directory and return a
+    /// handle to the final directory. No later operation needs to reopen the
+    /// original absolute path.
+    pub(crate) fn create_directory(&self, relative: &Path) -> Result<Self> {
+        self.create_directories(relative)
+    }
+
+    /// Duplicate this directory for inheritance by an approved child process.
+    ///
+    /// `F_DUPFD` returns a descriptor with `FD_CLOEXEC` cleared. The caller
+    /// must retain the returned `File` until the child has exited.
+    pub(crate) fn duplicate_inheritable(&self) -> Result<fs::File> {
+        use std::os::fd::{AsRawFd as _, FromRawFd as _};
+
+        // SAFETY: `self.file` owns a live descriptor. F_DUPFD creates a new
+        // owned descriptor at or above 3 and leaves FD_CLOEXEC clear.
+        let duplicated = unsafe { libc::fcntl(self.file.as_raw_fd(), libc::F_DUPFD, 3) };
+        if duplicated < 0 {
+            return Err(std::io::Error::last_os_error().into());
+        }
+        // SAFETY: a successful F_DUPFD transfers one independent descriptor.
+        Ok(unsafe { fs::File::from_raw_fd(duplicated) })
+    }
+
+    /// Recursively read regular files below this retained directory.
+    ///
+    /// Every entry is opened relative to a live directory descriptor with
+    /// `O_NOFOLLOW`. A symlink or any non-file/non-directory entry rejects the
+    /// entire snapshot; it is never skipped and never followed.
+    /// Recursively read regular files without ever buffering more than
+    /// `max_bytes` in aggregate.
+    pub(crate) fn snapshot_nofollow_bounded(
+        &self,
+        max_bytes: u64,
+    ) -> Result<Vec<(PathBuf, Vec<u8>)>> {
+        let mut files = Vec::new();
+        let mut bytes_read = 0u64;
+        self.snapshot_nofollow_into(Path::new(""), &mut files, &mut bytes_read, max_bytes)?;
+        Ok(files)
+    }
+
+    fn snapshot_nofollow_into(
+        &self,
+        prefix: &Path,
+        files: &mut Vec<(PathBuf, Vec<u8>)>,
+        bytes_read: &mut u64,
+        max_bytes: u64,
+    ) -> Result<()> {
+        for name in readdir_names(&self.file)? {
+            let relative = prefix.join(&name);
+            let opened = openat(
+                &self.file,
+                &name,
+                libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
+                None,
+            )
+            .map_err(|error| match error {
+                ScienceError::Io(io) if io.raw_os_error() == Some(libc::ELOOP) => {
+                    ScienceError::Invalid(format!(
+                        "workflow output snapshot refuses symlink '{}'",
+                        relative.display()
+                    ))
+                }
+                error => error,
+            })?;
+            let metadata = opened.metadata()?;
+            if metadata.is_dir() {
+                Self { file: opened }
+                    .snapshot_nofollow_into(&relative, files, bytes_read, max_bytes)?;
+            } else if metadata.is_file() {
+                let remaining = max_bytes.saturating_sub(*bytes_read);
+                let mut bytes = Vec::new();
+                opened
+                    .take(remaining.saturating_add(1))
+                    .read_to_end(&mut bytes)?;
+                *bytes_read = bytes_read.checked_add(bytes.len() as u64).ok_or_else(|| {
+                    ScienceError::Invalid("workflow output snapshot byte count overflowed".into())
+                })?;
+                if *bytes_read > max_bytes {
+                    return Err(ScienceError::Invalid(format!(
+                        "workflow output exceeds the admitted {max_bytes} byte cap"
+                    )));
+                }
+                files.push((relative, bytes));
+            } else {
+                return Err(ScienceError::Invalid(format!(
+                    "workflow output snapshot refuses special entry '{}'",
+                    relative.display()
+                )));
+            }
+        }
+        Ok(())
     }
 
     fn open_parent(&self, relative: &Path, create: bool) -> Result<Self> {
@@ -437,8 +581,18 @@ fn unlinkat(directory: &fs::File, name: &OsStr, flags: i32) -> Result<()> {
 #[cfg(unix)]
 fn readdir_names(directory: &fs::File) -> Result<Vec<OsString>> {
     use std::os::{fd::AsRawFd as _, unix::ffi::OsStringExt as _};
-    // SAFETY: dup returns an independent descriptor for fdopendir to own.
-    let duplicated = unsafe { libc::dup(directory.as_raw_fd()) };
+    // `dup` would share the directory offset with the retained capability, so
+    // a second snapshot could silently observe an empty directory. Reopening
+    // "." relative to the live descriptor creates a fresh open-file
+    // description while remaining anchored to the exact retained directory.
+    // SAFETY: the relative name is a static NUL-terminated C string.
+    let duplicated = unsafe {
+        libc::openat(
+            directory.as_raw_fd(),
+            c".".as_ptr(),
+            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
+        )
+    };
     if duplicated < 0 {
         return Err(std::io::Error::last_os_error().into());
     }
@@ -501,7 +655,36 @@ impl PinnedDirectory {
             }
             Err(error) => return Err(error.into()),
         }
-        Self::open_verified_directory(dunce::canonicalize(path)?)
+        Self::open_existing(path)
+    }
+
+    fn open_existing(path: &Path) -> Result<Self> {
+        let absolute = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            std::env::current_dir()?.join(path)
+        };
+        windows_assert_no_reparse_components(&absolute)?;
+        Self::open_verified_directory(dunce::canonicalize(absolute)?)
+    }
+
+    pub(crate) fn open_existing_within(path: &Path, workspace: &Path) -> Result<Self> {
+        let canonical_workspace = dunce::canonicalize(workspace)?;
+        let opened = Self::open_existing(path)?;
+        let canonical_path = dunce::canonicalize(path)?;
+        if !canonical_path.starts_with(&canonical_workspace) {
+            return Err(ScienceError::Invalid(
+                "project store root escapes the canonical workspace".into(),
+            ));
+        }
+        let reopened = Self::open_existing(&canonical_path)?;
+        if !windows_same_open_file(&opened.file, &reopened.file) {
+            return Err(ScienceError::Invalid(
+                "project store root identity changed during confinement".into(),
+            ));
+        }
+        opened.assert_stable()?;
+        Ok(opened)
     }
 
     pub(crate) fn open_or_create_within(path: &Path, workspace: &Path) -> Result<Self> {
@@ -647,6 +830,75 @@ impl PinnedDirectory {
         Ok(true)
     }
 
+    pub(crate) fn create_directory(&self, relative: &Path) -> Result<Self> {
+        self.create_directories(relative)
+    }
+
+    pub(crate) fn snapshot_nofollow_bounded(
+        &self,
+        max_bytes: u64,
+    ) -> Result<Vec<(PathBuf, Vec<u8>)>> {
+        let mut files = Vec::new();
+        let mut bytes_read = 0u64;
+        self.snapshot_nofollow_into(Path::new(""), &mut files, &mut bytes_read, max_bytes)?;
+        Ok(files)
+    }
+
+    fn snapshot_nofollow_into(
+        &self,
+        prefix: &Path,
+        files: &mut Vec<(PathBuf, Vec<u8>)>,
+        bytes_read: &mut u64,
+        max_bytes: u64,
+    ) -> Result<()> {
+        self.assert_stable()?;
+        let mut names = Vec::new();
+        for entry in fs::read_dir(&self.path)? {
+            names.push(entry?.file_name());
+        }
+        names.sort();
+        for name in names {
+            self.assert_stable()?;
+            let relative = prefix.join(&name);
+            let path = self.path.join(&name);
+            let metadata = fs::symlink_metadata(&path)?;
+            if windows_has_reparse_point(&metadata) {
+                return Err(ScienceError::Invalid(format!(
+                    "workflow output snapshot refuses reparse entry '{}'",
+                    relative.display()
+                )));
+            }
+            if metadata.is_dir() {
+                let child = Self::open_verified_directory(path)?;
+                child.snapshot_nofollow_into(&relative, files, bytes_read, max_bytes)?;
+            } else if metadata.is_file() {
+                let mut file = windows_open_regular(&path, false)?;
+                windows_assert_regular_handle(&path, &file)?;
+                self.assert_stable()?;
+                let remaining = max_bytes.saturating_sub(*bytes_read);
+                let mut bytes = Vec::new();
+                file.take(remaining.saturating_add(1))
+                    .read_to_end(&mut bytes)?;
+                *bytes_read = bytes_read.checked_add(bytes.len() as u64).ok_or_else(|| {
+                    ScienceError::Invalid("workflow output snapshot byte count overflowed".into())
+                })?;
+                if *bytes_read > max_bytes {
+                    return Err(ScienceError::Invalid(format!(
+                        "workflow output exceeds the admitted {max_bytes} byte cap"
+                    )));
+                }
+                files.push((relative, bytes));
+            } else {
+                return Err(ScienceError::Invalid(format!(
+                    "workflow output snapshot refuses special entry '{}'",
+                    relative.display()
+                )));
+            }
+        }
+        self.assert_stable()?;
+        Ok(())
+    }
+
     fn open_parent(&self, relative: &Path, create: bool) -> Result<Self> {
         match relative.parent() {
             Some(parent) if !parent.as_os_str().is_empty() => {
@@ -738,13 +990,43 @@ impl PinnedDirectory {
 #[cfg(windows)]
 fn windows_open_directory(path: &Path) -> Result<fs::File> {
     use std::os::windows::fs::OpenOptionsExt as _;
+    const FILE_SHARE_READ: u32 = 0x0000_0001;
+    const FILE_SHARE_WRITE: u32 = 0x0000_0002;
     const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
     const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
     let mut options = fs::OpenOptions::new();
     options
         .read(true)
+        // Deliberately omit FILE_SHARE_DELETE: a retained directory used as a
+        // capability must not be renamed or deleted behind the handle.
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
         .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT);
     Ok(options.open(path)?)
+}
+
+#[cfg(windows)]
+fn windows_assert_no_reparse_components(path: &Path) -> Result<()> {
+    let mut current = PathBuf::new();
+    for component in path.components() {
+        current.push(component.as_os_str());
+        if !matches!(component, Component::Normal(_)) {
+            continue;
+        }
+        let metadata = fs::symlink_metadata(&current)?;
+        if windows_has_reparse_point(&metadata) {
+            return Err(ScienceError::Invalid(format!(
+                "project store path contains Windows reparse component '{}'",
+                current.display()
+            )));
+        }
+        if !metadata.is_dir() {
+            return Err(ScienceError::Invalid(format!(
+                "project store path component is not a directory: '{}'",
+                current.display()
+            )));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(windows)]
@@ -923,6 +1205,12 @@ impl PinnedDirectory {
         ))
     }
 
+    pub(crate) fn open_existing_within(_path: &Path, _workspace: &Path) -> Result<Self> {
+        Err(ScienceError::FeatureDisabled(
+            "confined project-store I/O has no backend for this platform".into(),
+        ))
+    }
+
     pub(crate) fn read_optional(&self, _relative: &Path) -> Result<Option<Vec<u8>>> {
         Err(ScienceError::FeatureDisabled(
             "confined project-store I/O has no backend for this platform".into(),
@@ -948,6 +1236,21 @@ impl PinnedDirectory {
     }
 
     pub(crate) fn remove_file(&self, _relative: &Path) -> Result<bool> {
+        Err(ScienceError::FeatureDisabled(
+            "confined project-store I/O has no backend for this platform".into(),
+        ))
+    }
+
+    pub(crate) fn create_directory(&self, _relative: &Path) -> Result<Self> {
+        Err(ScienceError::FeatureDisabled(
+            "confined project-store I/O has no backend for this platform".into(),
+        ))
+    }
+
+    pub(crate) fn snapshot_nofollow_bounded(
+        &self,
+        _max_bytes: u64,
+    ) -> Result<Vec<(PathBuf, Vec<u8>)>> {
         Err(ScienceError::FeatureDisabled(
             "confined project-store I/O has no backend for this platform".into(),
         ))

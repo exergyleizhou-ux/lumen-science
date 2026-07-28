@@ -246,7 +246,13 @@ pub enum StepOperation {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct KernelInvocation {
     /// Absolute path recorded by kernel admission, symlinks already resolved.
+    ///
+    /// This is evidence/display metadata. A production runner must execute the
+    /// actor-retained capability whose digest is `executable_sha256`; it must
+    /// never reopen this path.
     pub interpreter_path: String,
+    /// Digest of the exact executable bytes admitted for this invocation.
+    pub executable_sha256: String,
     pub argv: Vec<String>,
     /// Cell body the runner is to feed the kernel, addressed by digest so the
     /// plan stays small and the source stays verifiable.
@@ -656,6 +662,21 @@ impl WorkflowExecutor {
         let root = root.into();
         let confined = Arc::new(PinnedDirectory::open_or_create_within(&root, workspace)?);
         Ok(Self::from_capability(root, environment, Ok(confined)))
+    }
+
+    /// Construct an executor from the already-retained workflow I/O root.
+    ///
+    /// `root` is used only as the in-process write-lock key (and by tests for
+    /// inspection). Durable records are always opened through `io`'s retained
+    /// directory capability, so an approval-time rename or symlink swap cannot
+    /// redirect the ledger.
+    pub fn from_io(
+        root: impl Into<PathBuf>,
+        io: &super::WorkflowIoCapability,
+        environment: ComputeEnvironment,
+    ) -> Self {
+        let root = root.into();
+        Self::from_capability(root, environment, Ok(io.shared_root()))
     }
 
     fn from_capability(
@@ -1305,6 +1326,7 @@ impl WorkflowExecutor {
                     kernel: Box::new(kernel.clone()),
                     invocation: KernelInvocation {
                         interpreter_path: kernel.interpreter_path.clone(),
+                        executable_sha256: kernel.executable_hash.clone(),
                         // Empty on purpose, and argv rather than a command
                         // line either way — nothing is ever interpolated into a
                         // shell string. The RUNNER decides how to drive the

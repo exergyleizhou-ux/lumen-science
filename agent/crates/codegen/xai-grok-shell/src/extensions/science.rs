@@ -2135,13 +2135,6 @@ async fn handle_workflow_execute(agent: &MvpAgent, args: &acp::ExtRequest) -> Ex
         Some(root) => canonical_dir_within(root, &workspace)?,
         None => canonical_dir_within(store_root.join("runs"), &workspace)?,
     };
-    // These are actor-owned children of the already confined store. Do not
-    // provision them in the adapter: a denied/cancelled/timed-out request has
-    // no authority to leave staging or runtime directories behind.
-    let cell_source_root = store_root.join("workflow-cells");
-    let output_root = store_root.join("workflow-outputs");
-    let runtime_root = store_root.join("workflow-runtime");
-
     let context = RunContext {
         run_id: RunId::new_v7(),
         project_id: ProjectId::new(spec.project_id.0.clone()),
@@ -2165,9 +2158,6 @@ async fn handle_workflow_execute(agent: &MvpAgent, args: &acp::ExtRequest) -> Ex
             spec,
         },
         executor_root: store_root.clone(),
-        cell_source_root,
-        output_root,
-        runtime_root,
         kernel_id: params.kernel_id,
         kernel_kind,
         interpreter_path: params.interpreter_path,
