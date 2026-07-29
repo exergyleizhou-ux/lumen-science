@@ -122,7 +122,7 @@ fn validate_invocation_environment(
 }
 
 #[cfg(target_os = "linux")]
-fn linux_post_load_exec_seal_bootstrap() -> std::io::Result<String> {
+pub(crate) fn linux_post_load_exec_seal_bootstrap() -> std::io::Result<String> {
     let filter = super::pinned_executable::linux_deny_exec_filter()?;
     let instructions = filter
         .instructions

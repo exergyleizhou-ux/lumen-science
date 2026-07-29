@@ -453,13 +453,16 @@ impl PinnedExecutable {
         // parent-opened descriptor capabilities, then performs only syscalls.
         unsafe {
             command.pre_exec(move || {
-                // Keep the exact verified PT_INTERP inode alive until the
-                // kernel begins the first exec. It receives no Landlock
-                // EXECUTE grant, so user code cannot invoke it directly.
-                let _loader_fd = loader_capability.as_raw_fd();
+                // A dynamic ELF cannot complete its initial exec unless
+                // Landlock admits its exact PT_INTERP inode. The trusted
+                // Python bootstrap installs the separately tested deny-exec
+                // seccomp seal before it reads any cell source, so this
+                // initial loader grant cannot become a user-code re-exec
+                // bypass.
                 apply_linux_landlock_and_seccomp(
                     output_capability.as_raw_fd(),
                     executable_capability.as_raw_fd(),
+                    loader_capability.as_raw_fd(),
                     &read_capabilities,
                     &seccomp_filter,
                 )
@@ -833,10 +836,11 @@ fn push_macos_rule(
 fn apply_linux_landlock_and_seccomp(
     output_fd: std::os::fd::RawFd,
     executable_fd: std::os::fd::RawFd,
+    loader_fd: std::os::fd::RawFd,
     read_capabilities: &[LinuxPathCapability],
     seccomp_filter: &LinuxSeccompFilter,
 ) -> io::Result<()> {
-    apply_linux_landlock(output_fd, executable_fd, read_capabilities)?;
+    apply_linux_landlock(output_fd, executable_fd, loader_fd, read_capabilities)?;
     apply_linux_seccomp(seccomp_filter)
 }
 
@@ -1048,6 +1052,7 @@ fn verify_linux_protected_read_path(path: &Path) -> io::Result<()> {
 fn apply_linux_landlock(
     output_fd: std::os::fd::RawFd,
     executable_fd: std::os::fd::RawFd,
+    loader_fd: std::os::fd::RawFd,
     read_capabilities: &[LinuxPathCapability],
 ) -> io::Result<()> {
     use std::os::fd::AsRawFd as _;
@@ -1147,6 +1152,16 @@ fn apply_linux_landlock(
     if add_linux_landlock_path_rule(
         ruleset_fd,
         executable_fd,
+        ACCESS_FS_EXECUTE | ACCESS_FS_READ_FILE,
+    ) < 0
+    {
+        let error = io::Error::last_os_error();
+        unsafe { libc::close(ruleset_fd as i32) };
+        return Err(error);
+    }
+    if add_linux_landlock_path_rule(
+        ruleset_fd,
+        loader_fd,
         ACCESS_FS_EXECUTE | ACCESS_FS_READ_FILE,
     ) < 0
     {
@@ -1798,10 +1813,28 @@ mod tests {
         let mut command = pinned
             .spawn_linux_sandboxed_command(output_fd.as_raw_fd())
             .unwrap_or_else(|e| panic!("build sandbox command for {python:?}: {e}"));
-        command.command_mut().args(["-c", code]);
-        let result = command
-            .output()
+        let bootstrap =
+            super::super::python_runner::linux_post_load_exec_seal_bootstrap()
+                .unwrap_or_else(|e| panic!("build post-load seal bootstrap: {e}"));
+        command
+            .command_mut()
+            .args(["-I", "-S", "-u", "-c"])
+            .arg(bootstrap)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let mut child = command
+            .spawn()
             .unwrap_or_else(|e| panic!("run sandbox command: {e}"));
+        child
+            .stdin
+            .take()
+            .expect("sandbox bootstrap stdin")
+            .write_all(code.as_bytes())
+            .expect("write sandboxed cell source");
+        let result = child
+            .wait_with_output()
+            .unwrap_or_else(|e| panic!("wait for sandbox command: {e}"));
         let stdout = String::from_utf8_lossy(&result.stdout).into_owned();
         let stderr = String::from_utf8_lossy(&result.stderr).into_owned();
         (result, stdout, stderr)
