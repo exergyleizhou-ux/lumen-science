@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "recorded_at": "2026-07-30T00:58:22+08:00",
+  "recorded_at": "2026-07-30T05:03:00+08:00",
   "purpose": "Record selective Lumen core v0.1.251 admission into Lumen Science without claiming full source or release parity.",
   "policy": {
     "source_of_truth": "lumen",
@@ -84,20 +84,37 @@
       ],
       "adaptation": "This is a Science authority integration, not a Lumen version sync. It changes existing Science shell adapters and makes one previously identical shared Rust path intentionally diverge. The exact path set and bytes are admitted by the drift manifest below.",
       "status": "admitted"
+    },
+    {
+      "name": "seq_analyze sealed actor authority and cross-process serialization",
+      "science_commits": [
+        "d38f948d491069ae6002b7c63adc515a145e45a9",
+        "c54bb88ada7fbbc55a5a3a0e9c47ca8f29b07f20",
+        "63f27da0d74ed050a7691c349805c69f26f2623d"
+      ],
+      "coverage": [
+        "write-once authority-prefix seal across fresh execution, restart recovery, replay, and terminal verification",
+        "store-owned hashed analysis and report artifacts with durable parent-directory publication",
+        "cross-process operation and project mutation serialization with retained-descriptor identity checks",
+        "deny, timeout, cancel, malformed input, boundary, replay, revision-race, and interrupted-Begin counterexamples",
+        "ten exact rebuilt-binary seq_analyze ACP product tests"
+      ],
+      "adaptation": "Seven shared Rust paths that were already classified shared_diverged changed bytes without growing, shrinking, or reclassifying the 130 + 5 drift set. The complete manifest digest is rederived below; xai-grok-science remains outside the current copied-Core drift scope and is tracked as a single-base architecture gap.",
+      "status": "admitted"
     }
   ],
   "comparison": {
     "tool": "scripts/check-core-drift.py",
     "basis": "audited_lumen_main_head",
     "lumen_head": "dc563b1e0db9eaca7e970d56d7816e1522511723",
-    "science_code_head": "989501a6e875441107ff646b347321efe3654c74",
+    "science_code_head": "63f27da0d74ed050a7691c349805c69f26f2623d",
     "comparison_scope": "Exact committed Science source bytes at science_code_head; CI rederives the manifest from the checked-out bytes",
     "diverged_rust_files": 130,
     "missing_in_science_rust_files": 5,
     "science_only_rust_files": 0,
     "total_drift": 135,
     "drift_manifest_schema": "lumen-core-drift-v1",
-    "drift_manifest_sha256": "2dfad561a4179c3d21536731f476864ee90ce92c350cca5d467ebb94617fdd58",
+    "drift_manifest_sha256": "c2b3d3af382a280bded1b923776d36e3cb960e7ce751adc08e399eed5450f36c",
     "tracked_security_markers_present": 8,
     "tracked_security_markers_total": 8,
     "strict_zero_drift_gate": false
@@ -105,17 +122,17 @@
   "verification": {
     "source_and_focused_tests": [
       {
-        "command": "cargo test -p xai-grok-science --all-targets --locked -- --test-threads=2",
-        "passed": 553,
+        "command": "cargo check -p xai-grok-science --all-targets --locked",
+        "passed": 1,
         "failed": 0,
-        "ignored": 8,
+        "ignored": 0,
         "exit_code": 0
       },
       {
-        "command": "cargo test -p xai-grok-shell --lib --locked actor_root_tests -- --test-threads=2",
-        "passed": 8,
+        "command": "cargo test -p xai-grok-science --locked",
+        "passed": 589,
         "failed": 0,
-        "ignored": 0,
+        "ignored": 8,
         "exit_code": 0
       },
       {
@@ -126,7 +143,7 @@
         "exit_code": 0
       },
       {
-        "command": "cargo check -p xai-grok-shell --all-targets --locked",
+        "command": "cargo check -p xai-grok-shell --lib --locked",
         "passed": 1,
         "failed": 0,
         "ignored": 0,
@@ -134,22 +151,15 @@
       }
     ],
     "built_binary": {
-      "source_commit": "989501a6e875441107ff646b347321efe3654c74",
+      "source_commit": "63f27da0d74ed050a7691c349805c69f26f2623d",
       "path": "agent/target/debug/lumen",
-      "sha256": "11916604ddc859068905e84f068a3b4820020325953f5f26d9958ae8967d9c7e",
+      "sha256": "8d7bd563028b24c73ad8aff7a67b93b373ce410ba5505f17748ccad54d36b545",
       "product_tests": {
-        "project_migrate": 7,
-        "seq_analyze": 6,
-        "project_mutation": 3,
-        "review_record": 2,
-        "kernel_admission": 2,
-        "skill_quarantine": 4,
-        "workflow": 6,
-        "connector_fetch": 1,
-        "biomni_uniprot": 1,
-        "total_passed": 32
+        "seq_analyze": 10,
+        "total_passed": 10
       },
-      "failures": 0
+      "failures": 0,
+      "scope": "Exact-head aggregate for the ten seq_analyze ACP product tests only; other product families were not rerun for this admission update."
     }
   },
   "deferred": [
