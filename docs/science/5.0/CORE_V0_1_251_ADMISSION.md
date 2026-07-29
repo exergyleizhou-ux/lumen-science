@@ -27,7 +27,7 @@ The machine-readable authority for this admission is
 `core-v0.1.251-admission.lock.json`.
 
 **Single Rust base is not complete.** Science still identifies the embedded
-Core line as `0.1.222`. The 134-file drift against audited Lumen main head
+Core line as `0.1.222`. The 135-file drift against audited Lumen main head
 `dc563b1e0db9eaca7e970d56d7816e1522511723` is expected and machine-visible; it
 must not grow or change identity silently, and it must not be erased by
 rewriting VERSION to `0.1.251`. The `v0.1.251` tag commit
@@ -70,17 +70,29 @@ The v0.1.251 Science commits are:
 - `58783fc25ec7297e50f40a3f8ed653e4f82d05f4`
 - `75d7251b625ddff19745e9cde6910b36a7df5c89`
 
+The Science authority integration commit is:
+
+- `75fa66b70a8795c582b18b9e38b8d0486f6488d4`
+
+That commit is not a Lumen version admission. It closes durable Science
+SessionActor paths and intentionally makes
+`xai-grok-shell/src/session/science_goal.rs` one newly diverged shared path.
+The machine lock records the exact resulting path set and byte manifest instead
+of treating the count increase as implicit or harmless.
+
 ## Current evidence
 
-At Science code head `58783fc`:
+At Science code head `75fa66b`:
 
-- `cargo test -p lumen-verify`: 29 passed, 0 failed.
-- `cargo test -p xai-grok-science`: 378 passed, 0 failed, 8 explicit live
+- `cargo test -p xai-grok-science --lib --locked`: 548 passed, 0 failed, 8 explicit live
   network probes ignored.
-- `xai-grok-workspace` test binary: 1,414 passed, 0 failed.
+- `cargo test -p xai-grok-shell --lib --locked actor_root_tests`: 7 passed,
+  0 failed.
+- Science strict clippy and Shell all-target check both exited 0.
 - Exact-head `lumen` binary SHA-256:
-  `33dc60ac77fa13e18b908c1c0a7c78ae5c1eea840949aef9c5b9cee8526a1f64`.
-- Built-binary OSF9: 17 steps and 5 assertions passed, 0 failures.
+  `127a9c4a0666da120edc1dbadc9e8eeed45ffc2e9975fa095fe2e6d0392aae4b`.
+- Built-binary authority product tests: 25 passed across project migration,
+  sequence analysis, project mutation, review, and workflow; 0 failed.
 - The core drift reporter finds all 8 tracked security markers present.
 
 This is source, focused/offline test, and local built-binary evidence. It is not
@@ -92,9 +104,9 @@ The current comparison against Lumen `dc563b1e` still reports:
 
 | Kind | Count |
 |---|---:|
-| Diverged shared-core Rust files | 129 |
+| Diverged shared-core Rust files | 130 |
 | Missing in Science | 5 |
-| Total drift | 134 |
+| Total drift | 135 |
 
 Therefore the Science product still identifies its embedded Lumen line as
 `0.1.222`. Changing package versions, the SBOM, or release ledgers to

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "recorded_at": "2026-07-29T14:34:00+08:00",
+  "recorded_at": "2026-07-29T23:05:24+08:00",
   "purpose": "Record selective Lumen core v0.1.251 admission into Lumen Science without claiming full source or release parity.",
   "policy": {
     "source_of_truth": "lumen",
@@ -72,20 +72,32 @@
       ],
       "adaptation": "Only the hermetic global-settings discovery portion was admitted; unrelated permission and policy hunks from the source commit were already present or separately reviewed.",
       "status": "admitted"
+    },
+    {
+      "name": "Science durable SessionActor authority closure",
+      "science_commit": "75fa66b70a8795c582b18b9e38b8d0486f6488d4",
+      "coverage": [
+        "durable seq_analyze, workflow, review, and project mutation Begin/permission/Finish protocols",
+        "project_migrate exact admission, retained-root, target-byte, recovery, commit-fence, and completion-manifest checks",
+        "deny, timeout, cancel, tamper, replay, and crash-window product counterexamples",
+        "one newly diverged shared path: xai-grok-shell/src/session/science_goal.rs"
+      ],
+      "adaptation": "This is a Science authority integration, not a Lumen version sync. It changes existing Science shell adapters and makes one previously identical shared Rust path intentionally diverge. The exact path set and bytes are admitted by the drift manifest below.",
+      "status": "admitted"
     }
   ],
   "comparison": {
     "tool": "scripts/check-core-drift.py",
     "basis": "audited_lumen_main_head",
     "lumen_head": "dc563b1e0db9eaca7e970d56d7816e1522511723",
-    "science_code_head": "6dededbcc9577d8c71a6a56e337c18c2b1bca9d1",
+    "science_code_head": "75fa66b70a8795c582b18b9e38b8d0486f6488d4",
     "comparison_scope": "Science working-tree bytes based on science_code_head; CI rederives the manifest from exact committed bytes",
-    "diverged_rust_files": 129,
+    "diverged_rust_files": 130,
     "missing_in_science_rust_files": 5,
     "science_only_rust_files": 0,
-    "total_drift": 134,
+    "total_drift": 135,
     "drift_manifest_schema": "lumen-core-drift-v1",
-    "drift_manifest_sha256": "c07f3a957b876f4178dd3f140a0589308e729307f41d49f2db1448d7c74bc28f",
+    "drift_manifest_sha256": "aee86324223e722c8a48fbf5fc66b8e6d3d3316891048df1b198fff2ad0c4c44",
     "tracked_security_markers_present": 8,
     "tracked_security_markers_total": 8,
     "strict_zero_drift_gate": false
@@ -93,40 +105,53 @@
   "verification": {
     "source_and_focused_tests": [
       {
-        "command": "cargo test -p lumen-verify",
-        "passed": 29,
-        "failed": 0,
-        "ignored": 0,
-        "exit_code": 0
-      },
-      {
-        "command": "cargo test -p xai-grok-science",
-        "passed": 378,
+        "command": "cargo test -p xai-grok-science --lib --locked -- --test-threads=2",
+        "passed": 548,
         "failed": 0,
         "ignored": 8,
         "exit_code": 0
       },
       {
-        "command": "xai_grok_workspace test binary --format=terse",
-        "passed": 1414,
+        "command": "cargo test -p xai-grok-shell --lib --locked actor_root_tests -- --test-threads=2",
+        "passed": 7,
+        "failed": 0,
+        "ignored": 0,
+        "exit_code": 0
+      },
+      {
+        "command": "cargo clippy -p xai-grok-science --all-targets --locked -- -D warnings",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "exit_code": 0
+      },
+      {
+        "command": "cargo check -p xai-grok-shell --all-targets --locked",
+        "passed": 1,
         "failed": 0,
         "ignored": 0,
         "exit_code": 0
       }
     ],
     "built_binary": {
-      "source_commit": "58783fc25ec7297e50f40a3f8ed653e4f82d05f4",
+      "source_commit": "75fa66b70a8795c582b18b9e38b8d0486f6488d4",
       "path": "agent/target/debug/lumen",
-      "sha256": "33dc60ac77fa13e18b908c1c0a7c78ae5c1eea840949aef9c5b9cee8526a1f64",
-      "osf9_steps_passed": 17,
-      "osf9_assertions_passed": 5,
+      "sha256": "127a9c4a0666da120edc1dbadc9e8eeed45ffc2e9975fa095fe2e6d0392aae4b",
+      "product_tests": {
+        "project_migrate": 7,
+        "seq_analyze": 6,
+        "project_mutation": 4,
+        "review_record": 2,
+        "workflow": 6,
+        "total_passed": 25
+      },
       "failures": 0
     }
   },
   "deferred": [
     {
       "item": "full v0.1.251 source parity",
-      "reason": "134 shared-core Rust files still differ or are missing; a bulk overlay could erase Science authority and product-specific behavior"
+      "reason": "135 shared-core Rust files still differ or are missing; a bulk overlay could erase Science authority and product-specific behavior"
     },
     {
       "item": "version metadata bump from 0.1.222 to 0.1.251",

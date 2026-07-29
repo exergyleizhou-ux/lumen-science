@@ -6,7 +6,7 @@ between this repository and an exact upstream Lumen checkout.
 
 Semantics (not strict-zero):
   - Known drift recorded in docs/science/5.0/core-v0.1.251-admission.lock.json
-    is allowed (today: 129 shared_diverged + 5 missing_from_science = 134).
+    is allowed (today: 130 shared_diverged + 5 missing_from_science = 135).
   - Silent growth/shrink/reclassification or equal-count replacement fails.
   - Does NOT claim single-Rust-base completion.
 
