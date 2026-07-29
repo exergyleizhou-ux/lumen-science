@@ -596,6 +596,95 @@ fn executor_hashes_exact_runner_bytes_into_the_store_owned_cas() {
 }
 
 #[test]
+fn committed_artifact_bytes_reopens_verified_cas() {
+    let harness = Harness::new();
+    let runner = Arc::new(ScriptedRunner::new(vec![Ok(output(&[
+        ("result.json", "{\"mean\":1.5}"),
+        ("stdout.txt", "computed\n"),
+    ]))]));
+    let executor = harness.executor(runner);
+    let report = executor
+        .execute(&request(
+            "op-authority-cas-read",
+            spec(vec![step("fetch", StepKind::ConnectorFetch, &[])]),
+        ))
+        .unwrap();
+    let commit = &report.commits[0];
+
+    assert_eq!(
+        executor
+            .committed_artifact_bytes(&commit.commit_key, "result.json")
+            .unwrap(),
+        b"{\"mean\":1.5}"
+    );
+    assert_eq!(
+        executor
+            .committed_artifact_bytes(&commit.commit_key, "stdout.txt")
+            .unwrap(),
+        b"computed\n"
+    );
+    assert!(
+        executor
+            .committed_artifact_bytes(&commit.commit_key, "missing.txt")
+            .is_err(),
+        "an artifact absent from the canonical manifest was served"
+    );
+    assert!(
+        executor
+            .committed_artifact_bytes(&"0".repeat(64), "result.json")
+            .is_err(),
+        "an unknown commit key was accepted"
+    );
+}
+
+#[test]
+fn committed_artifact_bytes_refuses_missing_or_tampered_cas() {
+    for (label, replacement) in [("missing", None), ("tampered", Some(b"forged".as_slice()))] {
+        let harness = Harness::new();
+        let runner = Arc::new(ScriptedRunner::always_ok());
+        let executor = harness.executor(runner);
+        let report = executor
+            .execute(&request(
+                &format!("op-authority-cas-{label}"),
+                spec(vec![step("fetch", StepKind::ConnectorFetch, &[])]),
+            ))
+            .unwrap();
+        let commit = &report.commits[0];
+        let digest = &commit.output_manifest["out.json"];
+        let cas_path = harness.root.join(executor.artifact_path(digest));
+        match replacement {
+            Some(bytes) => fs::write(cas_path, bytes).unwrap(),
+            None => fs::remove_file(cas_path).unwrap(),
+        }
+
+        assert!(
+            executor
+                .committed_artifact_bytes(&commit.commit_key, "out.json")
+                .is_err(),
+            "{label} CAS bytes were served"
+        );
+    }
+}
+
+#[test]
+fn workflow_run_id_for_operation_is_validated_and_deterministic() {
+    let first = run_id_for_operation("op-authority-run-id").unwrap();
+    let replay = run_id_for_operation("op-authority-run-id").unwrap();
+    let other = run_id_for_operation("op-authority-run-id-other").unwrap();
+
+    assert_eq!(first, replay);
+    assert_ne!(first, other);
+    assert_eq!(first.len(), 32);
+    assert!(first.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    for invalid in ["", "../escape", "slash/name", " leading-space"] {
+        assert!(
+            run_id_for_operation(invalid).is_err(),
+            "invalid operation id {invalid:?} received a run id"
+        );
+    }
+}
+
+#[test]
 fn runner_byte_count_claim_is_recomputed_before_cas_publication() {
     let harness = Harness::new();
     let runner = Arc::new(ScriptedRunner::new(vec![Ok(StepOutput {

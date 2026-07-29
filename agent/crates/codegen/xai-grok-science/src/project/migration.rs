@@ -420,6 +420,102 @@ impl VerifiedMigrationBundle {
         }
         Ok(())
     }
+
+    pub(crate) fn verify_live_authority_for_project_store(
+        &self,
+        project_store: &super::ProjectStore,
+    ) -> Result<()> {
+        self.verify_live_authority()?;
+        let store = self.authority_store.as_ref().ok_or_else(|| {
+            ScienceError::Invalid("migration bundle has no retained authority store".into())
+        })?;
+        if !store.shares_root_capability_with(project_store)? {
+            return Err(ScienceError::Invalid(
+                "migration ScienceStore and ProjectStore retained different roots".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Keep the authority's write lock from final Running+Allow validation
+    /// through the caller's ProjectStore journal/publication closure. The
+    /// caller must already hold the ProjectStore guard so all cross-store
+    /// operations preserve Project -> Science lock ordering.
+    pub(crate) fn with_live_authority_for_project_store<T>(
+        &self,
+        project_store: &super::ProjectStore,
+        operation: impl FnOnce() -> Result<T>,
+    ) -> Result<T> {
+        let store = self.authority_store.as_ref().ok_or_else(|| {
+            ScienceError::Invalid("migration bundle has no retained authority store".into())
+        })?;
+        store.with_exclusive_authority(|| {
+            self.verify_live_authority_for_project_store(project_store)?;
+            operation()
+        })
+    }
+
+    pub(crate) fn mark_project_commit_fence(&self) -> Result<()> {
+        let admission = self.admission()?;
+        let store = self.authority_store.as_ref().ok_or_else(|| {
+            ScienceError::Invalid("migration bundle has no retained authority store".into())
+        })?;
+        let context = self.authority_context.as_ref().ok_or_else(|| {
+            ScienceError::Invalid("migration bundle has no retained authority context".into())
+        })?;
+        if admission.authority_run_id() != &context.run_id
+            || admission.target_project_id().0 != context.project_id.0
+        {
+            return Err(ScienceError::Ownership);
+        }
+        store.mark_authority_commit_fence_unlocked(
+            context,
+            &CallId::new("science_project_mutation"),
+            admission.operation_id(),
+        )
+    }
+
+    /// Before ProjectStore publishes a migration, reopen every target-owned
+    /// copy through the retained Running+Allow authority capability. A source
+    /// bundle alone cannot authorize project records that still point only at
+    /// legacy source bytes.
+    pub(crate) fn verify_target_copies_for_project_store(
+        &self,
+        project_store: &super::ProjectStore,
+    ) -> Result<()> {
+        use sha2::Digest as _;
+
+        self.verify_live_authority_for_project_store(project_store)?;
+        let admission = self.admission()?;
+        let store = self.authority_store.as_ref().ok_or_else(|| {
+            ScienceError::Invalid("migration bundle has no retained authority store".into())
+        })?;
+        let context = self.authority_context.as_ref().ok_or_else(|| {
+            ScienceError::Invalid("migration bundle has no retained authority context".into())
+        })?;
+        let call_id = CallId::new("science_project_mutation");
+        for item in &self.artifacts {
+            let bytes = store.allowed_running_artifact_bytes(
+                &context.project_id,
+                &context.run_id,
+                &context.owner_id,
+                &call_id,
+                &item.record.target_relative_path,
+            )?;
+            if bytes.as_slice() != item.payload.as_slice()
+                || bytes.len() as u64 != item.record.bytes
+                || format!("{:x}", Sha256::digest(&bytes)) != item.record.sha256
+            {
+                return Err(ScienceError::Invalid(
+                    "migration target-owned copy differs from its verified source bundle".into(),
+                ));
+            }
+        }
+        if admission.authority_run_id() != &context.run_id {
+            return Err(ScienceError::Ownership);
+        }
+        Ok(())
+    }
 }
 
 /// Exact, human-auditable source material used to build the target project.
@@ -446,7 +542,8 @@ impl MigrationManifest {
         bundle: &VerifiedMigrationBundle,
         generated_at: DateTime<Utc>,
     ) -> Result<Self> {
-        if bundle.source_run.context.project_id != admission.source_project_id
+        if bundle.admission()? != admission
+            || bundle.source_run.context.project_id != admission.source_project_id
             || bundle.snapshot != admission.source_snapshot
         {
             return Err(ScienceError::Invalid(
@@ -641,6 +738,8 @@ pub struct MigrationRecoveryGrant {
     target_project_id: ResearchProjectId,
     authority_run_id: RunId,
     authority_state: RunState,
+    authority_store: ScienceStore,
+    commit: MigrationCommit,
 }
 
 impl MigrationRecoveryGrant {
@@ -715,6 +814,43 @@ impl MigrationRecoveryGrant {
             target_project_id: commit.manifest.target_project_id.clone(),
             authority_run_id,
             authority_state: run.state,
+            authority_store: store.clone(),
+            commit: commit.clone(),
+        })
+    }
+
+    fn revalidate_for_project_store(
+        &self,
+        project_store: &super::ProjectStore,
+    ) -> Result<RunState> {
+        let current = Self::verify(&self.authority_store, &self.commit)?;
+        if !self
+            .authority_store
+            .shares_root_capability_with(project_store)?
+            || current.operation_id != self.operation_id
+            || current.request_sha256 != self.request_sha256
+            || current.target_project_id != self.target_project_id
+            || current.authority_run_id != self.authority_run_id
+        {
+            return Err(ScienceError::Invalid(
+                "migration recovery authority changed after its grant was minted".into(),
+            ));
+        }
+        Ok(current.authority_state)
+    }
+
+    /// Revalidate the retained authority and keep its write lock held while
+    /// the caller verifies or publishes the project-side operation. The
+    /// callback receives the current state so only a Running authority can
+    /// publish missing records while Succeeded remains replay-only.
+    pub(crate) fn with_revalidated_authority_for_project_store<T>(
+        &self,
+        project_store: &super::ProjectStore,
+        operation: impl FnOnce(RunState) -> Result<T>,
+    ) -> Result<T> {
+        self.authority_store.with_exclusive_authority(|| {
+            let current_state = self.revalidate_for_project_store(project_store)?;
+            operation(current_state)
         })
     }
 
@@ -724,6 +860,31 @@ impl MigrationRecoveryGrant {
 
     pub(crate) fn request_sha256(&self) -> &str {
         &self.request_sha256
+    }
+
+    pub(crate) fn verify_retained_commit(&self, current: &MigrationCommit) -> Result<()> {
+        current.verify()?;
+        if current != &self.commit {
+            return Err(ScienceError::Invalid(
+                "migration recovery journal differs from the grant's retained commit".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn mark_project_commit_fence(&self) -> Result<()> {
+        let run = self.authority_store.load_run(&self.authority_run_id)?;
+        if run.state != RunState::Running
+            || run.context.run_id != self.authority_run_id
+            || run.context.project_id.0 != self.target_project_id.0
+        {
+            return Err(ScienceError::Ownership);
+        }
+        self.authority_store.mark_authority_commit_fence_unlocked(
+            &run.context,
+            &CallId::new("science_project_mutation"),
+            &self.operation_id,
+        )
     }
 
     pub(crate) fn target_project_id(&self) -> &ResearchProjectId {
@@ -1091,6 +1252,8 @@ mod tests {
     use super::*;
     use crate::{Approval, ApprovalDecision, CallId, ProjectId, RunState};
     use std::collections::BTreeMap;
+    use std::sync::{Arc, Barrier, mpsc};
+    use std::time::Duration;
     use tempfile::TempDir;
 
     struct Fixture {
@@ -1122,6 +1285,32 @@ mod tests {
             environment: BTreeMap::new(),
         };
         store.create_run(source_context).unwrap();
+        let source_call = CallId::new("source-call");
+        store
+            .request_approval(Approval {
+                project_id: source_project_id.clone(),
+                run_id: source_run_id.clone(),
+                call_id: source_call.clone(),
+                owner_id: "owner-1".into(),
+                decision: ApprovalDecision::Pending,
+                decided_at: None,
+            })
+            .unwrap();
+        store
+            .transition(&source_run_id, RunState::AwaitingApproval, None)
+            .unwrap();
+        store
+            .decide_approval(
+                &source_project_id,
+                &source_run_id,
+                "owner-1",
+                &source_call,
+                ApprovalDecision::Allow,
+            )
+            .unwrap();
+        store
+            .transition(&source_run_id, RunState::Running, None)
+            .unwrap();
         for (index, bytes) in [b"alpha".as_slice(), b"beta".as_slice()]
             .into_iter()
             .enumerate()
@@ -1132,7 +1321,7 @@ mod tests {
                     &source_project_id,
                     &source_run_id,
                     "owner-1",
-                    CallId::new("source-call"),
+                    source_call.clone(),
                     &relative,
                     bytes,
                     "application/octet-stream",
@@ -1162,9 +1351,7 @@ mod tests {
                 })
                 .unwrap();
         }
-        store
-            .transition(&source_run_id, RunState::Succeeded, None)
-            .unwrap();
+        store.transition_succeeded_verified(&source_run_id).unwrap();
         let authority_context = RunContext {
             run_id: RunId::new("authority-run-1"),
             project_id: ProjectId::new("target-project-1"),
@@ -1275,6 +1462,90 @@ mod tests {
         assert_eq!(result.evidence_items_migrated, 2);
         assert_eq!(result.provenance_items_migrated, 2);
         assert_eq!(result.bytes_migrated, 9);
+    }
+
+    #[test]
+    fn migration_manifest_rejects_bundle_from_another_admission() {
+        let fixture = fixture();
+        let admitted = admission(&fixture);
+        let bundle = authorize(&fixture, &admitted);
+        let substituted = MigrationAdmission::capture(
+            &fixture.store,
+            &fixture.authority_context,
+            fixture.source_run_id.clone(),
+            "op-migrate-substituted",
+            ResearchProjectId("target-project-1".into()),
+            fixture.authority_context.run_id.clone(),
+            "Migrated study",
+            "Which evidence remains valid?",
+        )
+        .unwrap();
+        assert_ne!(admitted, substituted);
+        assert!(
+            MigrationManifest::from_verified(&substituted, &bundle, Utc::now()).is_err(),
+            "a verified bundle was relabeled with another admission"
+        );
+    }
+
+    #[test]
+    fn migration_authority_closure_blocks_terminal_transition_until_commit_returns() {
+        let fixture = fixture();
+        let admitted = admission(&fixture);
+        let bundle = authorize(&fixture, &admitted);
+        let project_store = super::super::ProjectStore::new_confined(
+            &fixture.root,
+            &fixture.authority_context.workspace_root,
+        )
+        .unwrap();
+        let entered_commit = Arc::new(Barrier::new(2));
+        let release_commit = Arc::new(Barrier::new(2));
+        let (transition_started_tx, transition_started_rx) = mpsc::channel();
+        let (transition_done_tx, transition_done_rx) = mpsc::channel();
+
+        std::thread::scope(|scope| {
+            let entered_commit_worker = entered_commit.clone();
+            let release_commit_worker = release_commit.clone();
+            scope.spawn(move || {
+                let _project_guard = project_store.write_guard().unwrap();
+                bundle
+                    .with_live_authority_for_project_store(&project_store, || {
+                        entered_commit_worker.wait();
+                        release_commit_worker.wait();
+                        Ok(())
+                    })
+                    .unwrap();
+            });
+
+            entered_commit.wait();
+            scope.spawn(move || {
+                transition_started_tx.send(()).unwrap();
+                transition_done_tx
+                    .send(fixture.store.transition(
+                        &fixture.authority_context.run_id,
+                        RunState::Failed,
+                        Some("concurrent terminalization probe".into()),
+                    ))
+                    .unwrap();
+            });
+            transition_started_rx
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap();
+            assert!(
+                transition_done_rx
+                    .recv_timeout(Duration::from_millis(100))
+                    .is_err(),
+                "authority terminalized while the migration commit closure held its lease"
+            );
+            release_commit.wait();
+            assert_eq!(
+                transition_done_rx
+                    .recv_timeout(Duration::from_secs(2))
+                    .unwrap()
+                    .unwrap()
+                    .state,
+                RunState::Failed
+            );
+        });
     }
 
     #[test]

@@ -169,6 +169,108 @@ pub struct SessionHandle {
         Option<xai_grok_tools::implementations::grok_build::scheduler::types::SchedulerHandle>,
 }
 
+/// Cancellation safety for a durably admitted sequence analysis.
+///
+/// The permission future is outside the SessionActor, but terminalization is
+/// not: dropping that future enqueues the same actor-only Finish command with
+/// Cancel and never mutates the store directly.
+struct PendingScienceSeqAnalyzeApproval {
+    cmd_tx: mpsc::UnboundedSender<SessionCommand>,
+    prepared: Option<crate::session::commands::PreparedScienceSeqAnalyze>,
+}
+
+/// Only the production permission bridge in this module can construct an
+/// Allow grant. The actor binds it to the exact durable run, project snapshot,
+/// source bytes, options and retained context before changing Pending to
+/// Allow.
+pub(crate) struct ScienceSeqAnalyzePermissionGrant {
+    run_id: xai_grok_science::RunId,
+    call_id: xai_grok_science::CallId,
+    expected_context: xai_grok_science::RunContext,
+    project_revision: String,
+    source_path: std::path::PathBuf,
+    source_sha256: String,
+    options: xai_grok_science::seqbench::SeqAnalyzeOptions,
+}
+
+impl ScienceSeqAnalyzePermissionGrant {
+    fn new(prepared: &crate::session::commands::PreparedScienceSeqAnalyze) -> Self {
+        Self {
+            run_id: prepared.ticket.run_id.clone(),
+            call_id: prepared.ticket.call_id.clone(),
+            expected_context: prepared.expected_context.clone(),
+            project_revision: prepared.project_revision.clone(),
+            source_path: prepared.source_path.clone(),
+            source_sha256: xai_grok_science::seqbench::hex_sha256(&prepared.source_bytes),
+            options: prepared.options.clone(),
+        }
+    }
+
+    pub(crate) fn authorizes(
+        &self,
+        prepared: &crate::session::commands::PreparedScienceSeqAnalyze,
+    ) -> bool {
+        self.run_id == prepared.ticket.run_id
+            && self.call_id == prepared.ticket.call_id
+            && self.expected_context == prepared.expected_context
+            && self.project_revision == prepared.project_revision
+            && self.source_path == prepared.source_path
+            && self.source_sha256 == xai_grok_science::seqbench::hex_sha256(&prepared.source_bytes)
+            && self.options == prepared.options
+    }
+}
+
+impl PendingScienceSeqAnalyzeApproval {
+    fn new(
+        cmd_tx: mpsc::UnboundedSender<SessionCommand>,
+        prepared: crate::session::commands::PreparedScienceSeqAnalyze,
+    ) -> Self {
+        Self {
+            cmd_tx,
+            prepared: Some(prepared),
+        }
+    }
+
+    fn prepared(&self) -> &crate::session::commands::PreparedScienceSeqAnalyze {
+        self.prepared
+            .as_ref()
+            .expect("sequence analysis approval guard must remain armed")
+    }
+
+    fn take(mut self) -> crate::session::commands::PreparedScienceSeqAnalyze {
+        self.prepared
+            .take()
+            .expect("sequence analysis approval guard must remain armed")
+    }
+}
+
+impl Drop for PendingScienceSeqAnalyzeApproval {
+    fn drop(&mut self) {
+        let Some(prepared) = self.prepared.take() else {
+            return;
+        };
+        let (respond_to, _response) = oneshot::channel();
+        if self
+            .cmd_tx
+            .send(SessionCommand::FinishScienceSeqAnalyze(Box::new(
+                crate::session::commands::FinishScienceSeqAnalyze {
+                    prepared,
+                    decision: xai_grok_science::ApprovalDecision::Cancel,
+                    reason: "sequence analysis permission wait was cancelled before a decision"
+                        .into(),
+                    permission_grant: None,
+                    respond_to,
+                },
+            )))
+            .is_err()
+        {
+            tracing::warn!(
+                "session actor unavailable while cancelling a pending sequence analysis approval"
+            );
+        }
+    }
+}
+
 /// Cancellation safety for the interval between durable admission and the
 /// permission decision.
 ///
@@ -177,6 +279,84 @@ pub struct SessionHandle {
 /// normal control flow never takes it, sends the same actor-only Finish command
 /// with a terminal Cancel decision. The response is intentionally detached:
 /// the SessionActor remains the sole authority that closes the durable run.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct ScienceWorkflowPermissionGrant {
+    run_id: xai_grok_science::RunId,
+    call_id: xai_grok_science::CallId,
+    ticket_project_id: xai_grok_science::ProjectId,
+    ticket_owner_id: String,
+    expected_context: xai_grok_science::RunContext,
+    project_revision: String,
+    operation_id: String,
+    execution_session_id: String,
+    execution_owner_id: String,
+    workflow_spec_json: Vec<u8>,
+    executor_root: std::path::PathBuf,
+    kernel_id: String,
+    kernel_kind: xai_grok_science::workflow::KernelKind,
+    interpreter_path: std::path::PathBuf,
+    probe_timeout: std::time::Duration,
+    allow_kernel_steps: bool,
+    executable_sha256: String,
+    executable_backend: String,
+    permission_target: String,
+}
+
+impl ScienceWorkflowPermissionGrant {
+    /// Private by design: only this production permission bridge can turn an
+    /// actual `Decision::Allow` into an actor-consumable capability.
+    fn new(
+        prepared: &crate::session::commands::PreparedScienceWorkflowExecution,
+    ) -> xai_grok_science::Result<Self> {
+        Ok(Self {
+            run_id: prepared.ticket.run_id.clone(),
+            call_id: prepared.ticket.call_id.clone(),
+            ticket_project_id: prepared.ticket.project_id.clone(),
+            ticket_owner_id: prepared.ticket.owner_id.clone(),
+            expected_context: prepared.expected_context.clone(),
+            project_revision: prepared.project_revision.clone(),
+            operation_id: prepared.binding.execution.operation_id.clone(),
+            execution_session_id: prepared.binding.execution.session_id.clone(),
+            execution_owner_id: prepared.binding.execution.owner_id.clone(),
+            workflow_spec_json: serde_json::to_vec(&prepared.binding.execution.spec)?,
+            executor_root: prepared.binding.executor_root.clone(),
+            kernel_id: prepared.binding.kernel_id.clone(),
+            kernel_kind: prepared.binding.kernel_kind,
+            interpreter_path: prepared.binding.interpreter_path.clone(),
+            probe_timeout: prepared.binding.probe_timeout,
+            allow_kernel_steps: prepared.binding.allow_kernel_steps,
+            executable_sha256: prepared.executable.sha256().to_owned(),
+            executable_backend: prepared.executable.backend().to_string(),
+            permission_target: prepared.target.clone(),
+        })
+    }
+
+    pub(crate) fn authorizes(
+        &self,
+        prepared: &crate::session::commands::PreparedScienceWorkflowExecution,
+    ) -> xai_grok_science::Result<bool> {
+        Ok(self.run_id == prepared.ticket.run_id
+            && self.call_id == prepared.ticket.call_id
+            && self.ticket_project_id == prepared.ticket.project_id
+            && self.ticket_owner_id == prepared.ticket.owner_id
+            && self.expected_context == prepared.expected_context
+            && self.project_revision == prepared.project_revision
+            && self.operation_id == prepared.binding.execution.operation_id
+            && self.execution_session_id == prepared.binding.execution.session_id
+            && self.execution_owner_id == prepared.binding.execution.owner_id
+            && self.workflow_spec_json == serde_json::to_vec(&prepared.binding.execution.spec)?
+            && self.executor_root == prepared.binding.executor_root
+            && self.kernel_id == prepared.binding.kernel_id
+            && self.kernel_kind == prepared.binding.kernel_kind
+            && self.interpreter_path == prepared.binding.interpreter_path
+            && self.probe_timeout == prepared.binding.probe_timeout
+            && self.allow_kernel_steps == prepared.binding.allow_kernel_steps
+            && self.executable_sha256 == prepared.executable.sha256()
+            && self.executable_backend == prepared.executable.backend().to_string()
+            && self.permission_target == prepared.target)
+    }
+}
+
 struct PendingScienceWorkflowApproval {
     cmd_tx: mpsc::UnboundedSender<SessionCommand>,
     prepared: Option<crate::session::commands::PreparedScienceWorkflowExecution>,
@@ -208,9 +388,10 @@ impl PendingScienceWorkflowApproval {
 
 impl Drop for PendingScienceWorkflowApproval {
     fn drop(&mut self) {
-        let Some(prepared) = self.prepared.take() else {
+        let Some(mut prepared) = self.prepared.take() else {
             return;
         };
+        prepared.permission_grant = None;
         let (respond_to, _response) = oneshot::channel();
         if self
             .cmd_tx
@@ -412,6 +593,133 @@ impl Drop for PendingScienceSkillQuarantineApproval {
 /// An ACP client may disconnect while the production permission future is
 /// pending. Without this guard the durable run remains
 /// `AwaitingApproval` forever even though no caller can resume it.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct ScienceProjectMutationPermissionGrant {
+    run_id: xai_grok_science::RunId,
+    ticket_project_id: xai_grok_science::ProjectId,
+    ticket_owner_id: String,
+    call_id: xai_grok_science::CallId,
+    expected_context: xai_grok_science::RunContext,
+    request_sha256: String,
+    review_admission_sha256: Option<String>,
+    migration_admission_sha256: Option<String>,
+    project_revision: Option<String>,
+    science_store_root: std::path::PathBuf,
+    project_root: std::path::PathBuf,
+    permission_target: String,
+}
+
+impl ScienceProjectMutationPermissionGrant {
+    /// Private by design: only the production permission bridge in this
+    /// module can turn a fresh `Decision::Allow` into actor authority.
+    fn new(
+        prepared: &crate::session::commands::PreparedScienceProjectMutation,
+    ) -> xai_grok_science::Result<Self> {
+        use xai_grok_science::{ScienceError, project::ProjectMutation};
+
+        if prepared.replayed.is_some() || prepared.resume_allowed {
+            return Err(ScienceError::Invalid(
+                "replayed or resumed project mutation cannot mint a fresh Allow grant".into(),
+            ));
+        }
+        if prepared.ticket.run_id != prepared.expected_context.run_id
+            || prepared.ticket.project_id != prepared.expected_context.project_id
+            || prepared.ticket.owner_id != prepared.expected_context.owner_id
+            || prepared.request.session_id != prepared.expected_context.session_id
+            || prepared.request.owner_id != prepared.expected_context.owner_id
+            || prepared.expected_context.artifact_root != prepared.store.root().join("runs")
+            || prepared.project_root != prepared.store.root()
+        {
+            return Err(ScienceError::Ownership);
+        }
+
+        let request_sha256 = prepared.request.replay_fingerprint()?;
+        let is_review = matches!(
+            prepared.request.mutation,
+            ProjectMutation::ReviewRecord { .. }
+        );
+        let is_migration = matches!(
+            prepared.request.mutation,
+            ProjectMutation::ProjectMigrate { .. }
+        );
+        if is_review != prepared.review_admission.is_some()
+            || is_migration != prepared.migration_admission.is_some()
+        {
+            return Err(ScienceError::Invalid(
+                "project mutation admission kind does not match its request".into(),
+            ));
+        }
+        if prepared.request.mutation.target_project().is_some()
+            && prepared.project_revision.is_none()
+        {
+            return Err(ScienceError::Invalid(
+                "existing-project mutation requires an actor-captured project revision".into(),
+            ));
+        }
+
+        let review_admission_sha256 = match prepared.review_admission.as_ref() {
+            Some(admission) => {
+                if admission.request_sha256() != request_sha256
+                    || admission.owner_id() != prepared.request.owner_id
+                    || admission.session_id() != prepared.request.session_id
+                    || admission.authority_run_id() != prepared.ticket.run_id.0
+                    || prepared.project_revision.as_deref() != Some(admission.project_revision())
+                {
+                    return Err(ScienceError::Ownership);
+                }
+                for (key, expected) in admission.authority_environment() {
+                    if prepared.expected_context.environment.get(&key) != Some(&expected) {
+                        return Err(ScienceError::Invalid(format!(
+                            "review grant context is missing exact {key} binding"
+                        )));
+                    }
+                }
+                Some(admission.sha256().to_string())
+            }
+            None => None,
+        };
+        let migration_admission_sha256 = match prepared.migration_admission.as_ref() {
+            Some(admission) => {
+                let sha256 = admission.sha256()?;
+                if prepared
+                    .expected_context
+                    .environment
+                    .get("project_migration_admission_sha256")
+                    != Some(&sha256)
+                {
+                    return Err(ScienceError::Invalid(
+                        "migration grant context is missing its exact admission binding".into(),
+                    ));
+                }
+                Some(sha256)
+            }
+            None => None,
+        };
+
+        Ok(Self {
+            run_id: prepared.ticket.run_id.clone(),
+            ticket_project_id: prepared.ticket.project_id.clone(),
+            ticket_owner_id: prepared.ticket.owner_id.clone(),
+            call_id: prepared.ticket.call_id.clone(),
+            expected_context: prepared.expected_context.clone(),
+            request_sha256,
+            review_admission_sha256,
+            migration_admission_sha256,
+            project_revision: prepared.project_revision.clone(),
+            science_store_root: prepared.store.root().to_path_buf(),
+            project_root: prepared.project_root.clone(),
+            permission_target: prepared.target.clone(),
+        })
+    }
+
+    pub(crate) fn authorizes(
+        &self,
+        prepared: &crate::session::commands::PreparedScienceProjectMutation,
+    ) -> xai_grok_science::Result<bool> {
+        Ok(self == &Self::new(prepared)?)
+    }
+}
+
 struct PendingScienceProjectMutationApproval {
     cmd_tx: mpsc::UnboundedSender<SessionCommand>,
     prepared: Option<crate::session::commands::PreparedScienceProjectMutation>,
@@ -443,9 +751,12 @@ impl PendingScienceProjectMutationApproval {
 
 impl Drop for PendingScienceProjectMutationApproval {
     fn drop(&mut self) {
-        let Some(prepared) = self.prepared.take() else {
+        let Some(mut prepared) = self.prepared.take() else {
             return;
         };
+        // Cancellation can never carry a capability minted for Allow, even if
+        // future control-flow changes arm the guard after grant construction.
+        prepared.permission_grant = None;
         let (respond_to, _response) = oneshot::channel();
         if self
             .cmd_tx
@@ -704,9 +1015,10 @@ impl SessionHandle {
         let prepared = begin_rx.await.map_err(|_| {
             xai_grok_science::ScienceError::Invalid("session actor stopped".into())
         })??;
+        let pending = PendingScienceSeqAnalyzeApproval::new(self.cmd_tx.clone(), prepared);
         let call_id = acp::ToolCallId::new(std::sync::Arc::from(format!(
             "science-seq-analyze-{}",
-            prepared.ticket.run_id.0
+            pending.prepared().ticket.run_id.0
         )));
         let update = acp::ToolCallUpdate::new(
             call_id,
@@ -714,15 +1026,20 @@ impl SessionHandle {
                 .kind(Some(acp::ToolKind::Other))
                 .title(Some(format!(
                     "Lumen Science sequence analysis (NCBI table {}; {} restriction scan; {} digest enzyme(s))",
-                    prepared.options.translation_table_id,
-                    prepared.options.topology.as_str(),
-                    prepared.options.restriction_digest_enzymes.len()
+                    pending.prepared().options.translation_table_id,
+                    pending.prepared().options.topology.as_str(),
+                    pending
+                        .prepared()
+                        .options
+                        .restriction_digest_enzymes
+                        .len()
                 ))),
         );
+        let target = pending.prepared().target.clone();
         let permission = tokio::time::timeout(
             approval_timeout,
             self.permission_handle.request(
-                AccessKind::Edit(prepared.target.clone()),
+                AccessKind::Edit(target),
                 update,
                 Some(self.info.id.0.to_string()),
                 None,
@@ -755,6 +1072,9 @@ impl SessionHandle {
                 format!("permission requires follow-up: {message}"),
             ),
         };
+        let permission_grant = (decision == xai_grok_science::ApprovalDecision::Allow)
+            .then(|| ScienceSeqAnalyzePermissionGrant::new(pending.prepared()));
+        let prepared = pending.take();
         let (respond_to, response) = oneshot::channel();
         self.cmd_tx
             .send(SessionCommand::FinishScienceSeqAnalyze(Box::new(
@@ -762,6 +1082,7 @@ impl SessionHandle {
                     prepared,
                     decision,
                     reason,
+                    permission_grant,
                     respond_to,
                 },
             )))
@@ -1128,8 +1449,9 @@ impl SessionHandle {
             xai_grok_science::ScienceError::Invalid("session actor stopped".into())
         })??;
 
-        // Already applied under this operation id: no second prompt.
-        if prepared.replayed.is_some() {
+        // Already applied, or an actor-verified Running+Allow review recovery:
+        // no second prompt and no fresh permission grant.
+        if prepared.replayed.is_some() || prepared.resume_allowed {
             return self
                 .finish_science_project_mutation(
                     prepared,
@@ -1189,7 +1511,16 @@ impl SessionHandle {
                 format!("permission requires follow-up: {message}"),
             ),
         };
-        self.finish_science_project_mutation(pending.take(), decision, reason)
+        let permission_grant = if decision == xai_grok_science::ApprovalDecision::Allow {
+            Some(ScienceProjectMutationPermissionGrant::new(
+                pending.prepared(),
+            )?)
+        } else {
+            None
+        };
+        let mut prepared = pending.take();
+        prepared.permission_grant = permission_grant;
+        self.finish_science_project_mutation(prepared, decision, reason)
             .await
     }
 
@@ -1354,7 +1685,7 @@ impl SessionHandle {
 
         // Already executed under this operation id: no second prompt, no
         // second execution.
-        if prepared.replayed.is_some() {
+        if prepared.replayed.is_some() || prepared.resume_allowed {
             return self
                 .finish_science_workflow_execution(
                     prepared,
@@ -1415,7 +1746,13 @@ impl SessionHandle {
                 format!("permission requires follow-up: {message}"),
             ),
         };
-        let prepared = pending.take();
+        let permission_grant = if decision == xai_grok_science::ApprovalDecision::Allow {
+            Some(ScienceWorkflowPermissionGrant::new(pending.prepared())?)
+        } else {
+            None
+        };
+        let mut prepared = pending.take();
+        prepared.permission_grant = permission_grant;
         self.finish_science_workflow_execution(prepared, decision, reason)
             .await
     }
@@ -1843,6 +2180,103 @@ impl SessionHandle {
 }
 
 #[cfg(test)]
+mod seq_analyze_approval_cancellation_tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    fn prepared(
+        workspace: &std::path::Path,
+    ) -> crate::session::commands::PreparedScienceSeqAnalyze {
+        let store_root = workspace.join("science-seq-store");
+        std::fs::create_dir(&store_root).unwrap();
+        let store = xai_grok_science::ScienceStore::new(&store_root);
+        let project_store = xai_grok_science::project::ProjectStore::new(&store_root);
+        let project = project_store
+            .create_project(
+                "owner-seq-cancel-guard",
+                "Sequence cancellation",
+                "Does cancellation remain actor-owned?",
+            )
+            .unwrap();
+        let project_revision = project_store.project_revision(&project.project_id).unwrap();
+        let context = xai_grok_science::RunContext {
+            run_id: xai_grok_science::RunId::new_v7(),
+            project_id: xai_grok_science::ProjectId::new(project.project_id.0),
+            session_id: "session-seq-cancel-guard".into(),
+            owner_id: "owner-seq-cancel-guard".into(),
+            workspace_root: workspace.to_path_buf(),
+            provider: "test".into(),
+            approval_policy: "test".into(),
+            tool_profile: "test".into(),
+            artifact_root: store_root.clone(),
+            environment: BTreeMap::new(),
+        };
+        let options = xai_grok_science::seqbench::SeqAnalyzeOptions::default();
+        let mut expected_context = context.clone();
+        expected_context
+            .environment
+            .insert("translation_table_id".into(), "1".into());
+        expected_context
+            .environment
+            .insert("translation_table_name".into(), "Standard".into());
+        expected_context
+            .environment
+            .insert("restriction_topology".into(), "linear".into());
+        expected_context
+            .environment
+            .insert("restriction_digest_enzymes".into(), String::new());
+        let ticket =
+            xai_grok_science::seqbench::begin_analysis_with_options(&store, context, &options)
+                .unwrap();
+        crate::session::commands::PreparedScienceSeqAnalyze {
+            store,
+            project_store,
+            project_revision,
+            expected_context,
+            ticket,
+            options,
+            source_path: workspace.join("input.fasta"),
+            source_bytes: b">seq\nATGC\n".to_vec(),
+            target: "test sequence analysis cancellation guard".into(),
+        }
+    }
+
+    #[test]
+    fn dropping_permission_wait_enqueues_actor_cancel_finish() {
+        let workspace = tempfile::tempdir().unwrap();
+        let prepared = prepared(workspace.path());
+        let run_id = prepared.ticket.run_id.clone();
+        let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel();
+
+        drop(PendingScienceSeqAnalyzeApproval::new(cmd_tx, prepared));
+
+        let command = cmd_rx
+            .try_recv()
+            .expect("drop must enqueue an actor Finish command");
+        let SessionCommand::FinishScienceSeqAnalyze(command) = command else {
+            panic!("drop enqueued the wrong SessionCommand");
+        };
+        assert_eq!(command.prepared.ticket.run_id, run_id);
+        assert_eq!(command.decision, xai_grok_science::ApprovalDecision::Cancel);
+        assert!(
+            command.permission_grant.is_none(),
+            "drop cancellation must never manufacture or retain an Allow grant"
+        );
+        assert!(command.reason.contains("cancelled before a decision"));
+        assert_eq!(
+            command
+                .prepared
+                .store
+                .load_run(&run_id)
+                .expect("durable awaiting run")
+                .state,
+            xai_grok_science::RunState::AwaitingApproval,
+            "the handle must enqueue actor work, never mutate the store directly"
+        );
+    }
+}
+
+#[cfg(test)]
 mod workflow_approval_cancellation_tests {
     use super::*;
     use std::collections::BTreeMap;
@@ -1859,19 +2293,34 @@ mod workflow_approval_cancellation_tests {
         let store_root = workspace.join("science-store");
         std::fs::create_dir(&store_root).unwrap();
         let store = xai_grok_science::ScienceStore::new(&store_root);
+        let project_store = xai_grok_science::project::ProjectStore::new(&store_root);
+        let project = project_store
+            .create_project(
+                "owner-cancel-guard",
+                "Workflow cancellation",
+                "Does actor cancellation remain execution-free?",
+            )
+            .unwrap();
+        let project_revision = project_store
+            .with_owned_project_revision(
+                &project.project_id,
+                "owner-cancel-guard",
+                |_project, revision| Ok(revision.to_owned()),
+            )
+            .unwrap();
         let context = xai_grok_science::RunContext {
             run_id: xai_grok_science::RunId::new_v7(),
-            project_id: xai_grok_science::ProjectId::new("project-cancel-guard"),
+            project_id: xai_grok_science::ProjectId::new(project.project_id.0.clone()),
             session_id: "session-cancel-guard".into(),
             owner_id: "owner-cancel-guard".into(),
             workspace_root: workspace.to_path_buf(),
             provider: "test".into(),
             approval_policy: "test".into(),
             tool_profile: "test".into(),
-            artifact_root: store_root.join("artifacts"),
+            artifact_root: store_root.join("runs"),
             environment: BTreeMap::new(),
         };
-        let ticket = xai_grok_science::csv::begin_fixture(&store, context).unwrap();
+        let ticket = xai_grok_science::csv::begin_fixture(&store, context.clone()).unwrap();
         let io = WorkflowIoCapability::open_existing_confined(&store_root, workspace).unwrap();
         let environment = ComputeEnvironment {
             environment_id: "cancel-guard".into(),
@@ -1898,7 +2347,7 @@ mod workflow_approval_cancellation_tests {
         );
         let spec = WorkflowSpec {
             workflow_id: "workflow-cancel-guard".into(),
-            project_id: xai_grok_science::project::ProjectId("project-cancel-guard".into()),
+            project_id: project.project_id,
             name: "cancellation guard".into(),
             steps: Vec::new(),
             parameters: BTreeMap::new(),
@@ -1913,7 +2362,10 @@ mod workflow_approval_cancellation_tests {
         };
         crate::session::commands::PreparedScienceWorkflowExecution {
             store,
+            project_store,
+            project_revision,
             ticket,
+            expected_context: context,
             binding: crate::session::commands::ScienceWorkflowBinding {
                 execution: WorkflowExecutionRequest {
                     operation_id: "operation-cancel-guard".into(),
@@ -1933,6 +2385,8 @@ mod workflow_approval_cancellation_tests {
             executable,
             target: "test cancellation guard".into(),
             replayed: None,
+            resume_allowed: false,
+            permission_grant: None,
         }
     }
 
@@ -1953,6 +2407,10 @@ mod workflow_approval_cancellation_tests {
         };
         assert_eq!(command.prepared.ticket.run_id, run_id);
         assert_eq!(command.decision, xai_grok_science::ApprovalDecision::Cancel);
+        assert!(
+            command.prepared.permission_grant.is_none(),
+            "drop cancellation must never manufacture or retain a workflow Allow grant"
+        );
         assert!(command.reason.contains("cancelled before a decision"));
         assert_eq!(
             command
@@ -1964,6 +2422,35 @@ mod workflow_approval_cancellation_tests {
             xai_grok_science::RunState::AwaitingApproval,
             "the handle must enqueue actor work, never mutate the store directly"
         );
+    }
+
+    #[test]
+    fn workflow_permission_grant_binds_exact_admission_and_cannot_be_reused() {
+        let workspace = tempfile::tempdir().unwrap();
+        let mut prepared = prepared(workspace.path());
+        let grant = ScienceWorkflowPermissionGrant::new(&prepared).unwrap();
+        assert!(grant.authorizes(&prepared).unwrap());
+
+        let target = prepared.target.clone();
+        prepared.target.push_str("-swapped");
+        assert!(!grant.authorizes(&prepared).unwrap());
+        prepared.target = target;
+
+        let revision = prepared.project_revision.clone();
+        prepared.project_revision = "0".repeat(64);
+        assert!(!grant.authorizes(&prepared).unwrap());
+        prepared.project_revision = revision;
+
+        prepared.binding.allow_kernel_steps = !prepared.binding.allow_kernel_steps;
+        assert!(!grant.authorizes(&prepared).unwrap());
+        prepared.binding.allow_kernel_steps = !prepared.binding.allow_kernel_steps;
+
+        prepared.binding.execution.spec.name.push_str(" (changed)");
+        assert!(!grant.authorizes(&prepared).unwrap());
+        prepared.binding.execution.spec.name = "cancellation guard".into();
+
+        prepared.expected_context.owner_id.push_str("-other");
+        assert!(!grant.authorizes(&prepared).unwrap());
     }
 
     fn prepared_dossier(
@@ -2005,10 +2492,9 @@ mod workflow_approval_cancellation_tests {
         let mut source_context = context.clone();
         source_context.run_id = source_run_id.clone();
         source_context.tool_profile = "dossier-source-fixture".into();
-        store.create_run(source_context).unwrap();
-        store
-            .transition(&source_run_id, xai_grok_science::RunState::Succeeded, None)
-            .unwrap();
+        let source_ticket = xai_grok_science::csv::begin_fixture(&store, source_context).unwrap();
+        xai_grok_science::csv::mark_allowed(&store, &source_ticket).unwrap();
+        store.transition_succeeded_verified(&source_run_id).unwrap();
         let source_snapshots =
             xai_grok_science::dossier::capture_source_snapshots(&store, &[source_run_id]).unwrap();
         let admission = xai_grok_science::dossier::DossierAdmission::new(
@@ -2093,6 +2579,228 @@ mod workflow_approval_cancellation_tests {
         );
     }
 
+    fn prepared_review_project_mutation(
+        workspace: &std::path::Path,
+    ) -> crate::session::commands::PreparedScienceProjectMutation {
+        use xai_grok_science::{
+            Approval, ApprovalDecision, CallId, Evidence, ProjectId as ScienceProjectId,
+            Provenance, RunContext, RunId, RunState,
+            project::{
+                MutationRequest, ProjectMutation, ReviewAdmission, ReviewVerdict,
+            },
+        };
+
+        let workspace = dunce::canonicalize(workspace).unwrap();
+        let store_root = workspace.join("review-grant-store");
+        let project_store =
+            xai_grok_science::project::ProjectStore::new_confined(&store_root, &workspace).unwrap();
+        let project = project_store
+            .create_project(
+                "owner-review-grant",
+                "Review grant fixture",
+                "Does the grant bind the exact admitted evidence?",
+            )
+            .unwrap();
+        let store = xai_grok_science::ScienceStore::new_confined(&store_root, &workspace).unwrap();
+        let source_run_id = RunId::new("source-review-grant");
+        let source_project_id = ScienceProjectId::new(project.project_id.0.clone());
+        let source_call = CallId::new("source-review-grant");
+        store
+            .create_run(RunContext {
+                run_id: source_run_id.clone(),
+                project_id: source_project_id.clone(),
+                session_id: "session-review-grant".into(),
+                owner_id: "owner-review-grant".into(),
+                workspace_root: workspace.clone(),
+                provider: "offline-test".into(),
+                approval_policy: "test".into(),
+                tool_profile: "review-grant-source".into(),
+                artifact_root: store_root.join("runs"),
+                environment: BTreeMap::new(),
+            })
+            .unwrap();
+        store
+            .request_approval(Approval {
+                project_id: source_project_id.clone(),
+                run_id: source_run_id.clone(),
+                call_id: source_call.clone(),
+                owner_id: "owner-review-grant".into(),
+                decision: ApprovalDecision::Pending,
+                decided_at: None,
+            })
+            .unwrap();
+        store
+            .transition(&source_run_id, RunState::AwaitingApproval, None)
+            .unwrap();
+        store
+            .decide_approval(
+                &source_project_id,
+                &source_run_id,
+                "owner-review-grant",
+                &source_call,
+                ApprovalDecision::Allow,
+            )
+            .unwrap();
+        store
+            .transition(&source_run_id, RunState::Running, None)
+            .unwrap();
+        let source_artifact = store
+            .put_artifact(
+                &source_project_id,
+                &source_run_id,
+                "owner-review-grant",
+                source_call,
+                std::path::Path::new("result.json"),
+                br#"{"verified":true}"#,
+                "application/json",
+                "review grant source",
+            )
+            .unwrap();
+        store
+            .add_evidence(Evidence {
+                run_id: source_run_id.clone(),
+                claim: "The source bytes were rehashed.".into(),
+                source: "fixture://review-grant/result.json".into(),
+                artifact_sha256: Some(source_artifact.sha256.clone()),
+                verified_at: chrono::Utc::now(),
+            })
+            .unwrap();
+        store
+            .add_provenance(Provenance {
+                run_id: source_run_id.clone(),
+                source_uri: "fixture://review-grant".into(),
+                source_commit: None,
+                source_path: Some("result.json".into()),
+                license: "test-only".into(),
+                retrieved_at: chrono::Utc::now(),
+                input_sha256: source_artifact.sha256.clone(),
+                tool: "review-grant-fixture".into(),
+                environment: BTreeMap::from([("network".into(), "disabled".into())]),
+            })
+            .unwrap();
+        store
+            .transition_succeeded_verified(&source_run_id)
+            .unwrap();
+
+        let mut request = MutationRequest {
+            operation_id: "operation-review-grant".into(),
+            session_id: "session-review-grant".into(),
+            owner_id: "owner-review-grant".into(),
+            expected_revision: None,
+            mutation: ProjectMutation::ReviewRecord {
+                project_id: project.project_id.clone(),
+                reviewer_id: "owner-review-grant".into(),
+                verdict: ReviewVerdict::Pass,
+                summary: "The exact admitted bytes support this test verdict.".into(),
+                claim_id: None,
+                source_run_id: source_run_id.0,
+                authority_run_id: String::new(),
+                artifact_sha256s: vec![source_artifact.sha256],
+            },
+        };
+        let authority_run_id =
+            RunId::new(format!("review-authority-{}", request.replay_fingerprint().unwrap()));
+        let ProjectMutation::ReviewRecord {
+            authority_run_id: bound_run_id,
+            ..
+        } = &mut request.mutation
+        else {
+            unreachable!("review fixture mutation changed kind");
+        };
+        *bound_run_id = authority_run_id.0.clone();
+        let admission = ReviewAdmission::capture(&project_store, &store, &request).unwrap();
+        let mut environment = BTreeMap::from([
+            ("network".into(), "disabled".into()),
+            ("locale".into(), "C".into()),
+        ]);
+        environment.extend(admission.authority_environment());
+        let context = RunContext {
+            run_id: authority_run_id,
+            project_id: source_project_id,
+            session_id: request.session_id.clone(),
+            owner_id: request.owner_id.clone(),
+            workspace_root: workspace,
+            provider: "offline-test".into(),
+            approval_policy: "test".into(),
+            tool_profile: "review-grant-authority".into(),
+            artifact_root: store_root.join("runs"),
+            environment,
+        };
+        let ticket = xai_grok_science::csv::begin_fixture(&store, context.clone()).unwrap();
+        crate::session::commands::PreparedScienceProjectMutation {
+            store,
+            project_store,
+            ticket,
+            expected_context: context,
+            request,
+            project_revision: Some(admission.project_revision().to_string()),
+            project_root: store_root.clone(),
+            review_admission: Some(admission),
+            migration_admission: None,
+            target: format!(
+                "{}/projects/{}",
+                store_root.display(),
+                project.project_id.0
+            ),
+            replayed: None,
+            resume_allowed: false,
+            permission_grant: None,
+        }
+    }
+
+    #[test]
+    fn project_mutation_permission_grant_binds_review_admission_request_and_context() {
+        let workspace = tempfile::tempdir().unwrap();
+        let mut prepared = prepared_review_project_mutation(workspace.path());
+        let grant = ScienceProjectMutationPermissionGrant::new(&prepared).unwrap();
+        assert!(grant.authorizes(&prepared).unwrap());
+
+        let original_request = prepared.request.clone();
+        let original_admission = prepared.review_admission.clone();
+        let original_environment = prepared.expected_context.environment.clone();
+        if let xai_grok_science::project::ProjectMutation::ReviewRecord { summary, .. } =
+            &mut prepared.request.mutation
+        {
+            *summary = "A different review request.".into();
+        }
+        let replacement = xai_grok_science::project::ReviewAdmission::capture(
+            &prepared.project_store,
+            &prepared.store,
+            &prepared.request,
+        )
+        .unwrap();
+        prepared.expected_context.environment.extend(replacement.authority_environment());
+        prepared.review_admission = Some(replacement);
+        assert!(!grant.authorizes(&prepared).unwrap());
+
+        prepared.request = original_request;
+        prepared.review_admission = original_admission;
+        prepared.expected_context.environment = original_environment;
+        prepared.expected_context.approval_policy.push_str("-changed");
+        assert!(!grant.authorizes(&prepared).unwrap());
+
+        prepared.resume_allowed = true;
+        assert!(ScienceProjectMutationPermissionGrant::new(&prepared).is_err());
+        prepared.resume_allowed = false;
+        prepared.replayed = Some(xai_grok_science::project::MutationOutcome {
+            operation_id: prepared.request.operation_id.clone(),
+            kind: "review_record".into(),
+            project_id: prepared
+                .request
+                .mutation
+                .target_project()
+                .cloned()
+                .expect("review has a target project"),
+            revision: prepared
+                .project_revision
+                .clone()
+                .expect("review has an admitted project revision"),
+            result: serde_json::json!({}),
+            replayed: true,
+        });
+        assert!(ScienceProjectMutationPermissionGrant::new(&prepared).is_err());
+    }
+
     fn prepared_project_mutation(
         workspace: &std::path::Path,
     ) -> crate::session::commands::PreparedScienceProjectMutation {
@@ -2115,11 +2823,12 @@ mod workflow_approval_cancellation_tests {
             artifact_root: store_root.join("runs"),
             environment: BTreeMap::new(),
         };
-        let ticket = xai_grok_science::csv::begin_fixture(&store, context).unwrap();
+        let ticket = xai_grok_science::csv::begin_fixture(&store, context.clone()).unwrap();
         crate::session::commands::PreparedScienceProjectMutation {
             store,
             project_store,
             ticket,
+            expected_context: context,
             request: xai_grok_science::project::MutationRequest {
                 operation_id: operation_id.into(),
                 session_id: "session-project-cancel-guard".into(),
@@ -2130,20 +2839,27 @@ mod workflow_approval_cancellation_tests {
                     research_question: "Does disconnect remain zero-output?".into(),
                 },
             },
+            project_revision: None,
+            project_root: store_root.clone(),
+            review_admission: None,
             migration_admission: None,
             target: store_root.join("projects").display().to_string(),
             replayed: None,
+            resume_allowed: false,
+            permission_grant: None,
         }
     }
 
     #[test]
     fn dropping_project_permission_wait_enqueues_actor_cancel_finish() {
         let workspace = tempfile::tempdir().unwrap();
-        let prepared = prepared_project_mutation(workspace.path());
+        let mut prepared = prepared_project_mutation(workspace.path());
         let run_id = prepared.ticket.run_id.clone();
         let project_store_root = dunce::canonicalize(workspace.path())
             .unwrap()
             .join("project-mutation-store");
+        prepared.permission_grant =
+            Some(ScienceProjectMutationPermissionGrant::new(&prepared).unwrap());
         let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel();
 
         drop(PendingScienceProjectMutationApproval::new(cmd_tx, prepared));
@@ -2156,6 +2872,10 @@ mod workflow_approval_cancellation_tests {
         };
         assert_eq!(command.prepared.ticket.run_id, run_id);
         assert_eq!(command.decision, xai_grok_science::ApprovalDecision::Cancel);
+        assert!(
+            command.prepared.permission_grant.is_none(),
+            "drop cancellation must never retain a project mutation Allow grant"
+        );
         assert!(command.reason.contains("cancelled before a decision"));
         assert_eq!(
             command

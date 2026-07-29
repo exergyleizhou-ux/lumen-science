@@ -213,6 +213,11 @@ pub fn start_ssh_scp_admission(
                 "connector.admission",
                 serde_json::to_value(admission_audit(request, AdmissionOutcome::Denied))?,
             )?;
+            // `Denied` is a decision terminal and therefore may only be
+            // entered from the decision boundary. A connector-policy
+            // rejection does not create a Lumen permission record, but it
+            // still crosses that boundary before becoming terminal.
+            store.transition(&context.run_id, RunState::AwaitingApproval, None)?;
             store.transition(
                 &context.run_id,
                 RunState::Denied,
@@ -312,11 +317,6 @@ pub fn execute_offline_transport(
         OfflineTransportOutcome::Timeout => (RunState::TimedOut, "connector.transport.timed_out"),
         OfflineTransportOutcome::Cancel => (RunState::Cancelled, "connector.transport.cancelled"),
     };
-    store.transition(
-        &ticket.context.run_id,
-        state,
-        Some("offline connector transport terminal".into()),
-    )?;
     store.append_event(
         &ticket.context.run_id,
         "LumenOfflineConnectorTransport",
@@ -327,6 +327,15 @@ pub fn execute_offline_transport(
             "target_sha256": target_sha256,
         }),
     )?;
+    if state == RunState::Succeeded {
+        store.transition_succeeded_verified(&ticket.context.run_id)?;
+    } else {
+        store.transition(
+            &ticket.context.run_id,
+            state,
+            Some("offline connector transport terminal".into()),
+        )?;
+    }
     Ok(OfflineTransportReceipt {
         run_id: ticket.context.run_id,
         outcome,

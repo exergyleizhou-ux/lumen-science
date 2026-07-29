@@ -7,11 +7,11 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     io::{Read, Write},
     path::{Component, Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
 };
 use uuid::Uuid;
 
@@ -126,6 +126,33 @@ impl RunState {
                 | Self::Interrupted
         )
     }
+
+    /// The ordinary state-machine edges.
+    ///
+    /// `Succeeded` is deliberately absent: successful completion is an
+    /// authority commit and must go through
+    /// `ScienceStore::transition_succeeded_verified`, which verifies the
+    /// durable approval under the same store write lock.
+    fn can_transition_to(self, next: Self) -> bool {
+        matches!(
+            (self, next),
+            (
+                Self::Created,
+                Self::AwaitingApproval | Self::Failed | Self::Interrupted
+            ) | (
+                Self::AwaitingApproval,
+                Self::Running
+                    | Self::Failed
+                    | Self::Denied
+                    | Self::TimedOut
+                    | Self::Cancelled
+                    | Self::Interrupted
+            ) | (
+                Self::Running,
+                Self::Failed | Self::TimedOut | Self::Cancelled | Self::Interrupted
+            )
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -207,11 +234,77 @@ pub struct Approval {
     pub decided_at: Option<DateTime<Utc>>,
 }
 
+/// Exact durable state authorized for one successful Science completion.
+///
+/// Callers build this only after their protocol-specific verification. The
+/// store then re-reads and compares every collection while retaining its
+/// process-wide write lock, re-hashes every artifact, verifies evidence and
+/// provenance completeness, and makes `Succeeded` the final visible write.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SuccessfulCompletionManifest {
+    pub context: RunContext,
+    pub artifacts: Vec<Artifact>,
+    pub evidence: Vec<Evidence>,
+    pub provenance: Vec<Provenance>,
+    pub previews: Vec<preview::PreviewRecord>,
+    pub events: Vec<Event>,
+    /// The unique last event expected by the actor protocol.
+    pub final_event: Event,
+}
+
+const AUTHORITY_COMMIT_FENCE_FILE: &str = "authority-commit-fence.json";
+
+/// Durable point-of-no-return for a cross-store authority commit.
+///
+/// Once present, a visible ProjectStore commit may exist or be recoverable.
+/// Ordinary failure/cancel/timeout transitions and output rollback must stop;
+/// only the exact successful-completion manifest may terminalize the run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct AuthorityCommitFence {
+    schema_version: u32,
+    run_id: RunId,
+    project_id: ProjectId,
+    call_id: CallId,
+    operation_id: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct ScienceStore {
     root: PathBuf,
     root_capability: Arc<Mutex<StoreRootCapability>>,
     writes: Arc<Mutex<()>>,
+}
+
+/// Retained authority for one canonical session workspace.
+///
+/// Product adapters use this capability when source admission and store
+/// provisioning must share one directory identity. Its fields intentionally
+/// remain private: callers can request descriptor-relative operations, but
+/// cannot substitute a pathname after the workspace has been admitted.
+#[derive(Debug)]
+pub struct ScienceWorkspaceCapability {
+    #[cfg(unix)]
+    admitted_root: PathBuf,
+    #[cfg(unix)]
+    directory: PinnedDirectory,
+    #[cfg(unix)]
+    identity: StoreRootIdentity,
+    #[cfg(not(unix))]
+    _unsupported: (),
+}
+
+/// Serialize Science authority mutations across independently constructed
+/// stores in this process.
+///
+/// A store-local lock only protects clones. Product code legitimately reopens
+/// the same retained root through separate `ScienceStore` values, so a
+/// per-instance lock permits a terminal transition to race an output write.
+/// The deliberately coarse process lock is fail-closed and keeps the critical
+/// sections short; it can later be sharded by retained directory identity
+/// without weakening this contract.
+fn shared_science_write_lock() -> Arc<Mutex<()>> {
+    static WRITES: OnceLock<Arc<Mutex<()>>> = OnceLock::new();
+    Arc::clone(WRITES.get_or_init(|| Arc::new(Mutex::new(()))))
 }
 
 #[derive(Debug)]
@@ -227,6 +320,285 @@ pub(crate) enum StoreRootIdentity {
     Unix { device: u64, inode: u64 },
     #[cfg(windows)]
     Windows { volume: u32, index: u64 },
+}
+
+impl ScienceWorkspaceCapability {
+    /// Open the canonical session workspace once and retain that exact
+    /// directory identity for all subsequent source and store operations.
+    #[cfg(unix)]
+    pub fn open(workspace_root: impl AsRef<Path>) -> Result<Self> {
+        let admitted_root = dunce::canonicalize(workspace_root.as_ref())?;
+        if !admitted_root.is_absolute() {
+            return Err(ScienceError::Invalid(
+                "science workspace must resolve to an absolute directory".into(),
+            ));
+        }
+        let expected =
+            PinnedDirectory::checked_directory_identity(&admitted_root, "science workspace")?;
+        let directory = PinnedDirectory::open_absolute_path(&admitted_root)?;
+        if directory.identity()? != expected
+            || directory.final_path()? != admitted_root
+            || PinnedDirectory::checked_directory_identity(&admitted_root, "science workspace")?
+                != expected
+        {
+            return Err(ScienceError::Invalid(
+                "science workspace identity changed during capability admission".into(),
+            ));
+        }
+        Ok(Self {
+            admitted_root,
+            directory,
+            identity: expected,
+        })
+    }
+
+    /// Non-Unix products fail closed until they can retain a workspace handle
+    /// with equivalent no-follow, descriptor-relative semantics.
+    #[cfg(not(unix))]
+    pub fn open(_workspace_root: impl AsRef<Path>) -> Result<Self> {
+        Err(ScienceError::FeatureDisabled(
+            "retained science workspace capability has no backend on this platform".into(),
+        ))
+    }
+
+    /// Resolve the workspace's current handle path without reacquiring
+    /// authority from that pathname.
+    #[cfg(unix)]
+    pub fn current_path(&self) -> Result<PathBuf> {
+        if self.directory.identity()? != self.identity {
+            return Err(ScienceError::Invalid(
+                "retained science workspace identity changed".into(),
+            ));
+        }
+        let current = self.directory.final_path()?;
+        if !current.is_absolute()
+            || PinnedDirectory::checked_directory_identity(&current, "retained science workspace")?
+                != self.identity
+        {
+            return Err(ScienceError::Invalid(
+                "retained science workspace has no stable current path".into(),
+            ));
+        }
+        Ok(current)
+    }
+
+    #[cfg(not(unix))]
+    pub fn current_path(&self) -> Result<PathBuf> {
+        Err(ScienceError::FeatureDisabled(
+            "retained science workspace capability has no backend on this platform".into(),
+        ))
+    }
+
+    #[cfg(unix)]
+    fn assert_admitted_path_attached(&self) -> Result<()> {
+        if self.current_path()? != self.admitted_root
+            || PinnedDirectory::checked_directory_identity(
+                &self.admitted_root,
+                "admitted science workspace",
+            )? != self.identity
+        {
+            return Err(ScienceError::Invalid(
+                "science workspace pathname changed during source admission".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    fn store_relative_path(&self, root: &Path) -> Result<PathBuf> {
+        let relative = if root.is_absolute() {
+            let current = self.current_path()?;
+            root.strip_prefix(&self.admitted_root)
+                .or_else(|_| root.strip_prefix(&current))
+                .map_err(|_| {
+                    ScienceError::Invalid(
+                        "science store root must be inside the retained workspace".into(),
+                    )
+                })?
+                .to_path_buf()
+        } else {
+            root.to_path_buf()
+        };
+        if relative.as_os_str().is_empty() {
+            return Ok(relative);
+        }
+        validate_relative(&relative)?;
+        Ok(relative)
+    }
+
+    /// Snapshot one regular workspace file through the retained workspace
+    /// descriptor. The returned path is the exact handle-resolved path whose
+    /// bounded bytes were read.
+    #[cfg(unix)]
+    pub fn snapshot_regular_bounded(
+        &self,
+        source_path: impl AsRef<Path>,
+        max_bytes: u64,
+    ) -> Result<(PathBuf, Vec<u8>)> {
+        self.snapshot_regular_bounded_with_hook(source_path.as_ref(), max_bytes, || Ok(()))
+    }
+
+    #[cfg(not(unix))]
+    pub fn snapshot_regular_bounded(
+        &self,
+        _source_path: impl AsRef<Path>,
+        _max_bytes: u64,
+    ) -> Result<(PathBuf, Vec<u8>)> {
+        Err(ScienceError::FeatureDisabled(
+            "retained science source snapshot has no backend on this platform".into(),
+        ))
+    }
+
+    #[cfg(unix)]
+    fn snapshot_regular_bounded_with_hook(
+        &self,
+        source_path: &Path,
+        max_bytes: u64,
+        after_identity_snapshot: impl FnOnce() -> Result<()>,
+    ) -> Result<(PathBuf, Vec<u8>)> {
+        let requested = if source_path.is_absolute() {
+            source_path.to_path_buf()
+        } else {
+            self.admitted_root.join(source_path)
+        };
+        let requested_metadata = fs::symlink_metadata(&requested)?;
+        if requested_metadata.file_type().is_symlink() || !requested_metadata.is_file() {
+            return Err(ScienceError::Invalid(
+                "science source must be a non-symlink regular file".into(),
+            ));
+        }
+        if requested_metadata.len() > max_bytes {
+            return Err(ScienceError::Invalid(format!(
+                "science source exceeds the {max_bytes}-byte cap"
+            )));
+        }
+        let expected_source = PinnedDirectory::metadata_identity(&requested_metadata);
+        let canonical_source = dunce::canonicalize(&requested)?;
+        let relative = canonical_source
+            .strip_prefix(&self.admitted_root)
+            .map_err(|_| {
+                ScienceError::Invalid("science source must be inside the retained workspace".into())
+            })?
+            .to_path_buf();
+        validate_relative(&relative)?;
+
+        after_identity_snapshot()?;
+        self.assert_admitted_path_attached()?;
+
+        let parent = match relative.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => {
+                self.directory.open_directory(parent)?
+            }
+            _ => self.directory.try_clone()?,
+        };
+        let name = relative
+            .file_name()
+            .ok_or_else(|| ScienceError::Invalid("science source path has no file name".into()))?;
+        let mut file = openat(
+            &parent.file,
+            name,
+            libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
+            None,
+        )
+        .map_err(|error| match error {
+            ScienceError::Io(io) if io.raw_os_error() == Some(libc::ELOOP) => {
+                ScienceError::Invalid("science source must not traverse a symlink".into())
+            }
+            error => error,
+        })?;
+        let opened_metadata = file.metadata()?;
+        if !opened_metadata.is_file()
+            || PinnedDirectory::metadata_identity(&opened_metadata) != expected_source
+        {
+            return Err(ScienceError::Invalid(
+                "science source identity changed during descriptor-relative open".into(),
+            ));
+        }
+        if opened_metadata.len() > max_bytes {
+            return Err(ScienceError::Invalid(format!(
+                "science source exceeds the {max_bytes}-byte cap"
+            )));
+        }
+        let opened_handle = PinnedDirectory {
+            file: file.try_clone()?,
+        };
+        if opened_handle.final_path()? != canonical_source
+            || !canonical_source.starts_with(self.current_path()?)
+            || PinnedDirectory::metadata_identity(&fs::symlink_metadata(&requested)?)
+                != expected_source
+        {
+            return Err(ScienceError::Invalid(
+                "science source pathname no longer identifies the opened file".into(),
+            ));
+        }
+
+        let mut bytes = Vec::new();
+        std::io::Read::by_ref(&mut file)
+            .take(max_bytes.saturating_add(1))
+            .read_to_end(&mut bytes)?;
+        if bytes.len() as u64 > max_bytes {
+            return Err(ScienceError::Invalid(format!(
+                "science source exceeds the {max_bytes}-byte cap"
+            )));
+        }
+        let final_requested = fs::symlink_metadata(&requested)?;
+        if final_requested.file_type().is_symlink()
+            || !final_requested.is_file()
+            || PinnedDirectory::metadata_identity(&final_requested) != expected_source
+            || PinnedDirectory::metadata_identity(&file.metadata()?) != expected_source
+            || opened_handle.final_path()? != canonical_source
+        {
+            return Err(ScienceError::Invalid(
+                "science source changed while its bytes were read".into(),
+            ));
+        }
+        self.assert_admitted_path_attached()?;
+        Ok((canonical_source, bytes))
+    }
+
+    /// Provision a ScienceStore root beneath the retained workspace and
+    /// transfer the already-open root directory directly into the store.
+    ///
+    /// No pathname is canonicalized or reopened between directory creation
+    /// and store construction.
+    #[cfg(unix)]
+    pub fn create_science_store(&self, root: impl AsRef<Path>) -> Result<ScienceStore> {
+        let expected_relative = self.store_relative_path(root.as_ref())?;
+        let directory = if expected_relative.as_os_str().is_empty() {
+            self.directory.try_clone()?
+        } else {
+            self.directory.create_directories(&expected_relative)?
+        };
+        let workspace_path = self.current_path()?;
+        let root_path = directory.final_path()?;
+        let actual_relative = root_path.strip_prefix(&workspace_path).map_err(|_| {
+            ScienceError::Invalid("opened science store root escaped the retained workspace".into())
+        })?;
+        if actual_relative != expected_relative
+            || directory.final_path()? != root_path
+            || directory.identity()?
+                != PinnedDirectory::checked_directory_identity(
+                    &root_path,
+                    "opened science store root",
+                )?
+        {
+            return Err(ScienceError::Invalid(
+                "science store root identity changed during retained provisioning".into(),
+            ));
+        }
+        Ok(ScienceStore {
+            root: root_path,
+            root_capability: Arc::new(Mutex::new(StoreRootCapability::Pinned(directory))),
+            writes: shared_science_write_lock(),
+        })
+    }
+
+    #[cfg(not(unix))]
+    pub fn create_science_store(&self, _root: impl AsRef<Path>) -> Result<ScienceStore> {
+        Err(ScienceError::FeatureDisabled(
+            "retained science store provisioning has no backend on this platform".into(),
+        ))
+    }
 }
 
 impl ScienceStore {
@@ -254,38 +626,45 @@ impl ScienceStore {
         Self {
             root,
             root_capability: Arc::new(Mutex::new(root_capability)),
-            writes: Arc::new(Mutex::new(())),
+            writes: shared_science_write_lock(),
         }
     }
 
-    /// Open and retain the store root first, then prove the opened directory's
-    /// handle-resolved location is inside the canonical workspace boundary.
-    /// Product adapters use this constructor after provisioning the root so an
-    /// ancestor swap between pathname validation and store construction cannot
-    /// redirect later record writes.
+    /// Open and retain the store root relative to a pinned canonical workspace
+    /// directory, then verify both the pre-open identity and the final
+    /// handle-resolved location. Product adapters use this constructor after
+    /// provisioning the root so a rename, symlink, or in-workspace replacement
+    /// between pathname inspection and open cannot redirect later record
+    /// writes.
     pub fn new_confined(
         root: impl Into<PathBuf>,
         workspace_root: impl AsRef<Path>,
     ) -> Result<Self> {
         let root = root.into();
-        let metadata = fs::symlink_metadata(&root)?;
-        if metadata.file_type().is_symlink() || !metadata.is_dir() {
-            return Err(ScienceError::Invalid(
-                "science store root must be a non-symlink directory".into(),
-            ));
-        }
-        let directory = PinnedDirectory::open_path(&root)?;
-        let opened_root = directory.final_path()?;
-        let workspace = dunce::canonicalize(workspace_root.as_ref())?;
-        if !opened_root.starts_with(&workspace) {
-            return Err(ScienceError::Invalid(
-                "opened science store root escapes canonical workspace".into(),
-            ));
-        }
+        #[cfg(unix)]
+        let directory = PinnedDirectory::open_existing_confined(&root, workspace_root.as_ref())?;
+        #[cfg(not(unix))]
+        let directory = {
+            let metadata = fs::symlink_metadata(&root)?;
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                return Err(ScienceError::Invalid(
+                    "science store root must be a non-symlink directory".into(),
+                ));
+            }
+            let directory = PinnedDirectory::open_path(&root)?;
+            let opened_root = directory.final_path()?;
+            let workspace = dunce::canonicalize(workspace_root.as_ref())?;
+            if !opened_root.starts_with(&workspace) {
+                return Err(ScienceError::Invalid(
+                    "opened science store root escapes canonical workspace".into(),
+                ));
+            }
+            directory
+        };
         Ok(Self {
             root,
             root_capability: Arc::new(Mutex::new(StoreRootCapability::Pinned(directory))),
-            writes: Arc::new(Mutex::new(())),
+            writes: shared_science_write_lock(),
         })
     }
 
@@ -308,8 +687,112 @@ impl ScienceStore {
         Ok(self.root_directory()?.identity()? == project_store.root_identity()?)
     }
 
+    /// Retain the process-wide Science authority write lock across a
+    /// cross-store commit closure.
+    ///
+    /// The caller must acquire its ProjectStore write guard first. The closure
+    /// may reopen authority-owned records and write that already-guarded
+    /// ProjectStore, but must not call a ScienceStore method which itself
+    /// acquires `writes`. This Project -> Science ordering matches the other
+    /// cross-store product paths and prevents ABBA deadlocks. Migration uses
+    /// the seam to keep Running+Allow stable from final validation through the
+    /// project commit marker; otherwise a public terminal transition could
+    /// race between the check and publication.
+    pub(crate) fn with_exclusive_authority<T>(
+        &self,
+        operation: impl FnOnce() -> Result<T>,
+    ) -> Result<T> {
+        let _guard = self
+            .writes
+            .lock()
+            .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
+        operation()
+    }
+
+    /// Persist a cross-store point-of-no-return while the caller retains
+    /// `writes`. This method intentionally does not acquire the mutex again.
+    pub(crate) fn mark_authority_commit_fence_unlocked(
+        &self,
+        context: &RunContext,
+        call_id: &CallId,
+        operation_id: &str,
+    ) -> Result<()> {
+        validate_context(context)?;
+        call_id.validate()?;
+        project::mutation::validate_operation_id(operation_id)?;
+        let run_dir = self.open_run_directory(&context.run_id)?;
+        let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
+        validate_context(&run.context)?;
+        if run.context != *context || run.state != RunState::Running {
+            return Err(ScienceError::Invalid(
+                "authority commit fence requires the exact Running context".into(),
+            ));
+        }
+        Self::require_running_allowed_output(&run_dir, &run, &context.run_id, Some(call_id))?;
+        let expected = AuthorityCommitFence {
+            schema_version: SCHEMA_VERSION,
+            run_id: context.run_id.clone(),
+            project_id: context.project_id.clone(),
+            call_id: call_id.clone(),
+            operation_id: operation_id.to_owned(),
+        };
+        let path = Path::new(AUTHORITY_COMMIT_FENCE_FILE);
+        match run_dir.read_json::<AuthorityCommitFence>(path) {
+            Ok(existing) if existing == expected => return Ok(()),
+            Ok(_) => {
+                return Err(ScienceError::Invalid(
+                    "authority commit fence conflicts with another operation".into(),
+                ));
+            }
+            Err(ScienceError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+        match run_dir.replace_json_atomic(path, &expected) {
+            Ok(()) => Ok(()),
+            Err(error) => match run_dir.read_json::<AuthorityCommitFence>(path) {
+                Ok(reopened) if reopened == expected => Ok(()),
+                _ => Err(error),
+            },
+        }
+    }
+
+    fn authority_commit_fence(run_dir: &PinnedDirectory) -> Result<Option<AuthorityCommitFence>> {
+        match run_dir.read_json(Path::new(AUTHORITY_COMMIT_FENCE_FILE)) {
+            Ok(fence) => Ok(Some(fence)),
+            Err(ScienceError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn reject_fenced_rollback(run_dir: &PinnedDirectory) -> Result<()> {
+        if Self::authority_commit_fence(run_dir)?.is_some() {
+            return Err(ScienceError::Invalid(
+                "authority passed its durable project commit fence and cannot roll back or terminalize unsuccessfully"
+                    .into(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Prove that workflow I/O and the authority store retained the same
+    /// directory handle. Comparing path strings is insufficient because an
+    /// attacker can rename and replace a validated store between independent
+    /// opens.
+    pub fn shares_root_capability_with_workflow_io(
+        &self,
+        workflow_io: &workflow::WorkflowIoCapability,
+    ) -> Result<bool> {
+        Ok(self.root_directory()?.identity()? == workflow_io.shared_root().identity()?)
+    }
+
     pub fn create_run(&self, context: RunContext) -> Result<RunRecord> {
         validate_context(&context)?;
+        let _guard = self
+            .writes
+            .lock()
+            .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
         let record = RunRecord {
             schema_version: SCHEMA_VERSION,
             context,
@@ -380,16 +863,41 @@ impl ScienceStore {
         state: RunState,
         reason: Option<String>,
     ) -> Result<RunRecord> {
+        let _guard = self
+            .writes
+            .lock()
+            .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
+        self.transition_unlocked(run_id, state, reason)
+    }
+
+    /// Transition while the caller retains `writes`.
+    ///
+    /// Keeping this separate is essential for event failure and interrupted
+    /// recovery paths, which must make a terminal transition without trying to
+    /// acquire the non-reentrant mutex a second time.
+    fn transition_unlocked(
+        &self,
+        run_id: &RunId,
+        state: RunState,
+        reason: Option<String>,
+    ) -> Result<RunRecord> {
         let mut run = self.load_run(run_id)?;
         if run.state.terminal() {
             return Err(ScienceError::Invalid(
                 "terminal run cannot transition".into(),
             ));
         }
+        if !run.state.can_transition_to(state) {
+            return Err(ScienceError::Invalid(format!(
+                "illegal science run transition: {:?} -> {state:?}",
+                run.state
+            )));
+        }
+        let run_dir = self.open_run_directory(run_id)?;
+        Self::reject_fenced_rollback(&run_dir)?;
         run.state = state;
         run.terminal_reason = reason;
-        self.open_run_directory(run_id)?
-            .replace_json_atomic(Path::new("run.json"), &run)?;
+        run_dir.replace_json_atomic(Path::new("run.json"), &run)?;
         Ok(run)
     }
 
@@ -398,14 +906,244 @@ impl ScienceStore {
     /// reported an error. Returning an error while a read-back is already
     /// Succeeded would create an API/durable split that callers cannot safely
     /// roll back because terminal states are immutable.
+    ///
+    /// This compatibility seam verifies the durable Allow, but does not bind a
+    /// caller snapshot of every output collection. New actor protocols must
+    /// use `transition_succeeded_with_manifest`.
     pub fn transition_succeeded_verified(&self, run_id: &RunId) -> Result<RunRecord> {
-        match self.transition(run_id, RunState::Succeeded, None) {
-            Ok(run) => Ok(run),
-            Err(error) => match self.load_run(run_id) {
-                Ok(run) if run.state == RunState::Succeeded => Ok(run),
-                _ => Err(error),
-            },
+        let _guard = self
+            .writes
+            .lock()
+            .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
+        let run_dir = self.open_run_directory(run_id)?;
+        let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
+        validate_context(&run.context)?;
+        if run.context.run_id != *run_id {
+            return Err(ScienceError::Invalid(
+                "run record identity does not match requested run".into(),
+            ));
         }
+        if Self::authority_commit_fence(&run_dir)?.is_some() {
+            return Err(ScienceError::Invalid(
+                "a fenced cross-store authority requires an exact completion manifest".into(),
+            ));
+        }
+        Self::require_running_allowed_output(&run_dir, &run, run_id, None)?;
+        Self::persist_succeeded_unlocked(&run_dir, run)
+    }
+
+    /// Atomically verify an exact completion snapshot and commit Succeeded.
+    ///
+    /// No public store method is called after acquiring `writes`; all
+    /// registries and payloads are read directly through the retained run
+    /// capability. This avoids both a non-reentrant lock and the
+    /// verify-unlock-mutate-relock race that the manifest closes.
+    pub fn transition_succeeded_with_manifest(
+        &self,
+        manifest: &SuccessfulCompletionManifest,
+    ) -> Result<RunRecord> {
+        validate_context(&manifest.context)?;
+        let run_id = &manifest.context.run_id;
+        let _guard = self
+            .writes
+            .lock()
+            .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
+        let run_dir = self.open_run_directory(run_id)?;
+        let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
+        validate_context(&run.context)?;
+        if run.context != manifest.context || run.state != RunState::Running {
+            return Err(ScienceError::Invalid(
+                "successful completion manifest does not bind the running context".into(),
+            ));
+        }
+        let approval = Self::running_allowed_approval(&run_dir, &run, run_id, None)?;
+
+        let artifacts: Vec<Artifact> = run_dir.read_json(Path::new("artifacts.json"))?;
+        let evidence: Vec<Evidence> = run_dir.read_json(Path::new("evidence.json"))?;
+        let provenance: Vec<Provenance> = run_dir.read_json(Path::new("provenance.json"))?;
+        let previews: Vec<preview::PreviewRecord> =
+            run_dir.read_json(Path::new("previews.json"))?;
+        let events: Vec<Event> = run_dir.read_json(Path::new("events.json"))?;
+        validate_artifacts(&artifacts, run_id)?;
+        validate_run_ids(evidence.iter().map(|item| &item.run_id), run_id, "evidence")?;
+        validate_run_ids(
+            provenance.iter().map(|item| &item.run_id),
+            run_id,
+            "provenance",
+        )?;
+        validate_previews(&previews, run_id)?;
+        validate_events(&events, run_id)?;
+
+        if artifacts != manifest.artifacts
+            || evidence != manifest.evidence
+            || provenance != manifest.provenance
+            || previews != manifest.previews
+            || events != manifest.events
+        {
+            return Err(ScienceError::Invalid(
+                "successful completion manifest does not exactly match durable collections".into(),
+            ));
+        }
+        Self::verify_completion_collections(
+            &run_dir,
+            run_id,
+            &approval,
+            &artifacts,
+            &evidence,
+            &provenance,
+            &previews,
+            &events,
+            &manifest.final_event,
+        )?;
+        Self::persist_succeeded_unlocked(&run_dir, run)
+    }
+
+    fn persist_succeeded_unlocked(
+        run_dir: &PinnedDirectory,
+        mut run: RunRecord,
+    ) -> Result<RunRecord> {
+        if run.state != RunState::Running {
+            return Err(ScienceError::Invalid(
+                "only a Running authority may commit Succeeded".into(),
+            ));
+        }
+        run.state = RunState::Succeeded;
+        run.terminal_reason = None;
+        match run_dir.replace_json_atomic(Path::new("run.json"), &run) {
+            Ok(()) => Ok(run),
+            Err(error) => {
+                let read_back: Result<RunRecord> = run_dir.read_json(Path::new("run.json"));
+                match read_back {
+                    Ok(read_back)
+                        if read_back.context == run.context
+                            && read_back.state == RunState::Succeeded =>
+                    {
+                        Ok(read_back)
+                    }
+                    _ => Err(error),
+                }
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn verify_completion_collections(
+        run_dir: &PinnedDirectory,
+        run_id: &RunId,
+        approval: &Approval,
+        artifacts: &[Artifact],
+        evidence: &[Evidence],
+        provenance: &[Provenance],
+        previews: &[preview::PreviewRecord],
+        events: &[Event],
+        final_event: &Event,
+    ) -> Result<()> {
+        if artifacts.is_empty() || evidence.is_empty() || provenance.is_empty() {
+            return Err(ScienceError::Invalid(
+                "successful completion requires artifact, evidence, and provenance".into(),
+            ));
+        }
+
+        let artifact_dir = run_dir.open_directory(Path::new("artifacts"))?;
+        let mut artifact_paths = BTreeSet::new();
+        let mut artifact_hashes = BTreeSet::new();
+        for artifact in artifacts {
+            if artifact.run_id != *run_id
+                || artifact.call_id != approval.call_id
+                || !artifact_paths.insert(artifact.relative_path.clone())
+                || !artifact_hashes.insert(artifact.sha256.clone())
+            {
+                return Err(ScienceError::Invalid(
+                    "completion artifacts do not exactly bind the allowed call".into(),
+                ));
+            }
+            let (bytes, sha256) = artifact_dir.hash_regular(&artifact.relative_path)?;
+            if bytes != artifact.bytes || sha256 != artifact.sha256 {
+                return Err(ScienceError::Invalid(
+                    "completion artifact bytes do not match registered hash/length".into(),
+                ));
+            }
+        }
+
+        let mut cited_artifacts = BTreeSet::new();
+        for item in evidence {
+            let Some(artifact_sha256) = item.artifact_sha256.as_ref() else {
+                return Err(ScienceError::Invalid(
+                    "completion evidence must cite an artifact hash".into(),
+                ));
+            };
+            if item.run_id != *run_id
+                || item.claim.trim().is_empty()
+                || item.source.trim().is_empty()
+                || !artifact_hashes.contains(artifact_sha256)
+            {
+                return Err(ScienceError::Invalid(
+                    "completion evidence is incomplete or references an unknown artifact".into(),
+                ));
+            }
+            cited_artifacts.insert(artifact_sha256.clone());
+        }
+        if cited_artifacts != artifact_hashes {
+            return Err(ScienceError::Invalid(
+                "completion evidence must exactly cover artifact hashes".into(),
+            ));
+        }
+
+        if provenance.iter().any(|item| {
+            item.run_id != *run_id
+                || item.source_uri.trim().is_empty()
+                || item.license.trim().is_empty()
+                || item.tool.trim().is_empty()
+                || !is_sha256_hex(&item.input_sha256)
+        }) {
+            return Err(ScienceError::Invalid(
+                "completion provenance is incomplete or malformed".into(),
+            ));
+        }
+
+        let mut preview_paths = BTreeSet::new();
+        for preview in previews {
+            if preview.run_id != *run_id
+                || preview.call_id != approval.call_id
+                || preview.tool.trim().is_empty()
+                || !preview_paths.insert(preview.relative_path.clone())
+                || !artifacts.iter().any(|artifact| {
+                    artifact.relative_path == preview.relative_path
+                        && artifact.sha256 == preview.artifact_sha256
+                        && artifact.call_id == preview.call_id
+                })
+            {
+                return Err(ScienceError::Invalid(
+                    "completion preview is not uniquely bound to an artifact".into(),
+                ));
+            }
+        }
+
+        if events.is_empty()
+            || events.last() != Some(final_event)
+            || events.iter().filter(|event| *event == final_event).count() != 1
+        {
+            return Err(ScienceError::Invalid(
+                "completion requires one unique final event at the end of the event collection"
+                    .into(),
+            ));
+        }
+        for (index, event) in events.iter().enumerate() {
+            let expected_seq = u64::try_from(index)
+                .map_err(|_| ScienceError::Invalid("event collection is too large".into()))?
+                + 1;
+            if event.schema_version != SCHEMA_VERSION
+                || event.run_id != *run_id
+                || event.seq != expected_seq
+                || event.actor.trim().is_empty()
+                || event.kind.trim().is_empty()
+            {
+                return Err(ScienceError::Invalid(
+                    "completion event collection is not contiguous and well formed".into(),
+                ));
+            }
+        }
+        Ok(())
     }
 
     pub fn append_event(
@@ -449,7 +1187,7 @@ impl ScienceStore {
             Ok(events) => events,
             Err(error) => {
                 if fail_run {
-                    let _ = self.transition(
+                    let _ = self.transition_unlocked(
                         run_id,
                         RunState::Failed,
                         Some(format!("event persistence failed: {error}")),
@@ -471,7 +1209,7 @@ impl ScienceStore {
         events.push(event.clone());
         if let Err(error) = run_dir.replace_json_atomic(Path::new("events.json"), &events) {
             if fail_run {
-                let _ = self.transition(
+                let _ = self.transition_unlocked(
                     run_id,
                     RunState::Failed,
                     Some(format!("event persistence failed: {error}")),
@@ -502,8 +1240,25 @@ impl ScienceStore {
         if approval.decision != ApprovalDecision::Pending {
             return Err(ScienceError::Invalid("new approval must be pending".into()));
         }
+        let _guard = self
+            .writes
+            .lock()
+            .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
         self.assert_owner(&approval.project_id, &approval.run_id, &approval.owner_id)?;
         let run_dir = self.open_run_directory(&approval.run_id)?;
+        let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
+        validate_context(&run.context)?;
+        if run.context.run_id != approval.run_id
+            || run.context.project_id != approval.project_id
+            || run.context.owner_id != approval.owner_id
+        {
+            return Err(ScienceError::Ownership);
+        }
+        if run.state != RunState::Created {
+            return Err(ScienceError::Invalid(
+                "pending approval may only be requested for a Created run".into(),
+            ));
+        }
         let mut items: Vec<Approval> = run_dir.read_json(Path::new("approvals.json"))?;
         validate_approvals(&items, &approval.run_id)?;
         if items.iter().any(|item| item.call_id == approval.call_id) {
@@ -527,8 +1282,20 @@ impl ScienceStore {
         if !decision.terminal() {
             return Err(ScienceError::Invalid("decision must be terminal".into()));
         }
+        let _guard = self
+            .writes
+            .lock()
+            .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
         self.assert_owner(project, run_id, owner)?;
         let run_dir = self.open_run_directory(run_id)?;
+        let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
+        validate_context(&run.context)?;
+        if run.context.run_id != *run_id
+            || run.context.project_id != *project
+            || run.context.owner_id != owner
+        {
+            return Err(ScienceError::Ownership);
+        }
         let mut items: Vec<Approval> = run_dir.read_json(Path::new("approvals.json"))?;
         validate_approvals(&items, run_id)?;
         let item = items
@@ -541,11 +1308,58 @@ impl ScienceStore {
             }
             return Err(ScienceError::ApprovalConflict);
         }
+        if run.state != RunState::AwaitingApproval {
+            return Err(ScienceError::Invalid(
+                "pending approval may only be decided while AwaitingApproval".into(),
+            ));
+        }
         item.decision = decision;
         item.decided_at = Some(Utc::now());
         let result = item.clone();
         run_dir.replace_json_atomic(Path::new("approvals.json"), &items)?;
         Ok(result)
+    }
+
+    fn require_running_allowed_output(
+        run_dir: &PinnedDirectory,
+        run: &RunRecord,
+        expected_run_id: &RunId,
+        call: Option<&CallId>,
+    ) -> Result<()> {
+        Self::running_allowed_approval(run_dir, run, expected_run_id, call).map(|_| ())
+    }
+
+    fn running_allowed_approval(
+        run_dir: &PinnedDirectory,
+        run: &RunRecord,
+        expected_run_id: &RunId,
+        call: Option<&CallId>,
+    ) -> Result<Approval> {
+        validate_context(&run.context)?;
+        if run.context.run_id != *expected_run_id || run.state != RunState::Running {
+            return Err(ScienceError::Invalid(
+                "scientific outputs require an allowed running run".into(),
+            ));
+        }
+        let approvals: Vec<Approval> = run_dir.read_json(Path::new("approvals.json"))?;
+        validate_approvals(&approvals, &run.context.run_id)?;
+        let [approval] = approvals.as_slice() else {
+            return Err(ScienceError::Invalid(
+                "scientific outputs require exactly one approval".into(),
+            ));
+        };
+        if approval.project_id != run.context.project_id
+            || approval.run_id != run.context.run_id
+            || approval.owner_id != run.context.owner_id
+            || call.is_some_and(|call| approval.call_id != *call)
+            || approval.decision != ApprovalDecision::Allow
+            || approval.decided_at.is_none()
+        {
+            return Err(ScienceError::Invalid(
+                "scientific outputs are not bound to a terminal Allow".into(),
+            ));
+        }
+        Ok(approval.clone())
     }
 
     pub fn put_artifact(
@@ -562,31 +1376,19 @@ impl ScienceStore {
         project.validate()?;
         run_id.validate()?;
         call.validate()?;
-        self.assert_owner(project, run_id, owner)?;
         validate_relative(relative)?;
         let _guard = self
             .writes
             .lock()
             .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
+        self.assert_owner(project, run_id, owner)?;
         let run_dir = self.open_run_directory(run_id)?;
         let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
-        if run.state.terminal() {
-            return Err(ScienceError::Invalid(
-                "terminal science run outputs are immutable".into(),
-            ));
-        }
-        let mut items: Vec<Artifact> = run_dir.read_json(Path::new("artifacts.json"))?;
-        validate_artifacts(&items, run_id)?;
-        if items
-            .iter()
-            .any(|artifact| artifact.relative_path == relative)
-        {
-            return Err(ScienceError::Invalid(
-                "artifact path is already registered to run".into(),
-            ));
+        Self::require_running_allowed_output(&run_dir, &run, run_id, Some(&call))?;
+        if run.context.project_id != *project || run.context.owner_id != owner {
+            return Err(ScienceError::Ownership);
         }
         let artifact_dir = run_dir.open_directory(Path::new("artifacts"))?;
-        artifact_dir.write_new_atomic(relative, bytes)?;
         let artifact = Artifact {
             run_id: run_id.clone(),
             call_id: call,
@@ -596,9 +1398,82 @@ impl ScienceStore {
             mime: mime.into(),
             preview: preview.into(),
         };
+        let mut items: Vec<Artifact> = run_dir.read_json(Path::new("artifacts.json"))?;
+        validate_artifacts(&items, run_id)?;
+        if let Some(registered) = items
+            .iter()
+            .find(|registered| registered.relative_path == relative)
+        {
+            if registered != &artifact {
+                return Err(ScienceError::Invalid(
+                    "artifact path is registered with different metadata".into(),
+                ));
+            }
+            match artifact_dir.read_regular(relative) {
+                Ok(existing) if existing == bytes => return Ok(registered.clone()),
+                Ok(_) => {
+                    return Err(ScienceError::Invalid(
+                        "registered artifact payload differs from the exact retry".into(),
+                    ));
+                }
+                Err(ScienceError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
+                    // A prior registry replacement may have become visible
+                    // before its durability error was returned and cleanup
+                    // removed the payload. Repair only the exact registered
+                    // bytes supplied by the idempotent retry.
+                    artifact_dir.write_new_atomic(relative, bytes)?;
+                    let repaired = artifact_dir.read_regular(relative)?;
+                    if repaired != bytes {
+                        return Err(ScienceError::Invalid(
+                            "repaired artifact payload differs from its registry".into(),
+                        ));
+                    }
+                    return Ok(registered.clone());
+                }
+                Err(error) => return Err(error),
+            }
+        }
+
+        match artifact_dir.read_regular(relative) {
+            Ok(existing) if existing == bytes => {
+                // Recover a payload whose no-replace publication became
+                // visible before the registry commit.
+            }
+            Ok(_) => {
+                return Err(ScienceError::Invalid(
+                    "unregistered artifact payload differs from the exact retry".into(),
+                ));
+            }
+            Err(ScienceError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
+                if let Err(write_error) = artifact_dir.write_new_atomic(relative, bytes) {
+                    match artifact_dir.read_regular(relative) {
+                        Ok(existing) if existing == bytes => {}
+                        Ok(_) => {
+                            return Err(ScienceError::Invalid(
+                                "artifact publication raced with different payload bytes".into(),
+                            ));
+                        }
+                        Err(_) => return Err(write_error),
+                    }
+                }
+            }
+            Err(error) => return Err(error),
+        }
         items.push(artifact.clone());
         if let Err(error) = run_dir.replace_json_atomic(Path::new("artifacts.json"), &items) {
-            let _ = artifact_dir.unlink_file(relative);
+            let reopened: Vec<Artifact> = match run_dir.read_json(Path::new("artifacts.json")) {
+                Ok(reopened) => reopened,
+                Err(_) => return Err(error),
+            };
+            if validate_artifacts(&reopened, run_id).is_ok()
+                && reopened.iter().any(|registered| registered == &artifact)
+                && artifact_dir.read_regular(relative)? == bytes
+            {
+                return Ok(artifact);
+            }
+            // Preserve an exact orphan payload for the next idempotent retry.
+            // Unlinking after an ambiguous registry error can invert the
+            // failure into a durable registry-to-missing-file corruption.
             return Err(error);
         }
         Ok(artifact)
@@ -619,7 +1494,6 @@ impl ScienceStore {
         project.validate()?;
         run_id.validate()?;
         call.validate()?;
-        self.assert_owner(project, run_id, owner)?;
         for relative in relative_paths {
             validate_relative(relative)?;
         }
@@ -627,7 +1501,14 @@ impl ScienceStore {
             .writes
             .lock()
             .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
+        self.assert_owner(project, run_id, owner)?;
         let run_dir = self.open_run_directory(run_id)?;
+        let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
+        Self::reject_fenced_rollback(&run_dir)?;
+        Self::require_running_allowed_output(&run_dir, &run, run_id, Some(call))?;
+        if run.context.project_id != *project || run.context.owner_id != owner {
+            return Err(ScienceError::Ownership);
+        }
         let mut items: Vec<Artifact> = run_dir.read_json(Path::new("artifacts.json"))?;
         validate_artifacts(&items, run_id)?;
         let removed: Vec<PathBuf> = items
@@ -661,11 +1542,11 @@ impl ScienceStore {
     /// still-Running actor call after its commit path fails.
     ///
     /// A run is the transaction boundary for science execution. Clearing the
-    /// artifact registry, evidence, and provenance before unlinking the known
-    /// payload names ensures a subsequent Failed terminal cannot retain a
-    /// partially authoritative result. Corrupt metadata is overwritten rather
-    /// than parsed during rollback so the corruption that triggered rollback
-    /// cannot prevent de-publication.
+    /// artifact registry, evidence, provenance, and previews before unlinking
+    /// the known payload names ensures a subsequent Failed terminal cannot
+    /// retain a partially authoritative result. Corrupt metadata is
+    /// overwritten rather than parsed during rollback so the corruption that
+    /// triggered rollback cannot prevent de-publication.
     pub fn discard_running_outputs(
         &self,
         project: &ProjectId,
@@ -686,6 +1567,7 @@ impl ScienceStore {
             .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
         let run_dir = self.open_run_directory(run_id)?;
         let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
+        Self::reject_fenced_rollback(&run_dir)?;
         validate_context(&run.context)?;
         if run.context.run_id != *run_id
             || run.context.project_id != *project
@@ -723,9 +1605,93 @@ impl ScienceStore {
         run_dir.replace_json_atomic(Path::new("artifacts.json"), &Vec::<Artifact>::new())?;
         run_dir.replace_json_atomic(Path::new("evidence.json"), &Vec::<Evidence>::new())?;
         run_dir.replace_json_atomic(Path::new("provenance.json"), &Vec::<Provenance>::new())?;
+        run_dir.replace_json_atomic(
+            Path::new("previews.json"),
+            &Vec::<preview::PreviewRecord>::new(),
+        )?;
         let artifact_dir = run_dir.open_directory(Path::new("artifacts"))?;
         for relative in relative_paths {
-            artifact_dir.unlink_file(relative)?;
+            match artifact_dir.unlink_file(relative) {
+                Ok(()) => {}
+                Err(ScienceError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(())
+    }
+
+    /// Clear outputs that appeared before a pending approval was decided.
+    ///
+    /// Such records cannot be authoritative: execution has not been allowed.
+    /// The caller can then persist a Failed terminal without leaving forged
+    /// registries serviceable. Identity and the one exact Pending approval are
+    /// checked under the Science write lock before any record is changed.
+    pub fn discard_pending_unauthorized_outputs(
+        &self,
+        project: &ProjectId,
+        run_id: &RunId,
+        owner: &str,
+        call: &CallId,
+    ) -> Result<()> {
+        project.validate()?;
+        run_id.validate()?;
+        call.validate()?;
+        let _guard = self
+            .writes
+            .lock()
+            .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
+        let run_dir = self.open_run_directory(run_id)?;
+        let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
+        validate_context(&run.context)?;
+        if run.context.run_id != *run_id
+            || run.context.project_id != *project
+            || run.context.owner_id != owner
+            || run.state != RunState::AwaitingApproval
+        {
+            return Err(ScienceError::Ownership);
+        }
+        Self::reject_fenced_rollback(&run_dir)?;
+        let approvals: Vec<Approval> = run_dir.read_json(Path::new("approvals.json"))?;
+        validate_approvals(&approvals, run_id)?;
+        let [approval] = approvals.as_slice() else {
+            return Err(ScienceError::Invalid(
+                "pending output rejection requires exactly one approval".into(),
+            ));
+        };
+        if approval.project_id != *project
+            || approval.run_id != *run_id
+            || approval.owner_id != owner
+            || approval.call_id != *call
+            || approval.decision != ApprovalDecision::Pending
+            || approval.decided_at.is_some()
+        {
+            return Err(ScienceError::Invalid(
+                "pending output rejection is not bound to the exact pending call".into(),
+            ));
+        }
+
+        let registered_paths = run_dir
+            .read_json::<Vec<Artifact>>(Path::new("artifacts.json"))
+            .ok()
+            .filter(|artifacts| validate_artifacts(artifacts, run_id).is_ok())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|artifact| artifact.relative_path)
+            .collect::<Vec<_>>();
+        run_dir.replace_json_atomic(Path::new("artifacts.json"), &Vec::<Artifact>::new())?;
+        run_dir.replace_json_atomic(Path::new("evidence.json"), &Vec::<Evidence>::new())?;
+        run_dir.replace_json_atomic(Path::new("provenance.json"), &Vec::<Provenance>::new())?;
+        run_dir.replace_json_atomic(
+            Path::new("previews.json"),
+            &Vec::<preview::PreviewRecord>::new(),
+        )?;
+        let artifact_dir = run_dir.open_directory(Path::new("artifacts"))?;
+        for relative in registered_paths {
+            match artifact_dir.unlink_file(&relative) {
+                Ok(()) => {}
+                Err(ScienceError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error),
+            }
         }
         Ok(())
     }
@@ -738,11 +1704,7 @@ impl ScienceStore {
             .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
         let run_dir = self.open_run_directory(&evidence.run_id)?;
         let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
-        if run.state.terminal() {
-            return Err(ScienceError::Invalid(
-                "terminal science run outputs are immutable".into(),
-            ));
-        }
+        Self::require_running_allowed_output(&run_dir, &run, &evidence.run_id, None)?;
         let mut items: Vec<Evidence> = run_dir.read_json(Path::new("evidence.json"))?;
         validate_run_ids(
             items.iter().map(|item| &item.run_id),
@@ -760,11 +1722,7 @@ impl ScienceStore {
             .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
         let run_dir = self.open_run_directory(&provenance.run_id)?;
         let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
-        if run.state.terminal() {
-            return Err(ScienceError::Invalid(
-                "terminal science run outputs are immutable".into(),
-            ));
-        }
+        Self::require_running_allowed_output(&run_dir, &run, &provenance.run_id, None)?;
         let mut items: Vec<Provenance> = run_dir.read_json(Path::new("provenance.json"))?;
         validate_run_ids(
             items.iter().map(|item| &item.run_id),
@@ -785,7 +1743,29 @@ impl ScienceStore {
         preview.run_id.validate()?;
         preview.call_id.validate()?;
         validate_relative(&preview.relative_path)?;
+        let _guard = self
+            .writes
+            .lock()
+            .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
         let run_dir = self.open_run_directory(&preview.run_id)?;
+        let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
+        Self::require_running_allowed_output(
+            &run_dir,
+            &run,
+            &preview.run_id,
+            Some(&preview.call_id),
+        )?;
+        let artifacts: Vec<Artifact> = run_dir.read_json(Path::new("artifacts.json"))?;
+        validate_artifacts(&artifacts, &preview.run_id)?;
+        if !artifacts.iter().any(|artifact| {
+            artifact.call_id == preview.call_id
+                && artifact.relative_path == preview.relative_path
+                && artifact.sha256 == preview.artifact_sha256
+        }) {
+            return Err(ScienceError::Invalid(
+                "preview is not bound to a registered artifact".into(),
+            ));
+        }
         let mut items: Vec<preview::PreviewRecord> =
             run_dir.read_json(Path::new("previews.json"))?;
         validate_previews(&items, &preview.run_id)?;
@@ -1032,6 +2012,10 @@ impl ScienceStore {
     }
 
     pub fn recover_interrupted(&self, run_id: &RunId) -> Result<RunRecord> {
+        let _guard = self
+            .writes
+            .lock()
+            .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
         let run = self.load_run(run_id)?;
         if run.state.terminal() {
             return Ok(run);
@@ -1050,7 +2034,7 @@ impl ScienceStore {
         if approvals_changed {
             run_dir.replace_json_atomic(Path::new("approvals.json"), &approvals)?;
         }
-        self.transition(
+        self.transition_unlocked(
             run_id,
             RunState::Interrupted,
             Some("process restarted before terminal state".into()),
@@ -1118,6 +2102,96 @@ struct PinnedDirectory {
 
 #[cfg(unix)]
 impl PinnedDirectory {
+    fn metadata_identity(metadata: &fs::Metadata) -> StoreRootIdentity {
+        use std::os::unix::fs::MetadataExt as _;
+
+        StoreRootIdentity::Unix {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        }
+    }
+
+    fn checked_directory_identity(path: &Path, kind: &str) -> Result<StoreRootIdentity> {
+        let metadata = fs::symlink_metadata(path)?;
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return Err(ScienceError::Invalid(format!(
+                "{kind} must be a non-symlink directory"
+            )));
+        }
+        Ok(Self::metadata_identity(&metadata))
+    }
+
+    /// Open an existing root only through a retained workspace directory.
+    ///
+    /// The two identity snapshots are intentionally taken before deriving or
+    /// opening the target path. Any rename/replacement during that window is
+    /// rejected by the descriptor and pathname identity checks below.
+    fn open_existing_confined(root: &Path, workspace_root: &Path) -> Result<Self> {
+        Self::open_existing_confined_with_snapshot_hook(root, workspace_root, || Ok(()))
+    }
+
+    fn open_existing_confined_with_snapshot_hook(
+        root: &Path,
+        workspace_root: &Path,
+        after_snapshot: impl FnOnce() -> Result<()>,
+    ) -> Result<Self> {
+        let root_absolute = if root.is_absolute() {
+            root.to_path_buf()
+        } else {
+            std::env::current_dir()?.join(root)
+        };
+        let expected_root = Self::checked_directory_identity(&root_absolute, "science store root")?;
+
+        let workspace = dunce::canonicalize(workspace_root)?;
+        if !workspace.is_absolute() {
+            return Err(ScienceError::Invalid(
+                "workspace root must resolve to an absolute path".into(),
+            ));
+        }
+        let expected_workspace =
+            Self::checked_directory_identity(&workspace, "canonical workspace root")?;
+
+        after_snapshot()?;
+
+        // Do not canonicalize this path a second time: each component of the
+        // already-canonical workspace is opened with O_NOFOLLOW, then its
+        // retained identity is compared with the pre-open snapshot.
+        let workspace_directory = Self::open_absolute_path(&workspace)?;
+        if workspace_directory.identity()? != expected_workspace
+            || workspace_directory.final_path()? != workspace
+            || Self::checked_directory_identity(&workspace, "canonical workspace root")?
+                != expected_workspace
+        {
+            return Err(ScienceError::Invalid(
+                "workspace directory identity changed during confined open".into(),
+            ));
+        }
+
+        let canonical_root = dunce::canonicalize(&root_absolute)?;
+        let relative = canonical_root.strip_prefix(&workspace).map_err(|_| {
+            ScienceError::Invalid(
+                "science store root escapes the retained canonical workspace".into(),
+            )
+        })?;
+        let directory = if relative.as_os_str().is_empty() {
+            workspace_directory.try_clone()?
+        } else {
+            validate_relative(relative)?;
+            workspace_directory.open_directory(relative)?
+        };
+
+        if directory.identity()? != expected_root
+            || directory.final_path()? != canonical_root
+            || Self::checked_directory_identity(&root_absolute, "science store root")?
+                != expected_root
+        {
+            return Err(ScienceError::Invalid(
+                "science store root identity changed during confined open".into(),
+            ));
+        }
+        Ok(directory)
+    }
+
     fn create_path(path: &Path) -> Result<Self> {
         let absolute = if path.is_absolute() {
             path.to_path_buf()
@@ -1150,11 +2224,15 @@ impl PinnedDirectory {
     }
 
     fn open_path(path: &Path) -> Result<Self> {
-        use std::os::unix::fs::OpenOptionsExt as _;
-
         // Resolve platform aliases such as macOS /var -> /private/var once,
         // then re-open every resulting component without following links.
         let canonical = dunce::canonicalize(path)?;
+        Self::open_absolute_path(&canonical)
+    }
+
+    fn open_absolute_path(canonical: &Path) -> Result<Self> {
+        use std::os::unix::fs::OpenOptionsExt as _;
+
         if !canonical.is_absolute() {
             return Err(ScienceError::Invalid(
                 "artifact store root must resolve to an absolute path".into(),
@@ -1380,6 +2458,32 @@ impl PinnedDirectory {
             ));
         }
         Ok(bytes)
+    }
+
+    fn hash_regular(&self, relative: &Path) -> Result<(u64, String)> {
+        validate_relative(relative)?;
+        let parent = self.open_directory_parent(relative)?;
+        let name = relative
+            .file_name()
+            .ok_or_else(|| ScienceError::Invalid("artifact path has no file name".into()))?;
+        let mut file = openat(
+            &parent.file,
+            name,
+            libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
+            None,
+        )
+        .map_err(|error| match error {
+            ScienceError::Io(io) if io.raw_os_error() == Some(libc::ELOOP) => {
+                ScienceError::Invalid("artifact must not be a symlink".into())
+            }
+            error => error,
+        })?;
+        if !file.metadata()?.is_file() {
+            return Err(ScienceError::Invalid(
+                "artifact must be a regular file".into(),
+            ));
+        }
+        hash_open_file(&mut file)
     }
 
     fn read_json<T: DeserializeOwned>(&self, relative: &Path) -> Result<T> {
@@ -1810,6 +2914,23 @@ impl PinnedDirectory {
         Ok(bytes)
     }
 
+    fn hash_regular(&self, relative: &Path) -> Result<(u64, String)> {
+        validate_relative(relative)?;
+        let parent = self.open_directory_parent(relative)?;
+        parent.assert_path_still_matches_handle()?;
+        let path = parent.path.join(
+            relative
+                .file_name()
+                .ok_or_else(|| ScienceError::Invalid("artifact path has no file name".into()))?,
+        );
+        let mut file = windows_open_regular(&path, false)?;
+        windows_assert_regular_handle(&path, &file)?;
+        parent.assert_path_still_matches_handle()?;
+        let result = hash_open_file(&mut file)?;
+        parent.assert_path_still_matches_handle()?;
+        Ok(result)
+    }
+
     fn read_json<T: DeserializeOwned>(&self, relative: &Path) -> Result<T> {
         Ok(serde_json::from_slice(&self.read_regular(relative)?)?)
     }
@@ -2177,6 +3298,12 @@ impl PinnedDirectory {
         ))
     }
 
+    fn hash_regular(&self, _relative: &Path) -> Result<(u64, String)> {
+        Err(ScienceError::FeatureDisabled(
+            "confined artifact I/O has no backend for this platform".into(),
+        ))
+    }
+
     fn read_json<T: DeserializeOwned>(&self, _relative: &Path) -> Result<T> {
         Err(ScienceError::FeatureDisabled(
             "confined artifact I/O has no backend for this platform".into(),
@@ -2216,6 +3343,23 @@ impl PinnedDirectory {
             "confined artifact I/O has no backend for this platform".into(),
         ))
     }
+}
+
+fn hash_open_file(file: &mut fs::File) -> Result<(u64, String)> {
+    let mut digest = Sha256::new();
+    let mut bytes = 0_u64;
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        bytes = bytes
+            .checked_add(read as u64)
+            .ok_or_else(|| ScienceError::Invalid("artifact length overflow".into()))?;
+        digest.update(&buffer[..read]);
+    }
+    Ok((bytes, format!("{:x}", digest.finalize())))
 }
 
 fn validate_context(context: &RunContext) -> Result<()> {
@@ -2330,6 +3474,10 @@ fn hex_sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
+fn is_sha256_hex(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
 /// Best-effort fsync of a directory, so the rename that published a record is
 /// itself durable and not just the bytes it points at.
 ///
@@ -2368,6 +3516,482 @@ mod tests {
             artifact_root: root.join(project).join("artifacts"),
             environment: BTreeMap::from([("locale".into(), "C".into())]),
         }
+    }
+
+    fn request_pending_call(store: &ScienceStore, run: &RunRecord, call: &CallId) {
+        store
+            .request_approval(Approval {
+                project_id: run.context.project_id.clone(),
+                run_id: run.context.run_id.clone(),
+                call_id: call.clone(),
+                owner_id: run.context.owner_id.clone(),
+                decision: ApprovalDecision::Pending,
+                decided_at: None,
+            })
+            .unwrap();
+    }
+
+    fn allow_running_call(store: &ScienceStore, run: &RunRecord, call: &str) -> CallId {
+        let call = CallId::new(call);
+        request_pending_call(store, run, &call);
+        store
+            .transition(&run.context.run_id, RunState::AwaitingApproval, None)
+            .unwrap();
+        let approvals = store.approvals(&run.context.run_id).unwrap();
+        let [pending] = approvals.as_slice() else {
+            panic!("fixture must retain exactly one pending approval");
+        };
+        assert_eq!(pending.call_id, call);
+        assert_eq!(pending.decision, ApprovalDecision::Pending);
+        assert!(pending.decided_at.is_none());
+        store
+            .decide_approval(
+                &run.context.project_id,
+                &run.context.run_id,
+                &run.context.owner_id,
+                &call,
+                ApprovalDecision::Allow,
+            )
+            .unwrap();
+        store
+            .transition(&run.context.run_id, RunState::Running, None)
+            .unwrap();
+        let approvals = store.approvals(&run.context.run_id).unwrap();
+        let [allowed] = approvals.as_slice() else {
+            panic!("fixture must retain exactly one allowed approval");
+        };
+        assert_eq!(allowed.call_id, call);
+        assert_eq!(allowed.decision, ApprovalDecision::Allow);
+        assert!(allowed.decided_at.is_some());
+        assert_eq!(
+            store.load_run(&run.context.run_id).unwrap().state,
+            RunState::Running
+        );
+        call
+    }
+
+    #[test]
+    fn put_artifact_recovers_payload_visible_before_registry() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path().join("store"));
+        let run = store
+            .create_run(context(temp.path(), "artifact-orphan", "alice"))
+            .unwrap();
+        let call = allow_running_call(&store, &run, "artifact-call");
+        let relative = Path::new("nested/result.bin");
+        let payload = b"exact orphan payload";
+        let payload_path = store
+            .run_dir(&run.context.run_id)
+            .unwrap()
+            .join("artifacts")
+            .join(relative);
+        fs::create_dir_all(payload_path.parent().unwrap()).unwrap();
+        fs::write(&payload_path, payload).unwrap();
+        assert!(store.artifacts(&run.context.run_id).unwrap().is_empty());
+
+        let recovered = store
+            .put_artifact(
+                &run.context.project_id,
+                &run.context.run_id,
+                "alice",
+                call.clone(),
+                relative,
+                payload,
+                "application/octet-stream",
+                "recovered orphan",
+            )
+            .unwrap();
+        assert_eq!(recovered.sha256, hex_sha256(payload));
+        assert_eq!(
+            store.artifacts(&run.context.run_id).unwrap(),
+            vec![recovered]
+        );
+        assert_eq!(
+            store
+                .allowed_running_artifact_bytes(
+                    &run.context.project_id,
+                    &run.context.run_id,
+                    "alice",
+                    &call,
+                    relative,
+                )
+                .unwrap(),
+            payload
+        );
+
+        assert!(
+            store
+                .put_artifact(
+                    &run.context.project_id,
+                    &run.context.run_id,
+                    "alice",
+                    call,
+                    relative,
+                    b"different retry",
+                    "application/octet-stream",
+                    "recovered orphan",
+                )
+                .is_err(),
+            "orphan reconciliation accepted different bytes"
+        );
+    }
+
+    #[test]
+    fn put_artifact_repairs_registry_visible_with_missing_payload() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path().join("store"));
+        let run = store
+            .create_run(context(temp.path(), "artifact-registry-first", "alice"))
+            .unwrap();
+        let call = allow_running_call(&store, &run, "artifact-call");
+        let relative = Path::new("result.bin");
+        let payload = b"registry-first payload";
+        let expected = Artifact {
+            run_id: run.context.run_id.clone(),
+            call_id: call.clone(),
+            relative_path: relative.to_path_buf(),
+            sha256: hex_sha256(payload),
+            bytes: payload.len() as u64,
+            mime: "application/octet-stream".into(),
+            preview: "repair missing payload".into(),
+        };
+        fs::write(
+            store
+                .run_dir(&run.context.run_id)
+                .unwrap()
+                .join("artifacts.json"),
+            serde_json::to_vec_pretty(&vec![expected.clone()]).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            !store
+                .run_dir(&run.context.run_id)
+                .unwrap()
+                .join("artifacts")
+                .join(relative)
+                .exists()
+        );
+
+        let repaired = store
+            .put_artifact(
+                &run.context.project_id,
+                &run.context.run_id,
+                "alice",
+                call.clone(),
+                relative,
+                payload,
+                "application/octet-stream",
+                "repair missing payload",
+            )
+            .unwrap();
+        assert_eq!(repaired, expected);
+        assert_eq!(
+            store
+                .allowed_running_artifact_bytes(
+                    &run.context.project_id,
+                    &run.context.run_id,
+                    "alice",
+                    &call,
+                    relative,
+                )
+                .unwrap(),
+            payload
+        );
+    }
+
+    fn preview_record(
+        run: &RunRecord,
+        call: &CallId,
+        relative_path: &Path,
+        artifact_sha256: String,
+    ) -> preview::PreviewRecord {
+        preview::PreviewRecord {
+            run_id: run.context.run_id.clone(),
+            call_id: call.clone(),
+            relative_path: relative_path.to_path_buf(),
+            artifact_sha256,
+            preview: preview::Preview {
+                kind: preview::PreviewKind::Text,
+                mime: "text/plain".into(),
+                bytes: 7,
+                truncated: false,
+                stats: preview::PreviewStats::Text { lines: 1 },
+            },
+            generated_at: Utc::now(),
+            tool: "fixture".into(),
+        }
+    }
+
+    fn successful_completion_fixture(
+        project: &str,
+    ) -> (tempfile::TempDir, ScienceStore, RunRecord, CallId, Artifact) {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path().join("store"));
+        let run = store
+            .create_run(context(temp.path(), project, "alice"))
+            .unwrap();
+        let call = allow_running_call(&store, &run, "completion-call");
+        let artifact = store
+            .put_artifact(
+                &run.context.project_id,
+                &run.context.run_id,
+                &run.context.owner_id,
+                call.clone(),
+                Path::new("result.txt"),
+                b"verified completion bytes",
+                "text/plain",
+                "verified",
+            )
+            .unwrap();
+        store
+            .add_evidence(Evidence {
+                run_id: run.context.run_id.clone(),
+                claim: "verified completion".into(),
+                source: "fixture".into(),
+                artifact_sha256: Some(artifact.sha256.clone()),
+                verified_at: Utc::now(),
+            })
+            .unwrap();
+        store
+            .add_provenance(Provenance {
+                run_id: run.context.run_id.clone(),
+                source_uri: "fixture://successful-completion".into(),
+                source_commit: None,
+                source_path: Some("input.txt".into()),
+                license: "test-only".into(),
+                retrieved_at: Utc::now(),
+                input_sha256: artifact.sha256.clone(),
+                tool: "successful-completion-fixture".into(),
+                environment: BTreeMap::new(),
+            })
+            .unwrap();
+        store
+            .add_preview(preview_record(
+                &run,
+                &call,
+                &artifact.relative_path,
+                artifact.sha256.clone(),
+            ))
+            .unwrap();
+        store
+            .append_event(
+                &run.context.run_id,
+                "SessionActor",
+                "fixture.execution.finished",
+                serde_json::json!({
+                    "run_id": run.context.run_id.0.clone(),
+                    "call_id": call.0.clone(),
+                    "project_id": run.context.project_id.0.clone(),
+                    "session_id": run.context.session_id.clone(),
+                    "owner_id": run.context.owner_id.clone(),
+                }),
+            )
+            .unwrap();
+        (temp, store, run, call, artifact)
+    }
+
+    fn completion_manifest(store: &ScienceStore, run: &RunRecord) -> SuccessfulCompletionManifest {
+        let events = store.events_after(&run.context.run_id, 0, 1_000).unwrap();
+        SuccessfulCompletionManifest {
+            context: run.context.clone(),
+            artifacts: store.artifacts(&run.context.run_id).unwrap(),
+            evidence: store.evidence(&run.context.run_id).unwrap(),
+            provenance: store.provenance(&run.context.run_id).unwrap(),
+            previews: store.previews(&run.context.run_id).unwrap(),
+            final_event: events.last().unwrap().clone(),
+            events,
+        }
+    }
+
+    fn assert_all_output_writes_rejected(store: &ScienceStore, run: &RunRecord, call: &CallId) {
+        let relative = Path::new("blocked.txt");
+        assert!(
+            store
+                .put_artifact(
+                    &run.context.project_id,
+                    &run.context.run_id,
+                    &run.context.owner_id,
+                    call.clone(),
+                    relative,
+                    b"blocked",
+                    "text/plain",
+                    "blocked",
+                )
+                .is_err()
+        );
+        assert!(
+            store
+                .add_evidence(Evidence {
+                    run_id: run.context.run_id.clone(),
+                    claim: "blocked".into(),
+                    source: "fixture".into(),
+                    artifact_sha256: Some(hex_sha256(b"blocked")),
+                    verified_at: Utc::now(),
+                })
+                .is_err()
+        );
+        assert!(
+            store
+                .add_provenance(Provenance {
+                    run_id: run.context.run_id.clone(),
+                    source_uri: "fixture://blocked".into(),
+                    source_commit: None,
+                    source_path: None,
+                    license: "test-only".into(),
+                    retrieved_at: Utc::now(),
+                    input_sha256: hex_sha256(b"blocked"),
+                    tool: "fixture".into(),
+                    environment: BTreeMap::new(),
+                })
+                .is_err()
+        );
+        assert!(
+            store
+                .add_preview(preview_record(run, call, relative, hex_sha256(b"blocked"),))
+                .is_err()
+        );
+        assert!(store.artifacts(&run.context.run_id).unwrap().is_empty());
+        assert!(store.evidence(&run.context.run_id).unwrap().is_empty());
+        assert!(store.provenance(&run.context.run_id).unwrap().is_empty());
+        assert!(store.previews(&run.context.run_id).unwrap().is_empty());
+        assert_eq!(
+            fs::read_dir(
+                store
+                    .run_dir(&run.context.run_id)
+                    .unwrap()
+                    .join("artifacts")
+            )
+            .unwrap()
+            .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn exact_successful_completion_manifest_commits_under_one_store_lock() {
+        let (_temp, store, run, _call, _artifact) =
+            successful_completion_fixture("manifest-success");
+        let manifest = completion_manifest(&store, &run);
+        let mut wrong_final_event = manifest.clone();
+        wrong_final_event.final_event.kind = "not.the.durable.final.event".into();
+
+        assert!(
+            store
+                .transition(&run.context.run_id, RunState::Succeeded, None)
+                .is_err(),
+            "ordinary transition bypassed the successful-completion manifest"
+        );
+        assert!(
+            store
+                .transition_succeeded_with_manifest(&wrong_final_event)
+                .is_err(),
+            "a manifest without the unique durable final event was accepted"
+        );
+        assert_eq!(
+            store.load_run(&run.context.run_id).unwrap().state,
+            RunState::Running
+        );
+        let succeeded = store.transition_succeeded_with_manifest(&manifest).unwrap();
+        assert_eq!(succeeded.context, manifest.context);
+        assert_eq!(succeeded.state, RunState::Succeeded);
+        assert_eq!(store.load_run(&run.context.run_id).unwrap(), succeeded);
+    }
+
+    #[test]
+    fn completion_manifest_rejects_second_store_collection_injection_after_snapshot() {
+        for injected in ["artifact", "evidence", "provenance", "event"] {
+            let (_temp, store, run, call, artifact) =
+                successful_completion_fixture(&format!("inject-{injected}"));
+            let manifest = completion_manifest(&store, &run);
+            let second_store = ScienceStore::new(store.root());
+
+            match injected {
+                "artifact" => {
+                    second_store
+                        .put_artifact(
+                            &run.context.project_id,
+                            &run.context.run_id,
+                            &run.context.owner_id,
+                            call.clone(),
+                            Path::new("injected.txt"),
+                            b"injected",
+                            "text/plain",
+                            "injected",
+                        )
+                        .unwrap();
+                }
+                "evidence" => {
+                    second_store
+                        .add_evidence(Evidence {
+                            run_id: run.context.run_id.clone(),
+                            claim: "injected".into(),
+                            source: "second-store".into(),
+                            artifact_sha256: Some(artifact.sha256.clone()),
+                            verified_at: Utc::now(),
+                        })
+                        .unwrap();
+                }
+                "provenance" => {
+                    second_store
+                        .add_provenance(Provenance {
+                            run_id: run.context.run_id.clone(),
+                            source_uri: "fixture://injected".into(),
+                            source_commit: None,
+                            source_path: None,
+                            license: "test-only".into(),
+                            retrieved_at: Utc::now(),
+                            input_sha256: artifact.sha256.clone(),
+                            tool: "second-store".into(),
+                            environment: BTreeMap::new(),
+                        })
+                        .unwrap();
+                }
+                "event" => {
+                    second_store
+                        .append_event(
+                            &run.context.run_id,
+                            "second-store",
+                            "injected.after.snapshot",
+                            serde_json::json!({}),
+                        )
+                        .unwrap();
+                }
+                _ => unreachable!(),
+            }
+
+            assert!(
+                store.transition_succeeded_with_manifest(&manifest).is_err(),
+                "post-snapshot {injected} injection was accepted"
+            );
+            assert_eq!(
+                store.load_run(&run.context.run_id).unwrap().state,
+                RunState::Running
+            );
+        }
+    }
+
+    #[test]
+    fn completion_manifest_rehashes_and_rejects_tampered_artifact_bytes() {
+        let (_temp, store, run, _call, artifact) = successful_completion_fixture("manifest-tamper");
+        let manifest = completion_manifest(&store, &run);
+        fs::write(
+            store
+                .run_dir(&run.context.run_id)
+                .unwrap()
+                .join("artifacts")
+                .join(&artifact.relative_path),
+            b"tampered after snapshot",
+        )
+        .unwrap();
+
+        assert!(
+            store.transition_succeeded_with_manifest(&manifest).is_err(),
+            "tampered artifact bytes reached Succeeded"
+        );
+        assert_eq!(
+            store.load_run(&run.context.run_id).unwrap().state,
+            RunState::Running
+        );
     }
 
     #[test]
@@ -2505,6 +4129,143 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn workspace_capability_rejects_final_source_swap_to_outside_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let workspace = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let source = workspace.path().join("input.fasta");
+        let retained = workspace.path().join("input-retained.fasta");
+        let outside_source = outside.path().join("secret.fasta");
+        fs::write(&source, b">inside\nACGT\n").unwrap();
+        fs::write(&outside_source, b">outside\nSECRET\n").unwrap();
+        let workspace_capability = ScienceWorkspaceCapability::open(workspace.path()).unwrap();
+
+        let snapshot =
+            workspace_capability.snapshot_regular_bounded_with_hook(&source, 1024, || {
+                fs::rename(&source, &retained)?;
+                symlink(&outside_source, &source)?;
+                Ok(())
+            });
+
+        assert!(
+            snapshot.is_err(),
+            "final source symlink replacement escaped retained admission"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn workspace_capability_rejects_source_ancestor_swap_to_outside_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let workspace = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let ancestor = workspace.path().join("inputs");
+        let retained = workspace.path().join("inputs-retained");
+        fs::create_dir(&ancestor).unwrap();
+        fs::write(ancestor.join("input.fasta"), b">inside\nACGT\n").unwrap();
+        fs::write(outside.path().join("input.fasta"), b">outside\nSECRET\n").unwrap();
+        let workspace_capability = ScienceWorkspaceCapability::open(workspace.path()).unwrap();
+
+        let snapshot = workspace_capability.snapshot_regular_bounded_with_hook(
+            &ancestor.join("input.fasta"),
+            1024,
+            || {
+                fs::rename(&ancestor, &retained)?;
+                symlink(outside.path(), &ancestor)?;
+                Ok(())
+            },
+        );
+
+        assert!(
+            snapshot.is_err(),
+            "source ancestor symlink replacement escaped retained admission"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn workspace_capability_bounds_source_and_rejects_fifo() {
+        use std::{ffi::CString, os::unix::ffi::OsStrExt as _};
+
+        let workspace = tempfile::tempdir().unwrap();
+        let oversized = workspace.path().join("oversized.fasta");
+        fs::write(&oversized, b"123456789").unwrap();
+        let workspace_capability = ScienceWorkspaceCapability::open(workspace.path()).unwrap();
+        assert!(
+            workspace_capability
+                .snapshot_regular_bounded(&oversized, 8)
+                .is_err()
+        );
+
+        let fifo = workspace.path().join("input.fifo");
+        let fifo_name = CString::new(fifo.as_os_str().as_bytes()).unwrap();
+        // SAFETY: fifo_name is a live NUL-terminated path.
+        assert_eq!(unsafe { libc::mkfifo(fifo_name.as_ptr(), 0o600) }, 0);
+        assert!(
+            workspace_capability
+                .snapshot_regular_bounded(&fifo, 8)
+                .is_err()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn workspace_capability_keeps_store_out_of_replacement_workspace() {
+        use std::os::unix::fs::symlink;
+
+        let parent = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let workspace = parent.path().join("workspace");
+        let retained = parent.path().join("workspace-retained");
+        fs::create_dir(&workspace).unwrap();
+        let source = workspace.join("input.fasta");
+        fs::write(&source, b">inside\nACGT\n").unwrap();
+        let workspace_capability = ScienceWorkspaceCapability::open(&workspace).unwrap();
+        workspace_capability
+            .snapshot_regular_bounded(&source, 1024)
+            .unwrap();
+
+        fs::rename(&workspace, &retained).unwrap();
+        symlink(outside.path(), &workspace).unwrap();
+        let store = workspace_capability.create_science_store(workspace.join("science-store"));
+        assert!(
+            !outside.path().join("science-store").exists(),
+            "replacement workspace received a Science store"
+        );
+        assert_eq!(
+            fs::read_dir(outside.path()).unwrap().count(),
+            0,
+            "replacement workspace received durable output"
+        );
+
+        if let Ok(store) = store {
+            let current_workspace = workspace_capability.current_path().unwrap();
+            assert_eq!(current_workspace, retained);
+            assert!(store.root().starts_with(&retained));
+            let mut retained_context = context(parent.path(), "retained", "alice");
+            retained_context.workspace_root = current_workspace;
+            retained_context.artifact_root = store.root().to_path_buf();
+            let run = store.create_run(retained_context).unwrap();
+            assert!(
+                retained
+                    .join("science-store/runs")
+                    .join(&run.context.run_id.0)
+                    .is_dir()
+            );
+            assert!(
+                !outside.path().join("science-store").exists(),
+                "durable run escaped into replacement workspace"
+            );
+        }
+
+        fs::remove_file(&workspace).unwrap();
+        fs::rename(&retained, &workspace).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn store_constructor_and_confined_constructor_reject_escape_roots() {
         use std::os::unix::fs::symlink;
 
@@ -2530,6 +4291,71 @@ mod tests {
         let outside_root = outside.path().join("outside-store");
         fs::create_dir(&outside_root).unwrap();
         assert!(ScienceStore::new_confined(&outside_root, workspace.path()).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn confined_open_rejects_in_workspace_store_replacement_after_identity_snapshot() {
+        let workspace = tempfile::tempdir().unwrap();
+        let root = workspace.path().join("intended-store");
+        let replacement = workspace.path().join("replacement-store");
+        let retained = workspace.path().join("retained-intended-store");
+        fs::create_dir(&root).unwrap();
+        fs::create_dir(&replacement).unwrap();
+
+        let opened = PinnedDirectory::open_existing_confined_with_snapshot_hook(
+            &root,
+            workspace.path(),
+            || {
+                fs::rename(&root, &retained)?;
+                fs::rename(&replacement, &root)?;
+                Ok(())
+            },
+        );
+
+        assert!(
+            matches!(opened, Err(ScienceError::Invalid(_))),
+            "a different in-workspace store replaced after the identity snapshot was accepted"
+        );
+        assert!(root.is_dir());
+        assert!(retained.is_dir());
+        assert_ne!(
+            PinnedDirectory::checked_directory_identity(&root, "replacement").unwrap(),
+            PinnedDirectory::checked_directory_identity(&retained, "retained").unwrap()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn confined_open_rejects_symlink_to_renamed_root_after_identity_snapshot() {
+        use std::os::unix::fs::symlink;
+
+        let workspace = tempfile::tempdir().unwrap();
+        let root = workspace.path().join("intended-store");
+        let retained = workspace.path().join("retained-intended-store");
+        fs::create_dir(&root).unwrap();
+
+        let opened = PinnedDirectory::open_existing_confined_with_snapshot_hook(
+            &root,
+            workspace.path(),
+            || {
+                fs::rename(&root, &retained)?;
+                symlink(&retained, &root)?;
+                Ok(())
+            },
+        );
+
+        assert!(
+            matches!(opened, Err(ScienceError::Invalid(_))),
+            "a symlink installed after the identity snapshot was accepted"
+        );
+        assert!(
+            fs::symlink_metadata(&root)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert!(retained.is_dir());
     }
 
     #[test]
@@ -2560,6 +4386,9 @@ mod tests {
             ),
             Err(ScienceError::Ownership)
         ));
+        store
+            .transition(&run.context.run_id, RunState::AwaitingApproval, None)
+            .unwrap();
         let first = store
             .decide_approval(
                 &run.context.project_id,
@@ -2619,6 +4448,9 @@ mod tests {
                 decided_at: None,
             })
             .unwrap();
+        store
+            .transition(&run.context.run_id, RunState::AwaitingApproval, None)
+            .unwrap();
         drop(store);
         let reopened = ScienceStore::new(temp.path());
         assert_eq!(
@@ -2673,6 +4505,119 @@ mod tests {
         );
     }
 
+    #[test]
+    fn independent_stores_serialize_terminal_and_output_write_races() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("store");
+        let authority = ScienceStore::new(&root);
+        let independently_reopened = ScienceStore::new(&root);
+
+        assert!(
+            !Arc::ptr_eq(
+                &authority.root_capability,
+                &independently_reopened.root_capability,
+            ),
+            "fixture must use independently constructed stores"
+        );
+        assert!(
+            Arc::ptr_eq(&authority.writes, &independently_reopened.writes),
+            "independent stores must serialize authority writes"
+        );
+
+        for iteration in 0..32 {
+            let run = authority
+                .create_run(context(temp.path(), &format!("race-{iteration}"), "alice"))
+                .unwrap();
+            let call = allow_running_call(&authority, &run, "race-call");
+            let relative = PathBuf::from(format!("race-{iteration}.txt"));
+            let barrier = Arc::new(std::sync::Barrier::new(3));
+
+            let (terminal, write) = std::thread::scope(|scope| {
+                let terminal_barrier = Arc::clone(&barrier);
+                let terminal_store = &independently_reopened;
+                let terminal_run_id = run.context.run_id.clone();
+                let terminal = scope.spawn(move || {
+                    terminal_barrier.wait();
+                    terminal_store.transition_succeeded_verified(&terminal_run_id)
+                });
+
+                let write_barrier = Arc::clone(&barrier);
+                let write_store = &authority;
+                let write_project = run.context.project_id.clone();
+                let write_run_id = run.context.run_id.clone();
+                let write_owner = run.context.owner_id.clone();
+                let write_call = call.clone();
+                let write_relative = relative.clone();
+                let write = scope.spawn(move || {
+                    write_barrier.wait();
+                    write_store.put_artifact(
+                        &write_project,
+                        &write_run_id,
+                        &write_owner,
+                        write_call,
+                        &write_relative,
+                        b"race",
+                        "text/plain",
+                        "race",
+                    )
+                });
+
+                barrier.wait();
+                (terminal.join().unwrap(), write.join().unwrap())
+            });
+
+            terminal.unwrap();
+            assert_eq!(
+                authority.load_run(&run.context.run_id).unwrap().state,
+                RunState::Succeeded
+            );
+            let artifacts = independently_reopened
+                .artifacts(&run.context.run_id)
+                .unwrap();
+            match write {
+                Ok(artifact) => {
+                    assert_eq!(artifacts, vec![artifact]);
+                    assert_eq!(
+                        independently_reopened
+                            .artifact_bytes(
+                                &run.context.project_id,
+                                &run.context.run_id,
+                                &run.context.owner_id,
+                                &relative,
+                            )
+                            .unwrap(),
+                        b"race"
+                    );
+                }
+                Err(_) => assert!(artifacts.is_empty()),
+            }
+
+            let retained = artifacts.clone();
+            assert!(
+                authority
+                    .put_artifact(
+                        &run.context.project_id,
+                        &run.context.run_id,
+                        &run.context.owner_id,
+                        call,
+                        Path::new("after-terminal.txt"),
+                        b"late",
+                        "text/plain",
+                        "late",
+                    )
+                    .is_err(),
+                "a write beginning after Succeeded must fail closed"
+            );
+            assert_eq!(
+                independently_reopened
+                    .artifacts(&run.context.run_id)
+                    .unwrap(),
+                retained,
+                "Succeeded must remain output-immutable"
+            );
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn registered_symlink_artifact_is_rejected_on_read() {
@@ -2683,12 +4628,13 @@ mod tests {
         let run = store
             .create_run(context(temp.path(), "a", "alice"))
             .unwrap();
+        let call = allow_running_call(&store, &run, "c");
         store
             .put_artifact(
                 &run.context.project_id,
                 &run.context.run_id,
                 "alice",
-                CallId::new("c"),
+                call,
                 Path::new("artifact.txt"),
                 b"safe",
                 "text/plain",
@@ -2696,7 +4642,7 @@ mod tests {
             )
             .unwrap();
         store
-            .transition(&run.context.run_id, RunState::Succeeded, None)
+            .transition_succeeded_verified(&run.context.run_id)
             .unwrap();
         let outside = temp.path().join("outside-secret");
         fs::write(&outside, b"secret").unwrap();
@@ -2730,6 +4676,7 @@ mod tests {
         let run = store
             .create_run(context(temp.path(), "a", "alice"))
             .unwrap();
+        let call = allow_running_call(&store, &run, "artifact-parent");
         let artifact_root = store
             .run_dir(&run.context.run_id)
             .unwrap()
@@ -2744,7 +4691,7 @@ mod tests {
                     &run.context.project_id,
                     &run.context.run_id,
                     "alice",
-                    CallId::new("write"),
+                    call.clone(),
                     Path::new("redirected.txt"),
                     b"must-stay-inside",
                     "text/plain",
@@ -2765,7 +4712,7 @@ mod tests {
                 &run.context.project_id,
                 &run.context.run_id,
                 "alice",
-                CallId::new("read"),
+                call,
                 Path::new("registered.txt"),
                 b"registered",
                 "text/plain",
@@ -2773,7 +4720,7 @@ mod tests {
             )
             .unwrap();
         store
-            .transition(&run.context.run_id, RunState::Succeeded, None)
+            .transition_succeeded_verified(&run.context.run_id)
             .unwrap();
         fs::rename(&artifact_root, &retained_root).unwrap();
         fs::create_dir_all(outside.path()).unwrap();
@@ -2809,6 +4756,7 @@ mod tests {
         let run = store
             .create_run(context(temp.path(), "a", "alice"))
             .unwrap();
+        let call = allow_running_call(&store, &run, "call");
         let outside = temp.path().join("outside");
         fs::write(&outside, b"outside-unchanged").unwrap();
         let target = store
@@ -2823,7 +4771,7 @@ mod tests {
                     &run.context.project_id,
                     &run.context.run_id,
                     "alice",
-                    CallId::new("call"),
+                    call,
                     Path::new("target.txt"),
                     b"must-not-escape",
                     "text/plain",
@@ -2885,7 +4833,7 @@ mod tests {
         let run = store
             .create_run(context(temp.path(), "a", "alice"))
             .unwrap();
-        let call = CallId::new("call");
+        let call = allow_running_call(&store, &run, "call");
         store
             .put_artifact(
                 &run.context.project_id,
@@ -2921,6 +4869,144 @@ mod tests {
         assert_eq!(fs::read(outside).unwrap(), b"outside-unchanged");
     }
 
+    #[test]
+    fn succeeded_run_rejects_discard_and_retains_serviceable_bytes() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("store");
+        let writer = ScienceStore::new(&root);
+        let terminal = ScienceStore::new(&root);
+        let run = writer
+            .create_run(context(temp.path(), "succeeded-discard", "alice"))
+            .unwrap();
+        let call = allow_running_call(&writer, &run, "call");
+        let relative = Path::new("retained.txt");
+        let artifact = writer
+            .put_artifact(
+                &run.context.project_id,
+                &run.context.run_id,
+                &run.context.owner_id,
+                call.clone(),
+                relative,
+                b"retained",
+                "text/plain",
+                "retained",
+            )
+            .unwrap();
+        terminal
+            .transition_succeeded_verified(&run.context.run_id)
+            .unwrap();
+
+        assert!(
+            writer
+                .discard_artifacts(
+                    &run.context.project_id,
+                    &run.context.run_id,
+                    &run.context.owner_id,
+                    &call,
+                    &[relative],
+                )
+                .is_err(),
+            "public rollback must not mutate a Succeeded authority run"
+        );
+        assert_eq!(
+            terminal.artifacts(&run.context.run_id).unwrap(),
+            vec![artifact]
+        );
+        assert_eq!(
+            terminal
+                .artifact_bytes(
+                    &run.context.project_id,
+                    &run.context.run_id,
+                    &run.context.owner_id,
+                    relative,
+                )
+                .unwrap(),
+            b"retained"
+        );
+    }
+
+    #[test]
+    fn running_output_rollback_tolerates_only_missing_payloads() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path().join("store"));
+        let run = store
+            .create_run(context(temp.path(), "missing-rollback", "alice"))
+            .unwrap();
+        let call = allow_running_call(&store, &run, "call");
+        let relative = Path::new("present.txt");
+        let artifact = store
+            .put_artifact(
+                &run.context.project_id,
+                &run.context.run_id,
+                &run.context.owner_id,
+                call.clone(),
+                relative,
+                b"partial",
+                "text/plain",
+                "partial",
+            )
+            .unwrap();
+        store
+            .add_evidence(Evidence {
+                run_id: run.context.run_id.clone(),
+                claim: "partial".into(),
+                source: "fixture".into(),
+                artifact_sha256: Some(artifact.sha256.clone()),
+                verified_at: Utc::now(),
+            })
+            .unwrap();
+        store
+            .add_provenance(Provenance {
+                run_id: run.context.run_id.clone(),
+                source_uri: "fixture://partial".into(),
+                source_commit: None,
+                source_path: None,
+                license: "test-only".into(),
+                retrieved_at: Utc::now(),
+                input_sha256: artifact.sha256.clone(),
+                tool: "fixture".into(),
+                environment: BTreeMap::new(),
+            })
+            .unwrap();
+        store
+            .add_preview(preview_record(
+                &run,
+                &call,
+                relative,
+                artifact.sha256.clone(),
+            ))
+            .unwrap();
+
+        store
+            .discard_running_outputs(
+                &run.context.project_id,
+                &run.context.run_id,
+                &run.context.owner_id,
+                &call,
+                &[relative, Path::new("never-created/stdout.txt")],
+            )
+            .unwrap();
+
+        assert!(store.artifacts(&run.context.run_id).unwrap().is_empty());
+        assert!(store.evidence(&run.context.run_id).unwrap().is_empty());
+        assert!(store.provenance(&run.context.run_id).unwrap().is_empty());
+        assert!(store.previews(&run.context.run_id).unwrap().is_empty());
+        assert!(
+            !store
+                .run_dir(&run.context.run_id)
+                .unwrap()
+                .join("artifacts/present.txt")
+                .exists()
+        );
+        store
+            .transition(
+                &run.context.run_id,
+                RunState::Failed,
+                Some("commit rollback".into()),
+            )
+            .unwrap();
+    }
+
     #[cfg(unix)]
     #[test]
     fn artifact_read_hashes_the_same_open_handle_and_requires_success() {
@@ -2929,12 +5015,13 @@ mod tests {
         let run = store
             .create_run(context(temp.path(), "a", "alice"))
             .unwrap();
+        let call = allow_running_call(&store, &run, "call");
         store
             .put_artifact(
                 &run.context.project_id,
                 &run.context.run_id,
                 "alice",
-                CallId::new("call"),
+                call,
                 Path::new("result.txt"),
                 b"registered",
                 "text/plain",
@@ -2953,7 +5040,7 @@ mod tests {
             "non-succeeded run artifact was serviceable"
         );
         store
-            .transition(&run.context.run_id, RunState::Succeeded, None)
+            .transition_succeeded_verified(&run.context.run_id)
             .unwrap();
         let target = store
             .run_dir(&run.context.run_id)
@@ -3193,6 +5280,26 @@ mod tests {
             let run = store
                 .create_run(context(temp.path(), "a", "alice"))
                 .unwrap();
+            let call = CallId::new("terminal-call");
+            request_pending_call(&store, &run, &call);
+            store
+                .transition(&run.context.run_id, RunState::AwaitingApproval, None)
+                .unwrap();
+            let decision = match state {
+                RunState::Denied => ApprovalDecision::Deny,
+                RunState::TimedOut => ApprovalDecision::Timeout,
+                RunState::Cancelled => ApprovalDecision::Cancel,
+                _ => unreachable!(),
+            };
+            store
+                .decide_approval(
+                    &run.context.project_id,
+                    &run.context.run_id,
+                    &run.context.owner_id,
+                    &call,
+                    decision,
+                )
+                .unwrap();
             let terminal = store
                 .transition(&run.context.run_id, state, Some(format!("{state:?}")))
                 .unwrap();
@@ -3206,14 +5313,268 @@ mod tests {
     }
 
     #[test]
+    fn succeeded_requires_specialized_running_allowed_transition() {
+        for (state, decision) in [
+            (RunState::Created, None),
+            (RunState::AwaitingApproval, None),
+            (RunState::Denied, Some(ApprovalDecision::Deny)),
+            (RunState::TimedOut, Some(ApprovalDecision::Timeout)),
+            (RunState::Cancelled, Some(ApprovalDecision::Cancel)),
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let store = ScienceStore::new(temp.path().join("store"));
+            let run = store
+                .create_run(context(temp.path(), "blocked-success", "alice"))
+                .unwrap();
+            let call = CallId::new("blocked-call");
+            if state != RunState::Created {
+                request_pending_call(&store, &run, &call);
+                store
+                    .transition(&run.context.run_id, RunState::AwaitingApproval, None)
+                    .unwrap();
+            }
+            if let Some(decision) = decision {
+                store
+                    .decide_approval(
+                        &run.context.project_id,
+                        &run.context.run_id,
+                        &run.context.owner_id,
+                        &call,
+                        decision,
+                    )
+                    .unwrap();
+                store
+                    .transition(
+                        &run.context.run_id,
+                        state,
+                        Some(format!("{state:?} fixture")),
+                    )
+                    .unwrap();
+            }
+
+            assert!(
+                store
+                    .transition_succeeded_verified(&run.context.run_id)
+                    .is_err(),
+                "{state:?} reached Succeeded without a running terminal Allow"
+            );
+            assert_eq!(store.load_run(&run.context.run_id).unwrap().state, state);
+        }
+
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path().join("store"));
+        let run = store
+            .create_run(context(temp.path(), "pending-running", "alice"))
+            .unwrap();
+        let call = CallId::new("pending-call");
+        request_pending_call(&store, &run, &call);
+        store
+            .transition(&run.context.run_id, RunState::AwaitingApproval, None)
+            .unwrap();
+        store
+            .transition(&run.context.run_id, RunState::Running, None)
+            .unwrap();
+        assert!(
+            store
+                .transition_succeeded_verified(&run.context.run_id)
+                .is_err(),
+            "Running with a pending approval reached Succeeded"
+        );
+        assert_eq!(
+            store.load_run(&run.context.run_id).unwrap().state,
+            RunState::Running
+        );
+
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path().join("store"));
+        let run = store
+            .create_run(context(temp.path(), "allowed-success", "alice"))
+            .unwrap();
+        allow_running_call(&store, &run, "allowed-call");
+        assert!(
+            store
+                .transition(&run.context.run_id, RunState::Succeeded, None)
+                .is_err(),
+            "ordinary transition bypassed the verified success authority"
+        );
+        assert_eq!(
+            store.load_run(&run.context.run_id).unwrap().state,
+            RunState::Running
+        );
+        let succeeded = store
+            .transition_succeeded_verified(&run.context.run_id)
+            .unwrap();
+        assert_eq!(succeeded.state, RunState::Succeeded);
+        assert_eq!(store.load_run(&run.context.run_id).unwrap(), succeeded);
+    }
+
+    #[test]
+    fn scientific_outputs_require_exactly_one_allowed_running_call() {
+        for state in [
+            RunState::Created,
+            RunState::AwaitingApproval,
+            RunState::Running,
+            RunState::Denied,
+            RunState::TimedOut,
+            RunState::Cancelled,
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let store = ScienceStore::new(temp.path().join("store"));
+            let run = store
+                .create_run(context(temp.path(), "a", "alice"))
+                .unwrap();
+            let call = CallId::new("blocked-call");
+
+            if state != RunState::Created {
+                request_pending_call(&store, &run, &call);
+                store
+                    .transition(&run.context.run_id, RunState::AwaitingApproval, None)
+                    .unwrap();
+            }
+            match state {
+                RunState::Created | RunState::AwaitingApproval => {}
+                RunState::Running => {
+                    store
+                        .transition(&run.context.run_id, RunState::Running, None)
+                        .unwrap();
+                }
+                RunState::Denied | RunState::TimedOut | RunState::Cancelled => {
+                    let decision = match state {
+                        RunState::Denied => ApprovalDecision::Deny,
+                        RunState::TimedOut => ApprovalDecision::Timeout,
+                        RunState::Cancelled => ApprovalDecision::Cancel,
+                        _ => unreachable!(),
+                    };
+                    store
+                        .decide_approval(
+                            &run.context.project_id,
+                            &run.context.run_id,
+                            &run.context.owner_id,
+                            &call,
+                            decision,
+                        )
+                        .unwrap();
+                    store
+                        .transition(
+                            &run.context.run_id,
+                            state,
+                            Some(format!("{state:?} fixture")),
+                        )
+                        .unwrap();
+                }
+                _ => unreachable!(),
+            }
+
+            assert_eq!(store.load_run(&run.context.run_id).unwrap().state, state);
+            assert_all_output_writes_rejected(&store, &run, &call);
+        }
+
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path().join("store"));
+        let run = store
+            .create_run(context(temp.path(), "multiple-approvals", "alice"))
+            .unwrap();
+        let allowed_call = CallId::new("allowed-call");
+        let second_call = CallId::new("second-call");
+        request_pending_call(&store, &run, &allowed_call);
+        request_pending_call(&store, &run, &second_call);
+        store
+            .transition(&run.context.run_id, RunState::AwaitingApproval, None)
+            .unwrap();
+        for call in [&allowed_call, &second_call] {
+            store
+                .decide_approval(
+                    &run.context.project_id,
+                    &run.context.run_id,
+                    &run.context.owner_id,
+                    call,
+                    ApprovalDecision::Allow,
+                )
+                .unwrap();
+        }
+        store
+            .transition(&run.context.run_id, RunState::Running, None)
+            .unwrap();
+        assert_all_output_writes_rejected(&store, &run, &allowed_call);
+
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path().join("store"));
+        let run = store
+            .create_run(context(temp.path(), "allowed", "alice"))
+            .unwrap();
+        let call = allow_running_call(&store, &run, "allowed-call");
+        let relative = Path::new("allowed.txt");
+        let artifact = store
+            .put_artifact(
+                &run.context.project_id,
+                &run.context.run_id,
+                &run.context.owner_id,
+                call.clone(),
+                relative,
+                b"allowed",
+                "text/plain",
+                "allowed",
+            )
+            .unwrap();
+        store
+            .add_evidence(Evidence {
+                run_id: run.context.run_id.clone(),
+                claim: "allowed".into(),
+                source: "fixture".into(),
+                artifact_sha256: Some(artifact.sha256.clone()),
+                verified_at: Utc::now(),
+            })
+            .unwrap();
+        store
+            .add_provenance(Provenance {
+                run_id: run.context.run_id.clone(),
+                source_uri: "fixture://allowed".into(),
+                source_commit: None,
+                source_path: None,
+                license: "test-only".into(),
+                retrieved_at: Utc::now(),
+                input_sha256: artifact.sha256.clone(),
+                tool: "fixture".into(),
+                environment: BTreeMap::new(),
+            })
+            .unwrap();
+        store
+            .add_preview(preview_record(
+                &run,
+                &call,
+                relative,
+                artifact.sha256.clone(),
+            ))
+            .unwrap();
+
+        assert_eq!(
+            store
+                .allowed_running_artifact_bytes(
+                    &run.context.project_id,
+                    &run.context.run_id,
+                    &run.context.owner_id,
+                    &call,
+                    relative,
+                )
+                .unwrap(),
+            b"allowed"
+        );
+        assert_eq!(store.artifacts(&run.context.run_id).unwrap().len(), 1);
+        assert_eq!(store.evidence(&run.context.run_id).unwrap().len(), 1);
+        assert_eq!(store.provenance(&run.context.run_id).unwrap().len(), 1);
+        assert_eq!(store.previews(&run.context.run_id).unwrap().len(), 1);
+    }
+
+    #[test]
     fn terminal_run_scientific_outputs_are_immutable() {
         let temp = tempfile::tempdir().unwrap();
         let store = ScienceStore::new(temp.path());
         let run = store
             .create_run(context(temp.path(), "a", "alice"))
             .unwrap();
+        allow_running_call(&store, &run, "terminal-call");
         store
-            .transition(&run.context.run_id, RunState::Succeeded, None)
+            .transition_succeeded_verified(&run.context.run_id)
             .unwrap();
 
         assert!(
@@ -3270,9 +5631,16 @@ mod tests {
         fs::create_dir(&root).unwrap();
         let science = ScienceStore::new_confined(&root, &workspace).unwrap();
         let original_project = project::ProjectStore::new_confined(&root, &workspace).unwrap();
+        let original_workflow =
+            workflow::WorkflowIoCapability::open_existing_confined(&root, &workspace).unwrap();
         assert!(
             science
                 .shares_root_capability_with(&original_project)
+                .unwrap()
+        );
+        assert!(
+            science
+                .shares_root_capability_with_workflow_io(&original_workflow)
                 .unwrap()
         );
 
@@ -3280,6 +5648,8 @@ mod tests {
         fs::rename(&root, &retained).unwrap();
         fs::create_dir(&root).unwrap();
         let replacement_project = project::ProjectStore::new_confined(&root, &workspace).unwrap();
+        let replacement_workflow =
+            workflow::WorkflowIoCapability::open_existing_confined(&root, &workspace).unwrap();
 
         assert!(
             science
@@ -3292,6 +5662,18 @@ mod tests {
                 .shares_root_capability_with(&replacement_project)
                 .unwrap(),
             "same path spelling after replacement must not pass identity binding"
+        );
+        assert!(
+            science
+                .shares_root_capability_with_workflow_io(&original_workflow)
+                .unwrap(),
+            "workflow and Science handles opened before the rename must retain one identity"
+        );
+        assert!(
+            !science
+                .shares_root_capability_with_workflow_io(&replacement_workflow)
+                .unwrap(),
+            "replacement workflow root must not pass retained identity binding"
         );
     }
 }

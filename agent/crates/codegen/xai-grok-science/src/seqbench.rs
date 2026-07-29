@@ -2479,7 +2479,17 @@ fn finish_allowed_analysis(
         artifact_sha256: Some(analysis_artifact.sha256.clone()),
         verified_at: Utc::now(),
     })?;
-    store.append_event(
+    store.add_evidence(Evidence {
+        run_id: ticket.run_id.clone(),
+        claim: format!(
+            "rendered the verified analysis of {} sequence record(s) as a Markdown report",
+            analysis.records.len()
+        ),
+        source: source_path.display().to_string(),
+        artifact_sha256: Some(report_artifact.sha256.clone()),
+        verified_at: Utc::now(),
+    })?;
+    let final_event = store.append_event(
         &ticket.run_id,
         "SessionActor",
         "analysis.completed",
@@ -2502,11 +2512,41 @@ fn finish_allowed_analysis(
     let artifacts = store.artifacts(&ticket.run_id)?;
     let evidence = store.evidence(&ticket.run_id)?;
     let provenance = store.provenance(&ticket.run_id)?;
+    let previews = store.previews(&ticket.run_id)?;
     let approvals = store.approvals(&ticket.run_id)?;
     let events = store.events_after(&ticket.run_id, 0, 1_000)?;
+    let event_contract: Vec<_> = events
+        .iter()
+        .map(|event| (event.actor.as_str(), event.kind.as_str()))
+        .collect();
+    if event_contract
+        != [
+            ("SessionActor", "run.created"),
+            ("LumenApproval", "approval.allowed"),
+            ("SessionActor", "analysis.completed"),
+        ]
+        || events.last() != Some(&final_event)
+    {
+        return Err(ScienceError::Invalid(
+            "sequence analysis authority event contract changed before completion".into(),
+        ));
+    }
     let replay_after = events.last().map_or(0, |event| event.seq);
     let records = analysis.records.len();
-    let run = store.transition(&ticket.run_id, RunState::Succeeded, None)?;
+    // Reopen every candidate artifact and prove exact approval/evidence/
+    // provenance coverage while the run is still rollback-capable. Succeeded
+    // is then the final verified write, including the visible-write/read-back
+    // reconciliation used by other actor-owned science commits.
+    let running = store.load_run(&ticket.run_id)?;
+    let run = store.transition_succeeded_with_manifest(&crate::SuccessfulCompletionManifest {
+        context: running.context,
+        artifacts: artifacts.clone(),
+        evidence: evidence.clone(),
+        provenance: provenance.clone(),
+        previews,
+        events,
+        final_event,
+    })?;
 
     Ok(SeqAnalyzeResult {
         records,
@@ -2764,9 +2804,14 @@ mod protocol_tests {
         assert_eq!(result.run.state, RunState::Succeeded);
         assert_eq!(result.records, 2);
         assert_eq!(result.artifacts.len(), 2);
-        assert_eq!(result.evidence.len(), 1);
+        assert_eq!(result.evidence.len(), 2);
         assert_eq!(result.provenance.len(), 1);
         assert_eq!(result.approvals[0].decision, ApprovalDecision::Allow);
+        let verification =
+            crate::review::verify_for_goal_completion(&store, &ticket.run_id).unwrap();
+        assert_eq!(verification.artifact_count, 2);
+        assert_eq!(verification.evidence_count, 2);
+        assert_eq!(verification.provenance_count, 1);
         assert_eq!(
             result.evidence[0].artifact_sha256.as_deref(),
             Some(result.artifacts[0].sha256.as_str())

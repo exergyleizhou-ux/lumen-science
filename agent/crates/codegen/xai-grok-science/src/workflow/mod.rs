@@ -22,7 +22,7 @@ pub use executor::{
     KernelInvocation, ManualClock, RefusedStep, StepAttempt, StepFailure, StepOperation,
     StepOutput, StepPlan, StepRunner, SystemClock, UnboundStepRunner, WorkflowExecutionRequest,
     WorkflowExecutor, WorkflowOperationRecord, WorkflowRecoveryReport, WorkflowRunRecord,
-    WorkflowRunReport, WorkflowState,
+    WorkflowRunReport, WorkflowState, run_id_for_operation,
 };
 pub use io::{
     AttemptOutputCapability, RetainedOutputDirectory, WorkflowChildPaths, WorkflowIoCapability,

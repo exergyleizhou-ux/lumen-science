@@ -11,7 +11,9 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
-use xai_grok_science::{ProjectId, RunContext, RunId, RunState, ScienceError, ScienceStore};
+use xai_grok_science::{
+    ProjectId, RunContext, RunId, RunState, ScienceError, ScienceStore, ScienceWorkspaceCapability,
+};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -312,6 +314,8 @@ fn canonical_existing_dir_within(path: PathBuf, workspace: &Path) -> Result<Path
     Ok(canonical)
 }
 
+const MAX_SEQ_SOURCE_BYTES: u64 = 32 * 1024 * 1024;
+
 #[cfg(test)]
 mod canonical_dir_tests {
     use super::{canonical_dir_within, canonical_existing_dir_within};
@@ -321,8 +325,8 @@ mod canonical_dir_tests {
     fn directory_confinement_checks_before_creating() {
         let workspace = tempfile::tempdir().unwrap();
         let outside = tempfile::tempdir().unwrap();
-        let workspace = std::fs::canonicalize(workspace.path()).unwrap();
-        let outside = std::fs::canonicalize(outside.path()).unwrap();
+        let workspace = dunce::canonicalize(workspace.path()).unwrap();
+        let outside = dunce::canonicalize(outside.path()).unwrap();
 
         let inside = workspace.join("science-store").join("runs");
         assert_eq!(
@@ -353,7 +357,7 @@ mod canonical_dir_tests {
     #[test]
     fn existing_directory_confinement_never_creates_for_a_read() {
         let workspace = tempfile::tempdir().unwrap();
-        let workspace = std::fs::canonicalize(workspace.path()).unwrap();
+        let workspace = dunce::canonicalize(workspace.path()).unwrap();
         let absent = workspace.join("absent-read-root");
 
         assert!(canonical_existing_dir_within(absent.clone(), &workspace).is_err());
@@ -368,8 +372,8 @@ mod canonical_dir_tests {
     fn directory_confinement_rejects_an_existing_symlink_escape() {
         let workspace = tempfile::tempdir().unwrap();
         let outside = tempfile::tempdir().unwrap();
-        let workspace = std::fs::canonicalize(workspace.path()).unwrap();
-        let outside = std::fs::canonicalize(outside.path()).unwrap();
+        let workspace = dunce::canonicalize(workspace.path()).unwrap();
+        let outside = dunce::canonicalize(outside.path()).unwrap();
         let link = workspace.join("outside-link");
         std::os::unix::fs::symlink(&outside, &link).unwrap();
         let target = link.join("must-not-be-created");
@@ -385,8 +389,8 @@ mod canonical_dir_tests {
 
         let workspace = tempfile::tempdir().unwrap();
         let outside = tempfile::tempdir().unwrap();
-        let workspace = std::fs::canonicalize(workspace.path()).unwrap();
-        let outside = std::fs::canonicalize(outside.path()).unwrap();
+        let workspace = dunce::canonicalize(workspace.path()).unwrap();
+        let outside = dunce::canonicalize(outside.path()).unwrap();
         let original = workspace.join("ancestor");
         let pinned = workspace.join("ancestor-pinned");
         std::fs::create_dir(&original).unwrap();
@@ -678,7 +682,7 @@ mod artifact_list_tests {
     #[test]
     fn listing_is_verified_and_bound_to_run_identity() {
         let workspace = tempfile::tempdir().unwrap();
-        let workspace = std::fs::canonicalize(workspace.path()).unwrap();
+        let workspace = dunce::canonicalize(workspace.path()).unwrap();
         let store_root = workspace.join("science-store");
         let store = ScienceStore::new(&store_root);
         let run_id = RunId::new("run-1");
@@ -686,21 +690,43 @@ mod artifact_list_tests {
         store
             .create_run(context(&workspace, &run_id, &project_id))
             .unwrap();
+        let call_id = CallId::new("call-1");
+        store
+            .request_approval(xai_grok_science::Approval {
+                project_id: project_id.clone(),
+                run_id: run_id.clone(),
+                call_id: call_id.clone(),
+                owner_id: "owner-1".into(),
+                decision: xai_grok_science::ApprovalDecision::Pending,
+                decided_at: None,
+            })
+            .unwrap();
+        store
+            .transition(&run_id, RunState::AwaitingApproval, None)
+            .unwrap();
+        store
+            .decide_approval(
+                &project_id,
+                &run_id,
+                "owner-1",
+                &call_id,
+                xai_grok_science::ApprovalDecision::Allow,
+            )
+            .unwrap();
+        store.transition(&run_id, RunState::Running, None).unwrap();
         let artifact = store
             .put_artifact(
                 &project_id,
                 &run_id,
                 "owner-1",
-                CallId::new("call-1"),
+                call_id,
                 Path::new("report.md"),
                 b"verified report\n",
                 "text/markdown",
                 "report",
             )
             .unwrap();
-        store
-            .transition(&run_id, RunState::Succeeded, None)
-            .unwrap();
+        store.transition_succeeded_verified(&run_id).unwrap();
 
         let listed = verified_artifact_list(
             &store,
@@ -753,7 +779,7 @@ mod artifact_list_tests {
         }
 
         let other_workspace = tempfile::tempdir().unwrap();
-        let other_workspace = std::fs::canonicalize(other_workspace.path()).unwrap();
+        let other_workspace = dunce::canonicalize(other_workspace.path()).unwrap();
         assert!(
             verified_artifact_list(
                 &store,
@@ -795,13 +821,36 @@ mod artifact_list_tests {
     #[test]
     fn non_succeeded_runs_never_list_artifacts() {
         let workspace = tempfile::tempdir().unwrap();
-        let workspace = std::fs::canonicalize(workspace.path()).unwrap();
+        let workspace = dunce::canonicalize(workspace.path()).unwrap();
         let store_root = workspace.join("science-store");
         let store = ScienceStore::new(&store_root);
         let run_id = RunId::new("run-denied");
         let project_id = ProjectId::new("project-1");
         store
             .create_run(context(&workspace, &run_id, &project_id))
+            .unwrap();
+        let call_id = CallId::new("call-denied");
+        store
+            .request_approval(xai_grok_science::Approval {
+                project_id: project_id.clone(),
+                run_id: run_id.clone(),
+                call_id: call_id.clone(),
+                owner_id: "owner-1".into(),
+                decision: xai_grok_science::ApprovalDecision::Pending,
+                decided_at: None,
+            })
+            .unwrap();
+        store
+            .transition(&run_id, RunState::AwaitingApproval, None)
+            .unwrap();
+        store
+            .decide_approval(
+                &project_id,
+                &run_id,
+                "owner-1",
+                &call_id,
+                xai_grok_science::ApprovalDecision::Deny,
+            )
             .unwrap();
         store
             .transition(&run_id, RunState::Denied, Some("refused".into()))
@@ -925,7 +974,7 @@ async fn run_project_mutation(
         .science_feature_gates
         .require_all(mutation.required_features())
         .map_err(internal)?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let workspace = dunce::canonicalize(&handle.info.cwd).map_err(internal)?;
     // A migration source is required to exist before the actor can capture
     // and admit it. Resolve that store read-only so an absent source cannot
     // leave even an empty store/runs tree behind. The SessionActor still
@@ -982,6 +1031,26 @@ async fn run_project_mutation(
         expected_revision,
         mutation,
     };
+    if matches!(
+        request.mutation,
+        xai_grok_science::project::ProjectMutation::ReviewRecord { .. }
+    ) {
+        // A retry before the review ledger exists must reopen one authority
+        // run. The normalized request fingerprint excludes the actor-minted
+        // authority id, so compute it first and only then bind the mutation.
+        authority_run_id = RunId::new(format!(
+            "review-authority-{}",
+            request.replay_fingerprint().map_err(internal)?
+        ));
+        let xai_grok_science::project::ProjectMutation::ReviewRecord {
+            authority_run_id: bound_run_id,
+            ..
+        } = &mut request.mutation
+        else {
+            unreachable!("review variant checked above");
+        };
+        *bound_run_id = authority_run_id.0.clone();
+    }
     if matches!(
         request.mutation,
         xai_grok_science::project::ProjectMutation::ProjectMigrate { .. }
@@ -1157,7 +1226,7 @@ async fn handle_project_get(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
     let handle = agent
         .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let workspace = dunce::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
     let store = xai_grok_science::project::ProjectStore::new_confined(&store_root, &workspace)
         .map_err(internal)?
@@ -1203,7 +1272,7 @@ async fn handle_project_assert_membership(agent: &MvpAgent, args: &acp::ExtReque
     let handle = agent
         .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let workspace = dunce::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
     let store = xai_grok_science::project::ProjectStore::new_confined(&store_root, &workspace)
         .map_err(internal)?
@@ -1240,7 +1309,7 @@ async fn handle_project_list(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtRes
     let handle = agent
         .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let workspace = dunce::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
     let store = xai_grok_science::project::ProjectStore::new_confined(&store_root, &workspace)
         .map_err(internal)?
@@ -1463,18 +1532,16 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
     let handle = agent
         .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
-    let source_path = std::fs::canonicalize(&params.source_path).map_err(internal)?;
-    if !source_path.starts_with(&workspace) || !source_path.is_file() {
-        return Err(
-            acp::Error::invalid_params().data("sourcePath must be a file inside session cwd")
-        );
-    }
-    let artifact_root = canonical_dir_within(params.artifact_root, &workspace)?;
-    let bytes = std::fs::read(&source_path).map_err(internal)?;
-    if bytes.len() > 32 * 1024 * 1024 {
-        return Err(acp::Error::invalid_params().data("source exceeds 32 MiB cap"));
-    }
+    let workspace_capability =
+        ScienceWorkspaceCapability::open(&handle.info.cwd).map_err(internal)?;
+    let (source_path, bytes) = workspace_capability
+        .snapshot_regular_bounded(&params.source_path, MAX_SEQ_SOURCE_BYTES)
+        .map_err(internal)?;
+    let store = workspace_capability
+        .create_science_store(params.artifact_root)
+        .map_err(internal)?;
+    let workspace = workspace_capability.current_path().map_err(internal)?;
+    let artifact_root = store.root().to_path_buf();
     let context = RunContext {
         run_id: RunId::new_v7(),
         project_id: ProjectId::new(params.project_id),
@@ -1505,8 +1572,7 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
     let result = agent
         .run_science_seq_analyze(
             &session_id,
-            ScienceStore::new_confined(&context.artifact_root, &context.workspace_root)
-                .map_err(internal)?,
+            store,
             context,
             xai_grok_science::seqbench::SeqAnalyzeOptions {
                 translation_table_id: params.translation_table_id,
@@ -1519,6 +1585,7 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
         )
         .await
         .map_err(internal)?;
+    drop(workspace_capability);
     to_raw_response(&serde_json::json!({
         "run": result.run,
         "analysis": result.analysis,
@@ -1657,7 +1724,7 @@ async fn handle_goal_host_verify(agent: &MvpAgent, args: &acp::ExtRequest) -> Ex
     let handle = agent
         .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let workspace = dunce::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
     let result = agent
         .verify_science_goal(
@@ -1693,11 +1760,11 @@ async fn handle_ssh_scp_fixture(agent: &MvpAgent, args: &acp::ExtRequest) -> Ext
     let handle = agent
         .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let workspace = dunce::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
     let artifact_root = canonical_dir_within(params.artifact_root, &workspace)?;
     let canonical_file = |path: PathBuf, label: &str| -> Result<PathBuf, acp::Error> {
-        let path = std::fs::canonicalize(path).map_err(internal)?;
+        let path = dunce::canonicalize(path).map_err(internal)?;
         if !path.starts_with(&workspace) || !path.is_file() {
             return Err(acp::Error::invalid_params()
                 .data(format!("{label} must be a file inside session cwd")));
@@ -1714,7 +1781,7 @@ async fn handle_ssh_scp_fixture(agent: &MvpAgent, args: &acp::ExtRequest) -> Ext
                 .local_path
                 .parent()
                 .ok_or_else(|| acp::Error::invalid_params().data("localPath has no parent"))?;
-            let parent = std::fs::canonicalize(parent).map_err(internal)?;
+            let parent = dunce::canonicalize(parent).map_err(internal)?;
             if !parent.starts_with(&workspace) {
                 return Err(
                     acp::Error::invalid_params().data("localPath must be inside session cwd")
@@ -1916,7 +1983,7 @@ async fn execute_connector_fetch(
     let handle = agent
         .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let workspace = dunce::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
     let artifact_root = canonical_dir_within(params.artifact_root, &workspace)?;
     let fixture_bytes = if let Some(bytes) = supplied_fixture_bytes {
@@ -1929,7 +1996,7 @@ async fn execute_connector_fetch(
     } else {
         let mut bytes = Vec::with_capacity(expected);
         for path in &params.fixture_paths {
-            let path = std::fs::canonicalize(path).map_err(internal)?;
+            let path = dunce::canonicalize(path).map_err(internal)?;
             if !path.starts_with(&workspace) || !path.is_file() {
                 return Err(acp::Error::invalid_params()
                     .data("fixturePaths must be files inside session cwd"));
@@ -2072,8 +2139,8 @@ async fn handle_import_preview(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtR
     let handle = agent
         .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
-    let source_path = std::fs::canonicalize(&params.source_path).map_err(internal)?;
+    let workspace = dunce::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let source_path = dunce::canonicalize(&params.source_path).map_err(internal)?;
     if !source_path.starts_with(&workspace) || !source_path.is_file() {
         return Err(
             acp::Error::invalid_params().data("sourcePath must be a file inside session cwd")
@@ -2126,8 +2193,8 @@ async fn handle_run_csv(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let handle = agent
         .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
-    let fixture_path = std::fs::canonicalize(params.fixture_path).map_err(internal)?;
+    let workspace = dunce::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let fixture_path = dunce::canonicalize(params.fixture_path).map_err(internal)?;
     if !fixture_path.starts_with(&workspace) || !fixture_path.is_file() {
         return Err(
             acp::Error::invalid_params().data("fixturePath must be a file inside session cwd")
@@ -2186,7 +2253,7 @@ async fn handle_evidence_trace(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtR
     let handle = agent
         .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let workspace = dunce::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
     let store = xai_grok_science::project::ProjectStore::new_confined(&store_root, &workspace)
         .map_err(internal)?
@@ -2221,7 +2288,7 @@ async fn handle_evidence_compare(agent: &MvpAgent, args: &acp::ExtRequest) -> Ex
     let handle = agent
         .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let workspace = dunce::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
     let store = xai_grok_science::project::ProjectStore::new_confined(&store_root, &workspace)
         .map_err(internal)?
@@ -2254,7 +2321,7 @@ async fn handle_evidence_consistency(agent: &MvpAgent, args: &acp::ExtRequest) -
     let handle = agent
         .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let workspace = dunce::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
     let store = xai_grok_science::project::ProjectStore::new_confined(&store_root, &workspace)
         .map_err(internal)?
@@ -2286,7 +2353,7 @@ async fn handle_evidence_reproduction(agent: &MvpAgent, args: &acp::ExtRequest) 
     let handle = agent
         .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let workspace = dunce::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
     let store = xai_grok_science::project::ProjectStore::new_confined(&store_root, &workspace)
         .map_err(internal)?
@@ -2380,7 +2447,7 @@ async fn store_handler<T: serde::Serialize>(
     let handle = agent
         .get_session_handle(&sid)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let workspace = dunce::canonicalize(&handle.info.cwd).map_err(internal)?;
     let sr = canonical_dir_within(store_root, &workspace)?;
     let store = xai_grok_science::project::ProjectStore::new_confined(&sr, &workspace)
         .map_err(internal)?
@@ -2509,14 +2576,16 @@ async fn handle_workflow_execute(agent: &MvpAgent, args: &acp::ExtRequest) -> Ex
     let handle = agent
         .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
-    let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
+    let workspace = dunce::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
     let artifact_root = match params.artifact_root {
         Some(root) => canonical_dir_within(root, &workspace)?,
         None => canonical_dir_within(store_root.join("runs"), &workspace)?,
     };
+    let workflow_run_id = xai_grok_science::workflow::run_id_for_operation(&params.operation_id)
+        .map_err(|error| acp::Error::invalid_params().data(error.to_string()))?;
     let context = RunContext {
-        run_id: RunId::new_v7(),
+        run_id: RunId::new(workflow_run_id),
         project_id: ProjectId::new(spec.project_id.0.clone()),
         session_id: session_id.0.to_string(),
         owner_id: params.owner_id.clone(),

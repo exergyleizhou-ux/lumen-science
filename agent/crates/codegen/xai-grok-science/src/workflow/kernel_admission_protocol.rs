@@ -217,7 +217,7 @@ fn finish_allowed_kernel_admission(
     let provenance = store.provenance(&ticket.run_id)?;
     let approvals = store.approvals(&ticket.run_id)?;
     let events = store.events_after(&ticket.run_id, 0, 1_000)?;
-    let run = store.transition(&ticket.run_id, RunState::Succeeded, None)?;
+    let run = store.transition_succeeded_verified(&ticket.run_id)?;
     Ok(KernelAdmissionResult {
         artifacts,
         evidence,

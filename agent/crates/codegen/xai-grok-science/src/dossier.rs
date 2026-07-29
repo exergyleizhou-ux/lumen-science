@@ -1000,9 +1000,7 @@ mod tests {
                 environment: BTreeMap::new(),
             })
             .unwrap();
-        store
-            .transition(&ticket.run_id, RunState::Succeeded, None)
-            .unwrap();
+        store.transition_succeeded_verified(&ticket.run_id).unwrap();
         ticket.run_id
     }
 

@@ -145,6 +145,11 @@ pub struct FinishScienceImport {
 /// immutable request input; only the actor may compute and commit outputs.
 pub struct PreparedScienceSeqAnalyze {
     pub(crate) store: xai_grok_science::ScienceStore,
+    /// Retained project authority opened from the exact same root as `store`.
+    /// Finish re-checks its owner and content revision after durable Allow.
+    pub(crate) project_store: xai_grok_science::project::ProjectStore,
+    pub(crate) project_revision: String,
+    pub(crate) expected_context: xai_grok_science::RunContext,
     pub(crate) ticket: xai_grok_science::csv::ScienceRunTicket,
     pub(crate) options: xai_grok_science::seqbench::SeqAnalyzeOptions,
     pub(crate) source_path: std::path::PathBuf,
@@ -164,6 +169,7 @@ pub struct FinishScienceSeqAnalyze {
     pub(crate) prepared: PreparedScienceSeqAnalyze,
     pub(crate) decision: xai_grok_science::ApprovalDecision,
     pub(crate) reason: String,
+    pub(crate) permission_grant: Option<crate::session::handle::ScienceSeqAnalyzePermissionGrant>,
     pub(crate) respond_to:
         oneshot::Sender<xai_grok_science::Result<xai_grok_science::seqbench::SeqAnalyzeResult>>,
 }
@@ -270,7 +276,19 @@ pub struct PreparedScienceProjectMutation {
     /// use this retained handle instead of reopening a caller-controlled path.
     pub(crate) project_store: xai_grok_science::project::ProjectStore,
     pub(crate) ticket: xai_grok_science::csv::ScienceRunTicket,
+    /// Exact durable context admitted before permission. The handle grant and
+    /// actor Finish both require equality with this snapshot.
+    pub(crate) expected_context: xai_grok_science::RunContext,
     pub(crate) request: xai_grok_science::project::MutationRequest,
+    /// Actual project revision captured by the actor, independent of the
+    /// caller's optional optimistic-CAS field. Creates have no prior revision.
+    pub(crate) project_revision: Option<String>,
+    /// Path identity paired with the retained ProjectStore capability. The
+    /// actor separately proves retained ScienceStore/ProjectStore equality.
+    pub(crate) project_root: std::path::PathBuf,
+    /// Present only for review_record. Captured before permission and
+    /// revalidated after Allow.
+    pub(crate) review_admission: Option<xai_grok_science::project::ReviewAdmission>,
     /// Present only for `project_migrate`. Captured before permission and
     /// revalidated after Allow; private fields make it an immutable source
     /// capability rather than caller-supplied metadata.
@@ -280,6 +298,12 @@ pub struct PreparedScienceProjectMutation {
     /// An operation already applied under this id: returned without asking
     /// for permission a second time.
     pub(crate) replayed: Option<xai_grok_science::project::MutationOutcome>,
+    /// True only when the actor reopens an existing Running+Allow review
+    /// authority. It resumes internally without a new prompt or fresh grant.
+    pub(crate) resume_allowed: bool,
+    /// Minted only by SessionHandle after a real production Allow decision.
+    pub(crate) permission_grant:
+        Option<crate::session::handle::ScienceProjectMutationPermissionGrant>,
 }
 /// WP-2 phase one: admit a project/claim/evidence mutation, bind it to this
 /// session, and open its durable run before the caller awaits permission.
@@ -359,7 +383,14 @@ pub struct ScienceWorkflowBinding {
 /// record to close.
 pub struct PreparedScienceWorkflowExecution {
     pub(crate) store: xai_grok_science::ScienceStore,
+    /// Retained project authority opened from the exact same root as `store`.
+    /// Finish re-checks the owner and exact revision after durable Allow.
+    pub(crate) project_store: xai_grok_science::project::ProjectStore,
+    pub(crate) project_revision: String,
     pub(crate) ticket: xai_grok_science::csv::ScienceRunTicket,
+    /// Exact actor-validated identity expected on both first completion and
+    /// terminal replay. Finish never reopens the workspace pathname.
+    pub(crate) expected_context: xai_grok_science::RunContext,
     pub(crate) binding: ScienceWorkflowBinding,
     /// Exact store root retained before permission; ledger, cells, and outputs
     /// all remain descriptor-relative to it after Allow.
@@ -375,6 +406,14 @@ pub struct PreparedScienceWorkflowExecution {
     /// This operation id already ran: the recorded report, returned without a
     /// second prompt and without executing anything again.
     pub(crate) replayed: Option<xai_grok_science::workflow::WorkflowRunReport>,
+    /// A previous process durably recorded Allow (and, if necessary, recovery
+    /// advanced AwaitingApproval to Running) before the workflow ledger was
+    /// created. The handle must route this straight back to the actor without
+    /// prompting again; Finish revalidates the exact durable Allow.
+    pub(crate) resume_allowed: bool,
+    /// An Allow token minted only by the production permission bridge in
+    /// `session::handle`. Replay and every non-Allow terminal carry `None`.
+    pub(crate) permission_grant: Option<crate::session::handle::ScienceWorkflowPermissionGrant>,
 }
 
 /// LS5-K8 phase one: admit a workflow execution, bind it to this session, and

@@ -290,6 +290,36 @@ pub(crate) fn validate_operation_id(operation_id: &str) -> Result<()> {
     Ok(())
 }
 
+fn validate_migration_request_shape(request: &MutationRequest) -> Result<()> {
+    validate_operation_id(&request.operation_id)?;
+    let ProjectMutation::ProjectMigrate {
+        source_run_id,
+        title,
+        research_question,
+        authority_run_id,
+    } = &request.mutation
+    else {
+        return Err(ScienceError::Invalid(
+            "migration authority requires project_migrate".into(),
+        ));
+    };
+    if request.session_id.is_empty()
+        || request.owner_id.is_empty()
+        || request.expected_revision.is_some()
+        || source_run_id.is_empty()
+        || title.is_empty()
+        || research_question.is_empty()
+        || authority_run_id.is_empty()
+        || request.migration_target_project_id()?.is_none()
+    {
+        return Err(ScienceError::Invalid(
+            "project_migrate requires exact session/owner/source/metadata/authority identity and no expectedRevision"
+                .into(),
+        ));
+    }
+    Ok(())
+}
+
 impl ProjectStore {
     /// Apply a mutation under session/owner/project binding, idempotency, and
     /// compare-and-swap. Holds the store write guard for the whole sequence,
@@ -301,7 +331,176 @@ impl ProjectStore {
                 "project_migrate requires a SessionActor-verified source bundle".into(),
             ));
         }
+        if matches!(request.mutation, ProjectMutation::ReviewRecord { .. }) {
+            return Err(ScienceError::Invalid(
+                "review_record requires SessionActor-retained ScienceStore authority".into(),
+            ));
+        }
         self.apply_mutation_inner_admitted(request, None)
+    }
+
+    /// Apply a review only through the exact `ScienceStore` capability the
+    /// SessionActor retained before permission. This prevents the project
+    /// mutation layer from reopening a pathname after Allow and binds the
+    /// succeeded source run to the same retained root as the project ledger.
+    pub fn apply_actor_review(
+        &self,
+        request: &MutationRequest,
+        science_store: &crate::ScienceStore,
+        admission: &super::review_store::ReviewAdmission,
+    ) -> Result<MutationOutcome> {
+        let ProjectMutation::ReviewRecord { project_id, .. } = &request.mutation else {
+            return Err(ScienceError::Invalid(
+                "review authority cannot authorize another mutation kind".into(),
+            ));
+        };
+        validate_operation_id(&request.operation_id)?;
+        if request.session_id.is_empty() || request.owner_id.is_empty() {
+            return Err(ScienceError::Invalid(
+                "review mutation requires a session id and owner id".into(),
+            ));
+        }
+        if !science_store.shares_root_capability_with(self)? {
+            return Err(ScienceError::Invalid(
+                "review ScienceStore and ProjectStore retained different roots".into(),
+            ));
+        }
+
+        let _guard = self.write_guard()?;
+        if let Some(record) = self.lookup_operation(&request.operation_id)? {
+            record.verify_replay(request)?;
+            if record.kind != "review_record" {
+                return Err(ScienceError::Invalid(
+                    "review admission cannot replay another mutation kind".into(),
+                ));
+            }
+            let review: super::review_store::ReviewRecord =
+                serde_json::from_value(record.result.clone())?;
+            self.verify_review_replay_admission(science_store, request, admission, &review)?;
+            return Ok(MutationOutcome {
+                operation_id: record.operation_id,
+                kind: record.kind,
+                project_id: record.project_id,
+                revision: record.revision,
+                result: record.result,
+                replayed: true,
+            });
+        }
+
+        let project = self.load_project(project_id)?;
+        if project.owner_id.0 != request.owner_id {
+            return Err(ScienceError::Ownership);
+        }
+        let current_revision = self.project_revision(project_id)?;
+        if let Some(expected) = request
+            .expected_revision
+            .as_deref()
+            .filter(|expected| *expected != current_revision)
+        {
+            return Err(ScienceError::Invalid(format!(
+                "revision conflict on project {}: expected {expected}, found {current_revision}",
+                project_id.0
+            )));
+        }
+
+        // This is the authority seam: while the same project write lock is
+        // held, recapture every pre-Allow input and require exact admission
+        // equality immediately before the ledger record is created.
+        admission.verify_after_allow_locked(self, science_store, request, &current_revision)?;
+        let review =
+            self.record_review_inner(science_store, request, admission, &current_revision)?;
+        let revision = self.project_revision(project_id)?;
+        let result = serde_json::to_value(review)?;
+        let record = OperationRecord {
+            operation_id: request.operation_id.clone(),
+            session_id: request.session_id.clone(),
+            owner_id: request.owner_id.clone(),
+            kind: request.mutation.kind().to_string(),
+            request_sha256: request.replay_fingerprint()?,
+            project_id: project_id.clone(),
+            revision: revision.clone(),
+            result: result.clone(),
+            completed_at: Utc::now(),
+        };
+        self.record_operation(&record)?;
+        Ok(MutationOutcome {
+            operation_id: record.operation_id,
+            kind: record.kind,
+            project_id: project_id.clone(),
+            revision,
+            result,
+            replayed: false,
+        })
+    }
+
+    /// Repair only the operation-ledger half of an already-written actor review.
+    ///
+    /// The opaque grant is minted while the original authority is still
+    /// Running and before its manifest/evidence/provenance commit. Recovery
+    /// reopens and verifies the exact v3 review under the same project write
+    /// lock, then writes no project data other than the missing operation
+    /// record.
+    pub fn recover_actor_review_operation(
+        &self,
+        request: &MutationRequest,
+        grant: &super::review_store::ReviewRecoveryGrant,
+    ) -> Result<MutationOutcome> {
+        let ProjectMutation::ReviewRecord { .. } = &request.mutation else {
+            return Err(ScienceError::Invalid(
+                "review recovery grant cannot authorize another mutation kind".into(),
+            ));
+        };
+        validate_operation_id(&request.operation_id)?;
+        if request.session_id.is_empty() || request.owner_id.is_empty() {
+            return Err(ScienceError::Invalid(
+                "review recovery requires a session id and owner id".into(),
+            ));
+        }
+
+        let _guard = self.write_guard()?;
+        let (review, revision) = grant.revalidate_locked(self, request)?;
+        let result = serde_json::to_value(&review)?;
+        if let Some(record) = self.lookup_operation(&request.operation_id)? {
+            record.verify_replay(request)?;
+            if record.kind != "review_record"
+                || record.project_id != review.project_id
+                || record.revision != revision
+                || record.result != result
+            {
+                return Err(ScienceError::Invalid(
+                    "existing review operation is not an exact orphan recovery replay".into(),
+                ));
+            }
+            return Ok(MutationOutcome {
+                operation_id: record.operation_id,
+                kind: record.kind,
+                project_id: record.project_id,
+                revision: record.revision,
+                result: record.result,
+                replayed: true,
+            });
+        }
+
+        let record = OperationRecord {
+            operation_id: request.operation_id.clone(),
+            session_id: request.session_id.clone(),
+            owner_id: request.owner_id.clone(),
+            kind: request.mutation.kind().to_string(),
+            request_sha256: request.replay_fingerprint()?,
+            project_id: review.project_id.clone(),
+            revision: revision.clone(),
+            result: result.clone(),
+            completed_at: Utc::now(),
+        };
+        self.record_operation(&record)?;
+        Ok(MutationOutcome {
+            operation_id: record.operation_id,
+            kind: record.kind,
+            project_id: record.project_id,
+            revision,
+            result,
+            replayed: true,
+        })
     }
 
     /// Apply the one project mutation whose source bytes live in
@@ -314,12 +513,38 @@ impl ProjectStore {
         admission: &super::migration::MigrationAdmission,
         source: &super::migration::VerifiedMigrationBundle,
     ) -> Result<MutationOutcome> {
-        if !matches!(request.mutation, ProjectMutation::ProjectMigrate { .. }) {
-            return Err(ScienceError::Invalid(
-                "a migration source bundle cannot authorize another mutation kind".into(),
-            ));
-        }
-        self.apply_mutation_inner_admitted(request, Some((admission, source)))
+        validate_migration_request_shape(request)?;
+        // Cross-store order is ProjectStore -> ScienceStore everywhere. Other
+        // product paths already hold the project guard while committing
+        // Science outputs; reversing it here would permit an ABBA deadlock.
+        let _guard = self.write_guard()?;
+        source.with_live_authority_for_project_store(self, || {
+            // Validate the exact request/admission/bundle tuple even when an
+            // operation record already exists. The generic idempotency fast
+            // path must not let an unrelated live bundle retrieve another
+            // migration's result.
+            if self.lookup_operation(&request.operation_id)?.is_some()
+                && self
+                    .lookup_migration_commit(&request.operation_id)?
+                    .is_none()
+            {
+                return Err(ScienceError::Invalid(
+                    "existing migration operation is missing its immutable commit journal".into(),
+                ));
+            }
+            self.admit_migration_commit_inner(request, admission, source)?;
+            source.verify_target_copies_for_project_store(self)?;
+            source.mark_project_commit_fence()?;
+            let outcome =
+                self.apply_mutation_inner_admitted_guarded(request, Some((admission, source)))?;
+            if outcome.replayed {
+                self.verify_migration_result(
+                    request,
+                    &serde_json::from_value(outcome.result.clone())?,
+                )?;
+            }
+            Ok(outcome)
+        })
     }
 
     /// Durably reserve the exact migration operation before any target
@@ -334,14 +559,11 @@ impl ProjectStore {
         admission: &super::migration::MigrationAdmission,
         source: &super::migration::VerifiedMigrationBundle,
     ) -> Result<super::migration::MigrationCommit> {
-        validate_operation_id(&request.operation_id)?;
-        if !matches!(request.mutation, ProjectMutation::ProjectMigrate { .. }) {
-            return Err(ScienceError::Invalid(
-                "a migration journal cannot authorize another mutation kind".into(),
-            ));
-        }
+        validate_migration_request_shape(request)?;
         let _guard = self.write_guard()?;
-        self.admit_migration_commit_inner(request, admission, source)
+        source.with_live_authority_for_project_store(self, || {
+            self.admit_migration_commit_inner(request, admission, source)
+        })
     }
 
     /// Adopt a project bundle whose actor commit journal landed before the
@@ -355,71 +577,87 @@ impl ProjectStore {
         request: &MutationRequest,
         grant: &super::migration::MigrationRecoveryGrant,
     ) -> Result<MutationOutcome> {
-        validate_operation_id(&request.operation_id)?;
-        if !matches!(request.mutation, ProjectMutation::ProjectMigrate { .. }) {
-            return Err(ScienceError::Invalid(
-                "migration recovery grant cannot authorize another mutation kind".into(),
-            ));
-        }
+        validate_migration_request_shape(request)?;
         let _guard = self.write_guard()?;
-        if let Some(record) = self.lookup_operation(&request.operation_id)? {
-            record.verify_replay(request)?;
-            return Ok(MutationOutcome {
+        grant.with_revalidated_authority_for_project_store(self, |authority_state| {
+            let commit = self
+                .lookup_migration_commit(&request.operation_id)?
+                .ok_or_else(|| {
+                    ScienceError::Invalid(format!(
+                        "migration commit {} is missing",
+                        request.operation_id
+                    ))
+                })?;
+            grant.verify_retained_commit(&commit)?;
+            let request_sha256 = request.replay_fingerprint()?;
+            if grant.operation_id() != request.operation_id
+                || grant.request_sha256() != request_sha256
+                || grant.target_project_id() != &commit.manifest.target_project_id
+                || grant.authority_run_id() != &commit.manifest.authority_run_id
+                || commit.request_sha256 != request_sha256
+            {
+                return Err(ScienceError::Ownership);
+            }
+            if let Some(record) = self.lookup_operation(&request.operation_id)? {
+                if authority_state == crate::RunState::Running {
+                    grant.mark_project_commit_fence()?;
+                }
+                record.verify_replay(request)?;
+                let expected_result =
+                    serde_json::to_value(super::migration::MigrationResult::from_commit(&commit)?)?;
+                if record.kind != "project_migrate"
+                    || record.project_id != commit.manifest.target_project_id
+                    || record.result != expected_result
+                {
+                    return Err(ScienceError::Invalid(
+                        "existing migration operation differs from its retained authority commit"
+                            .into(),
+                    ));
+                }
+                self.verify_migration_result(
+                    request,
+                    &serde_json::from_value(record.result.clone())?,
+                )?;
+                return Ok(MutationOutcome {
+                    operation_id: record.operation_id,
+                    kind: record.kind,
+                    project_id: record.project_id,
+                    revision: record.revision,
+                    result: record.result,
+                    replayed: true,
+                });
+            }
+            if authority_state != crate::RunState::Running {
+                return Err(ScienceError::Invalid(
+                    "a terminal migration authority may verify replay but cannot publish missing project records"
+                        .into(),
+                ));
+            }
+            grant.mark_project_commit_fence()?;
+            let result = self.resume_migration_commit_inner(request, &commit)?;
+            let project_id = result.target_project_id.clone();
+            let revision = self.project_revision(&project_id)?;
+            let result = serde_json::to_value(result)?;
+            let record = OperationRecord {
+                operation_id: request.operation_id.clone(),
+                session_id: request.session_id.clone(),
+                owner_id: request.owner_id.clone(),
+                kind: request.mutation.kind().into(),
+                request_sha256,
+                project_id: project_id.clone(),
+                revision: revision.clone(),
+                result: result.clone(),
+                completed_at: Utc::now(),
+            };
+            self.record_operation(&record)?;
+            Ok(MutationOutcome {
                 operation_id: record.operation_id,
                 kind: record.kind,
-                project_id: record.project_id,
-                revision: record.revision,
-                result: record.result,
+                project_id,
+                revision,
+                result,
                 replayed: true,
-            });
-        }
-        if grant.authority_state() != crate::RunState::Running {
-            return Err(ScienceError::Invalid(
-                "a terminal migration authority may verify replay but cannot publish missing project records"
-                    .into(),
-            ));
-        }
-        let commit = self
-            .lookup_migration_commit(&request.operation_id)?
-            .ok_or_else(|| {
-                ScienceError::Invalid(format!(
-                    "migration commit {} is missing",
-                    request.operation_id
-                ))
-            })?;
-        commit.verify()?;
-        let request_sha256 = request.replay_fingerprint()?;
-        if grant.operation_id() != request.operation_id
-            || grant.request_sha256() != request_sha256
-            || grant.target_project_id() != &commit.manifest.target_project_id
-            || grant.authority_run_id() != &commit.manifest.authority_run_id
-            || commit.request_sha256 != request_sha256
-        {
-            return Err(ScienceError::Ownership);
-        }
-        let result = self.resume_migration_commit_inner(request, &commit)?;
-        let project_id = result.target_project_id.clone();
-        let revision = self.project_revision(&project_id)?;
-        let result = serde_json::to_value(result)?;
-        let record = OperationRecord {
-            operation_id: request.operation_id.clone(),
-            session_id: request.session_id.clone(),
-            owner_id: request.owner_id.clone(),
-            kind: request.mutation.kind().into(),
-            request_sha256,
-            project_id: project_id.clone(),
-            revision: revision.clone(),
-            result: result.clone(),
-            completed_at: Utc::now(),
-        };
-        self.record_operation(&record)?;
-        Ok(MutationOutcome {
-            operation_id: record.operation_id,
-            kind: record.kind,
-            project_id,
-            revision,
-            result,
-            replayed: true,
+            })
         })
     }
 
@@ -448,16 +686,26 @@ impl ProjectStore {
         }
 
         let _guard = self.write_guard()?;
+        self.apply_mutation_inner_admitted_guarded(request, migration)
+    }
 
+    /// Apply while the caller retains this ProjectStore's write guard.
+    ///
+    /// Migration uses this entry after acquiring the guard before the Science
+    /// authority lock, preserving the repository-wide Project -> Science lock
+    /// order without re-entering the non-reentrant project mutex.
+    fn apply_mutation_inner_admitted_guarded(
+        &self,
+        request: &MutationRequest,
+        migration: Option<(
+            &super::migration::MigrationAdmission,
+            &super::migration::VerifiedMigrationBundle,
+        )>,
+    ) -> Result<MutationOutcome> {
         // Idempotency: a replay returns the first outcome, and only to the
         // session and owner that produced it.
         if let Some(record) = self.lookup_operation(&request.operation_id)? {
             record.verify_replay(request)?;
-            if record.kind == "review_record" {
-                let review: super::review_store::ReviewRecord =
-                    serde_json::from_value(record.result.clone())?;
-                self.verify_review_record(&review)?;
-            }
             return Ok(MutationOutcome {
                 operation_id: record.operation_id,
                 kind: record.kind,
@@ -623,31 +871,9 @@ impl ProjectStore {
                     }),
                 ))
             }
-            ProjectMutation::ReviewRecord {
-                project_id,
-                reviewer_id,
-                verdict,
-                summary,
-                claim_id,
-                source_run_id,
-                authority_run_id,
-                artifact_sha256s,
-            } => {
-                let review = self.record_review_inner(
-                    &request.operation_id,
-                    &request.session_id,
-                    &request.owner_id,
-                    project_id,
-                    reviewer_id,
-                    *verdict,
-                    summary,
-                    claim_id.clone(),
-                    source_run_id,
-                    authority_run_id,
-                    artifact_sha256s,
-                )?;
-                Ok((project_id.clone(), serde_json::to_value(review)?))
-            }
+            ProjectMutation::ReviewRecord { .. } => Err(ScienceError::Invalid(
+                "review_record requires an immutable ReviewAdmission".into(),
+            )),
         }
     }
 }
@@ -770,7 +996,7 @@ mod tests {
             })
             .unwrap();
         science_store
-            .transition(&source_run, RunState::Succeeded, None)
+            .transition_succeeded_verified(&source_run)
             .unwrap();
         let target = request.migration_target_project_id().unwrap().unwrap();
         let mut authority_context = RunContext {
@@ -831,6 +1057,35 @@ mod tests {
             .authorize_after_allow(&science_store, &authority_context)
             .unwrap();
         (admission, bundle)
+    }
+
+    fn copy_verified_migration_targets(
+        root: &Path,
+        request: &MutationRequest,
+        bundle: &super::super::migration::VerifiedMigrationBundle,
+    ) {
+        let ProjectMutation::ProjectMigrate {
+            authority_run_id, ..
+        } = &request.mutation
+        else {
+            panic!("migration target copy fixture requires ProjectMigrate");
+        };
+        let science_store = ScienceStore::new(root);
+        let target = request.migration_target_project_id().unwrap().unwrap();
+        for (artifact, bytes) in bundle.artifacts() {
+            science_store
+                .put_artifact(
+                    &ScienceProjectId::new(target.0.clone()),
+                    &RunId::new(authority_run_id),
+                    &request.owner_id,
+                    CallId::new("science_project_mutation"),
+                    &artifact.target_relative_path,
+                    bytes,
+                    artifact.mime.clone(),
+                    artifact.preview.clone(),
+                )
+                .unwrap();
+        }
     }
 
     #[test]
@@ -948,9 +1203,39 @@ mod tests {
                 .is_none(),
             "journal admission burned the generic operation ledger"
         );
+        assert!(
+            store
+                .apply_actor_migration(&request, &admission, &bundle)
+                .is_err(),
+            "project records published before target-owned copies existed"
+        );
+        assert!(store.list_projects().unwrap().is_empty());
+        copy_verified_migration_targets(dir.path(), &request, &bundle);
         let first = store
             .apply_actor_migration(&request, &admission, &bundle)
             .unwrap();
+        let science_store = ScienceStore::new(dir.path());
+        let authority_run_id = RunId::new("authority-run-42");
+        assert!(
+            science_store
+                .transition(
+                    &authority_run_id,
+                    RunState::Cancelled,
+                    Some("concurrent cancellation after project commit".into()),
+                )
+                .is_err(),
+            "authority cancellation crossed the durable project commit fence"
+        );
+        assert_eq!(
+            science_store.load_run(&authority_run_id).unwrap().state,
+            RunState::Running
+        );
+        assert!(
+            science_store
+                .transition_succeeded_verified(&authority_run_id)
+                .is_err(),
+            "compatibility success bypassed the fenced exact completion manifest"
+        );
         assert_eq!(first.kind, "project_migrate");
         let migration: super::super::migration::MigrationResult =
             serde_json::from_value(first.result.clone()).unwrap();
@@ -970,6 +1255,11 @@ mod tests {
         let result: super::super::migration::MigrationResult =
             serde_json::from_value(first.result).unwrap();
         store.verify_migration_result(&request, &result).unwrap();
+        let recovery_grant = super::super::migration::MigrationRecoveryGrant::verify(
+            &ScienceStore::new(dir.path()),
+            &journal,
+        )
+        .unwrap();
         store
             .propose_claim(
                 &replay.project_id,
@@ -978,9 +1268,41 @@ mod tests {
                 "researcher",
             )
             .unwrap();
+        let evolved_revision = store.project_revision(&replay.project_id).unwrap();
+        store
+            .apply_mutation(&MutationRequest {
+                operation_id: "op-migrate-later-question".into(),
+                session_id: request.session_id.clone(),
+                owner_id: request.owner_id.clone(),
+                expected_revision: Some(evolved_revision),
+                mutation: ProjectMutation::QuestionUpdate {
+                    project_id: replay.project_id.clone(),
+                    research_question: "A legitimately refined research question".into(),
+                },
+            })
+            .unwrap();
+        assert_eq!(
+            store
+                .load_project(&replay.project_id)
+                .unwrap()
+                .research_question,
+            "A legitimately refined research question"
+        );
         store
             .verify_migration_result(&request, &result)
-            .expect("later project evolution must not invalidate migration-owned records");
+            .expect("later claim/question evolution must not invalidate migration-owned records");
+        let recovered_replay = store
+            .recover_actor_migration_operation(&request, &recovery_grant)
+            .expect("later claim/question evolution must not invalidate authority-bound replay");
+        assert!(recovered_replay.replayed);
+        assert_eq!(recovered_replay.project_id, replay.project_id);
+        assert_eq!(
+            serde_json::from_value::<super::super::migration::MigrationResult>(
+                recovered_replay.result
+            )
+            .unwrap(),
+            result
+        );
 
         let migration_claim_path = store
             .project_dir(&replay.project_id)
@@ -1093,7 +1415,7 @@ mod tests {
                 .unwrap();
         }
         science_store
-            .transition(&authority_run, RunState::Succeeded, None)
+            .transition_succeeded_verified(&authority_run)
             .unwrap();
         let grant =
             super::super::migration::MigrationRecoveryGrant::verify(&science_store, &commit)
@@ -1132,11 +1454,7 @@ mod tests {
         };
         let (admission, bundle) = verified_migration(dir.path(), &request);
         ScienceStore::new(dir.path())
-            .transition(
-                &RunId::new("authority-stale-bundle"),
-                RunState::Succeeded,
-                None,
-            )
+            .transition_succeeded_verified(&RunId::new("authority-stale-bundle"))
             .unwrap();
         let error = project_store
             .admit_actor_migration(&request, &admission, &bundle)
@@ -1152,6 +1470,246 @@ mod tests {
                 .is_none()
         );
         assert!(project_store.list_projects().unwrap().is_empty());
+    }
+
+    #[test]
+    fn migration_rejects_cross_root_project_store() {
+        let authority_root = tempdir().unwrap();
+        let project_root = tempdir().unwrap();
+        let request = MutationRequest {
+            operation_id: "op-migrate-cross-root".into(),
+            session_id: "session-1".into(),
+            owner_id: "owner-1".into(),
+            expected_revision: None,
+            mutation: ProjectMutation::ProjectMigrate {
+                source_run_id: "source-cross-root".into(),
+                title: "Cross-root migration".into(),
+                research_question: "Can another project store consume this authority?".into(),
+                authority_run_id: "authority-cross-root".into(),
+            },
+        };
+        let (admission, bundle) = verified_migration(authority_root.path(), &request);
+        let project_store = ProjectStore::new(project_root.path());
+        let error = project_store
+            .admit_actor_migration(&request, &admission, &bundle)
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("different roots"),
+            "cross-root migration failed for the wrong reason: {error}"
+        );
+        assert!(
+            project_store
+                .lookup_migration_commit(&request.operation_id)
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn migration_journal_and_recovery_reject_expected_revision() {
+        let dir = tempdir().unwrap();
+        let project_store = ProjectStore::new(dir.path());
+        let valid = MutationRequest {
+            operation_id: "op-migrate-unexpected-revision".into(),
+            session_id: "session-1".into(),
+            owner_id: "owner-1".into(),
+            expected_revision: None,
+            mutation: ProjectMutation::ProjectMigrate {
+                source_run_id: "source-unexpected-revision".into(),
+                title: "No target revision".into(),
+                research_question: "Can create-only migration carry a CAS revision?".into(),
+                authority_run_id: "authority-unexpected-revision".into(),
+            },
+        };
+        let (admission, bundle) = verified_migration(dir.path(), &valid);
+        let mut forged = valid.clone();
+        forged.expected_revision = Some("forged-revision".into());
+        assert!(
+            project_store
+                .admit_actor_migration(&forged, &admission, &bundle)
+                .is_err(),
+            "migration journal accepted expectedRevision"
+        );
+        assert!(
+            project_store
+                .lookup_migration_commit(&valid.operation_id)
+                .unwrap()
+                .is_none()
+        );
+
+        let commit = project_store
+            .admit_actor_migration(&valid, &admission, &bundle)
+            .unwrap();
+        copy_verified_migration_targets(dir.path(), &valid, &bundle);
+        let grant = super::super::migration::MigrationRecoveryGrant::verify(
+            &ScienceStore::new(dir.path()),
+            &commit,
+        )
+        .unwrap();
+        assert!(
+            project_store
+                .recover_actor_migration_operation(&forged, &grant)
+                .is_err(),
+            "migration recovery accepted expectedRevision"
+        );
+        assert!(project_store.list_projects().unwrap().is_empty());
+        assert!(
+            project_store
+                .lookup_operation(&valid.operation_id)
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn migration_recovery_revalidates_grant_after_mint_before_publish() {
+        let dir = tempdir().unwrap();
+        let project_store = ProjectStore::new(dir.path());
+        let request = MutationRequest {
+            operation_id: "op-migrate-stale-recovery-grant".into(),
+            session_id: "session-1".into(),
+            owner_id: "owner-1".into(),
+            expected_revision: None,
+            mutation: ProjectMutation::ProjectMigrate {
+                source_run_id: "source-stale-recovery-grant".into(),
+                title: "Stale recovery grant".into(),
+                research_question: "Must publish revalidate authority state?".into(),
+                authority_run_id: "authority-stale-recovery-grant".into(),
+            },
+        };
+        let (admission, bundle) = verified_migration(dir.path(), &request);
+        let commit = project_store
+            .admit_actor_migration(&request, &admission, &bundle)
+            .unwrap();
+        copy_verified_migration_targets(dir.path(), &request, &bundle);
+        let science_store = ScienceStore::new(dir.path());
+        let grant =
+            super::super::migration::MigrationRecoveryGrant::verify(&science_store, &commit)
+                .unwrap();
+        science_store
+            .transition_succeeded_verified(&commit.manifest.authority_run_id)
+            .unwrap();
+        let error = project_store
+            .recover_actor_migration_operation(&request, &grant)
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("terminal migration authority may verify replay"),
+            "stale recovery grant failed for the wrong reason: {error}"
+        );
+        assert!(project_store.list_projects().unwrap().is_empty());
+        assert!(
+            project_store
+                .lookup_operation(&request.operation_id)
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn migration_replay_rejects_another_live_bundle() {
+        let dir = tempdir().unwrap();
+        let store = ProjectStore::new(dir.path());
+        let original = MutationRequest {
+            operation_id: "op-migrate-replay-original".into(),
+            session_id: "session-1".into(),
+            owner_id: "owner-1".into(),
+            expected_revision: None,
+            mutation: ProjectMutation::ProjectMigrate {
+                source_run_id: "source-replay-original".into(),
+                title: "Original migration".into(),
+                research_question: "Which exact source was allowed?".into(),
+                authority_run_id: "authority-replay-original".into(),
+            },
+        };
+        let (original_admission, original_bundle) = verified_migration(dir.path(), &original);
+        copy_verified_migration_targets(dir.path(), &original, &original_bundle);
+        store
+            .apply_actor_migration(&original, &original_admission, &original_bundle)
+            .unwrap();
+
+        let unrelated = MutationRequest {
+            operation_id: "op-migrate-replay-unrelated".into(),
+            mutation: ProjectMutation::ProjectMigrate {
+                source_run_id: "source-replay-unrelated".into(),
+                title: "Unrelated migration".into(),
+                research_question: "Can its Allow retrieve another result?".into(),
+                authority_run_id: "authority-replay-unrelated".into(),
+            },
+            ..original.clone()
+        };
+        let (_unrelated_admission, unrelated_bundle) = verified_migration(dir.path(), &unrelated);
+        let error = store
+            .apply_actor_migration(&original, &original_admission, &unrelated_bundle)
+            .unwrap_err();
+        assert!(
+            matches!(error, ScienceError::Ownership),
+            "another live bundle reached the existing-operation replay fast path: {error}"
+        );
+    }
+
+    #[test]
+    fn migration_recovery_grant_rejects_replaced_same_request_commit() {
+        let dir = tempdir().unwrap();
+        let store = ProjectStore::new(dir.path());
+        let request = MutationRequest {
+            operation_id: "op-migrate-replaced-commit".into(),
+            session_id: "session-1".into(),
+            owner_id: "owner-1".into(),
+            expected_revision: None,
+            mutation: ProjectMutation::ProjectMigrate {
+                source_run_id: "source-replaced-commit".into(),
+                title: "Retained commit".into(),
+                research_question: "Can a journal be substituted after grant mint?".into(),
+                authority_run_id: "authority-replaced-commit".into(),
+            },
+        };
+        let (admission, bundle) = verified_migration(dir.path(), &request);
+        let journal = store
+            .admit_actor_migration(&request, &admission, &bundle)
+            .unwrap();
+        copy_verified_migration_targets(dir.path(), &request, &bundle);
+        let grant = super::super::migration::MigrationRecoveryGrant::verify(
+            &ScienceStore::new(dir.path()),
+            &journal,
+        )
+        .unwrap();
+
+        let replacement_manifest = bundle
+            .manifest(journal.manifest.generated_at + chrono::Duration::seconds(1))
+            .unwrap();
+        let replacement = super::super::migration::MigrationCommit::new(
+            journal.request_sha256.clone(),
+            admission,
+            replacement_manifest,
+        )
+        .unwrap();
+        assert_ne!(replacement, journal);
+        std::fs::write(
+            dir.path()
+                .join("migration-commits")
+                .join(format!("{}.json", request.operation_id)),
+            serde_json::to_vec_pretty(&replacement).unwrap(),
+        )
+        .unwrap();
+
+        let error = store
+            .recover_actor_migration_operation(&request, &grant)
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("differs from the grant's retained commit"),
+            "replacement journal was not rejected by exact grant binding: {error}"
+        );
+        assert!(store.list_projects().unwrap().is_empty());
+        assert!(
+            store
+                .lookup_operation(&request.operation_id)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
@@ -1341,6 +1899,7 @@ mod tests {
             },
         };
         let (admission, bundle) = verified_migration(dir.path(), &original);
+        copy_verified_migration_targets(dir.path(), &original, &bundle);
         store
             .apply_actor_migration(&original, &admission, &bundle)
             .unwrap();
@@ -1356,8 +1915,7 @@ mod tests {
         assert!(
             matches!(
                 store.apply_actor_migration(&changed, &admission, &bundle),
-                Err(ScienceError::Invalid(message))
-                    if message.contains("does not match its original request")
+                Err(ScienceError::Ownership)
             ),
             "changed migration payload replayed"
         );

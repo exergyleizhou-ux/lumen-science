@@ -88,6 +88,7 @@ impl ProjectStore {
         source: &super::migration::VerifiedMigrationBundle,
     ) -> crate::Result<super::migration::MigrationResult> {
         let commit = self.admit_migration_commit_inner(request, admission, source)?;
+        source.verify_target_copies_for_project_store(self)?;
         publish_migration_commit(self, request, &commit)?;
         super::migration::MigrationResult::from_commit(&commit)
     }
@@ -110,7 +111,7 @@ impl ProjectStore {
             .require(crate::features::ScienceFeature::EvidenceGraph)?;
         self.gates()
             .require(crate::features::ScienceFeature::ClaimLifecycle)?;
-        source.verify_live_authority()?;
+        source.verify_live_authority_for_project_store(self)?;
         let super::mutation::ProjectMutation::ProjectMigrate {
             source_run_id,
             title,
@@ -133,6 +134,7 @@ impl ProjectStore {
             || admission.session_id() != request.session_id
             || admission.title() != title
             || admission.research_question() != research_question
+            || source.admission()? != admission
             || source.source_run().context.run_id != *admission.source_run_id()
             || source.snapshot() != admission.source_snapshot()
         {
@@ -392,7 +394,6 @@ pub(super) fn verify_committed_migration(
     if project.project_id != *target
         || project.owner_id.0 != request.owner_id
         || project.title != commit.manifest.title
-        || project.research_question != commit.manifest.research_question
         || !project
             .sessions
             .contains(&commit.manifest.source_run.context.run_id.0)

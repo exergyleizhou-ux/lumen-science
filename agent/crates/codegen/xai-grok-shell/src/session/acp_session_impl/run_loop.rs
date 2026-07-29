@@ -13,9 +13,22 @@ use super::*;
 pub(super) fn yolo_toggle_report(was: bool, actual: bool) -> Option<bool> {
     (was != actual).then_some(actual)
 }
+
+/// Recover the successfully prepared value when its oneshot receiver vanished.
+///
+/// `Sender::send` returns ownership of the undelivered payload. Only an `Ok`
+/// contains a durable workflow Begin that now needs actor-owned interruption;
+/// an undelivered preparation error created no capability bundle to close.
+fn undelivered_science_begin<T, E>(delivery: Result<(), Result<T, E>>) -> Option<T> {
+    match delivery {
+        Err(Ok(prepared)) => Some(prepared),
+        Ok(()) | Err(Err(_)) => None,
+    }
+}
+
 #[cfg(test)]
 mod yolo_toggle_report_tests {
-    use super::yolo_toggle_report;
+    use super::{undelivered_science_begin, yolo_toggle_report};
     /// A pin-clamped enable (requested ON but actual stays OFF) reports no
     /// change, so no spurious "turned on" event/telemetry is emitted. Real
     /// flips report the actual new state.
@@ -25,6 +38,30 @@ mod yolo_toggle_report_tests {
         assert_eq!(yolo_toggle_report(false, true), Some(true));
         assert_eq!(yolo_toggle_report(true, false), Some(false));
         assert_eq!(yolo_toggle_report(true, true), None);
+    }
+
+    #[test]
+    fn closed_begin_receiver_returns_only_a_prepared_success_for_interruption() {
+        let (closed_tx, closed_rx) = tokio::sync::oneshot::channel();
+        drop(closed_rx);
+        assert_eq!(
+            undelivered_science_begin(closed_tx.send(Ok::<_, &'static str>(41))),
+            Some(41)
+        );
+
+        let (error_tx, error_rx) = tokio::sync::oneshot::channel();
+        drop(error_rx);
+        assert_eq!(
+            undelivered_science_begin(error_tx.send(Err::<u8, _>("prepare failed"))),
+            None
+        );
+
+        let (live_tx, live_rx) = tokio::sync::oneshot::channel();
+        assert_eq!(
+            undelivered_science_begin(live_tx.send(Ok::<_, &'static str>(43))),
+            None
+        );
+        assert_eq!(live_rx.blocking_recv().unwrap().unwrap(), 43);
     }
 }
 /// Best-effort removal of this session's per-session scratch staging on
@@ -280,19 +317,19 @@ pub(super) async fn run_session(
             SessionCommand::VerifyScienceGoal(command) => { let command = *command; let result = session.verify_science_goal(command.store, command.run_id).await; let _ = command.respond_to.send(result); }
             SessionCommand::BeginScienceImport(command) => { let command = *command; let result = session.prepare_science_import(command.store, command.context, command.source_path, command.bytes); let _ = command.respond_to.send(result); }
             SessionCommand::FinishScienceImport(command) => { let command = *command; let result = Box::pin(session.finish_science_import(command.prepared, command.decision, command.reason)).await; let _ = command.respond_to.send(result); }
-            SessionCommand::BeginScienceSeqAnalyze(command) => { let command = *command; let result = session.prepare_science_seq_analyze(command.store, command.context, command.options, command.source_path, command.source_bytes); let _ = command.respond_to.send(result); }
-            SessionCommand::FinishScienceSeqAnalyze(command) => { let command = *command; let result = session.finish_science_seq_analyze(command.prepared, command.decision, command.reason); let _ = command.respond_to.send(result); }
+            SessionCommand::BeginScienceSeqAnalyze(command) => { let command = *command; let result = session.prepare_science_seq_analyze(command.store, command.context, command.options, command.source_path, command.source_bytes); if let Some(prepared) = undelivered_science_begin(command.respond_to.send(result)) && let Err(error) = session.interrupt_undelivered_science_seq_analyze_begin(prepared) { tracing::error!("failed to interrupt undelivered Science sequence analysis Begin: {error}"); } }
+            SessionCommand::FinishScienceSeqAnalyze(command) => { let command = *command; let result = session.finish_science_seq_analyze(command.prepared, command.decision, command.reason, command.permission_grant); let _ = command.respond_to.send(result); }
             SessionCommand::BeginScienceSkillQuarantine(command) => { let command = *command; let result = session.prepare_science_skill_quarantine(command.store, command.context, command.request, command.archive_bytes); let _ = command.respond_to.send(result); }
             SessionCommand::FinishScienceSkillQuarantine(command) => { let command = *command; let result = session.finish_science_skill_quarantine(command.prepared, command.decision, command.reason, command.permission_grant); let _ = command.respond_to.send(result); }
             SessionCommand::BeginScienceEvidenceDossier(command) => { let command = *command; let result = session.prepare_science_evidence_dossier(command.store, command.project_root, command.context, command.source_run_ids); let _ = command.respond_to.send(result); }
             SessionCommand::FinishScienceEvidenceDossier(command) => { let command = *command; let result = session.finish_science_evidence_dossier(command.prepared, command.decision, command.reason, command.permission_grant); let _ = command.respond_to.send(result); }
             SessionCommand::BeginScienceFetch(command) => { let command = *command; let result = session.prepare_science_fetch(command.store, command.context, command.connector_id, command.query, command.requests, command.fixture_bytes, command.capability_provenance); let _ = command.respond_to.send(result); }
             SessionCommand::FinishScienceFetch(command) => { let command = *command; let result = Box::pin(session.finish_science_fetch(command.prepared, command.decision, command.reason)).await; let _ = command.respond_to.send(result); }
-            SessionCommand::BeginScienceProjectMutation(command) => { let command = *command; let result = session.prepare_science_project_mutation(command.store, command.project_root, command.context, command.request); let _ = command.respond_to.send(result); }
+            SessionCommand::BeginScienceProjectMutation(command) => { let command = *command; let result = session.prepare_science_project_mutation(command.store, command.project_root, command.context, command.request); if let Some(prepared) = undelivered_science_begin(command.respond_to.send(result)) && let Err(error) = session.interrupt_undelivered_science_project_mutation_begin(prepared) { tracing::error!("failed to interrupt undelivered Science project mutation Begin: {error}"); } }
             SessionCommand::FinishScienceProjectMutation(command) => { let command = *command; let result = session.finish_science_project_mutation(command.prepared, command.decision, command.reason); let _ = command.respond_to.send(result); }
             SessionCommand::BeginScienceKernelAdmission(command) => { let command = *command; let result = session.prepare_science_kernel_admission(command.store, command.project_root, command.context, command.request); let _ = command.respond_to.send(result); }
             SessionCommand::FinishScienceKernelAdmission(command) => { let command = *command; let result = session.finish_science_kernel_admission(command.prepared, command.decision, command.reason); let _ = command.respond_to.send(result); }
-            SessionCommand::BeginScienceWorkflowExecution(command) => { let command = *command; let result = session.prepare_science_workflow_execution(command.store, command.context, command.binding); let _ = command.respond_to.send(result); }
+            SessionCommand::BeginScienceWorkflowExecution(command) => { let command = *command; let result = session.prepare_science_workflow_execution(command.store, command.context, command.binding); if let Some(prepared) = undelivered_science_begin(command.respond_to.send(result)) && let Err(error) = session.interrupt_undelivered_science_workflow_begin(prepared) { tracing::error!("failed to interrupt undelivered Science workflow Begin: {error}"); } }
             SessionCommand::FinishScienceWorkflowExecution(command) => { let command = *command; let result = session.finish_science_workflow_execution(command.prepared, command.decision, command.reason); let _ = command.respond_to.send(result); }
             /*
             SessionCommand::BeginScienceCsv { store, context, fixture_path, fixture,

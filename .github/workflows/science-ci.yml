@@ -192,6 +192,27 @@ jobs:
       - name: cargo test -p xai-grok-science --lib
         run: cargo test -p xai-grok-science --lib --locked -- --test-threads=2
 
+      - name: Workflow authority cancellation, replay, and rollback proofs
+        run: |
+          set -euo pipefail
+          tests=(
+            session::acp_session::run_loop::yolo_toggle_report_tests::closed_begin_receiver_returns_only_a_prepared_success_for_interruption
+            session::acp_session::science::workflow_authority_failure_tests::undelivered_begin_interrupts_pending_approval_without_probe_or_execution
+            session::acp_session::science::workflow_authority_failure_tests::terminal_replay_rejects_missing_duplicate_nonfinal_or_tampered_finish_event
+            session::acp_session::science::workflow_authority_failure_tests::recoverable_finish_event_failure_rolls_back_before_failed_terminal
+          )
+          for test_name in "${tests[@]}"; do
+            output="$(
+              CARGO_TERM_COLOR=never \
+                cargo test -p xai-grok-shell --lib --locked \
+                  "$test_name" -- --exact 2>&1
+            )"
+            printf '%s\n' "$output"
+            printf '%s\n' "$output" | grep -Fqx "test ${test_name} ... ok"
+            printf '%s\n' "$output" | grep -Eq \
+              'test result: ok\. 1 passed; 0 failed; 0 ignored; 0 measured; [0-9]+ filtered out; finished in .+$'
+          done
+
       # xai-grok-workspace + xai-grok-tools ran in NO job, and both were red:
       # 15 failures from fixtures that fed uncanonicalized temp paths into the
       # capability layer (invisible on Linux, where /tmp is not a symlink), and
@@ -229,10 +250,13 @@ jobs:
             test_stdio_science_seq_analyze_denied_writes_nothing
             test_stdio_science_seq_analyze_permission_timeout_writes_nothing
             test_stdio_science_seq_analyze_malformed_input_fails_without_outputs
+            test_stdio_science_seq_analyze_allow_rejects_project_revision_race
             test_stdio_science_project_mutation_is_actor_gated_and_idempotent
             test_stdio_science_project_mutation_denied_writes_nothing
+            test_stdio_science_project_mutation_fails_closed
             test_stdio_science_project_migrate_is_actor_gated_and_idempotent
             test_stdio_science_project_migrate_refusal_writes_no_project
+            test_stdio_science_project_migrate_cancel_writes_no_project
             test_stdio_science_project_migrate_requires_migration_chain_gate
             test_stdio_science_project_migrate_timeout_writes_no_project
             test_stdio_science_project_migrate_allow_rejects_source_tamper
@@ -246,11 +270,12 @@ jobs:
             test_stdio_science_skill_quarantine_permission_timeout_writes_nothing
             test_stdio_science_skill_quarantine_boundaries_fail_closed
             test_stdio_science_workflow_execute_is_actor_gated_and_idempotent
+            test_stdio_science_workflow_partial_artifact_registration_rolls_back
             test_stdio_science_workflow_deterministic_reuse_refuses_tampered_cas
             test_stdio_science_workflow_execute_retains_store_across_approval
             test_stdio_science_workflow_execute_retains_store_and_interpreter_across_approval
             test_stdio_science_workflow_execute_fails_closed
-            test_stdio_science_workflow_execute_denied_runs_nothing
+            test_stdio_science_workflow_execute_non_allow_terminals_run_nothing
             test_stdio_science_connector_fetch_product_path
             test_stdio_science_biomni_uniprot_capability_product_path
           )
@@ -343,9 +368,10 @@ jobs:
           set -euo pipefail
           tests=(
             test_stdio_science_workflow_execute_is_actor_gated_and_idempotent
+            test_stdio_science_workflow_partial_artifact_registration_rolls_back
             test_stdio_science_workflow_deterministic_reuse_refuses_tampered_cas
             test_stdio_science_workflow_execute_fails_closed
-            test_stdio_science_workflow_execute_denied_runs_nothing
+            test_stdio_science_workflow_execute_non_allow_terminals_run_nothing
             test_stdio_science_workflow_execute_macos_rejects_unprotected_interpreter_before_permission
             test_stdio_science_connector_fetch_product_path
             test_stdio_science_biomni_uniprot_capability_product_path

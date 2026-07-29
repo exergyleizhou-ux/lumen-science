@@ -44,7 +44,7 @@ use crate::project::capability::PinnedDirectory;
 use crate::project::model::ProjectId;
 #[cfg(test)]
 use crate::project::store::ProjectStore;
-use crate::project::store::write_lock_for;
+use crate::project::store::{HeldProjectRootWriteGuard, write_lock_for};
 use crate::{Result, ScienceError};
 use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
@@ -52,6 +52,7 @@ use sha2::{Digest, Sha256};
 #[cfg(test)]
 use std::fs;
 use std::{
+    cell::RefCell,
     collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
     sync::{
@@ -62,6 +63,43 @@ use std::{
 };
 
 pub const WORKFLOW_RUN_SCHEMA_VERSION: u32 = 2;
+
+thread_local! {
+    /// Root-lock identities proven held by a typed project-store guard on this
+    /// synchronous thread. Workflow execution is synchronous; this scope never
+    /// crosses an await point or moves between threads.
+    static EXTERNALLY_HELD_ROOT_WRITES: RefCell<Vec<usize>> =
+        const { RefCell::new(Vec::new()) };
+}
+
+struct ExternallyHeldRootWriteScope {
+    lock_identity: usize,
+}
+
+impl ExternallyHeldRootWriteScope {
+    fn enter(writes: &Arc<Mutex<()>>, held: &HeldProjectRootWriteGuard<'_>) -> Result<Self> {
+        if !held.authorizes(writes) {
+            return Err(ScienceError::Ownership);
+        }
+        let lock_identity = Arc::as_ptr(writes) as usize;
+        EXTERNALLY_HELD_ROOT_WRITES.with(|held| held.borrow_mut().push(lock_identity));
+        Ok(Self { lock_identity })
+    }
+}
+
+impl Drop for ExternallyHeldRootWriteScope {
+    fn drop(&mut self) {
+        EXTERNALLY_HELD_ROOT_WRITES.with(|held| {
+            let removed = held.borrow_mut().pop();
+            debug_assert_eq!(removed, Some(self.lock_identity));
+        });
+    }
+}
+
+fn root_write_is_externally_held(writes: &Arc<Mutex<()>>) -> bool {
+    let lock_identity = Arc::as_ptr(writes) as usize;
+    EXTERNALLY_HELD_ROOT_WRITES.with(|held| held.borrow().contains(&lock_identity))
+}
 
 /// Step ids become directory and file name components, so they are kept to a
 /// boring alphabet rather than sanitised after the fact.
@@ -803,9 +841,13 @@ impl WorkflowExecutor {
         PathBuf::from("workflow-operations").join(format!("{operation_id}.json"))
     }
 
-    fn guard(&self) -> Result<std::sync::MutexGuard<'_, ()>> {
+    fn guard(&self) -> Result<Option<std::sync::MutexGuard<'_, ()>>> {
+        if root_write_is_externally_held(&self.writes) {
+            return Ok(None);
+        }
         self.writes
             .lock()
+            .map(Some)
             .map_err(|_| ScienceError::Invalid("workflow store write lock poisoned".into()))
     }
 
@@ -838,6 +880,38 @@ impl WorkflowExecutor {
     }
 
     // ── Public API ────────────────────────────────────────────────
+
+    /// Execute while a [`ProjectStore`](crate::project::ProjectStore) holds
+    /// the write lock for this executor's exact retained root.
+    ///
+    /// `std::sync::Mutex` is not reentrant. The typed guard proves that
+    /// project-owner/revision validation already holds the same lock, so the
+    /// executor may use that outer critical section instead of deadlocking on
+    /// its normal per-write acquisitions. A token from any other root is
+    /// rejected and no workflow record is created.
+    pub fn execute_with_project_guard(
+        &self,
+        held: &HeldProjectRootWriteGuard<'_>,
+        request: &WorkflowExecutionRequest,
+    ) -> Result<WorkflowRunReport> {
+        self.with_project_guard(held, |executor| executor.execute(request))
+    }
+
+    /// Run a synchronous executor operation under an already-held project
+    /// root guard.
+    ///
+    /// This wider seam is needed when execution is immediately followed by
+    /// commit-ledger reads during an actor authority commit: those reads use
+    /// the same root lock and must remain inside the typed external-lock scope
+    /// as well.
+    pub fn with_project_guard<T>(
+        &self,
+        held: &HeldProjectRootWriteGuard<'_>,
+        operation: impl FnOnce(&Self) -> Result<T>,
+    ) -> Result<T> {
+        let _scope = ExternallyHeldRootWriteScope::enter(&self.writes, held)?;
+        operation(self)
+    }
 
     /// Execute a workflow, or replay an already-executed operation id.
     pub fn execute(&self, request: &WorkflowExecutionRequest) -> Result<WorkflowRunReport> {
@@ -1032,6 +1106,42 @@ impl WorkflowExecutor {
             return Ok(None);
         };
         Ok(Some(self.resolve_commit_locked(commit, commit_key)?))
+    }
+
+    /// Reopen one immutable artifact through the retained workflow-store
+    /// capability and verify that its physical bytes still match the commit.
+    ///
+    /// SessionActor uses this seam to register workflow outputs in the
+    /// ScienceStore authority run. Returning bytes rather than a store path
+    /// prevents protocol adapters from bypassing the confined CAS.
+    pub fn committed_artifact_bytes(
+        &self,
+        commit_key: &str,
+        artifact_name: &str,
+    ) -> Result<Vec<u8>> {
+        let commit = self
+            .load_commit(commit_key)?
+            .ok_or_else(|| ScienceError::Invalid("workflow artifact commit not found".into()))?;
+        let digest = commit.output_manifest.get(artifact_name).ok_or_else(|| {
+            ScienceError::Invalid(format!(
+                "workflow artifact '{artifact_name}' is not in commit {commit_key}"
+            ))
+        })?;
+        let bytes = self
+            .confined()?
+            .read_optional(&self.artifact_path(digest))?
+            .ok_or_else(|| {
+                ScienceError::Invalid(format!(
+                    "workflow artifact '{artifact_name}' ({digest}) is missing from the immutable store"
+                ))
+            })?;
+        let actual = hex_sha256(&bytes);
+        if actual != *digest {
+            return Err(ScienceError::Invalid(format!(
+                "workflow artifact '{artifact_name}' expected {digest}, but stored bytes hash to {actual}"
+            )));
+        }
+        Ok(bytes)
     }
 
     /// The reservation an operation id already holds, if any.
@@ -2393,8 +2503,14 @@ fn commit_key_for(
     format!("{:x}", hasher.finalize())
 }
 
-/// Deterministic run id, so re-executing an operation lands on the same run
-/// directory instead of scattering half-runs across the store.
+/// Deterministic run id, so the workflow ledger and the actor-owned Science
+/// run share one durable identity and an operation retry cannot scatter
+/// half-runs across two stores.
+pub fn run_id_for_operation(operation_id: &str) -> Result<String> {
+    crate::project::mutation::validate_operation_id(operation_id)?;
+    Ok(derive_run_id(operation_id))
+}
+
 fn derive_run_id(operation_id: &str) -> String {
     hex_sha256(operation_id.as_bytes())[..32].to_string()
 }
@@ -2453,6 +2569,153 @@ mod confinement_tests {
                 schema_version: 1,
             },
         }
+    }
+
+    #[test]
+    fn held_project_root_guard_executes_without_relocking_and_serializes_project_mutation() {
+        use std::sync::mpsc;
+
+        let workspace = tempdir().unwrap();
+        let root = workspace.path().join("store");
+        let executor = WorkflowExecutor::new(&root, environment());
+        let project_store = ProjectStore::new(&root);
+        let project = project_store
+            .create_project(
+                "owner-project-guard",
+                "Before guarded workflow",
+                "Can a project mutate during guarded workflow authority?",
+            )
+            .unwrap();
+        let initial_revision = project_store.project_revision(&project.project_id).unwrap();
+
+        let guarded_request = WorkflowExecutionRequest {
+            operation_id: "operation-project-guard".into(),
+            session_id: "session-project-guard".into(),
+            owner_id: "owner-project-guard".into(),
+            spec: WorkflowSpec {
+                workflow_id: "workflow-project-guard".into(),
+                project_id: project.project_id.clone(),
+                name: "guarded workflow".into(),
+                steps: Vec::new(),
+                parameters: BTreeMap::new(),
+                permissions: Vec::new(),
+                resources: ResourceLimits {
+                    max_concurrent_steps: 1,
+                    max_total_duration_secs: 1,
+                    max_memory_mb: 1,
+                    max_disk_mb: 1,
+                },
+                schema_version: 1,
+            },
+        };
+
+        let (start_tx, start_rx) = mpsc::channel();
+        let (attempting_tx, attempting_rx) = mpsc::channel();
+        let (finished_tx, finished_rx) = mpsc::channel();
+        let mutation_store = project_store.clone();
+        let mut changed_project = project.clone();
+        changed_project.title = "After guarded workflow".into();
+        let mutation = std::thread::spawn(move || {
+            start_rx.recv().unwrap();
+            attempting_tx.send(()).unwrap();
+            mutation_store.save_project(&changed_project).unwrap();
+            finished_tx.send(()).unwrap();
+        });
+
+        let report = project_store
+            .with_owned_project_revision_guarded(
+                &project.project_id,
+                "owner-project-guard",
+                |_owned, revision, held| {
+                    assert_eq!(revision, initial_revision);
+                    start_tx.send(()).unwrap();
+                    attempting_rx.recv().unwrap();
+                    assert!(
+                        finished_rx
+                            .recv_timeout(std::time::Duration::from_millis(100))
+                            .is_err(),
+                        "project mutation completed while the root guard was held"
+                    );
+                    executor.with_project_guard(held, |executor| {
+                        let report = executor.execute(&guarded_request)?;
+                        assert!(
+                            executor
+                                .lookup_operation(&guarded_request.operation_id)?
+                                .is_some(),
+                            "post-execution ledger read failed inside the same held-root scope"
+                        );
+                        Ok(report)
+                    })
+                },
+            )
+            .unwrap();
+        assert_eq!(report.run.state, WorkflowState::Succeeded);
+        finished_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("project mutation did not resume after the guarded workflow");
+        mutation.join().unwrap();
+
+        assert_ne!(
+            project_store.project_revision(&project.project_id).unwrap(),
+            initial_revision
+        );
+        assert_eq!(
+            project_store
+                .load_project(&project.project_id)
+                .unwrap()
+                .title,
+            "After guarded workflow"
+        );
+    }
+
+    #[test]
+    fn held_project_root_guard_is_rejected_by_an_executor_on_another_root() {
+        let workspace = tempdir().unwrap();
+        let guarded_root = workspace.path().join("guarded-store");
+        let other_root = workspace.path().join("other-store");
+        let project_store = ProjectStore::new(&guarded_root);
+        let project = project_store
+            .create_project("owner-root-binding", "Root binding", "Which root is held?")
+            .unwrap();
+        let other_executor = WorkflowExecutor::new(&other_root, environment());
+        let request = WorkflowExecutionRequest {
+            operation_id: "operation-wrong-root-guard".into(),
+            session_id: "session-root-binding".into(),
+            owner_id: "owner-root-binding".into(),
+            spec: WorkflowSpec {
+                workflow_id: "workflow-root-binding".into(),
+                project_id: project.project_id.clone(),
+                name: "wrong root guard".into(),
+                steps: Vec::new(),
+                parameters: BTreeMap::new(),
+                permissions: Vec::new(),
+                resources: ResourceLimits {
+                    max_concurrent_steps: 1,
+                    max_total_duration_secs: 1,
+                    max_memory_mb: 1,
+                    max_disk_mb: 1,
+                },
+                schema_version: 1,
+            },
+        };
+
+        project_store
+            .with_owned_project_revision_guarded(
+                &project.project_id,
+                "owner-root-binding",
+                |_owned, _revision, held| {
+                    assert!(matches!(
+                        other_executor.execute_with_project_guard(held, &request),
+                        Err(ScienceError::Ownership)
+                    ));
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert!(
+            !other_root.join("workflow-operations").exists(),
+            "wrong-root guard created workflow execution state"
+        );
     }
 
     #[test]

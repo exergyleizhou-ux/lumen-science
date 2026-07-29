@@ -52,6 +52,294 @@ pub struct ReviewedArtifact {
     pub mime: String,
 }
 
+/// Immutable proof of the exact review request and source authority inspected
+/// before the SessionActor asks for permission.
+///
+/// Fields are deliberately private and the type is not deserializable.  The
+/// only constructor reopens the source run and selected artifact bytes through
+/// the same retained `ScienceStore` / `ProjectStore` root capability, while
+/// holding the project write lock long enough to bind the current project
+/// revision.  `apply_actor_review` captures the same proof again after Allow
+/// and requires byte-for-byte equality before it may write a review.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReviewAdmission {
+    request_sha256: String,
+    owner_id: String,
+    project_id: ProjectId,
+    session_id: String,
+    source_run_id: String,
+    authority_run_id: String,
+    source_authority_sha256: String,
+    artifacts: Vec<ReviewedArtifact>,
+    project_revision: String,
+    sha256: String,
+}
+
+/// Opaque authority for repairing only the narrow review-ledger/operation-ledger
+/// crash window.
+///
+/// The grant retains the exact `ScienceStore` directory capability used to
+/// verify the orphan. It is intentionally neither serializable nor
+/// deserializable and contains no caller-supplied timestamp: it can only be
+/// minted while the original review authority is still Running with one
+/// durable Allow and before any authority output has been committed.
+#[derive(Debug, Clone)]
+pub struct ReviewRecoveryGrant {
+    science_store: ScienceStore,
+    operation_id: String,
+    request_sha256: String,
+    project_id: ProjectId,
+    owner_id: String,
+    session_id: String,
+    source_run_id: String,
+    authority_run_id: String,
+    review_admission_sha256: String,
+    source_authority_sha256: String,
+    artifacts: Vec<ReviewedArtifact>,
+    review_record_sha256: String,
+    project_revision: String,
+}
+
+#[derive(Serialize)]
+struct ReviewAdmissionDigest<'a> {
+    schema: &'static str,
+    request_sha256: &'a str,
+    owner_id: &'a str,
+    project_id: &'a ProjectId,
+    session_id: &'a str,
+    source_run_id: &'a str,
+    authority_run_id: &'a str,
+    source_authority_sha256: &'a str,
+    artifacts: &'a [ReviewedArtifact],
+    project_revision: &'a str,
+}
+
+impl ReviewAdmission {
+    pub const ENV_ADMISSION_SHA256: &'static str = "review_admission_sha256";
+    pub const ENV_REQUEST_SHA256: &'static str = "review_request_sha256";
+    pub const ENV_SOURCE_AUTHORITY_SHA256: &'static str = "review_source_authority_sha256";
+    pub const ENV_PROJECT_REVISION: &'static str = "review_project_revision";
+
+    /// Capture one immutable review admission from retained store
+    /// capabilities. The request's optional caller CAS remains part of its
+    /// normalized fingerprint, but admission independently binds the actual
+    /// current project revision even when `expected_revision` is `None`.
+    pub fn capture(
+        project_store: &ProjectStore,
+        science_store: &ScienceStore,
+        request: &super::mutation::MutationRequest,
+    ) -> crate::Result<Self> {
+        let ProjectMutationReviewFields { project_id, .. } =
+            ProjectMutationReviewFields::from_request(request)?;
+        project_store.with_owned_project_revision(
+            project_id,
+            &request.owner_id,
+            |_project, revision| {
+                project_store.capture_review_admission_inner(science_store, request, revision)
+            },
+        )
+    }
+
+    pub fn request_sha256(&self) -> &str {
+        &self.request_sha256
+    }
+
+    pub fn owner_id(&self) -> &str {
+        &self.owner_id
+    }
+
+    pub fn project_id(&self) -> &ProjectId {
+        &self.project_id
+    }
+
+    pub fn session_id(&self) -> &str {
+        &self.session_id
+    }
+
+    pub fn source_run_id(&self) -> &str {
+        &self.source_run_id
+    }
+
+    pub fn authority_run_id(&self) -> &str {
+        &self.authority_run_id
+    }
+
+    pub fn source_authority_sha256(&self) -> &str {
+        &self.source_authority_sha256
+    }
+
+    pub fn artifacts(&self) -> &[ReviewedArtifact] {
+        &self.artifacts
+    }
+
+    pub fn project_revision(&self) -> &str {
+        &self.project_revision
+    }
+
+    pub fn sha256(&self) -> &str {
+        &self.sha256
+    }
+
+    /// Exact bindings that must be present in the actor authority
+    /// `RunContext.environment` before its approval may authorize a review.
+    pub fn authority_environment(&self) -> BTreeMap<String, String> {
+        BTreeMap::from([
+            (Self::ENV_ADMISSION_SHA256.into(), self.sha256().to_string()),
+            (
+                Self::ENV_REQUEST_SHA256.into(),
+                self.request_sha256().to_string(),
+            ),
+            (
+                Self::ENV_SOURCE_AUTHORITY_SHA256.into(),
+                self.source_authority_sha256().to_string(),
+            ),
+            (
+                Self::ENV_PROJECT_REVISION.into(),
+                self.project_revision().to_string(),
+            ),
+        ])
+    }
+
+    /// Reopen every admission-bearing input after durable Allow while holding
+    /// the project write lock. This is useful to the actor before it enters
+    /// its finish phase; `apply_actor_review` performs the same check again and
+    /// therefore does not trust callers to have invoked this method.
+    pub fn verify_after_allow(
+        &self,
+        project_store: &ProjectStore,
+        science_store: &ScienceStore,
+        request: &super::mutation::MutationRequest,
+    ) -> crate::Result<()> {
+        let ProjectMutationReviewFields { project_id, .. } =
+            ProjectMutationReviewFields::from_request(request)?;
+        project_store.with_owned_project_revision(
+            project_id,
+            &request.owner_id,
+            |_project, revision| {
+                self.verify_after_allow_locked(project_store, science_store, request, revision)
+            },
+        )
+    }
+
+    pub(super) fn verify_after_allow_locked(
+        &self,
+        project_store: &ProjectStore,
+        science_store: &ScienceStore,
+        request: &super::mutation::MutationRequest,
+        current_revision: &str,
+    ) -> crate::Result<()> {
+        self.verify_digest()?;
+        let recaptured = project_store.capture_review_admission_inner(
+            science_store,
+            request,
+            current_revision,
+        )?;
+        if recaptured != *self {
+            return Err(ScienceError::Invalid(
+                "review request, source authority, artifacts, or project revision changed after admission"
+                    .into(),
+            ));
+        }
+        project_store.verify_review_authority_after_allow(science_store, request, self)
+    }
+
+    fn new(
+        request_sha256: String,
+        owner_id: String,
+        project_id: ProjectId,
+        session_id: String,
+        source_run_id: String,
+        authority_run_id: String,
+        source_authority_sha256: String,
+        artifacts: Vec<ReviewedArtifact>,
+        project_revision: String,
+    ) -> crate::Result<Self> {
+        let mut admission = Self {
+            request_sha256,
+            owner_id,
+            project_id,
+            session_id,
+            source_run_id,
+            authority_run_id,
+            source_authority_sha256,
+            artifacts,
+            project_revision,
+            sha256: String::new(),
+        };
+        admission.sha256 = admission.canonical_sha256()?;
+        Ok(admission)
+    }
+
+    fn canonical_sha256(&self) -> crate::Result<String> {
+        let canonical = ReviewAdmissionDigest {
+            schema: "lumen-science-review-admission-v1",
+            request_sha256: &self.request_sha256,
+            owner_id: &self.owner_id,
+            project_id: &self.project_id,
+            session_id: &self.session_id,
+            source_run_id: &self.source_run_id,
+            authority_run_id: &self.authority_run_id,
+            source_authority_sha256: &self.source_authority_sha256,
+            artifacts: &self.artifacts,
+            project_revision: &self.project_revision,
+        };
+        Ok(format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(&canonical)?)
+        ))
+    }
+
+    fn verify_digest(&self) -> crate::Result<()> {
+        if self.sha256 != self.canonical_sha256()? {
+            return Err(ScienceError::Invalid(
+                "review admission digest does not match its immutable bindings".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+struct ProjectMutationReviewFields<'a> {
+    project_id: &'a ProjectId,
+    reviewer_id: &'a str,
+    verdict: ReviewVerdict,
+    summary: &'a str,
+    claim_id: &'a Option<String>,
+    source_run_id: &'a str,
+    authority_run_id: &'a str,
+    artifact_sha256s: &'a [String],
+}
+
+impl<'a> ProjectMutationReviewFields<'a> {
+    fn from_request(request: &'a super::mutation::MutationRequest) -> crate::Result<Self> {
+        let super::mutation::ProjectMutation::ReviewRecord {
+            project_id,
+            reviewer_id,
+            verdict,
+            summary,
+            claim_id,
+            source_run_id,
+            authority_run_id,
+            artifact_sha256s,
+        } = &request.mutation
+        else {
+            return Err(ScienceError::Invalid(
+                "review admission cannot authorize another mutation kind".into(),
+            ));
+        };
+        Ok(Self {
+            project_id,
+            reviewer_id,
+            verdict: *verdict,
+            summary,
+            claim_id,
+            source_run_id,
+            authority_run_id,
+            artifact_sha256s,
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReviewRecord {
     pub schema_version: u32,
@@ -71,6 +359,13 @@ pub struct ReviewRecord {
     /// SessionActor approval run that authorized and evidenced this record.
     pub authority_run_id: String,
     pub artifacts: Vec<ReviewedArtifact>,
+    /// Exact digest of the source run's complete approval/artifact/evidence/
+    /// provenance/preview/event authority snapshot at review admission.
+    pub source_authority_sha256: String,
+    /// Immutable pre-Allow admission and normalized mutation bindings.
+    pub review_admission_sha256: String,
+    pub review_request_sha256: String,
+    pub review_project_revision: String,
     pub evidence_fingerprint: String,
     pub recorded_at: DateTime<Utc>,
 }
@@ -98,14 +393,182 @@ impl ReviewRecord {
             source_path: None,
             license: "project-local-evidence".into(),
             retrieved_at: self.recorded_at,
-            input_sha256: self.evidence_fingerprint.clone(),
-            tool: "SessionActor/review_record-v1".into(),
+            input_sha256: self.source_authority_sha256.clone(),
+            tool: "SessionActor/review_record-v3".into(),
             environment: BTreeMap::from([
                 ("source_run_id".into(), self.source_run_id.clone()),
                 ("artifact_count".into(), self.artifacts.len().to_string()),
+                (
+                    "evidence_fingerprint".into(),
+                    self.evidence_fingerprint.clone(),
+                ),
+                (
+                    ReviewAdmission::ENV_ADMISSION_SHA256.into(),
+                    self.review_admission_sha256.clone(),
+                ),
+                (
+                    ReviewAdmission::ENV_REQUEST_SHA256.into(),
+                    self.review_request_sha256.clone(),
+                ),
+                (
+                    ReviewAdmission::ENV_SOURCE_AUTHORITY_SHA256.into(),
+                    self.source_authority_sha256.clone(),
+                ),
+                (
+                    ReviewAdmission::ENV_PROJECT_REVISION.into(),
+                    self.review_project_revision.clone(),
+                ),
                 ("network".into(), "disabled".into()),
             ]),
         }
+    }
+}
+
+impl ReviewRecoveryGrant {
+    /// Verify and retain the exact orphaned review commit.
+    ///
+    /// This is the only constructor. The project write lock keeps the
+    /// review-ledger read, operation-ledger absence check, and retained-root
+    /// verification in one project mutation critical section.
+    pub fn verify(
+        project_store: &ProjectStore,
+        science_store: &ScienceStore,
+        request: &super::mutation::MutationRequest,
+    ) -> crate::Result<Self> {
+        let _guard = project_store.write_guard()?;
+        let (record, project_revision) =
+            Self::verify_orphan_record_locked(project_store, science_store, request)?;
+        if project_store
+            .lookup_operation(&request.operation_id)?
+            .is_some()
+        {
+            return Err(ScienceError::Invalid(
+                "review recovery requires an absent operation ledger record".into(),
+            ));
+        }
+        Ok(Self {
+            science_store: science_store.clone(),
+            operation_id: request.operation_id.clone(),
+            request_sha256: record.review_request_sha256.clone(),
+            project_id: record.project_id.clone(),
+            owner_id: record.owner_id.clone(),
+            session_id: record.session_id.clone(),
+            source_run_id: record.source_run_id.clone(),
+            authority_run_id: record.authority_run_id.clone(),
+            review_admission_sha256: record.review_admission_sha256.clone(),
+            source_authority_sha256: record.source_authority_sha256.clone(),
+            artifacts: record.artifacts.clone(),
+            review_record_sha256: Self::record_sha256(&record)?,
+            project_revision,
+        })
+    }
+
+    pub(super) fn revalidate_locked(
+        &self,
+        project_store: &ProjectStore,
+        request: &super::mutation::MutationRequest,
+    ) -> crate::Result<(ReviewRecord, String)> {
+        let (record, project_revision) =
+            Self::verify_orphan_record_locked(project_store, &self.science_store, request)?;
+        if self.operation_id != request.operation_id
+            || self.request_sha256 != request.replay_fingerprint()?
+            || self.request_sha256 != record.review_request_sha256
+            || self.project_id != record.project_id
+            || self.owner_id != record.owner_id
+            || self.session_id != record.session_id
+            || self.source_run_id != record.source_run_id
+            || self.authority_run_id != record.authority_run_id
+            || self.review_admission_sha256 != record.review_admission_sha256
+            || self.source_authority_sha256 != record.source_authority_sha256
+            || self.artifacts != record.artifacts
+            || self.review_record_sha256 != Self::record_sha256(&record)?
+            || self.project_revision != project_revision
+        {
+            return Err(ScienceError::Invalid(
+                "review recovery grant no longer matches its request, ledger, source, authority, or project"
+                    .into(),
+            ));
+        }
+        Ok((record, project_revision))
+    }
+
+    fn verify_orphan_record_locked(
+        project_store: &ProjectStore,
+        science_store: &ScienceStore,
+        request: &super::mutation::MutationRequest,
+    ) -> crate::Result<(ReviewRecord, String)> {
+        if !science_store.shares_root_capability_with(project_store)? {
+            return Err(ScienceError::Invalid(
+                "review recovery ScienceStore and ProjectStore retained different roots".into(),
+            ));
+        }
+        let fields = ProjectMutationReviewFields::from_request(request)?;
+        let record = project_store
+            .lookup_review_record(fields.project_id, &request.operation_id)?
+            .ok_or_else(|| {
+                ScienceError::Invalid(format!("orphan review {} is missing", request.operation_id))
+            })?;
+        let request_sha256 = request.replay_fingerprint()?;
+        let requested_artifacts: BTreeSet<_> =
+            fields.artifact_sha256s.iter().map(String::as_str).collect();
+        let recorded_artifacts: BTreeSet<_> = record
+            .artifacts
+            .iter()
+            .map(|artifact| artifact.sha256.as_str())
+            .collect();
+        if record.schema_version != 3
+            || record.operation_id != request.operation_id
+            || record.review_id != request.operation_id
+            || record.review_request_sha256 != request_sha256
+            || record.project_id != *fields.project_id
+            || record.owner_id != request.owner_id
+            || record.session_id != request.session_id
+            || record.reviewer_id != fields.reviewer_id
+            || record.verdict != fields.verdict
+            || record.summary != fields.summary
+            || record.claim_id != *fields.claim_id
+            || record.source_run_id != fields.source_run_id
+            || record.authority_run_id != fields.authority_run_id
+            || requested_artifacts.len() != fields.artifact_sha256s.len()
+            || recorded_artifacts.len() != record.artifacts.len()
+            || requested_artifacts != recorded_artifacts
+            || record
+                .artifacts
+                .iter()
+                .any(|artifact| artifact.source_run_id != record.source_run_id)
+        {
+            return Err(ScienceError::Invalid(
+                "orphan review does not exactly match its original request".into(),
+            ));
+        }
+
+        // This re-reads the operation-addressed ledger path and requires exact
+        // equality, reconstructs the v3 admission, re-verifies the source
+        // HostVerification and every selected artifact byte, then proves the
+        // original authority is still Running with one Allow and all four
+        // durable environment bindings.
+        project_store.verify_pending_review_record_with_store(science_store, &record)?;
+        let authority_run = RunId::new(&record.authority_run_id);
+        if !science_store.artifacts(&authority_run)?.is_empty()
+            || !science_store.evidence(&authority_run)?.is_empty()
+            || !science_store.provenance(&authority_run)?.is_empty()
+            || !science_store.previews(&authority_run)?.is_empty()
+        {
+            return Err(ScienceError::Invalid(
+                "review recovery is only valid before authority outputs are committed".into(),
+            ));
+        }
+        let project_revision = project_store.project_revision(&record.project_id)?;
+        if project_revision == record.review_project_revision {
+            return Err(ScienceError::Invalid(
+                "orphan review is not reflected in the current project revision".into(),
+            ));
+        }
+        Ok((record, project_revision))
+    }
+
+    fn record_sha256(record: &ReviewRecord) -> crate::Result<String> {
+        Ok(crate::hex_sha256(&serde_json::to_vec(record)?))
     }
 }
 
@@ -173,7 +636,231 @@ impl ProjectStore {
         format!("{:x}", fingerprint.finalize())
     }
 
-    pub fn list_reviews(&self, project_id: &ProjectId) -> crate::Result<Vec<ReviewRecord>> {
+    fn capture_review_admission_inner(
+        &self,
+        science_store: &ScienceStore,
+        request: &super::mutation::MutationRequest,
+        current_revision: &str,
+    ) -> crate::Result<ReviewAdmission> {
+        self.gates().require(ScienceFeature::EvidenceGraph)?;
+        self.gates().require(ScienceFeature::Collaboration)?;
+        self.gates().require(ScienceFeature::ReviewPackage)?;
+        super::mutation::validate_operation_id(&request.operation_id)?;
+        if request.session_id.is_empty() || request.owner_id.is_empty() {
+            return Err(ScienceError::Invalid(
+                "review admission requires a session id and owner id".into(),
+            ));
+        }
+        if let Some(expected) = request
+            .expected_revision
+            .as_deref()
+            .filter(|expected| *expected != current_revision)
+        {
+            return Err(ScienceError::Invalid(format!(
+                "revision conflict on review admission: expected {expected}, found {current_revision}"
+            )));
+        }
+        if !science_store.shares_root_capability_with(self)? {
+            return Err(ScienceError::Invalid(
+                "review ScienceStore and ProjectStore retained different roots".into(),
+            ));
+        }
+
+        let fields = ProjectMutationReviewFields::from_request(request)?;
+        if fields.reviewer_id.trim().is_empty() || fields.reviewer_id.len() > 128 {
+            return Err(ScienceError::Invalid(
+                "reviewerId must be 1..=128 characters".into(),
+            ));
+        }
+        if fields.reviewer_id != request.owner_id {
+            return Err(ScienceError::Ownership);
+        }
+        if fields.summary.trim().is_empty() || fields.summary.len() > 16_384 {
+            return Err(ScienceError::Invalid(
+                "review summary must be 1..=16384 characters".into(),
+            ));
+        }
+        Self::validate_run_id(fields.source_run_id, "runId")?;
+        Self::validate_run_id(fields.authority_run_id, "authority run id")?;
+        if fields.artifact_sha256s.is_empty() || fields.artifact_sha256s.len() > 128 {
+            return Err(ScienceError::Invalid(
+                "review requires 1..=128 artifact SHA-256 values".into(),
+            ));
+        }
+
+        let project = self.load_project(fields.project_id)?;
+        if project.owner_id.0 != request.owner_id {
+            return Err(ScienceError::Ownership);
+        }
+        if let Some(claim_id) = fields.claim_id.as_deref() {
+            let claim = self.load_claim(fields.project_id, claim_id)?;
+            if claim.project_id != *fields.project_id {
+                return Err(ScienceError::Ownership);
+            }
+        }
+
+        let mut requested = BTreeSet::new();
+        for sha256 in fields.artifact_sha256s {
+            validate_sha256_hex(sha256).map_err(ScienceError::Invalid)?;
+            if !requested.insert(sha256.clone()) {
+                return Err(ScienceError::Invalid(
+                    "review artifact SHA-256 values must be unique".into(),
+                ));
+            }
+        }
+
+        let run_id = RunId::new(fields.source_run_id);
+        let run = science_store.load_run(&run_id)?;
+        let science_project = crate::ProjectId::new(fields.project_id.0.clone());
+        if run.state != RunState::Succeeded {
+            return Err(ScienceError::Invalid(
+                "review artifacts must come from a succeeded run".into(),
+            ));
+        }
+        if run.context.project_id != science_project
+            || run.context.owner_id != request.owner_id
+            || run.context.session_id != request.session_id
+            || run.context.artifact_root != self.root().join("runs")
+        {
+            return Err(ScienceError::Ownership);
+        }
+
+        let source_authority = crate::review::verify_for_goal_completion(science_store, &run_id)?;
+        let mut registered = science_store.artifacts(&run_id)?;
+        registered.sort_by(|left, right| {
+            left.sha256
+                .cmp(&right.sha256)
+                .then_with(|| left.relative_path.cmp(&right.relative_path))
+        });
+        let mut reviewed = Vec::with_capacity(requested.len());
+        for sha256 in requested {
+            let matches: Vec<_> = registered
+                .iter()
+                .filter(|artifact| artifact.sha256 == sha256)
+                .collect();
+            let artifact = match matches.as_slice() {
+                [artifact] => *artifact,
+                [] => {
+                    return Err(ScienceError::Invalid(format!(
+                        "artifact {sha256} is not registered in source run {}",
+                        fields.source_run_id
+                    )));
+                }
+                _ => {
+                    return Err(ScienceError::Invalid(format!(
+                        "artifact {sha256} is ambiguous in source run {}",
+                        fields.source_run_id
+                    )));
+                }
+            };
+            let bytes = science_store.artifact_bytes(
+                &science_project,
+                &run_id,
+                &request.owner_id,
+                &artifact.relative_path,
+            )?;
+            if bytes.len() as u64 != artifact.bytes || crate::hex_sha256(&bytes) != artifact.sha256
+            {
+                return Err(ScienceError::Invalid(
+                    "review artifact bytes do not match their registered hash/length".into(),
+                ));
+            }
+            reviewed.push(ReviewedArtifact {
+                source_run_id: fields.source_run_id.to_string(),
+                relative_path: artifact.relative_path.clone(),
+                sha256: artifact.sha256.clone(),
+                bytes: artifact.bytes,
+                mime: artifact.mime.clone(),
+            });
+        }
+        reviewed.sort_by(|left, right| {
+            left.sha256
+                .cmp(&right.sha256)
+                .then_with(|| left.relative_path.cmp(&right.relative_path))
+        });
+
+        ReviewAdmission::new(
+            request.replay_fingerprint()?,
+            request.owner_id.clone(),
+            fields.project_id.clone(),
+            request.session_id.clone(),
+            fields.source_run_id.to_string(),
+            fields.authority_run_id.to_string(),
+            source_authority.verification_sha256,
+            reviewed,
+            current_revision.to_string(),
+        )
+    }
+
+    fn verify_review_authority_after_allow(
+        &self,
+        science_store: &ScienceStore,
+        request: &super::mutation::MutationRequest,
+        admission: &ReviewAdmission,
+    ) -> crate::Result<()> {
+        let fields = ProjectMutationReviewFields::from_request(request)?;
+        if admission.request_sha256() != request.replay_fingerprint()?
+            || admission.owner_id() != request.owner_id
+            || admission.project_id() != fields.project_id
+            || admission.session_id() != request.session_id
+            || admission.source_run_id() != fields.source_run_id
+            || admission.authority_run_id() != fields.authority_run_id
+        {
+            return Err(ScienceError::Ownership);
+        }
+
+        let source_id = RunId::new(fields.source_run_id);
+        let source = science_store.load_run(&source_id)?;
+        let authority_id = RunId::new(fields.authority_run_id);
+        let authority = science_store.load_run(&authority_id)?;
+        let science_project = crate::ProjectId::new(fields.project_id.0.clone());
+        if authority.state != RunState::Running
+            || authority.context.project_id != science_project
+            || authority.context.owner_id != request.owner_id
+            || authority.context.session_id != request.session_id
+            || authority.context.workspace_root != source.context.workspace_root
+            || authority.context.artifact_root != source.context.artifact_root
+            || authority.context.artifact_root != self.root().join("runs")
+        {
+            return Err(ScienceError::Ownership);
+        }
+        for (key, expected) in admission.authority_environment() {
+            if authority.context.environment.get(&key) != Some(&expected) {
+                return Err(ScienceError::Invalid(format!(
+                    "review authority context is missing exact {key} binding"
+                )));
+            }
+        }
+        let approvals = science_store.approvals(&authority_id)?;
+        let [approval] = approvals.as_slice() else {
+            return Err(ScienceError::Invalid(
+                "review authority run requires exactly one terminal Allow approval".into(),
+            ));
+        };
+        if approval.project_id != science_project
+            || approval.run_id != authority_id
+            || approval.call_id != crate::CallId::new("science_project_mutation")
+            || approval.owner_id != request.owner_id
+            || approval.decision != crate::ApprovalDecision::Allow
+            || approval.decided_at.is_none()
+        {
+            return Err(ScienceError::Invalid(
+                "review authority approval does not exactly bind its mutation call".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn list_reviews_with_store(
+        &self,
+        science_store: &ScienceStore,
+        project_id: &ProjectId,
+    ) -> crate::Result<Vec<ReviewRecord>> {
+        if !science_store.shares_root_capability_with(self)? {
+            return Err(ScienceError::Invalid(
+                "review ScienceStore and ProjectStore retained different roots".into(),
+            ));
+        }
         self.gates().require(ScienceFeature::Collaboration)?;
         self.gates().require(ScienceFeature::ReviewPackage)?;
         let project = self.load_project(project_id)?;
@@ -190,7 +877,7 @@ impl ProjectStore {
             if record.project_id != *project_id || record.owner_id != project.owner_id.0 {
                 return Err(ScienceError::Ownership);
             }
-            self.verify_review_record(&record)?;
+            self.verify_review_record_with_store(science_store, &record)?;
             records.push(record);
         }
         records.sort_by(|left, right| {
@@ -221,180 +908,43 @@ impl ProjectStore {
         Ok(Some(record))
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn record_review_inner(
         &self,
-        operation_id: &str,
-        session_id: &str,
-        owner_id: &str,
-        project_id: &ProjectId,
-        reviewer_id: &str,
-        verdict: ReviewVerdict,
-        summary: &str,
-        claim_id: Option<String>,
-        source_run_id: &str,
-        authority_run_id: &str,
-        artifact_sha256s: &[String],
+        science_store: &ScienceStore,
+        request: &super::mutation::MutationRequest,
+        admission: &ReviewAdmission,
+        current_revision: &str,
     ) -> crate::Result<ReviewRecord> {
-        self.gates().require(ScienceFeature::EvidenceGraph)?;
-        self.gates().require(ScienceFeature::Collaboration)?;
-        self.gates().require(ScienceFeature::ReviewPackage)?;
-        if reviewer_id.trim().is_empty() || reviewer_id.len() > 128 {
-            return Err(ScienceError::Invalid(
-                "reviewerId must be 1..=128 characters".into(),
-            ));
-        }
-        if reviewer_id != owner_id {
-            return Err(ScienceError::Ownership);
-        }
-        if summary.trim().is_empty() || summary.len() > 16_384 {
-            return Err(ScienceError::Invalid(
-                "review summary must be 1..=16384 characters".into(),
-            ));
-        }
-        Self::validate_run_id(source_run_id, "runId")?;
-        Self::validate_run_id(authority_run_id, "authority run id")?;
-        if artifact_sha256s.is_empty() || artifact_sha256s.len() > 128 {
-            return Err(ScienceError::Invalid(
-                "review requires 1..=128 artifact SHA-256 values".into(),
-            ));
-        }
-
-        let project = self.load_project(project_id)?;
-        if project.owner_id.0 != owner_id {
-            return Err(ScienceError::Ownership);
-        }
-        if let Some(claim_id) = claim_id.as_deref() {
-            let claim = self.load_claim(project_id, claim_id)?;
-            if claim.project_id != *project_id {
-                return Err(ScienceError::Ownership);
-            }
-        }
-
-        let mut requested = BTreeSet::new();
-        for sha256 in artifact_sha256s {
-            validate_sha256_hex(sha256).map_err(ScienceError::Invalid)?;
-            if !requested.insert(sha256.clone()) {
-                return Err(ScienceError::Invalid(
-                    "review artifact SHA-256 values must be unique".into(),
-                ));
-            }
-        }
-
-        // This store root is deliberately shared by ProjectStore and
-        // ScienceStore. The actor validates that root against its workspace
-        // before approval; the checks below bind the cited run back to the
-        // same owner/project/session/workspace and exact run root.
-        let science_store = ScienceStore::new(self.root());
-        let run_id = RunId::new(source_run_id);
-        let run = science_store.load_run(&run_id)?;
-        let science_project = crate::ProjectId::new(project_id.0.clone());
-        if run.state != RunState::Succeeded {
-            return Err(ScienceError::Invalid(
-                "review artifacts must come from a succeeded run".into(),
-            ));
-        }
-        if run.context.project_id != science_project
-            || run.context.owner_id != owner_id
-            || run.context.session_id != session_id
-        {
-            return Err(ScienceError::Ownership);
-        }
-
-        let authority_id = RunId::new(authority_run_id);
-        let authority = science_store.load_run(&authority_id)?;
-        if authority.state != RunState::Running
-            || authority.context.project_id != science_project
-            || authority.context.owner_id != owner_id
-            || authority.context.session_id != session_id
-            || authority.context.workspace_root != run.context.workspace_root
-            || authority.context.artifact_root != run.context.artifact_root
-        {
-            return Err(ScienceError::Ownership);
-        }
-        let approvals = science_store.approvals(&authority_id)?;
-        if approvals.is_empty()
-            || approvals
-                .iter()
-                .any(|approval| approval.decision != crate::ApprovalDecision::Allow)
-        {
-            return Err(ScienceError::Invalid(
-                "review authority run requires terminal Allow approval".into(),
-            ));
-        }
-        let canonical_store = dunce::canonicalize(self.root())?;
-        let canonical_workspace = dunce::canonicalize(&run.context.workspace_root)?;
-        let canonical_run_root = dunce::canonicalize(&run.context.artifact_root)?;
-        if !canonical_store.starts_with(&canonical_workspace)
-            || canonical_run_root != canonical_store.join("runs")
-        {
-            return Err(ScienceError::Invalid(
-                "review source run is outside its bound workspace/store root".into(),
-            ));
-        }
-
-        let mut registered = science_store.artifacts(&run_id)?;
-        registered.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
-        let mut reviewed = Vec::with_capacity(requested.len());
-        for sha256 in requested {
-            let matches: Vec<_> = registered
-                .iter()
-                .filter(|artifact| artifact.sha256 == sha256)
-                .collect();
-            let artifact = match matches.as_slice() {
-                [artifact] => *artifact,
-                [] => {
-                    return Err(ScienceError::Invalid(format!(
-                        "artifact {sha256} is not registered in source run {source_run_id}"
-                    )));
-                }
-                _ => {
-                    return Err(ScienceError::Invalid(format!(
-                        "artifact {sha256} is ambiguous in source run {source_run_id}"
-                    )));
-                }
-            };
-            let bytes = science_store.artifact_bytes(
-                &science_project,
-                &run_id,
-                owner_id,
-                &artifact.relative_path,
-            )?;
-            if bytes.len() as u64 != artifact.bytes || crate::hex_sha256(&bytes) != artifact.sha256
-            {
-                return Err(ScienceError::Invalid(
-                    "review artifact bytes do not match their registered hash/length".into(),
-                ));
-            }
-            reviewed.push(ReviewedArtifact {
-                source_run_id: source_run_id.to_string(),
-                relative_path: artifact.relative_path.clone(),
-                sha256: artifact.sha256.clone(),
-                bytes: artifact.bytes,
-                mime: artifact.mime.clone(),
-            });
-        }
-
-        let evidence_fingerprint = Self::review_fingerprint(project_id, source_run_id, &reviewed);
+        admission.verify_after_allow_locked(self, science_store, request, current_revision)?;
+        let fields = ProjectMutationReviewFields::from_request(request)?;
+        let evidence_fingerprint = Self::review_fingerprint(
+            fields.project_id,
+            fields.source_run_id,
+            admission.artifacts(),
+        );
         let record = ReviewRecord {
-            schema_version: 1,
-            review_id: operation_id.to_string(),
-            operation_id: operation_id.to_string(),
-            project_id: project_id.clone(),
-            owner_id: owner_id.to_string(),
-            session_id: session_id.to_string(),
-            reviewer_id: reviewer_id.to_string(),
-            verdict,
-            summary: summary.to_string(),
-            claim_id,
-            source_run_id: source_run_id.to_string(),
-            authority_run_id: authority_run_id.to_string(),
-            artifacts: reviewed,
+            schema_version: 3,
+            review_id: request.operation_id.clone(),
+            operation_id: request.operation_id.clone(),
+            project_id: fields.project_id.clone(),
+            owner_id: request.owner_id.clone(),
+            session_id: request.session_id.clone(),
+            reviewer_id: fields.reviewer_id.to_string(),
+            verdict: fields.verdict,
+            summary: fields.summary.to_string(),
+            claim_id: fields.claim_id.clone(),
+            source_run_id: fields.source_run_id.to_string(),
+            authority_run_id: fields.authority_run_id.to_string(),
+            artifacts: admission.artifacts().to_vec(),
+            source_authority_sha256: admission.source_authority_sha256().to_string(),
+            review_admission_sha256: admission.sha256().to_string(),
+            review_request_sha256: admission.request_sha256().to_string(),
+            review_project_revision: admission.project_revision().to_string(),
             evidence_fingerprint,
             recorded_at: Utc::now(),
         };
 
-        let path = self.review_relative(project_id, operation_id)?;
+        let path = self.review_relative(fields.project_id, &request.operation_id)?;
         if let Some(existing) = self.read_confined_record::<ReviewRecord>(&path)? {
             if existing.operation_id == record.operation_id
                 && existing.project_id == record.project_id
@@ -407,12 +957,17 @@ impl ProjectStore {
                 && existing.source_run_id == record.source_run_id
                 && existing.authority_run_id == record.authority_run_id
                 && existing.artifacts == record.artifacts
+                && existing.source_authority_sha256 == record.source_authority_sha256
+                && existing.review_admission_sha256 == record.review_admission_sha256
+                && existing.review_request_sha256 == record.review_request_sha256
+                && existing.review_project_revision == record.review_project_revision
                 && existing.evidence_fingerprint == record.evidence_fingerprint
             {
                 return Ok(existing);
             }
             return Err(ScienceError::Invalid(format!(
-                "review operation {operation_id} already exists with different content"
+                "review operation {} already exists with different content",
+                request.operation_id
             )));
         }
         self.write_new_confined_record(&path, &record)?;
@@ -421,13 +976,14 @@ impl ProjectStore {
 
     fn verify_review_record_binding(
         &self,
+        science_store: &ScienceStore,
         record: &ReviewRecord,
         authority_state: RunState,
-    ) -> crate::Result<(ScienceStore, RunId)> {
+    ) -> crate::Result<RunId> {
         super::mutation::validate_operation_id(&record.operation_id)?;
         Self::validate_run_id(&record.source_run_id, "source run id")?;
         Self::validate_run_id(&record.authority_run_id, "authority run id")?;
-        if record.schema_version != 1
+        if record.schema_version != 3
             || record.review_id != record.operation_id
             || record.reviewer_id.trim().is_empty()
             || record.reviewer_id.len() > 128
@@ -440,7 +996,27 @@ impl ProjectStore {
                 "project review record has invalid identity or content bounds".into(),
             ));
         }
+        validate_sha256_hex(&record.source_authority_sha256).map_err(ScienceError::Invalid)?;
+        validate_sha256_hex(&record.review_admission_sha256).map_err(ScienceError::Invalid)?;
+        validate_sha256_hex(&record.review_request_sha256).map_err(ScienceError::Invalid)?;
+        validate_sha256_hex(&record.review_project_revision).map_err(ScienceError::Invalid)?;
         validate_sha256_hex(&record.evidence_fingerprint).map_err(ScienceError::Invalid)?;
+        let recorded_admission = ReviewAdmission::new(
+            record.review_request_sha256.clone(),
+            record.owner_id.clone(),
+            record.project_id.clone(),
+            record.session_id.clone(),
+            record.source_run_id.clone(),
+            record.authority_run_id.clone(),
+            record.source_authority_sha256.clone(),
+            record.artifacts.clone(),
+            record.review_project_revision.clone(),
+        )?;
+        if recorded_admission.sha256() != record.review_admission_sha256 {
+            return Err(ScienceError::Invalid(
+                "project review admission digest does not match its durable bindings".into(),
+            ));
+        }
         let project = self.load_project(&record.project_id)?;
         if project.owner_id.0 != record.owner_id || record.reviewer_id != record.owner_id {
             return Err(ScienceError::Ownership);
@@ -455,7 +1031,11 @@ impl ProjectStore {
                 "project review ledger does not match its operation result".into(),
             ));
         }
-        let science_store = ScienceStore::new(self.root());
+        if !science_store.shares_root_capability_with(self)? {
+            return Err(ScienceError::Invalid(
+                "review ScienceStore and ProjectStore retained different roots".into(),
+            ));
+        }
         let source_run = RunId::new(&record.source_run_id);
         let source = science_store.load_run(&source_run)?;
         if source.state != RunState::Succeeded
@@ -465,12 +1045,14 @@ impl ProjectStore {
         {
             return Err(ScienceError::Ownership);
         }
-        let canonical_store = dunce::canonicalize(self.root())?;
-        let canonical_workspace = dunce::canonicalize(&source.context.workspace_root)?;
-        let canonical_source_root = dunce::canonicalize(&source.context.artifact_root)?;
-        if !canonical_store.starts_with(&canonical_workspace)
-            || canonical_source_root != canonical_store.join("runs")
-        {
+        let source_authority =
+            crate::review::verify_for_goal_completion(science_store, &source_run)?;
+        if source_authority.verification_sha256 != record.source_authority_sha256 {
+            return Err(ScienceError::Invalid(
+                "review source authority snapshot no longer matches its admitted proof".into(),
+            ));
+        }
+        if source.context.artifact_root != self.root().join("runs") {
             return Err(ScienceError::Invalid(
                 "review source run is outside its bound workspace/store root".into(),
             ));
@@ -538,14 +1120,19 @@ impl ProjectStore {
         {
             return Err(ScienceError::Ownership);
         }
-        let canonical_authority_workspace = dunce::canonicalize(&authority.context.workspace_root)?;
-        let canonical_authority_root = dunce::canonicalize(&authority.context.artifact_root)?;
-        if canonical_authority_workspace != canonical_workspace
-            || canonical_authority_root != canonical_source_root
+        if authority.context.workspace_root != source.context.workspace_root
+            || authority.context.artifact_root != source.context.artifact_root
         {
             return Err(ScienceError::Invalid(
                 "review authority run is outside its source-run workspace/store".into(),
             ));
+        }
+        for (key, expected) in recorded_admission.authority_environment() {
+            if authority.context.environment.get(&key) != Some(&expected) {
+                return Err(ScienceError::Invalid(format!(
+                    "review authority context no longer matches exact {key} binding"
+                )));
+            }
         }
         let approvals = science_store.approvals(&authority_run)?;
         let [approval] = approvals.as_slice() else {
@@ -564,42 +1151,58 @@ impl ProjectStore {
                 "review authority approval does not exactly bind its mutation call".into(),
             ));
         }
-        Ok((science_store, authority_run))
+        Ok(authority_run)
     }
 
     /// Validate the durable project + operation half of a review commit while
     /// its already-Allowed authority run is still Running. The SessionActor
     /// uses this only to recover an interrupted evidence commit; callers
     /// cannot turn a denied/failed run back into authority.
-    pub fn verify_pending_review_record(&self, record: &ReviewRecord) -> crate::Result<()> {
-        self.verify_review_record_binding(record, RunState::Running)?;
+    /// Retained-capability variant used by the SessionActor after permission.
+    pub fn verify_pending_review_record_with_store(
+        &self,
+        science_store: &ScienceStore,
+        record: &ReviewRecord,
+    ) -> crate::Result<()> {
+        self.verify_review_record_binding(science_store, record, RunState::Running)?;
         Ok(())
     }
 
     /// Verify the complete manifest/evidence/provenance commit while the
     /// authority run is still Running. The SessionActor calls this before its
     /// final Succeeded transition.
-    pub fn verify_pending_review_commit(&self, record: &ReviewRecord) -> crate::Result<()> {
-        self.verify_review_commit(record, RunState::Running)
+    /// Retained-capability variant used by the SessionActor before Succeeded.
+    pub fn verify_pending_review_commit_with_store(
+        &self,
+        science_store: &ScienceStore,
+        record: &ReviewRecord,
+    ) -> crate::Result<()> {
+        self.verify_review_commit(science_store, record, RunState::Running)
     }
 
     /// Fail closed unless the review's own authority run is complete and its
     /// manifest/evidence/provenance exactly bind the project-ledger record.
-    pub fn verify_review_record(&self, record: &ReviewRecord) -> crate::Result<()> {
-        self.verify_review_commit(record, RunState::Succeeded)
+    /// Retained-capability variant used for actor-owned replay verification.
+    pub fn verify_review_record_with_store(
+        &self,
+        science_store: &ScienceStore,
+        record: &ReviewRecord,
+    ) -> crate::Result<()> {
+        self.verify_review_commit(science_store, record, RunState::Succeeded)
     }
 
     fn verify_review_commit(
         &self,
+        science_store: &ScienceStore,
         record: &ReviewRecord,
         authority_state: RunState,
     ) -> crate::Result<()> {
-        let (science_store, authority_run) =
-            self.verify_review_record_binding(record, authority_state)?;
+        let authority_run =
+            self.verify_review_record_binding(science_store, record, authority_state)?;
         if authority_state == RunState::Running {
-            crate::review::verify_before_successful_commit(&science_store, &authority_run)?;
+            crate::review::verify_before_successful_commit(science_store, &authority_run)?;
         } else {
-            crate::review::verify_for_goal_completion(&science_store, &authority_run)?;
+            crate::review::verify_for_goal_completion(science_store, &authority_run)?;
         }
         let artifacts = science_store.artifacts(&authority_run)?;
         let [manifest] = artifacts.as_slice() else {
@@ -653,6 +1256,42 @@ impl ProjectStore {
         }
         Ok(())
     }
+
+    pub(super) fn verify_review_replay_admission(
+        &self,
+        science_store: &ScienceStore,
+        request: &super::mutation::MutationRequest,
+        admission: &ReviewAdmission,
+        record: &ReviewRecord,
+    ) -> crate::Result<()> {
+        admission.verify_digest()?;
+        let fields = ProjectMutationReviewFields::from_request(request)?;
+        if admission.request_sha256() != request.replay_fingerprint()?
+            || admission.owner_id() != request.owner_id
+            || admission.project_id() != fields.project_id
+            || admission.session_id() != request.session_id
+            || admission.source_run_id() != fields.source_run_id
+            || admission.authority_run_id() != fields.authority_run_id
+            || record.project_id != *admission.project_id()
+            || record.owner_id != admission.owner_id()
+            || record.session_id != admission.session_id()
+            || record.source_run_id != admission.source_run_id()
+            || record.authority_run_id != admission.authority_run_id()
+            || record.artifacts != admission.artifacts()
+            || record.source_authority_sha256 != admission.source_authority_sha256()
+            || record.review_admission_sha256 != admission.sha256()
+            || record.review_request_sha256 != admission.request_sha256()
+            || record.review_project_revision != admission.project_revision()
+        {
+            return Err(ScienceError::Invalid(
+                "review replay does not match its immutable admission".into(),
+            ));
+        }
+        // This recomputes the current HostVerification v2 authority digest and
+        // rehashes every reviewed artifact, so a format-valid replacement
+        // after admission cannot replay an old operation.
+        self.verify_review_record_with_store(science_store, record)
+    }
 }
 
 #[cfg(test)]
@@ -667,6 +1306,7 @@ mod tests {
     struct Fixture {
         _root: tempfile::TempDir,
         store_root: PathBuf,
+        science_store: ScienceStore,
         project_store: ProjectStore,
         project_id: ProjectId,
         run_id: RunId,
@@ -698,12 +1338,39 @@ mod tests {
                 environment: BTreeMap::new(),
             })
             .unwrap();
-        let artifact = science_store
-            .put_artifact(
-                &ScienceProjectId::new(project.project_id.0.clone()),
+        let source_project_id = ScienceProjectId::new(project.project_id.0.clone());
+        let source_call = CallId::new("source-call");
+        science_store
+            .request_approval(crate::Approval {
+                project_id: source_project_id.clone(),
+                run_id: run_id.clone(),
+                call_id: source_call.clone(),
+                owner_id: "owner-1".into(),
+                decision: crate::ApprovalDecision::Pending,
+                decided_at: None,
+            })
+            .unwrap();
+        science_store
+            .transition(&run_id, RunState::AwaitingApproval, None)
+            .unwrap();
+        science_store
+            .decide_approval(
+                &source_project_id,
                 &run_id,
                 "owner-1",
-                CallId::new("source-call"),
+                &source_call,
+                crate::ApprovalDecision::Allow,
+            )
+            .unwrap();
+        science_store
+            .transition(&run_id, RunState::Running, None)
+            .unwrap();
+        let artifact = science_store
+            .put_artifact(
+                &source_project_id,
+                &run_id,
+                "owner-1",
+                source_call,
                 Path::new("result.json"),
                 br#"{"result":"verified"}"#,
                 "application/json",
@@ -711,7 +1378,29 @@ mod tests {
             )
             .unwrap();
         science_store
-            .transition(&run_id, RunState::Succeeded, None)
+            .add_evidence(crate::Evidence {
+                run_id: run_id.clone(),
+                claim: "Source result bytes passed deterministic verification.".into(),
+                source: "fixture://review-source/result.json".into(),
+                artifact_sha256: Some(artifact.sha256.clone()),
+                verified_at: Utc::now(),
+            })
+            .unwrap();
+        science_store
+            .add_provenance(crate::Provenance {
+                run_id: run_id.clone(),
+                source_uri: "fixture://review-source".into(),
+                source_commit: None,
+                source_path: Some("result.json".into()),
+                license: "test-only".into(),
+                retrieved_at: Utc::now(),
+                input_sha256: artifact.sha256.clone(),
+                tool: "review-source-fixture".into(),
+                environment: BTreeMap::from([("network".into(), "disabled".into())]),
+            })
+            .unwrap();
+        science_store
+            .transition_succeeded_verified(&run_id)
             .unwrap();
         let authority_run_id = RunId::new("authority-run-1");
         science_store
@@ -740,6 +1429,9 @@ mod tests {
             })
             .unwrap();
         science_store
+            .transition(&authority_run_id, RunState::AwaitingApproval, None)
+            .unwrap();
+        science_store
             .decide_approval(
                 &ScienceProjectId::new(project.project_id.0.clone()),
                 &authority_run_id,
@@ -754,6 +1446,7 @@ mod tests {
         Fixture {
             _root: root,
             store_root,
+            science_store,
             project_store,
             project_id: project.project_id,
             run_id,
@@ -786,8 +1479,38 @@ mod tests {
         }
     }
 
+    fn apply_review(
+        fixture: &Fixture,
+        request: &MutationRequest,
+    ) -> crate::Result<crate::project::MutationOutcome> {
+        let admission = admit_review(fixture, request)?;
+        fixture
+            .project_store
+            .apply_actor_review(request, &fixture.science_store, &admission)
+    }
+
+    fn admit_review(
+        fixture: &Fixture,
+        request: &MutationRequest,
+    ) -> crate::Result<ReviewAdmission> {
+        let admission =
+            ReviewAdmission::capture(&fixture.project_store, &fixture.science_store, request)?;
+        let mut authority = fixture.science_store.load_run(&fixture.authority_run_id)?;
+        authority.context.environment = admission.authority_environment();
+        ProjectStore::write_json(
+            &fixture
+                .store_root
+                .join("runs")
+                .join(&fixture.authority_run_id.0)
+                .join("run.json"),
+            &authority,
+        )?;
+        admission.verify_after_allow(&fixture.project_store, &fixture.science_store, request)?;
+        Ok(admission)
+    }
+
     fn complete_authority_run(fixture: &Fixture, record: &ReviewRecord) {
-        let science_store = ScienceStore::new(&fixture.store_root);
+        let science_store = &fixture.science_store;
         let manifest = serde_json::to_vec_pretty(record).unwrap();
         let artifact = science_store
             .put_artifact(
@@ -809,22 +1532,536 @@ mod tests {
             .unwrap();
         fixture
             .project_store
-            .verify_pending_review_commit(record)
+            .verify_pending_review_commit_with_store(science_store, record)
             .unwrap();
         science_store
-            .transition(&fixture.authority_run_id, RunState::Succeeded, None)
+            .transition_succeeded_verified(&fixture.authority_run_id)
             .unwrap();
+    }
+
+    fn assert_no_review_commit(fixture: &Fixture, operation_id: &str) {
+        assert!(
+            fixture
+                .project_store
+                .lookup_review_record(&fixture.project_id, operation_id)
+                .unwrap()
+                .is_none(),
+            "rejected review wrote a review ledger record"
+        );
+        assert!(
+            fixture
+                .project_store
+                .lookup_operation(operation_id)
+                .unwrap()
+                .is_none(),
+            "rejected review wrote an operation record"
+        );
+    }
+
+    fn write_orphan_review(fixture: &Fixture, request: &MutationRequest) -> ReviewRecord {
+        let admission = admit_review(fixture, request).unwrap();
+        let _guard = fixture.project_store.write_guard().unwrap();
+        let revision = fixture
+            .project_store
+            .project_revision(&fixture.project_id)
+            .unwrap();
+        let record = fixture
+            .project_store
+            .record_review_inner(&fixture.science_store, request, &admission, &revision)
+            .unwrap();
+        assert!(
+            fixture
+                .project_store
+                .lookup_operation(&request.operation_id)
+                .unwrap()
+                .is_none(),
+            "orphan fixture unexpectedly wrote an operation record"
+        );
+        record
+    }
+
+    fn assert_operation_absent(fixture: &Fixture, operation_id: &str) {
+        assert!(
+            fixture
+                .project_store
+                .lookup_operation(operation_id)
+                .unwrap()
+                .is_none(),
+            "rejected recovery wrote an operation record"
+        );
+    }
+
+    #[test]
+    fn review_orphan_recovery_writes_only_operation_and_replays_exactly() {
+        let fixture = fixture();
+        let request = review_request(&fixture, "op-review-orphan-recovery");
+        let review = write_orphan_review(&fixture, &request);
+        let review_path = fixture
+            .project_store
+            .review_path(&fixture.project_id, &request.operation_id);
+        let review_bytes = std::fs::read(&review_path).unwrap();
+        let expected_revision = fixture
+            .project_store
+            .project_revision(&fixture.project_id)
+            .unwrap();
+        let grant =
+            ReviewRecoveryGrant::verify(&fixture.project_store, &fixture.science_store, &request)
+                .unwrap();
+
+        let outcome = fixture
+            .project_store
+            .recover_actor_review_operation(&request, &grant)
+            .unwrap();
+        assert!(outcome.replayed);
+        assert_eq!(outcome.revision, expected_revision);
+        assert_eq!(
+            serde_json::from_value::<ReviewRecord>(outcome.result.clone()).unwrap(),
+            review
+        );
+        assert_eq!(
+            std::fs::read(&review_path).unwrap(),
+            review_bytes,
+            "recovery rewrote the durable review ledger"
+        );
+
+        let replay = fixture
+            .project_store
+            .recover_actor_review_operation(&request, &grant)
+            .unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay, outcome);
+        assert!(
+            ReviewRecoveryGrant::verify(&fixture.project_store, &fixture.science_store, &request)
+                .is_err(),
+            "a second grant was minted after the operation ledger existed"
+        );
+
+        let mut loosened = request.clone();
+        loosened.expected_revision = None;
+        assert!(
+            fixture
+                .project_store
+                .recover_actor_review_operation(&loosened, &grant)
+                .is_err(),
+            "clearing the original expected revision replayed the orphan"
+        );
+    }
+
+    #[test]
+    fn review_orphan_recovery_grant_cannot_cross_request_source_or_root() {
+        let fixture = fixture();
+        let request = review_request(&fixture, "op-review-recovery-binding");
+        write_orphan_review(&fixture, &request);
+        let grant =
+            ReviewRecoveryGrant::verify(&fixture.project_store, &fixture.science_store, &request)
+                .unwrap();
+
+        let mut changed_request = request.clone();
+        if let ProjectMutation::ReviewRecord { summary, .. } = &mut changed_request.mutation {
+            *summary = "different request".into();
+        }
+        assert!(
+            fixture
+                .project_store
+                .recover_actor_review_operation(&changed_request, &grant)
+                .is_err()
+        );
+
+        let mut changed_source = request.clone();
+        if let ProjectMutation::ReviewRecord { source_run_id, .. } = &mut changed_source.mutation {
+            *source_run_id = "different-source-run".into();
+        }
+        assert!(
+            fixture
+                .project_store
+                .recover_actor_review_operation(&changed_source, &grant)
+                .is_err()
+        );
+
+        let other = tempfile::tempdir().unwrap();
+        let other_project_store = ProjectStore::new(other.path().join("science-store"));
+        assert!(
+            other_project_store
+                .recover_actor_review_operation(&request, &grant)
+                .is_err(),
+            "a retained recovery grant crossed into another store root"
+        );
+        assert_operation_absent(&fixture, &request.operation_id);
+    }
+
+    #[test]
+    fn review_orphan_recovery_rejects_project_source_authority_and_ledger_tamper() {
+        let project_fixture = fixture();
+        let project_request = review_request(&project_fixture, "op-review-recovery-project-tamper");
+        write_orphan_review(&project_fixture, &project_request);
+        let project_grant = ReviewRecoveryGrant::verify(
+            &project_fixture.project_store,
+            &project_fixture.science_store,
+            &project_request,
+        )
+        .unwrap();
+        let mut project = project_fixture
+            .project_store
+            .load_project(&project_fixture.project_id)
+            .unwrap();
+        project.title = "tampered project".into();
+        ProjectStore::write_json(
+            &project_fixture
+                .project_store
+                .project_dir(&project_fixture.project_id)
+                .join("project.json"),
+            &project,
+        )
+        .unwrap();
+        assert!(
+            project_fixture
+                .project_store
+                .recover_actor_review_operation(&project_request, &project_grant)
+                .is_err()
+        );
+        assert_operation_absent(&project_fixture, &project_request.operation_id);
+
+        let source_fixture = fixture();
+        let source_request = review_request(&source_fixture, "op-review-recovery-source-tamper");
+        write_orphan_review(&source_fixture, &source_request);
+        let source_grant = ReviewRecoveryGrant::verify(
+            &source_fixture.project_store,
+            &source_fixture.science_store,
+            &source_request,
+        )
+        .unwrap();
+        std::fs::write(
+            source_fixture
+                .store_root
+                .join("runs")
+                .join(&source_fixture.run_id.0)
+                .join("artifacts/result.json"),
+            b"tampered source bytes",
+        )
+        .unwrap();
+        assert!(
+            source_fixture
+                .project_store
+                .recover_actor_review_operation(&source_request, &source_grant)
+                .is_err()
+        );
+        assert_operation_absent(&source_fixture, &source_request.operation_id);
+
+        let authority_fixture = fixture();
+        let authority_request =
+            review_request(&authority_fixture, "op-review-recovery-authority-tamper");
+        write_orphan_review(&authority_fixture, &authority_request);
+        let authority_grant = ReviewRecoveryGrant::verify(
+            &authority_fixture.project_store,
+            &authority_fixture.science_store,
+            &authority_request,
+        )
+        .unwrap();
+        let authority_path = authority_fixture
+            .store_root
+            .join("runs")
+            .join(&authority_fixture.authority_run_id.0)
+            .join("run.json");
+        let mut authority = authority_fixture
+            .science_store
+            .load_run(&authority_fixture.authority_run_id)
+            .unwrap();
+        authority
+            .context
+            .environment
+            .remove(ReviewAdmission::ENV_REQUEST_SHA256);
+        ProjectStore::write_json(&authority_path, &authority).unwrap();
+        assert!(
+            authority_fixture
+                .project_store
+                .recover_actor_review_operation(&authority_request, &authority_grant)
+                .is_err()
+        );
+        assert_operation_absent(&authority_fixture, &authority_request.operation_id);
+
+        let ledger_fixture = fixture();
+        let ledger_request = review_request(&ledger_fixture, "op-review-recovery-ledger-tamper");
+        let mut ledger_record = write_orphan_review(&ledger_fixture, &ledger_request);
+        let ledger_grant = ReviewRecoveryGrant::verify(
+            &ledger_fixture.project_store,
+            &ledger_fixture.science_store,
+            &ledger_request,
+        )
+        .unwrap();
+        ledger_record.summary = "tampered review ledger".into();
+        ProjectStore::write_json(
+            &ledger_fixture
+                .project_store
+                .review_path(&ledger_fixture.project_id, &ledger_request.operation_id),
+            &ledger_record,
+        )
+        .unwrap();
+        assert!(
+            ledger_fixture
+                .project_store
+                .recover_actor_review_operation(&ledger_request, &ledger_grant)
+                .is_err()
+        );
+        assert_operation_absent(&ledger_fixture, &ledger_request.operation_id);
+    }
+
+    #[test]
+    fn review_orphan_recovery_rejects_terminal_or_output_bearing_authority() {
+        let terminal_fixture = fixture();
+        let terminal_request =
+            review_request(&terminal_fixture, "op-review-recovery-terminal-authority");
+        write_orphan_review(&terminal_fixture, &terminal_request);
+        let terminal_grant = ReviewRecoveryGrant::verify(
+            &terminal_fixture.project_store,
+            &terminal_fixture.science_store,
+            &terminal_request,
+        )
+        .unwrap();
+        terminal_fixture
+            .science_store
+            .transition(
+                &terminal_fixture.authority_run_id,
+                RunState::Failed,
+                Some("interrupted before operation recovery".into()),
+            )
+            .unwrap();
+        assert!(
+            terminal_fixture
+                .project_store
+                .recover_actor_review_operation(&terminal_request, &terminal_grant)
+                .is_err(),
+            "a terminal authority filled a missing operation ledger"
+        );
+        assert_operation_absent(&terminal_fixture, &terminal_request.operation_id);
+
+        let output_fixture = fixture();
+        let output_request = review_request(&output_fixture, "op-review-recovery-output-authority");
+        write_orphan_review(&output_fixture, &output_request);
+        output_fixture
+            .science_store
+            .put_artifact(
+                &ScienceProjectId::new(output_fixture.project_id.0.clone()),
+                &output_fixture.authority_run_id,
+                "owner-1",
+                CallId::new("science_project_mutation"),
+                Path::new("unexpected.json"),
+                b"unexpected",
+                "application/json",
+                "unexpected pre-recovery output",
+            )
+            .unwrap();
+        assert!(
+            ReviewRecoveryGrant::verify(
+                &output_fixture.project_store,
+                &output_fixture.science_store,
+                &output_request
+            )
+            .is_err(),
+            "an output-bearing authority minted a recovery grant"
+        );
+        assert_operation_absent(&output_fixture, &output_request.operation_id);
+    }
+
+    #[test]
+    fn review_orphan_recovery_rejects_legacy_v2_record() {
+        let fixture = fixture();
+        let request = review_request(&fixture, "op-review-recovery-legacy-v2");
+        let mut record = write_orphan_review(&fixture, &request);
+        record.schema_version = 2;
+        ProjectStore::write_json(
+            &fixture
+                .project_store
+                .review_path(&fixture.project_id, &request.operation_id),
+            &record,
+        )
+        .unwrap();
+        assert!(
+            ReviewRecoveryGrant::verify(&fixture.project_store, &fixture.science_store, &request)
+                .is_err(),
+            "legacy v2 review minted a recovery grant"
+        );
+        assert_operation_absent(&fixture, &request.operation_id);
+    }
+
+    #[test]
+    fn review_admission_is_stable_and_binds_actual_revision_without_caller_cas() {
+        let fixture = fixture();
+        let mut request = review_request(&fixture, "op-review-admission-stable");
+        request.expected_revision = None;
+        let first =
+            ReviewAdmission::capture(&fixture.project_store, &fixture.science_store, &request)
+                .unwrap();
+        let second =
+            ReviewAdmission::capture(&fixture.project_store, &fixture.science_store, &request)
+                .unwrap();
+        assert_eq!(first, second);
+        assert_eq!(first.sha256(), second.sha256());
+        assert_eq!(
+            first.project_revision(),
+            fixture
+                .project_store
+                .project_revision(&fixture.project_id)
+                .unwrap()
+        );
+        assert_eq!(
+            first.request_sha256(),
+            request.replay_fingerprint().unwrap()
+        );
+        assert_eq!(first.artifacts().len(), 1);
+        assert_eq!(first.artifacts()[0].sha256, fixture.artifact_sha256);
+    }
+
+    #[test]
+    fn legacy_v2_review_record_fails_closed_without_silent_upgrade() {
+        let fixture = fixture();
+        let request = review_request(&fixture, "op-review-legacy-v2");
+        let outcome = apply_review(&fixture, &request).unwrap();
+        let record: ReviewRecord = serde_json::from_value(outcome.result).unwrap();
+        complete_authority_run(&fixture, &record);
+        let path = fixture
+            .project_store
+            .review_path(&fixture.project_id, &request.operation_id);
+        let mut legacy = record;
+        legacy.schema_version = 2;
+        ProjectStore::write_json(&path, &legacy).unwrap();
+
+        assert!(
+            fixture
+                .project_store
+                .list_reviews_with_store(&fixture.science_store, &fixture.project_id)
+                .is_err(),
+            "legacy v2 review was silently admitted"
+        );
+        let durable: ReviewRecord = ProjectStore::read_json(&path).unwrap();
+        assert_eq!(durable.schema_version, 2, "legacy record was rewritten");
+    }
+
+    #[test]
+    fn review_finish_rejects_source_authority_replacement_after_admission_without_writes() {
+        let fixture = fixture();
+        let request = review_request(&fixture, "op-review-admission-source-race");
+        let admission = admit_review(&fixture, &request).unwrap();
+        let evidence_path = fixture
+            .store_root
+            .join("runs")
+            .join(&fixture.run_id.0)
+            .join("evidence.json");
+        let mut evidence: Vec<crate::Evidence> = ProjectStore::read_json(&evidence_path).unwrap();
+        evidence[0].claim = "Changed after Allow, but still structurally valid.".into();
+        evidence[0].source = "fixture://changed-after-allow".into();
+        ProjectStore::write_json(&evidence_path, &evidence).unwrap();
+
+        let error = fixture
+            .project_store
+            .apply_actor_review(&request, &fixture.science_store, &admission)
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("changed after admission"),
+            "source replacement failed for the wrong reason: {error}"
+        );
+        assert_no_review_commit(&fixture, &request.operation_id);
+    }
+
+    #[test]
+    fn review_finish_rejects_project_revision_race_without_writes() {
+        let fixture = fixture();
+        let mut request = review_request(&fixture, "op-review-admission-project-race");
+        request.expected_revision = None;
+        let admission = admit_review(&fixture, &request).unwrap();
+        fixture
+            .project_store
+            .apply_mutation(&MutationRequest {
+                operation_id: "op-review-race-question-update".into(),
+                session_id: "session-1".into(),
+                owner_id: "owner-1".into(),
+                expected_revision: Some(
+                    fixture
+                        .project_store
+                        .project_revision(&fixture.project_id)
+                        .unwrap(),
+                ),
+                mutation: ProjectMutation::QuestionUpdate {
+                    project_id: fixture.project_id.clone(),
+                    research_question: "Did the question move after Allow?".into(),
+                },
+            })
+            .unwrap();
+
+        let error = fixture
+            .project_store
+            .apply_actor_review(&request, &fixture.science_store, &admission)
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("changed after admission"),
+            "project revision race failed for the wrong reason: {error}"
+        );
+        assert_no_review_commit(&fixture, &request.operation_id);
+    }
+
+    #[test]
+    fn review_finish_rejects_request_admission_mismatch_without_writes() {
+        let fixture = fixture();
+        let request = review_request(&fixture, "op-review-admission-request-race");
+        let admission = admit_review(&fixture, &request).unwrap();
+        let mut changed = request.clone();
+        if let ProjectMutation::ReviewRecord { summary, .. } = &mut changed.mutation {
+            *summary = "A different, still valid summary submitted after Allow.".into();
+        }
+
+        let error = fixture
+            .project_store
+            .apply_actor_review(&changed, &fixture.science_store, &admission)
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("changed after admission"),
+            "request mismatch failed for the wrong reason: {error}"
+        );
+        assert_no_review_commit(&fixture, &request.operation_id);
+    }
+
+    #[test]
+    fn review_finish_requires_exact_authority_environment_without_writes() {
+        let fixture = fixture();
+        let request = review_request(&fixture, "op-review-admission-env");
+        let admission = admit_review(&fixture, &request).unwrap();
+        let authority_path = fixture
+            .store_root
+            .join("runs")
+            .join(&fixture.authority_run_id.0)
+            .join("run.json");
+        let mut authority = fixture
+            .science_store
+            .load_run(&fixture.authority_run_id)
+            .unwrap();
+        authority
+            .context
+            .environment
+            .remove(ReviewAdmission::ENV_SOURCE_AUTHORITY_SHA256);
+        ProjectStore::write_json(&authority_path, &authority).unwrap();
+
+        let error = fixture
+            .project_store
+            .apply_actor_review(&request, &fixture.science_store, &admission)
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("exact review_source_authority_sha256"),
+            "authority environment mismatch failed for the wrong reason: {error}"
+        );
+        assert_no_review_commit(&fixture, &request.operation_id);
     }
 
     #[test]
     fn review_cannot_succeed_before_preterminal_commit_verification() {
         let fixture = fixture();
-        let outcome = fixture
-            .project_store
-            .apply_mutation(&review_request(&fixture, "op-review-preterminal-tamper"))
-            .unwrap();
+        let outcome = apply_review(
+            &fixture,
+            &review_request(&fixture, "op-review-preterminal-tamper"),
+        )
+        .unwrap();
         let record: ReviewRecord = serde_json::from_value(outcome.result).unwrap();
-        let science_store = ScienceStore::new(&fixture.store_root);
+        let science_store = &fixture.science_store;
         let manifest = serde_json::to_vec_pretty(&record).unwrap();
         let artifact = science_store
             .put_artifact(
@@ -855,7 +2092,7 @@ mod tests {
         assert!(
             fixture
                 .project_store
-                .verify_pending_review_commit(&record)
+                .verify_pending_review_commit_with_store(science_store, &record)
                 .is_err(),
             "tampered review commit passed its preterminal authority check"
         );
@@ -870,7 +2107,7 @@ mod tests {
         assert!(
             fixture
                 .project_store
-                .list_reviews(&fixture.project_id)
+                .list_reviews_with_store(&fixture.science_store, &fixture.project_id)
                 .is_err(),
             "a running authority commit must not expose a durable review"
         );
@@ -884,7 +2121,22 @@ mod tests {
             .project_revision(&fixture.project_id)
             .unwrap();
         let request = review_request(&fixture, "op-review-0001");
-        let first = fixture.project_store.apply_mutation(&request).unwrap();
+        let mut mismatched_request = request.clone();
+        if let ProjectMutation::ReviewRecord { summary, .. } = &mut mismatched_request.mutation {
+            *summary =
+                "A different replay admission must not authorize the original request.".into();
+        }
+        let mismatched_admission = ReviewAdmission::capture(
+            &fixture.project_store,
+            &fixture.science_store,
+            &mismatched_request,
+        )
+        .unwrap();
+        let admission = admit_review(&fixture, &request).unwrap();
+        let first = fixture
+            .project_store
+            .apply_actor_review(&request, &fixture.science_store, &admission)
+            .unwrap();
         assert_eq!(first.kind, "review_record");
         assert_ne!(first.revision, before);
         let record: ReviewRecord = serde_json::from_value(first.result.clone()).unwrap();
@@ -900,20 +2152,50 @@ mod tests {
         assert!(
             fixture
                 .project_store
-                .list_reviews(&fixture.project_id)
+                .list_reviews_with_store(&fixture.science_store, &fixture.project_id)
                 .is_err()
         );
-        assert!(fixture.project_store.apply_mutation(&request).is_err());
+        assert!(
+            fixture
+                .project_store
+                .apply_actor_review(&request, &fixture.science_store, &admission)
+                .is_err()
+        );
 
         complete_authority_run(&fixture, &record);
 
         let reopened = ProjectStore::new(&fixture.store_root);
-        let records = reopened.list_reviews(&fixture.project_id).unwrap();
+        let reopened_science = ScienceStore::new(&fixture.store_root);
+        let records = reopened
+            .list_reviews_with_store(&reopened_science, &fixture.project_id)
+            .unwrap();
         assert_eq!(records, vec![record.clone()]);
 
-        let replay = reopened.apply_mutation(&request).unwrap();
+        assert!(
+            reopened
+                .apply_actor_review(&request, &reopened_science, &mismatched_admission)
+                .is_err(),
+            "a different immutable admission replayed the original review"
+        );
+        assert_eq!(
+            reopened
+                .list_reviews_with_store(&reopened_science, &fixture.project_id)
+                .unwrap()
+                .len(),
+            1,
+            "rejected admission replay changed the review ledger"
+        );
+        let replay = reopened
+            .apply_actor_review(&request, &reopened_science, &admission)
+            .unwrap();
         assert!(replay.replayed);
-        assert_eq!(reopened.list_reviews(&fixture.project_id).unwrap().len(), 1);
+        assert_eq!(
+            reopened
+                .list_reviews_with_store(&reopened_science, &fixture.project_id)
+                .unwrap()
+                .len(),
+            1
+        );
 
         let authority_dir = fixture
             .store_root
@@ -925,7 +2207,9 @@ mod tests {
         wrong_approvals[0].call_id = CallId::new("forged-review-call");
         ProjectStore::write_json(&approvals_path, &wrong_approvals).unwrap();
         assert!(
-            reopened.list_reviews(&fixture.project_id).is_err(),
+            reopened
+                .list_reviews_with_store(&reopened_science, &fixture.project_id)
+                .is_err(),
             "review approval call-id tamper was accepted"
         );
         ProjectStore::write_json(&approvals_path, &approvals).unwrap();
@@ -948,7 +2232,9 @@ mod tests {
             mutate(&mut tampered[0]);
             ProjectStore::write_json(&artifacts_path, &tampered).unwrap();
             assert!(
-                reopened.list_reviews(&fixture.project_id).is_err(),
+                reopened
+                    .list_reviews_with_store(&reopened_science, &fixture.project_id)
+                    .is_err(),
                 "review manifest {field} tamper was accepted"
             );
             ProjectStore::write_json(&artifacts_path, &artifacts).unwrap();
@@ -963,11 +2249,19 @@ mod tests {
         wrong_provenance.input_sha256 = "f".repeat(64);
         ProjectStore::write_json(&provenance_path, &vec![wrong_provenance]).unwrap();
         assert!(
-            reopened.list_reviews(&fixture.project_id).is_err(),
+            reopened
+                .list_reviews_with_store(&reopened_science, &fixture.project_id)
+                .is_err(),
             "review-specific provenance tamper was accepted"
         );
         ProjectStore::write_json(&provenance_path, &vec![record.expected_provenance()]).unwrap();
-        assert_eq!(reopened.list_reviews(&fixture.project_id).unwrap().len(), 1);
+        assert_eq!(
+            reopened
+                .list_reviews_with_store(&reopened_science, &fixture.project_id)
+                .unwrap()
+                .len(),
+            1
+        );
 
         // A bare filesystem write cannot mint a second authoritative review:
         // its claimed authority run does not exist and list therefore fails
@@ -978,7 +2272,243 @@ mod tests {
         forged.authority_run_id = "forged-authority-run".into();
         let forged_path = reopened.review_path(&fixture.project_id, "op-review-forged");
         ProjectStore::write_json(&forged_path, &forged).unwrap();
-        assert!(reopened.list_reviews(&fixture.project_id).is_err());
+        assert!(
+            reopened
+                .list_reviews_with_store(&reopened_science, &fixture.project_id)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn bare_project_mutation_cannot_bypass_actor_review_authority() {
+        let fixture = fixture();
+        let request = review_request(&fixture, "op-review-bare-bypass");
+        let error = fixture.project_store.apply_mutation(&request).unwrap_err();
+        assert!(
+            matches!(error, ScienceError::Invalid(ref message) if message.contains("SessionActor-retained")),
+            "bare review failed for the wrong reason: {error}"
+        );
+        assert!(
+            fixture
+                .project_store
+                .lookup_operation("op-review-bare-bypass")
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn review_finish_uses_retained_root_after_pathname_rename_and_replace() {
+        let fixture = fixture();
+        let request = review_request(&fixture, "op-review-retained-root");
+        let admission = admit_review(&fixture, &request).unwrap();
+        let retained_root = fixture._root.path().join("retained-science-store");
+        std::fs::rename(&fixture.store_root, &retained_root).unwrap();
+        std::fs::create_dir(&fixture.store_root).unwrap();
+
+        let outcome = fixture
+            .project_store
+            .apply_actor_review(&request, &fixture.science_store, &admission)
+            .unwrap();
+        let record: ReviewRecord = serde_json::from_value(outcome.result).unwrap();
+        complete_authority_run(&fixture, &record);
+        fixture
+            .project_store
+            .verify_review_record_with_store(&fixture.science_store, &record)
+            .unwrap();
+
+        assert!(
+            retained_root
+                .join("projects")
+                .join(&fixture.project_id.0)
+                .join("reviews")
+                .join("op-review-retained-root.json")
+                .is_file(),
+            "review was not written through the retained project capability"
+        );
+        assert_eq!(
+            std::fs::read_dir(&fixture.store_root).unwrap().count(),
+            0,
+            "replacement pathname received review or authority bytes"
+        );
+    }
+
+    #[test]
+    fn review_source_requires_exact_approval_evidence_and_provenance() {
+        let approval_fixture = fixture();
+        let source_dir = approval_fixture
+            .store_root
+            .join("runs")
+            .join(&approval_fixture.run_id.0);
+        let approval_path = source_dir.join("approvals.json");
+        let mut approvals: Vec<crate::Approval> = ProjectStore::read_json(&approval_path).unwrap();
+        approvals[0].call_id = CallId::new("forged-source-call");
+        ProjectStore::write_json(&approval_path, &approvals).unwrap();
+        assert!(
+            apply_review(
+                &approval_fixture,
+                &review_request(&approval_fixture, "op-review-source-approval")
+            )
+            .is_err(),
+            "source approval call-id tamper was accepted"
+        );
+
+        let evidence_fixture = fixture();
+        let source_dir = evidence_fixture
+            .store_root
+            .join("runs")
+            .join(&evidence_fixture.run_id.0);
+        let evidence_path = source_dir.join("evidence.json");
+        let mut evidence: Vec<crate::Evidence> = ProjectStore::read_json(&evidence_path).unwrap();
+        evidence[0].artifact_sha256 = None;
+        ProjectStore::write_json(&evidence_path, &evidence).unwrap();
+        assert!(
+            apply_review(
+                &evidence_fixture,
+                &review_request(&evidence_fixture, "op-review-source-evidence")
+            )
+            .is_err(),
+            "source evidence registry tamper was accepted"
+        );
+
+        let provenance_fixture = fixture();
+        let source_dir = provenance_fixture
+            .store_root
+            .join("runs")
+            .join(&provenance_fixture.run_id.0);
+        let provenance_path = source_dir.join("provenance.json");
+        let mut provenance: Vec<crate::Provenance> =
+            ProjectStore::read_json(&provenance_path).unwrap();
+        provenance[0].run_id = RunId::new("forged-source-run");
+        ProjectStore::write_json(&provenance_path, &provenance).unwrap();
+        assert!(
+            apply_review(
+                &provenance_fixture,
+                &review_request(&provenance_fixture, "op-review-source-provenance")
+            )
+            .is_err(),
+            "source provenance run binding tamper was accepted"
+        );
+    }
+
+    #[test]
+    fn review_replay_rejects_format_valid_source_authority_replacement() {
+        let evidence_fixture = fixture();
+        let evidence_request =
+            review_request(&evidence_fixture, "op-review-source-evidence-replacement");
+        let evidence_admission = admit_review(&evidence_fixture, &evidence_request).unwrap();
+        let outcome = evidence_fixture
+            .project_store
+            .apply_actor_review(
+                &evidence_request,
+                &evidence_fixture.science_store,
+                &evidence_admission,
+            )
+            .unwrap();
+        let evidence_record: ReviewRecord = serde_json::from_value(outcome.result).unwrap();
+        complete_authority_run(&evidence_fixture, &evidence_record);
+        let source_dir = evidence_fixture
+            .store_root
+            .join("runs")
+            .join(&evidence_fixture.run_id.0);
+        let evidence_path = source_dir.join("evidence.json");
+        let mut evidence: Vec<crate::Evidence> = ProjectStore::read_json(&evidence_path).unwrap();
+        evidence[0].claim = "A different but still non-empty claim.".into();
+        evidence[0].source = "fixture://replacement-evidence".into();
+        ProjectStore::write_json(&evidence_path, &evidence).unwrap();
+        assert!(
+            evidence_fixture
+                .project_store
+                .verify_review_record_with_store(&evidence_fixture.science_store, &evidence_record,)
+                .is_err(),
+            "format-valid source evidence replacement retained an old review proof"
+        );
+        assert!(
+            evidence_fixture
+                .project_store
+                .apply_actor_review(
+                    &evidence_request,
+                    &evidence_fixture.science_store,
+                    &evidence_admission,
+                )
+                .is_err(),
+            "format-valid source evidence replacement replayed an old admission"
+        );
+
+        let provenance_fixture = fixture();
+        let provenance_request = review_request(
+            &provenance_fixture,
+            "op-review-source-provenance-replacement",
+        );
+        let provenance_admission = admit_review(&provenance_fixture, &provenance_request).unwrap();
+        let outcome = provenance_fixture
+            .project_store
+            .apply_actor_review(
+                &provenance_request,
+                &provenance_fixture.science_store,
+                &provenance_admission,
+            )
+            .unwrap();
+        let provenance_record: ReviewRecord = serde_json::from_value(outcome.result).unwrap();
+        complete_authority_run(&provenance_fixture, &provenance_record);
+        let source_dir = provenance_fixture
+            .store_root
+            .join("runs")
+            .join(&provenance_fixture.run_id.0);
+        let provenance_path = source_dir.join("provenance.json");
+        let mut provenance: Vec<crate::Provenance> =
+            ProjectStore::read_json(&provenance_path).unwrap();
+        provenance[0].source_uri = "fixture://replacement-provenance".into();
+        provenance[0].tool = "replacement-but-valid-tool".into();
+        ProjectStore::write_json(&provenance_path, &provenance).unwrap();
+        assert!(
+            provenance_fixture
+                .project_store
+                .verify_review_record_with_store(
+                    &provenance_fixture.science_store,
+                    &provenance_record,
+                )
+                .is_err(),
+            "format-valid source provenance replacement retained an old review proof"
+        );
+        assert!(
+            provenance_fixture
+                .project_store
+                .apply_actor_review(
+                    &provenance_request,
+                    &provenance_fixture.science_store,
+                    &provenance_admission,
+                )
+                .is_err(),
+            "format-valid source provenance replacement replayed an old admission"
+        );
+    }
+
+    #[test]
+    fn review_source_missing_artifact_registry_fails_before_project_write() {
+        let fixture = fixture();
+        let registry = fixture
+            .store_root
+            .join("runs")
+            .join(&fixture.run_id.0)
+            .join("artifacts.json");
+        ProjectStore::write_json(&registry, &Vec::<crate::Artifact>::new()).unwrap();
+        assert!(
+            apply_review(
+                &fixture,
+                &review_request(&fixture, "op-review-missing-source-registry")
+            )
+            .is_err()
+        );
+        assert!(
+            fixture
+                .project_store
+                .lookup_operation("op-review-missing-source-registry")
+                .unwrap()
+                .is_none(),
+            "missing source registry still committed a project operation"
+        );
     }
 
     #[test]
@@ -991,16 +2521,13 @@ mod tests {
             .join("artifacts/result.json");
         std::fs::write(&artifact_path, b"tampered").unwrap();
         assert!(
-            tampered
-                .project_store
-                .apply_mutation(&review_request(&tampered, "op-review-tamper"))
-                .is_err(),
+            apply_review(&tampered, &review_request(&tampered, "op-review-tamper")).is_err(),
             "tampered bytes produced a review"
         );
         assert!(
             tampered
                 .project_store
-                .list_reviews(&tampered.project_id)
+                .list_reviews_with_store(&tampered.science_store, &tampered.project_id)
                 .unwrap()
                 .is_empty()
         );
@@ -1020,12 +2547,12 @@ mod tests {
         {
             *artifact_sha256s = vec!["a".repeat(64)];
         }
-        assert!(clean.project_store.apply_mutation(&unknown).is_err());
+        assert!(apply_review(&clean, &unknown).is_err());
 
         let mut wrong_session = review_request(&clean, "op-review-session");
         wrong_session.session_id = "session-2".into();
         assert!(matches!(
-            clean.project_store.apply_mutation(&wrong_session),
+            apply_review(&clean, &wrong_session),
             Err(ScienceError::Ownership)
         ));
 
@@ -1034,7 +2561,7 @@ mod tests {
             *reviewer_id = "Nature-Reviewer-2".into();
         }
         assert!(matches!(
-            clean.project_store.apply_mutation(&forged_reviewer),
+            apply_review(&clean, &forged_reviewer),
             Err(ScienceError::Ownership)
         ));
 
@@ -1048,7 +2575,7 @@ mod tests {
         }
         wrong_project.expected_revision = None;
         assert!(matches!(
-            clean.project_store.apply_mutation(&wrong_project),
+            apply_review(&clean, &wrong_project),
             Err(ScienceError::Ownership)
         ));
 
@@ -1057,7 +2584,7 @@ mod tests {
             *project_id = ProjectId("../operations".into());
         }
         traversal.expected_revision = None;
-        let error = clean.project_store.apply_mutation(&traversal).unwrap_err();
+        let error = apply_review(&clean, &traversal).unwrap_err();
         assert!(
             matches!(&error, ScienceError::Invalid(message) if message.contains("projectId")),
             "project-id traversal failed for the wrong reason: {error}"
@@ -1067,10 +2594,7 @@ mod tests {
         {
             let linked = fixture();
             let linked_request = review_request(&linked, "op-review-symlink");
-            let outcome = linked
-                .project_store
-                .apply_mutation(&linked_request)
-                .unwrap();
+            let outcome = apply_review(&linked, &linked_request).unwrap();
             let record: ReviewRecord = serde_json::from_value(outcome.result).unwrap();
             complete_authority_run(&linked, &record);
             let reviews_dir = linked.project_store.reviews_dir(&linked.project_id);
@@ -1082,7 +2606,7 @@ mod tests {
             assert!(
                 linked
                     .project_store
-                    .list_reviews(&linked.project_id)
+                    .list_reviews_with_store(&linked.science_store, &linked.project_id)
                     .is_err(),
                 "a symlinked review ledger entry was followed"
             );
@@ -1107,10 +2631,7 @@ mod tests {
         .unwrap();
 
         assert!(
-            write_fixture
-                .project_store
-                .apply_mutation(&request)
-                .is_err(),
+            apply_review(&write_fixture, &request).is_err(),
             "a symlinked review parent accepted a ledger write"
         );
         assert_eq!(
@@ -1128,10 +2649,11 @@ mod tests {
         );
 
         let read_fixture = fixture();
-        let outcome = read_fixture
-            .project_store
-            .apply_mutation(&review_request(&read_fixture, "op-review-parent-read"))
-            .unwrap();
+        let outcome = apply_review(
+            &read_fixture,
+            &review_request(&read_fixture, "op-review-parent-read"),
+        )
+        .unwrap();
         let record: ReviewRecord = serde_json::from_value(outcome.result).unwrap();
         complete_authority_run(&read_fixture, &record);
         let reviews = read_fixture
@@ -1147,7 +2669,7 @@ mod tests {
         assert!(
             read_fixture
                 .project_store
-                .list_reviews(&read_fixture.project_id)
+                .list_reviews_with_store(&read_fixture.science_store, &read_fixture.project_id)
                 .is_err(),
             "review listing followed a replaced parent-directory symlink"
         );

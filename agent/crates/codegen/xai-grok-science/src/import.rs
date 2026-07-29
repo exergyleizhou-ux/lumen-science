@@ -40,7 +40,12 @@ pub fn begin_import(store: &ScienceStore, context: RunContext) -> Result<Science
         call_id: CallId::new("science_file_import"),
     };
     store.create_run(context)?;
-    store.append_event(&ticket.run_id, "SessionActor", "run.created", serde_json::json!({}))?;
+    store.append_event(
+        &ticket.run_id,
+        "SessionActor",
+        "run.created",
+        serde_json::json!({}),
+    )?;
     store.request_approval(Approval {
         project_id: ticket.project_id.clone(),
         run_id: ticket.run_id.clone(),
@@ -88,9 +93,7 @@ pub fn finish_import(
     let file_name = source_path
         .file_name()
         .and_then(|name| name.to_str())
-        .ok_or_else(|| {
-            ScienceError::Invalid("import source must have a UTF-8 file name".into())
-        })?;
+        .ok_or_else(|| ScienceError::Invalid("import source must have a UTF-8 file name".into()))?;
     let summary = preview::summarize(&built);
     let tool_identity = tool_identity.into();
     let artifact = store.put_artifact(
@@ -142,7 +145,7 @@ pub fn finish_import(
             "artifacts": [artifact.sha256]
         }),
     )?;
-    let run = store.transition(&ticket.run_id, RunState::Succeeded, None)?;
+    let run = store.transition_succeeded_verified(&ticket.run_id)?;
     store.append_event(
         &ticket.run_id,
         "HostVerification",
@@ -176,7 +179,13 @@ pub fn execute_approved_import(
 ) -> Result<ImportResult> {
     let ticket = begin_import(store, context)?;
     csv::mark_allowed(store, &ticket)?;
-    finish_import(store, ticket, source_path, bytes, "kernel-test-only/direct-executor")
+    finish_import(
+        store,
+        ticket,
+        source_path,
+        bytes,
+        "kernel-test-only/direct-executor",
+    )
 }
 
 #[cfg(test)]
@@ -207,7 +216,11 @@ mod tests {
         assert_eq!(record.artifact_sha256, artifact.sha256);
         assert_eq!(
             record.preview.stats,
-            PreviewStats::Tabular { rows: 3, columns: 3, ragged: false }
+            PreviewStats::Tabular {
+                rows: 3,
+                columns: 3,
+                ragged: false
+            }
         );
         assert_eq!(result.evidence.len(), 1);
         assert_eq!(
@@ -242,7 +255,10 @@ mod tests {
                 max_len,
                 ..
             } => {
-                assert_eq!((*sequences, *total_residues, *min_len, *max_len), (2, 8, 2, 6));
+                assert_eq!(
+                    (*sequences, *total_residues, *min_len, *max_len),
+                    (2, 8, 2, 6)
+                );
             }
             other => panic!("unexpected stats: {other:?}"),
         }
@@ -279,8 +295,7 @@ mod tests {
         )
         .unwrap();
         assert!(
-            finish_import(&store, ticket, Path::new("a.csv"), CSV, "kernel-test-only")
-                .is_err()
+            finish_import(&store, ticket, Path::new("a.csv"), CSV, "kernel-test-only").is_err()
         );
     }
 }

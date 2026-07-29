@@ -30,5 +30,7 @@ pub use mutation::{MutationOutcome, MutationRequest, OperationRecord, ProjectMut
 pub use query::{
     ClaimComparison, ConsistencyReport, EvidenceTrace, ReproductionStatus, Violation, ViolationKind,
 };
-pub use review_store::{ReviewRecord, ReviewVerdict, ReviewedArtifact};
+pub use review_store::{
+    ReviewAdmission, ReviewRecord, ReviewRecoveryGrant, ReviewVerdict, ReviewedArtifact,
+};
 pub use store::{ProjectBundle, ProjectRecoveryReport, ProjectStore, RegisteredArtifact};

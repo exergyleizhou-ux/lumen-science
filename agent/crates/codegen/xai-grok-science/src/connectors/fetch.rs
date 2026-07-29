@@ -377,7 +377,7 @@ pub fn finish_fetch(
             "artifacts": artifacts.iter().map(|artifact| artifact.sha256.clone()).collect::<Vec<_>>()
         }),
     )?;
-    let run = store.transition(&ticket.run_id, RunState::Succeeded, None)?;
+    let run = store.transition_succeeded_verified(&ticket.run_id)?;
     store.append_event(
         &ticket.run_id,
         "HostVerification",

@@ -337,9 +337,7 @@ mod tests {
             })
             .unwrap();
         store.transition(&run_id, RunState::Running, None).unwrap();
-        store
-            .transition(&run_id, RunState::Succeeded, None)
-            .unwrap();
+        store.transition_succeeded_verified(&run_id).unwrap();
         (store, run_id)
     }
 

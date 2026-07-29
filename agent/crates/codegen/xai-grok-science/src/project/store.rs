@@ -118,6 +118,25 @@ pub struct ProjectStore {
     writes: Arc<Mutex<()>>,
 }
 
+/// Proof that the process-wide write lock for one retained project root is
+/// held for the lifetime of this value.
+///
+/// Fields are private on purpose: callers can receive this proof only from
+/// [`ProjectStore::with_owned_project_revision_guarded`]. Workflow execution
+/// uses it to avoid trying to re-lock the same non-reentrant mutex while still
+/// keeping project mutation, execution, and authority commit in one critical
+/// section.
+pub struct HeldProjectRootWriteGuard<'a> {
+    writes: &'a Arc<Mutex<()>>,
+    _guard: MutexGuard<'a, ()>,
+}
+
+impl HeldProjectRootWriteGuard<'_> {
+    pub(crate) fn authorizes(&self, writes: &Arc<Mutex<()>>) -> bool {
+        Arc::ptr_eq(self.writes, writes)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectBundle {
     pub project: ResearchProject,
@@ -438,10 +457,34 @@ impl ProjectStore {
         owner_id: &str,
         operation: impl FnOnce(&ResearchProject, &str) -> Result<T>,
     ) -> Result<T> {
-        let _guard = self.write_guard()?;
+        self.with_owned_project_revision_guarded(
+            project_id,
+            owner_id,
+            |project, revision, _guard| operation(project, revision),
+        )
+    }
+
+    /// Execute an operation while retaining typed proof that this exact
+    /// project's root write lock remains held.
+    ///
+    /// This is the cross-store transaction seam for actor-owned work that
+    /// writes workflow records below the same retained root. The token cannot
+    /// be constructed by protocol adapters and is rejected by an executor
+    /// opened on any other root.
+    pub fn with_owned_project_revision_guarded<T>(
+        &self,
+        project_id: &ProjectId,
+        owner_id: &str,
+        operation: impl FnOnce(&ResearchProject, &str, &HeldProjectRootWriteGuard<'_>) -> Result<T>,
+    ) -> Result<T> {
+        let guard = self.write_guard()?;
+        let held_guard = HeldProjectRootWriteGuard {
+            writes: &self.writes,
+            _guard: guard,
+        };
         let project = self.load_owned_project(project_id, owner_id)?;
         let revision = self.project_revision(project_id)?;
-        operation(&project, &revision)
+        operation(&project, &revision, &held_guard)
     }
 
     pub fn save_project(&self, project: &ResearchProject) -> Result<()> {
