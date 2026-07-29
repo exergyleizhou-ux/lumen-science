@@ -1313,61 +1313,6 @@ fn apply_linux_seccomp(filter: &LinuxSeccompFilter) -> io::Result<()> {
     Ok(())
 }
 
-/// Build a minimal seccomp BPF filter that denies execve and execveat.
-/// Arch-safe with x32-ABI rejection on x86_64. Does NOT replace
-/// build_linux_seccomp_filter; this is a separate primitive for the
-/// post-load deny-all-exec seal (NOT wired to production yet).
-#[cfg(target_os = "linux")]
-fn linux_deny_exec_filter() -> io::Result<LinuxSeccompFilter> {
-    const BPF_LD: u16 = 0x00;
-    const BPF_W: u16 = 0x00;
-    const BPF_ABS: u16 = 0x20;
-    const BPF_JMP: u16 = 0x05;
-    const BPF_JEQ: u16 = 0x10;
-    #[cfg(target_arch = "x86_64")]
-    const BPF_JSET: u16 = 0x40;
-    const BPF_K: u16 = 0x00;
-    const BPF_RET: u16 = 0x06;
-    const RET_KILL_PROCESS: u32 = 0x8000_0000;
-    const RET_ERRNO: u32 = 0x0005_0000;
-    const RET_ALLOW: u32 = 0x7fff_0000;
-    #[cfg(target_arch = "x86_64")]
-    const AUDIT_ARCH: u32 = 0xc000_003e;
-    #[cfg(target_arch = "aarch64")]
-    const AUDIT_ARCH: u32 = 0xc000_00b7;
-    #[cfg(target_arch = "x86_64")]
-    const X32_SYSCALL_BIT: u32 = 0x4000_0000;
-
-    let stmt = |code, k| libc::sock_filter { code, jt: 0, jf: 0, k };
-    let jump = |code, k, jt, jf| libc::sock_filter { code, jt, jf, k };
-    let mut filters = vec![
-        stmt(BPF_LD | BPF_W | BPF_ABS, 4),
-        jump(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH, 1, 0),
-        stmt(BPF_RET | BPF_K, RET_KILL_PROCESS),
-        stmt(BPF_LD | BPF_W | BPF_ABS, 0),
-    ];
-    #[cfg(target_arch = "x86_64")]
-    {
-        filters.push(jump(BPF_JMP | BPF_JSET | BPF_K, X32_SYSCALL_BIT, 0, 1));
-        filters.push(stmt(BPF_RET | BPF_K, RET_ERRNO | libc::EPERM as u32));
-    }
-    let denied = [
-        libc::SYS_execve,
-        libc::SYS_execveat,
-    ];
-    for syscall in denied {
-        filters.push(jump(BPF_JMP | BPF_JEQ | BPF_K, syscall as u32, 0, 1));
-        filters.push(stmt(BPF_RET | BPF_K, RET_ERRNO | libc::EPERM as u32));
-    }
-    filters.push(stmt(BPF_RET | BPF_K, RET_ALLOW));
-    let len = u16::try_from(filters.len())
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "seccomp deny-exec filter is too large"))?;
-    Ok(LinuxSeccompFilter {
-        instructions: filters.into_boxed_slice(),
-        len,
-    })
-}
-
 #[cfg(target_os = "linux")]
 fn duplicate_inheritable(snapshot: &File) -> Result<File, PinExecutableError> {
     let inherited_fd = unsafe {
@@ -1770,6 +1715,63 @@ mod tests {
             .expect("set executable fixture mode");
     }
 
+    // ── G47-M: shared test helpers (used by all Linux sandbox tests) ──
+
+    const MARKER_BOOTSTRAP: &str = "BOOTSTRAP_REACHED";
+    const MARKER_BLOCKED: &str = "ATTACK_BLOCKED";
+    const MARKER_SUCCEEDED: &str = "ATTACK_SUCCEEDED";
+
+    #[cfg(target_os = "linux")]
+    fn run_linux_sandboxed(
+        python: &Path,
+        code: &str,
+    ) -> (std::process::Output, String, String) {
+        let pinned = PinnedExecutable::pin(python)
+            .unwrap_or_else(|e| panic!("pin {python:?}: {e}"));
+        let dir = TestDir::new();
+        let output_fd = File::open(&dir.0)
+            .unwrap_or_else(|e| panic!("open output dir: {e}"));
+        let mut command = pinned
+            .spawn_linux_sandboxed_command(output_fd.as_raw_fd())
+            .unwrap_or_else(|e| panic!("build sandbox command for {python:?}: {e}"));
+        command.command_mut().args(["-c", code]);
+        let result = command
+            .output()
+            .unwrap_or_else(|e| panic!("run sandbox command: {e}"));
+        let stdout = String::from_utf8_lossy(&result.stdout).into_owned();
+        let stderr = String::from_utf8_lossy(&result.stderr).into_owned();
+        (result, stdout, stderr)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn run_unsandboxed(
+        python: &Path,
+        code: &str,
+    ) -> (std::process::Output, String, String) {
+        let pinned = PinnedExecutable::pin(python)
+            .unwrap_or_else(|e| panic!("pin {python:?}: {e}"));
+        let mut command = pinned
+            .spawn_command()
+            .unwrap_or_else(|e| panic!("build unsandboxed command: {e}"));
+        command.command_mut().args(["-c", code]);
+        let result = command
+            .output()
+            .unwrap_or_else(|e| panic!("run unsandboxed command: {e}"));
+        let stdout = String::from_utf8_lossy(&result.stdout).into_owned();
+        let stderr = String::from_utf8_lossy(&result.stderr).into_owned();
+        (result, stdout, stderr)
+    }
+
+    fn assert_marker_count(stdout: &str, marker: &str, expected: usize, label: &str) {
+        let count = stdout.matches(marker).count();
+        assert_eq!(count, expected,
+            "{label}: expected {expected} occurrences of '{marker}' but found {count}.\nstdout:\n{stdout}");
+    }
+
+    fn assert_marker_absent(stdout: &str, marker: &str, label: &str) {
+        assert_marker_count(stdout, marker, 0, label);
+    }
+
     #[test]
     #[cfg(target_os = "linux")]
     fn replacement_at_original_path_cannot_change_executed_bytes() {
@@ -1963,10 +1965,6 @@ mod tests {
     }
 
     // ── G47-M1: corrected sandbox diagnostics ─────────────────────
-
-    const MARKER_BOOTSTRAP: &str = "BOOTSTRAP_REACHED";
-    const MARKER_BLOCKED: &str = "ATTACK_BLOCKED";
-    const MARKER_SUCCEEDED: &str = "ATTACK_SUCCEEDED";
 
     /// Loader-direct bypass: benign code reaches marker, then attempts
     /// `os.execv(loader, [loader, "/bin/sh", ...])`. Sandbox must block it.

@@ -218,11 +218,16 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
         const report = await environment.discover('python')
         const usable = report.interpreters.find((i) => i.runnable)
         if (!usable) {
+          const pinned = report.interpreters.filter((i) => i.interpreterPath.startsWith('/'))
+          const unpinned = report.interpreters.length - pinned.length
+          const probed = pinned.filter((i) => i.version !== undefined || i.detail !== undefined)
           return {
             ok: false as const,
             reason:
-              'no runnable Python interpreter was discovered on this machine — ' +
-              'add one in Settings or install python3, then retry',
+              `no runnable Python interpreter was discovered on this machine ` +
+              `(total=${report.interpreters.length} pinned=${pinned.length} ` +
+              `unpinned=${unpinned} versionProbed=${probed.length}). ` +
+              'Add a Python 3 interpreter in Settings, install python3, or check PATH.',
           }
         }
         return { ok: true as const, interpreterPath: usable.interpreterPath }
