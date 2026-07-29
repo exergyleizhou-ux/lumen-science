@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "recorded_at": "2026-07-29T14:29:17+08:00",
+  "recorded_at": "2026-07-29T14:34:00+08:00",
   "purpose": "Record selective Lumen core v0.1.251 admission into Lumen Science without claiming full source or release parity.",
   "policy": {
     "source_of_truth": "lumen",
@@ -78,7 +78,7 @@
     "tool": "scripts/check-core-drift.py",
     "basis": "audited_lumen_main_head",
     "lumen_head": "dc563b1e0db9eaca7e970d56d7816e1522511723",
-    "science_code_head": "b07c2bfaa9a5a4d5cf9179f0a91ea24e35285a7e",
+    "science_code_head": "3169a06f92ba2e4872c6a1d4cd2d3a2e40a946a2",
     "comparison_scope": "Science working-tree bytes based on science_code_head; CI rederives the manifest from exact committed bytes",
     "diverged_rust_files": 129,
     "missing_in_science_rust_files": 5,
