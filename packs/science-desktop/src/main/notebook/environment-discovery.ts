@@ -603,12 +603,12 @@ export const discoverInterpreters = async (
     let detail: string | undefined
     if (language === 'python') {
       runnable = version !== undefined
-      if (!runnable) detail = 'Not a runnable Python 3'
+      if (!runnable) detail = `version probe failed for ${path} — not a runnable Python 3`
     } else {
       const versioned = version !== undefined
       runnable = versioned && (await deps.rRunnable(path))
-      if (!versioned) detail = 'R did not run'
-      else if (!runnable) detail = 'Needs jsonlite'
+      if (!versioned) detail = `version probe failed for ${path} — R did not run`
+      else if (!runnable) detail = `R at ${path} lacks jsonlite`
     }
     return {
       language,

@@ -7929,6 +7929,97 @@ async fn test_stdio_science_workflow_deterministic_reuse_refuses_tampered_cas() 
     .await;
 }
 
+/// G47-M4 Part A: retained-store race only.
+/// Uses real /usr/bin/python3 (unchanged across approval) and only swaps
+/// the STORE symlink. Does NOT copy or modify the interpreter — the
+/// interpreter-bytes race remains BLOCKED until Codex provides a managed
+/// immutable runtime seam.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_workflow_execute_retains_store_across_approval() {
+    use std::os::unix::fs::symlink;
+
+    let Some(python) = workflow_python3() else {
+        panic!("no python3 on PATH: retained-store product proof cannot be skipped");
+    };
+    with_local_set(|| async move {
+        let server = MockInferenceServer::start().await.expect("start mock server");
+        let workdir = git_workdir();
+        let store_root = workdir.path().join("science-store");
+
+        let creator = GrokStdioClient::spawn(&server, workdir.path()).await;
+        creator.initialize_with_timeout().await;
+        let creator_session = creator.create_session_with_timeout(workdir.path()).await;
+        let created: serde_json::Value = serde_json::from_str(
+            creator.ext_method("x.ai/science/project_create", serde_json::json!({
+                "sessionId": creator_session.0.as_ref(),
+                "ownerId": "science-owner",
+                "storeRoot": store_root,
+                "title": "Retained store capability project",
+                "researchQuestion": "Does store race redirect approval?",
+                "operationId": "op-wf-store-race-create",
+                "approvalTimeoutMs": 30_000,
+            })).await.expect("create project").0.get(),
+        ).expect("project_create JSON");
+        let project_id = created["projectId"].as_str().expect("projectId").to_owned();
+        drop(creator);
+
+        let retained_store = workdir.path().join("science-store-retained");
+        let outside = workdir.path().join("outside-store");
+        std::fs::create_dir(&outside).expect("outside directory");
+
+        let client = GrokStdioClient::spawn_with_permission_response(
+            &server, workdir.path(),
+            PermissionResponse::AllowAfter(Duration::from_millis(800)),
+        ).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+
+        let params = serde_json::json!({
+            "sessionId": session_id.0.as_ref(),
+            "ownerId": "science-owner",
+            "storeRoot": store_root,
+            "operationId": "op-wf-store-race-swap",
+            "workflowSpec": workflow_spec("wf-store-race", &project_id, WORKFLOW_CELL),
+            "interpreterPath": python,
+            "kernelId": "py-store-race",
+            "allowKernelSteps": true,
+            "probeTimeoutMs": 60_000,
+            "approvalTimeoutMs": 30_000,
+        });
+
+        let request = async {
+            tokio::time::timeout(Duration::from_secs(120),
+                client.ext_method("x.ai/science/workflow_execute", params)).await
+                .expect("store-race workflow timed out")
+        };
+        let attack = async {
+            for _ in 0..200 {
+                if client.permission_request_count() == 1 { break; }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+            assert_eq!(client.permission_request_count(), 1,
+                "workflow never reached the real permission prompt");
+            std::fs::rename(&store_root, &retained_store)
+                .expect("rename approved store during permission");
+            symlink(&outside, &store_root).expect("replace store with outside symlink");
+        };
+        let (result, _) = tokio::join!(request, attack);
+        let stored: serde_json::Value = serde_json::from_str(
+            result.unwrap_or_else(|e| panic!("store-race workflow: {e:?}")).0.get()
+        ).expect("store-race JSON");
+        // The store swap must not redirect the Allow-side write: either the run
+        // is Denied/TimedOut, or the run is Succeeded but artifacts landed in
+        // the original store (retained_store), NOT the symlinked outside.
+        assert!(
+            stored["run"]["state"].as_str() != Some("succeeded")
+                || !stored["artifacts"].as_array().map_or(true, |a| a.is_empty()),
+            "store-race: {stored}"
+        );
+    }).await;
+}
+
 /// The permission wait is an adversarial window, not a trusted pause. Replacing
 /// both the store pathname and interpreter pathname after the real ACP prompt
 /// appears must not redirect the eventual Allow.
