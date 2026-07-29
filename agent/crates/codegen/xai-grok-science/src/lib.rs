@@ -161,6 +161,13 @@ pub struct RunRecord {
     pub context: RunContext,
     pub state: RunState,
     pub terminal_reason: Option<String>,
+    /// Durable marker that this run entered exact-manifest completion.
+    ///
+    /// `None` identifies legacy completion semantics. Once populated it is
+    /// immutable, prevents downgrade when the companion seal is missing, and
+    /// lets restart recovery rebuild the sealed manifest from collections.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub successful_completion_manifest_sha256: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -253,6 +260,7 @@ pub struct SuccessfulCompletionManifest {
 }
 
 const AUTHORITY_COMMIT_FENCE_FILE: &str = "authority-commit-fence.json";
+const SUCCESSFUL_COMPLETION_SEAL_FILE: &str = "successful-completion-seal.json";
 
 /// Durable point-of-no-return for a cross-store authority commit.
 ///
@@ -266,6 +274,32 @@ struct AuthorityCommitFence {
     project_id: ProjectId,
     call_id: CallId,
     operation_id: String,
+}
+
+/// Durable freeze for an exact successful-completion snapshot.
+///
+/// The seal is written while the store-wide write lock is retained and before
+/// `Succeeded` becomes visible. This closes both the post-manifest mutation
+/// race and the crash window between snapshot verification and the terminal
+/// run write. Legacy protocols that use `transition_succeeded_verified` do not
+/// receive this seal and retain their existing post-terminal audit behavior.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct SuccessfulCompletionSeal {
+    schema_version: u32,
+    manifest: SuccessfulCompletionManifest,
+    approval: Approval,
+    run_schema_version: u32,
+    terminal_reason: Option<String>,
+    manifest_sha256: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+struct SuccessfulCompletionSealPayload<'a> {
+    schema_version: u32,
+    manifest: &'a SuccessfulCompletionManifest,
+    approval: &'a Approval,
+    run_schema_version: u32,
+    terminal_reason: &'a Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -604,6 +638,7 @@ impl ScienceWorkspaceCapability {
 impl ScienceStore {
     const MAX_DOSSIER_REGISTRY_BYTES: u64 = 8 * 1024 * 1024;
     const MAX_DOSSIER_RUN_RECORD_BYTES: u64 = 1024 * 1024;
+    const MAX_DOSSIER_COMPLETION_SEAL_BYTES: u64 = 48 * 1024 * 1024;
 
     pub fn new(root: impl Into<PathBuf>) -> Self {
         let root = root.into();
@@ -766,10 +801,168 @@ impl ScienceStore {
         }
     }
 
+    fn successful_completion_seal_digest(seal: &SuccessfulCompletionSeal) -> Result<String> {
+        Ok(hex_sha256(&serde_json::to_vec(
+            &SuccessfulCompletionSealPayload {
+                schema_version: seal.schema_version,
+                manifest: &seal.manifest,
+                approval: &seal.approval,
+                run_schema_version: seal.run_schema_version,
+                terminal_reason: &seal.terminal_reason,
+            },
+        )?))
+    }
+
+    fn expected_successful_completion_seal(
+        run: &RunRecord,
+        approval: &Approval,
+        manifest: &SuccessfulCompletionManifest,
+    ) -> Result<SuccessfulCompletionSeal> {
+        let mut seal = SuccessfulCompletionSeal {
+            schema_version: SCHEMA_VERSION,
+            manifest: manifest.clone(),
+            approval: approval.clone(),
+            run_schema_version: run.schema_version,
+            terminal_reason: None,
+            manifest_sha256: String::new(),
+        };
+        seal.manifest_sha256 = Self::successful_completion_seal_digest(&seal)?;
+        Ok(seal)
+    }
+
+    fn successful_completion_seal(
+        run_dir: &PinnedDirectory,
+    ) -> Result<Option<SuccessfulCompletionSeal>> {
+        match run_dir.read_json(Path::new(SUCCESSFUL_COMPLETION_SEAL_FILE)) {
+            Ok(seal) => {
+                let seal: SuccessfulCompletionSeal = seal;
+                validate_context(&seal.manifest.context)?;
+                if seal.schema_version != SCHEMA_VERSION
+                    || seal.manifest_sha256 != Self::successful_completion_seal_digest(&seal)?
+                {
+                    return Err(ScienceError::Invalid(
+                        "successful completion seal is malformed or corrupt".into(),
+                    ));
+                }
+                Ok(Some(seal))
+            }
+            Err(ScienceError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn successful_completion_seal_bounded(
+        run_dir: &PinnedDirectory,
+    ) -> Result<Option<SuccessfulCompletionSeal>> {
+        match run_dir.read_json_bounded(
+            Path::new(SUCCESSFUL_COMPLETION_SEAL_FILE),
+            Self::MAX_DOSSIER_COMPLETION_SEAL_BYTES,
+        ) {
+            Ok(seal) => {
+                let seal: SuccessfulCompletionSeal = seal;
+                validate_context(&seal.manifest.context)?;
+                if seal.schema_version != SCHEMA_VERSION
+                    || seal.manifest_sha256 != Self::successful_completion_seal_digest(&seal)?
+                {
+                    return Err(ScienceError::Invalid(
+                        "successful completion seal is malformed or corrupt".into(),
+                    ));
+                }
+                Ok(Some(seal))
+            }
+            Err(ScienceError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn persist_successful_completion_seal_unlocked(
+        run_dir: &PinnedDirectory,
+        run: &RunRecord,
+        approval: &Approval,
+        manifest: &SuccessfulCompletionManifest,
+    ) -> Result<()> {
+        let expected = Self::expected_successful_completion_seal(run, approval, manifest)?;
+        let path = Path::new(SUCCESSFUL_COMPLETION_SEAL_FILE);
+        match Self::successful_completion_seal(run_dir)? {
+            Some(existing) if existing == expected => return Ok(()),
+            Some(_) => {
+                return Err(ScienceError::Invalid(
+                    "successful completion seal conflicts with the exact manifest".into(),
+                ));
+            }
+            None => {}
+        }
+        match run_dir.replace_json_atomic(path, &expected) {
+            Ok(()) => Ok(()),
+            Err(error) => match Self::successful_completion_seal(run_dir) {
+                Ok(Some(reopened)) if reopened == expected => Ok(()),
+                _ => Err(error),
+            },
+        }
+    }
+
+    fn successful_completion_anchor(run: &RunRecord) -> Result<Option<&str>> {
+        match run.successful_completion_manifest_sha256.as_deref() {
+            Some(digest) if is_sha256_hex(digest) => Ok(Some(digest)),
+            Some(_) => Err(ScienceError::Invalid(
+                "successful completion manifest anchor is malformed".into(),
+            )),
+            None => Ok(None),
+        }
+    }
+
+    fn persist_successful_completion_anchor_unlocked(
+        run_dir: &PinnedDirectory,
+        run: &mut RunRecord,
+        manifest_sha256: &str,
+    ) -> Result<()> {
+        if !is_sha256_hex(manifest_sha256) {
+            return Err(ScienceError::Invalid(
+                "successful completion manifest digest is malformed".into(),
+            ));
+        }
+        match Self::successful_completion_anchor(run)? {
+            Some(existing) if existing == manifest_sha256 => return Ok(()),
+            Some(_) => {
+                return Err(ScienceError::Invalid(
+                    "successful completion manifest anchor conflicts with another snapshot".into(),
+                ));
+            }
+            None => {}
+        }
+        run.successful_completion_manifest_sha256 = Some(manifest_sha256.to_owned());
+        run_dir.replace_json_atomic(Path::new("run.json"), run)
+    }
+
+    fn reject_successful_completion_seal(run_dir: &PinnedDirectory) -> Result<()> {
+        let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
+        if Self::successful_completion_anchor(&run)?.is_some()
+            || Self::successful_completion_seal(run_dir)?.is_some()
+        {
+            return Err(ScienceError::Invalid(
+                "exact successful completion is sealed and immutable".into(),
+            ));
+        }
+        Ok(())
+    }
+
     fn reject_fenced_rollback(run_dir: &PinnedDirectory) -> Result<()> {
         if Self::authority_commit_fence(run_dir)?.is_some() {
             return Err(ScienceError::Invalid(
                 "authority passed its durable project commit fence and cannot roll back or terminalize unsuccessfully"
+                    .into(),
+            ));
+        }
+        let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
+        if Self::successful_completion_anchor(&run)?.is_some()
+            || Self::successful_completion_seal(run_dir)?.is_some()
+        {
+            return Err(ScienceError::Invalid(
+                "authority sealed exact successful completion and cannot roll back or terminalize unsuccessfully"
                     .into(),
             ));
         }
@@ -798,6 +991,7 @@ impl ScienceStore {
             context,
             state: RunState::Created,
             terminal_reason: None,
+            successful_completion_manifest_sha256: None,
         };
         let root = self.root_directory()?;
         let runs = root.create_directories(Path::new("runs"))?;
@@ -816,10 +1010,11 @@ impl ScienceStore {
         Ok(record)
     }
 
-    pub fn load_run(&self, run_id: &RunId) -> Result<RunRecord> {
-        let run: RunRecord = self
-            .open_run_directory(run_id)?
-            .read_json(Path::new("run.json"))?;
+    fn load_run_record_from_directory(
+        run_dir: &PinnedDirectory,
+        run_id: &RunId,
+    ) -> Result<RunRecord> {
+        let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
         validate_context(&run.context)?;
         if &run.context.run_id != run_id {
             return Err(ScienceError::Invalid(
@@ -827,6 +1022,93 @@ impl ScienceStore {
             ));
         }
         Ok(run)
+    }
+
+    /// Return the immutable exact-success snapshot, when this run opted into
+    /// manifest completion.
+    ///
+    /// Public readers must use this gate before serving any run collection.
+    /// This makes raw-filesystem changes to an individual collection fail
+    /// closed outside recovery too. Legacy runs remain readable without a
+    /// seal; an in-progress exact completion must be recovered before reads.
+    fn successful_completion_manifest_for_read(
+        run_dir: &PinnedDirectory,
+        run: &RunRecord,
+    ) -> Result<Option<SuccessfulCompletionSeal>> {
+        let anchor = Self::successful_completion_anchor(run)?;
+        let seal = Self::successful_completion_seal(run_dir)?;
+        match (anchor, seal.as_ref()) {
+            (None, None) => Ok(None),
+            (Some(anchor), Some(seal)) if run.state == RunState::Succeeded => {
+                Self::verify_succeeded_seal_unlocked(run_dir, run, anchor, seal)?;
+                Ok(Some(seal.clone()))
+            }
+            (Some(_), None) | (None, Some(_)) if run.state.terminal() => {
+                Err(ScienceError::Invalid(
+                    "exact completion anchor and seal must both remain durable".into(),
+                ))
+            }
+            (Some(_), _) | (_, Some(_)) => Err(ScienceError::Invalid(
+                "exact completion is unfinished and requires restart recovery".into(),
+            )),
+        }
+    }
+
+    fn successful_completion_manifest_for_bounded_read(
+        run_dir: &PinnedDirectory,
+        run: &RunRecord,
+    ) -> Result<Option<SuccessfulCompletionSeal>> {
+        let anchor = Self::successful_completion_anchor(run)?;
+        let seal = Self::successful_completion_seal_bounded(run_dir)?;
+        match (anchor, seal.as_ref()) {
+            (None, None) => Ok(None),
+            (Some(anchor), Some(seal)) if run.state == RunState::Succeeded => {
+                Self::verify_succeeded_seal_bounded(run_dir, run, anchor, seal)?;
+                Ok(Some(seal.clone()))
+            }
+            (Some(_), None) | (None, Some(_)) if run.state.terminal() => {
+                Err(ScienceError::Invalid(
+                    "exact completion anchor and seal must both remain durable".into(),
+                ))
+            }
+            (Some(_), _) | (_, Some(_)) => Err(ScienceError::Invalid(
+                "exact completion is unfinished and requires restart recovery".into(),
+            )),
+        }
+    }
+
+    fn load_run_snapshot(
+        &self,
+        run_id: &RunId,
+    ) -> Result<(RunRecord, Option<SuccessfulCompletionSeal>)> {
+        let run_dir = self.open_run_directory(run_id)?;
+        let run = Self::load_run_record_from_directory(&run_dir, run_id)?;
+        let manifest = Self::successful_completion_manifest_for_read(&run_dir, &run)?;
+        Ok((run, manifest))
+    }
+
+    fn load_run_snapshot_bounded(
+        &self,
+        run_id: &RunId,
+        max_run_json_bytes: u64,
+    ) -> Result<(RunRecord, Option<SuccessfulCompletionSeal>)> {
+        let run_dir = self.open_run_directory(run_id)?;
+        let run: RunRecord = run_dir.read_json_bounded(
+            Path::new("run.json"),
+            max_run_json_bytes.min(Self::MAX_DOSSIER_RUN_RECORD_BYTES),
+        )?;
+        validate_context(&run.context)?;
+        if &run.context.run_id != run_id {
+            return Err(ScienceError::Invalid(
+                "run record identity does not match requested run".into(),
+            ));
+        }
+        let manifest = Self::successful_completion_manifest_for_bounded_read(&run_dir, &run)?;
+        Ok((run, manifest))
+    }
+
+    pub fn load_run(&self, run_id: &RunId) -> Result<RunRecord> {
+        Ok(self.load_run_snapshot(run_id)?.0)
     }
 
     /// Reopen a run when present without weakening corruption handling.
@@ -844,17 +1126,7 @@ impl ScienceStore {
     }
 
     pub fn load_run_bounded(&self, run_id: &RunId, max_json_bytes: u64) -> Result<RunRecord> {
-        let run: RunRecord = self.open_run_directory(run_id)?.read_json_bounded(
-            Path::new("run.json"),
-            max_json_bytes.min(Self::MAX_DOSSIER_RUN_RECORD_BYTES),
-        )?;
-        validate_context(&run.context)?;
-        if &run.context.run_id != run_id {
-            return Err(ScienceError::Invalid(
-                "run record identity does not match requested run".into(),
-            ));
-        }
-        Ok(run)
+        Ok(self.load_run_snapshot_bounded(run_id, max_json_bytes)?.0)
     }
 
     pub fn transition(
@@ -881,7 +1153,8 @@ impl ScienceStore {
         state: RunState,
         reason: Option<String>,
     ) -> Result<RunRecord> {
-        let mut run = self.load_run(run_id)?;
+        let run_dir = self.open_run_directory(run_id)?;
+        let mut run = Self::load_run_record_from_directory(&run_dir, run_id)?;
         if run.state.terminal() {
             return Err(ScienceError::Invalid(
                 "terminal run cannot transition".into(),
@@ -893,7 +1166,6 @@ impl ScienceStore {
                 run.state
             )));
         }
-        let run_dir = self.open_run_directory(run_id)?;
         Self::reject_fenced_rollback(&run_dir)?;
         run.state = state;
         run.terminal_reason = reason;
@@ -928,6 +1200,7 @@ impl ScienceStore {
                 "a fenced cross-store authority requires an exact completion manifest".into(),
             ));
         }
+        Self::reject_successful_completion_seal(&run_dir)?;
         Self::require_running_allowed_output(&run_dir, &run, run_id, None)?;
         Self::persist_succeeded_unlocked(&run_dir, run)
     }
@@ -949,14 +1222,22 @@ impl ScienceStore {
             .lock()
             .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
         let run_dir = self.open_run_directory(run_id)?;
-        let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
+        Self::transition_succeeded_with_manifest_unlocked(&run_dir, manifest)
+    }
+
+    fn transition_succeeded_with_manifest_unlocked(
+        run_dir: &PinnedDirectory,
+        manifest: &SuccessfulCompletionManifest,
+    ) -> Result<RunRecord> {
+        let run_id = &manifest.context.run_id;
+        let mut run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
         validate_context(&run.context)?;
         if run.context != manifest.context || run.state != RunState::Running {
             return Err(ScienceError::Invalid(
                 "successful completion manifest does not bind the running context".into(),
             ));
         }
-        let approval = Self::running_allowed_approval(&run_dir, &run, run_id, None)?;
+        let approval = Self::running_allowed_approval(run_dir, &run, run_id, None)?;
 
         let artifacts: Vec<Artifact> = run_dir.read_json(Path::new("artifacts.json"))?;
         let evidence: Vec<Evidence> = run_dir.read_json(Path::new("evidence.json"))?;
@@ -985,7 +1266,7 @@ impl ScienceStore {
             ));
         }
         Self::verify_completion_collections(
-            &run_dir,
+            run_dir,
             run_id,
             &approval,
             &artifacts,
@@ -994,8 +1275,193 @@ impl ScienceStore {
             &previews,
             &events,
             &manifest.final_event,
+            true,
         )?;
-        Self::persist_succeeded_unlocked(&run_dir, run)
+        let expected_seal = Self::expected_successful_completion_seal(&run, &approval, manifest)?;
+        Self::persist_successful_completion_anchor_unlocked(
+            run_dir,
+            &mut run,
+            &expected_seal.manifest_sha256,
+        )?;
+        Self::persist_successful_completion_seal_unlocked(run_dir, &run, &approval, manifest)?;
+        Self::persist_succeeded_unlocked(run_dir, run)
+    }
+
+    fn durable_completion_manifest_unlocked(
+        run_dir: &PinnedDirectory,
+        context: &RunContext,
+    ) -> Result<SuccessfulCompletionManifest> {
+        let run_id = &context.run_id;
+        let artifacts: Vec<Artifact> = run_dir.read_json(Path::new("artifacts.json"))?;
+        let evidence: Vec<Evidence> = run_dir.read_json(Path::new("evidence.json"))?;
+        let provenance: Vec<Provenance> = run_dir.read_json(Path::new("provenance.json"))?;
+        let previews: Vec<preview::PreviewRecord> =
+            run_dir.read_json(Path::new("previews.json"))?;
+        let events: Vec<Event> = run_dir.read_json(Path::new("events.json"))?;
+        validate_artifacts(&artifacts, run_id)?;
+        validate_run_ids(evidence.iter().map(|item| &item.run_id), run_id, "evidence")?;
+        validate_run_ids(
+            provenance.iter().map(|item| &item.run_id),
+            run_id,
+            "provenance",
+        )?;
+        validate_previews(&previews, run_id)?;
+        validate_events(&events, run_id)?;
+        let final_event = events.last().cloned().ok_or_else(|| {
+            ScienceError::Invalid("sealed completion has no durable final event".into())
+        })?;
+        Ok(SuccessfulCompletionManifest {
+            context: context.clone(),
+            artifacts,
+            evidence,
+            provenance,
+            previews,
+            events,
+            final_event,
+        })
+    }
+
+    fn durable_completion_manifest_bounded(
+        run_dir: &PinnedDirectory,
+        context: &RunContext,
+    ) -> Result<SuccessfulCompletionManifest> {
+        let run_id = &context.run_id;
+        let artifacts: Vec<Artifact> = run_dir.read_json_bounded(
+            Path::new("artifacts.json"),
+            Self::MAX_DOSSIER_REGISTRY_BYTES,
+        )?;
+        let evidence: Vec<Evidence> = run_dir.read_json_bounded(
+            Path::new("evidence.json"),
+            Self::MAX_DOSSIER_REGISTRY_BYTES,
+        )?;
+        let provenance: Vec<Provenance> = run_dir.read_json_bounded(
+            Path::new("provenance.json"),
+            Self::MAX_DOSSIER_REGISTRY_BYTES,
+        )?;
+        let previews: Vec<preview::PreviewRecord> = run_dir.read_json_bounded(
+            Path::new("previews.json"),
+            Self::MAX_DOSSIER_REGISTRY_BYTES,
+        )?;
+        let events: Vec<Event> = run_dir.read_json_bounded(
+            Path::new("events.json"),
+            Self::MAX_DOSSIER_REGISTRY_BYTES,
+        )?;
+        validate_artifacts(&artifacts, run_id)?;
+        validate_run_ids(evidence.iter().map(|item| &item.run_id), run_id, "evidence")?;
+        validate_run_ids(
+            provenance.iter().map(|item| &item.run_id),
+            run_id,
+            "provenance",
+        )?;
+        validate_previews(&previews, run_id)?;
+        validate_events(&events, run_id)?;
+        let final_event = events.last().cloned().ok_or_else(|| {
+            ScienceError::Invalid("sealed completion has no durable final event".into())
+        })?;
+        Ok(SuccessfulCompletionManifest {
+            context: context.clone(),
+            artifacts,
+            evidence,
+            provenance,
+            previews,
+            events,
+            final_event,
+        })
+    }
+
+    fn verify_succeeded_seal_unlocked(
+        run_dir: &PinnedDirectory,
+        run: &RunRecord,
+        anchor: &str,
+        seal: &SuccessfulCompletionSeal,
+    ) -> Result<()> {
+        if run.state != RunState::Succeeded
+            || seal.manifest.context != run.context
+            || seal.run_schema_version != run.schema_version
+            || seal.terminal_reason != run.terminal_reason
+            || run.terminal_reason.is_some()
+            || seal.manifest_sha256 != anchor
+        {
+            return Err(ScienceError::Invalid(
+                "Succeeded run differs from its exact completion seal".into(),
+            ));
+        }
+        let durable = Self::durable_completion_manifest_unlocked(run_dir, &run.context)?;
+        if durable != seal.manifest {
+            return Err(ScienceError::Invalid(
+                "Succeeded collections differ from their exact completion anchor".into(),
+            ));
+        }
+        let mut running = run.clone();
+        running.state = RunState::Running;
+        let approval =
+            Self::running_allowed_approval(run_dir, &running, &run.context.run_id, None)?;
+        if approval != seal.approval {
+            return Err(ScienceError::Invalid(
+                "Succeeded approval differs from its exact completion seal".into(),
+            ));
+        }
+        Self::verify_completion_collections(
+            run_dir,
+            &run.context.run_id,
+            &approval,
+            &durable.artifacts,
+            &durable.evidence,
+            &durable.provenance,
+            &durable.previews,
+            &durable.events,
+            &durable.final_event,
+            true,
+        )
+    }
+
+    fn verify_succeeded_seal_bounded(
+        run_dir: &PinnedDirectory,
+        run: &RunRecord,
+        anchor: &str,
+        seal: &SuccessfulCompletionSeal,
+    ) -> Result<()> {
+        if run.state != RunState::Succeeded
+            || seal.manifest.context != run.context
+            || seal.run_schema_version != run.schema_version
+            || seal.terminal_reason != run.terminal_reason
+            || run.terminal_reason.is_some()
+            || seal.manifest_sha256 != anchor
+        {
+            return Err(ScienceError::Invalid(
+                "Succeeded run differs from its exact completion seal".into(),
+            ));
+        }
+        let durable = Self::durable_completion_manifest_bounded(run_dir, &run.context)?;
+        if durable != seal.manifest {
+            return Err(ScienceError::Invalid(
+                "Succeeded collections differ from their exact completion anchor".into(),
+            ));
+        }
+        let mut running = run.clone();
+        running.state = RunState::Running;
+        let approvals: Vec<Approval> = run_dir.read_json_bounded(
+            Path::new("approvals.json"),
+            Self::MAX_DOSSIER_REGISTRY_BYTES,
+        )?;
+        let approval = Self::allowed_approval_from_items(&running, &approvals, None)?;
+        if approval != seal.approval {
+            return Err(ScienceError::Invalid(
+                "Succeeded approval differs from its exact completion seal".into(),
+            ));
+        }
+        Self::verify_completion_collections(
+            run_dir,
+            &run.context.run_id,
+            &approval,
+            &durable.artifacts,
+            &durable.evidence,
+            &durable.provenance,
+            &durable.previews,
+            &durable.events,
+            &durable.final_event,
+            false,
+        )
     }
 
     fn persist_succeeded_unlocked(
@@ -1037,6 +1503,7 @@ impl ScienceStore {
         previews: &[preview::PreviewRecord],
         events: &[Event],
         final_event: &Event,
+        verify_artifact_bytes: bool,
     ) -> Result<()> {
         if artifacts.is_empty() || evidence.is_empty() || provenance.is_empty() {
             return Err(ScienceError::Invalid(
@@ -1057,11 +1524,13 @@ impl ScienceStore {
                     "completion artifacts do not exactly bind the allowed call".into(),
                 ));
             }
-            let (bytes, sha256) = artifact_dir.hash_regular(&artifact.relative_path)?;
-            if bytes != artifact.bytes || sha256 != artifact.sha256 {
-                return Err(ScienceError::Invalid(
-                    "completion artifact bytes do not match registered hash/length".into(),
-                ));
+            if verify_artifact_bytes {
+                let (bytes, sha256) = artifact_dir.hash_regular(&artifact.relative_path)?;
+                if bytes != artifact.bytes || sha256 != artifact.sha256 {
+                    return Err(ScienceError::Invalid(
+                        "completion artifact bytes do not match registered hash/length".into(),
+                    ));
+                }
             }
         }
 
@@ -1183,6 +1652,7 @@ impl ScienceStore {
             .lock()
             .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
         let run_dir = self.open_run_directory(run_id)?;
+        Self::reject_successful_completion_seal(&run_dir)?;
         let mut events: Vec<Event> = match run_dir.read_json(Path::new("events.json")) {
             Ok(events) => events,
             Err(error) => {
@@ -1224,9 +1694,13 @@ impl ScienceStore {
         if limit == 0 || limit > 1_000 {
             return Err(ScienceError::Invalid("event limit must be 1..=1000".into()));
         }
-        let events: Vec<Event> = self
-            .open_run_directory(run_id)?
-            .read_json(Path::new("events.json"))?;
+        let (_, manifest) = self.load_run_snapshot(run_id)?;
+        let events: Vec<Event> = match manifest {
+            Some(seal) => seal.manifest.events,
+            None => self
+                .open_run_directory(run_id)?
+                .read_json(Path::new("events.json"))?,
+        };
         validate_events(&events, run_id)?;
         Ok(events
             .into_iter()
@@ -1326,6 +1800,7 @@ impl ScienceStore {
         expected_run_id: &RunId,
         call: Option<&CallId>,
     ) -> Result<()> {
+        Self::reject_successful_completion_seal(run_dir)?;
         Self::running_allowed_approval(run_dir, run, expected_run_id, call).map(|_| ())
     }
 
@@ -1342,8 +1817,16 @@ impl ScienceStore {
             ));
         }
         let approvals: Vec<Approval> = run_dir.read_json(Path::new("approvals.json"))?;
-        validate_approvals(&approvals, &run.context.run_id)?;
-        let [approval] = approvals.as_slice() else {
+        Self::allowed_approval_from_items(run, &approvals, call)
+    }
+
+    fn allowed_approval_from_items(
+        run: &RunRecord,
+        approvals: &[Approval],
+        call: Option<&CallId>,
+    ) -> Result<Approval> {
+        validate_approvals(approvals, &run.context.run_id)?;
+        let [approval] = approvals else {
             return Err(ScienceError::Invalid(
                 "scientific outputs require exactly one approval".into(),
             ));
@@ -1381,13 +1864,14 @@ impl ScienceStore {
             .writes
             .lock()
             .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
-        self.assert_owner(project, run_id, owner)?;
         let run_dir = self.open_run_directory(run_id)?;
-        let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
-        Self::require_running_allowed_output(&run_dir, &run, run_id, Some(&call))?;
+        let run = Self::load_run_record_from_directory(&run_dir, run_id)?;
         if run.context.project_id != *project || run.context.owner_id != owner {
             return Err(ScienceError::Ownership);
         }
+        Self::running_allowed_approval(&run_dir, &run, run_id, Some(&call))?;
+        let completion_is_sealed = Self::successful_completion_anchor(&run)?.is_some()
+            || Self::successful_completion_seal(&run_dir)?.is_some();
         let artifact_dir = run_dir.open_directory(Path::new("artifacts"))?;
         let artifact = Artifact {
             run_id: run_id.clone(),
@@ -1417,6 +1901,11 @@ impl ScienceStore {
                     ));
                 }
                 Err(ScienceError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
+                    if completion_is_sealed {
+                        return Err(ScienceError::Invalid(
+                            "sealed completion cannot repair a missing artifact payload".into(),
+                        ));
+                    }
                     // A prior registry replacement may have become visible
                     // before its durability error was returned and cleanup
                     // removed the payload. Repair only the exact registered
@@ -1432,6 +1921,11 @@ impl ScienceStore {
                 }
                 Err(error) => return Err(error),
             }
+        }
+        if completion_is_sealed {
+            return Err(ScienceError::Invalid(
+                "sealed completion accepts only an exact read-only artifact retry".into(),
+            ));
         }
 
         match artifact_dir.read_regular(relative) {
@@ -1733,9 +2227,13 @@ impl ScienceStore {
         run_dir.replace_json_atomic(Path::new("provenance.json"), &items)
     }
     pub fn artifacts(&self, run_id: &RunId) -> Result<Vec<Artifact>> {
-        let items: Vec<Artifact> = self
-            .open_run_directory(run_id)?
-            .read_json(Path::new("artifacts.json"))?;
+        let (_, manifest) = self.load_run_snapshot(run_id)?;
+        let items: Vec<Artifact> = match manifest {
+            Some(seal) => seal.manifest.artifacts,
+            None => self
+                .open_run_directory(run_id)?
+                .read_json(Path::new("artifacts.json"))?,
+        };
         validate_artifacts(&items, run_id)?;
         Ok(items)
     }
@@ -1775,6 +2273,10 @@ impl ScienceStore {
     /// Preview records for a run. Runs created before preview support have
     /// no `previews.json`; they read as empty rather than erroring.
     pub fn previews(&self, run_id: &RunId) -> Result<Vec<preview::PreviewRecord>> {
+        let (_, manifest) = self.load_run_snapshot(run_id)?;
+        if let Some(seal) = manifest {
+            return Ok(seal.manifest.previews);
+        }
         let run_dir = self.open_run_directory(run_id)?;
         match run_dir.read_json(Path::new("previews.json")) {
             Ok(items) => {
@@ -1789,23 +2291,35 @@ impl ScienceStore {
         }
     }
     pub fn evidence(&self, run_id: &RunId) -> Result<Vec<Evidence>> {
-        let items: Vec<Evidence> = self
-            .open_run_directory(run_id)?
-            .read_json(Path::new("evidence.json"))?;
+        let (_, manifest) = self.load_run_snapshot(run_id)?;
+        let items: Vec<Evidence> = match manifest {
+            Some(seal) => seal.manifest.evidence,
+            None => self
+                .open_run_directory(run_id)?
+                .read_json(Path::new("evidence.json"))?,
+        };
         validate_run_ids(items.iter().map(|item| &item.run_id), run_id, "evidence")?;
         Ok(items)
     }
     pub fn provenance(&self, run_id: &RunId) -> Result<Vec<Provenance>> {
-        let items: Vec<Provenance> = self
-            .open_run_directory(run_id)?
-            .read_json(Path::new("provenance.json"))?;
+        let (_, manifest) = self.load_run_snapshot(run_id)?;
+        let items: Vec<Provenance> = match manifest {
+            Some(seal) => seal.manifest.provenance,
+            None => self
+                .open_run_directory(run_id)?
+                .read_json(Path::new("provenance.json"))?,
+        };
         validate_run_ids(items.iter().map(|item| &item.run_id), run_id, "provenance")?;
         Ok(items)
     }
     pub fn approvals(&self, run_id: &RunId) -> Result<Vec<Approval>> {
-        let items: Vec<Approval> = self
-            .open_run_directory(run_id)?
-            .read_json(Path::new("approvals.json"))?;
+        let (_, seal) = self.load_run_snapshot(run_id)?;
+        let items: Vec<Approval> = match seal {
+            Some(seal) => vec![seal.approval],
+            None => self
+                .open_run_directory(run_id)?
+                .read_json(Path::new("approvals.json"))?,
+        };
         validate_approvals(&items, run_id)?;
         Ok(items)
     }
@@ -1912,8 +2426,15 @@ impl ScienceStore {
     ) -> Result<Vec<u8>> {
         project.validate()?;
         run_id.validate()?;
-        self.assert_owner(project, run_id, owner)?;
-        let run = self.load_run(run_id)?;
+        let (run, manifest) = match max_bytes {
+            Some(_) => {
+                self.load_run_snapshot_bounded(run_id, Self::MAX_DOSSIER_RUN_RECORD_BYTES)?
+            }
+            None => self.load_run_snapshot(run_id)?,
+        };
+        if &run.context.project_id != project || run.context.owner_id != owner {
+            return Err(ScienceError::Ownership);
+        }
         if run.state != required_state {
             return Err(ScienceError::Invalid(
                 "artifact bytes are unavailable in the run's current state".into(),
@@ -1921,12 +2442,15 @@ impl ScienceStore {
         }
         validate_relative(relative)?;
         let run_dir = self.open_run_directory(run_id)?;
-        let artifacts: Vec<Artifact> = match max_bytes {
-            Some(_) => run_dir.read_json_bounded(
-                Path::new("artifacts.json"),
-                Self::MAX_DOSSIER_REGISTRY_BYTES,
-            )?,
-            None => run_dir.read_json(Path::new("artifacts.json"))?,
+        let artifacts: Vec<Artifact> = match manifest {
+            Some(seal) => seal.manifest.artifacts,
+            None => match max_bytes {
+                Some(_) => run_dir.read_json_bounded(
+                    Path::new("artifacts.json"),
+                    Self::MAX_DOSSIER_REGISTRY_BYTES,
+                )?,
+                None => run_dir.read_json(Path::new("artifacts.json"))?,
+            },
         };
         validate_artifacts(&artifacts, run_id)?;
         let artifact = artifacts
@@ -1960,14 +2484,24 @@ impl ScienceStore {
         max_items: usize,
         max_json_bytes: u64,
     ) -> Result<Vec<Artifact>> {
-        let items: Vec<Artifact> = self.open_run_directory(run_id)?.read_json_bounded(
-            Path::new("artifacts.json"),
-            max_json_bytes.min(Self::MAX_DOSSIER_REGISTRY_BYTES),
-        )?;
+        let (_, manifest) =
+            self.load_run_snapshot_bounded(run_id, Self::MAX_DOSSIER_RUN_RECORD_BYTES)?;
+        let byte_limit = max_json_bytes.min(Self::MAX_DOSSIER_REGISTRY_BYTES);
+        let items: Vec<Artifact> = match manifest {
+            Some(seal) => seal.manifest.artifacts,
+            None => self
+                .open_run_directory(run_id)?
+                .read_json_bounded(Path::new("artifacts.json"), byte_limit)?,
+        };
         validate_artifacts(&items, run_id)?;
         if items.len() > max_items {
             return Err(ScienceError::Invalid(
                 "artifact registry exceeds the dossier item limit".into(),
+            ));
+        }
+        if serde_json::to_vec(&items)?.len() as u64 > byte_limit {
+            return Err(ScienceError::Invalid(
+                "artifact registry exceeds the dossier byte limit".into(),
             ));
         }
         Ok(items)
@@ -1979,14 +2513,24 @@ impl ScienceStore {
         max_items: usize,
         max_json_bytes: u64,
     ) -> Result<Vec<Evidence>> {
-        let items: Vec<Evidence> = self.open_run_directory(run_id)?.read_json_bounded(
-            Path::new("evidence.json"),
-            max_json_bytes.min(Self::MAX_DOSSIER_REGISTRY_BYTES),
-        )?;
+        let (_, manifest) =
+            self.load_run_snapshot_bounded(run_id, Self::MAX_DOSSIER_RUN_RECORD_BYTES)?;
+        let byte_limit = max_json_bytes.min(Self::MAX_DOSSIER_REGISTRY_BYTES);
+        let items: Vec<Evidence> = match manifest {
+            Some(seal) => seal.manifest.evidence,
+            None => self
+                .open_run_directory(run_id)?
+                .read_json_bounded(Path::new("evidence.json"), byte_limit)?,
+        };
         validate_run_ids(items.iter().map(|item| &item.run_id), run_id, "evidence")?;
         if items.len() > max_items {
             return Err(ScienceError::Invalid(
                 "evidence registry exceeds the dossier item limit".into(),
+            ));
+        }
+        if serde_json::to_vec(&items)?.len() as u64 > byte_limit {
+            return Err(ScienceError::Invalid(
+                "evidence registry exceeds the dossier byte limit".into(),
             ));
         }
         Ok(items)
@@ -1998,14 +2542,24 @@ impl ScienceStore {
         max_items: usize,
         max_json_bytes: u64,
     ) -> Result<Vec<Provenance>> {
-        let items: Vec<Provenance> = self.open_run_directory(run_id)?.read_json_bounded(
-            Path::new("provenance.json"),
-            max_json_bytes.min(Self::MAX_DOSSIER_REGISTRY_BYTES),
-        )?;
+        let (_, manifest) =
+            self.load_run_snapshot_bounded(run_id, Self::MAX_DOSSIER_RUN_RECORD_BYTES)?;
+        let byte_limit = max_json_bytes.min(Self::MAX_DOSSIER_REGISTRY_BYTES);
+        let items: Vec<Provenance> = match manifest {
+            Some(seal) => seal.manifest.provenance,
+            None => self
+                .open_run_directory(run_id)?
+                .read_json_bounded(Path::new("provenance.json"), byte_limit)?,
+        };
         validate_run_ids(items.iter().map(|item| &item.run_id), run_id, "provenance")?;
         if items.len() > max_items {
             return Err(ScienceError::Invalid(
                 "provenance registry exceeds the dossier item limit".into(),
+            ));
+        }
+        if serde_json::to_vec(&items)?.len() as u64 > byte_limit {
+            return Err(ScienceError::Invalid(
+                "provenance registry exceeds the dossier byte limit".into(),
             ));
         }
         Ok(items)
@@ -2016,11 +2570,66 @@ impl ScienceStore {
             .writes
             .lock()
             .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
-        let run = self.load_run(run_id)?;
+        let run_dir = self.open_run_directory(run_id)?;
+        let run = Self::load_run_record_from_directory(&run_dir, run_id)?;
+        let anchor = Self::successful_completion_anchor(&run)?;
+        let seal = Self::successful_completion_seal(&run_dir)?;
         if run.state.terminal() {
+            match (anchor, seal.as_ref()) {
+                (Some(anchor), Some(seal)) => {
+                    Self::verify_succeeded_seal_unlocked(&run_dir, &run, anchor, seal)?;
+                }
+                (Some(_), None) | (None, Some(_)) => {
+                    return Err(ScienceError::Invalid(
+                        "exact completion anchor and seal must both remain durable".into(),
+                    ));
+                }
+                (None, None) => {}
+            }
             return Ok(run);
         }
-        let run_dir = self.open_run_directory(run_id)?;
+        if let Some(anchor) = anchor {
+            if run.state != RunState::Running {
+                return Err(ScienceError::Invalid(
+                    "exact completion anchor requires a Running recovery state".into(),
+                ));
+            }
+            let manifest = Self::durable_completion_manifest_unlocked(&run_dir, &run.context)?;
+            let approval =
+                Self::running_allowed_approval(&run_dir, &run, &run.context.run_id, None)?;
+            let expected =
+                Self::expected_successful_completion_seal(&run, &approval, &manifest)?;
+            if expected.manifest_sha256 != anchor {
+                return Err(ScienceError::Invalid(
+                    "durable collections differ from their completion anchor".into(),
+                ));
+            }
+            match seal.as_ref() {
+                Some(seal) if seal == &expected => {}
+                Some(_) => {
+                    return Err(ScienceError::Invalid(
+                        "successful completion seal conflicts with its durable anchor".into(),
+                    ));
+                }
+                None => {
+                    Self::persist_successful_completion_seal_unlocked(
+                        &run_dir, &run, &approval, &manifest,
+                    )?;
+                }
+            }
+            return Self::transition_succeeded_with_manifest_unlocked(&run_dir, &manifest);
+        }
+        if let Some(seal) = seal {
+            if seal.manifest.context.run_id != *run_id || run.state != RunState::Running {
+                return Err(ScienceError::Invalid(
+                    "unanchored successful completion seal has invalid recovery state".into(),
+                ));
+            }
+            return Self::transition_succeeded_with_manifest_unlocked(
+                &run_dir,
+                &seal.manifest,
+            );
+        }
         let mut approvals: Vec<Approval> = run_dir.read_json(Path::new("approvals.json"))?;
         validate_approvals(&approvals, run_id)?;
         let mut approvals_changed = false;
@@ -3895,6 +4504,346 @@ mod tests {
         assert_eq!(succeeded.context, manifest.context);
         assert_eq!(succeeded.state, RunState::Succeeded);
         assert_eq!(store.load_run(&run.context.run_id).unwrap(), succeeded);
+        let events = store.events_after(&run.context.run_id, 0, 1_000).unwrap();
+        assert!(
+            store
+                .append_event(
+                    &run.context.run_id,
+                    "Intruder",
+                    "event.after-exact-completion",
+                    serde_json::json!({}),
+                )
+                .is_err(),
+            "exact successful completion accepted a late event"
+        );
+        assert_eq!(
+            store.events_after(&run.context.run_id, 0, 1_000).unwrap(),
+            events,
+            "rejected late event changed the sealed completion history"
+        );
+    }
+
+    #[test]
+    fn completion_anchor_freezes_snapshot_before_terminal_and_recovers_exactly() {
+        let (_temp, store, run, _call, artifact) =
+            successful_completion_fixture("manifest-seal-recovery");
+        let manifest = completion_manifest(&store, &run);
+        {
+            let _guard = store.writes.lock().unwrap();
+            let run_dir = store.open_run_directory(&run.context.run_id).unwrap();
+            let mut running =
+                ScienceStore::load_run_record_from_directory(&run_dir, &run.context.run_id)
+                    .unwrap();
+            let approval = ScienceStore::running_allowed_approval(
+                &run_dir,
+                &running,
+                &run.context.run_id,
+                None,
+            )
+            .unwrap();
+            let expected =
+                ScienceStore::expected_successful_completion_seal(&running, &approval, &manifest)
+                    .unwrap();
+            ScienceStore::persist_successful_completion_anchor_unlocked(
+                &run_dir, &mut running, &expected.manifest_sha256,
+            )
+            .unwrap();
+        }
+
+        let exact_retry = store
+            .put_artifact(
+                &run.context.project_id,
+                &run.context.run_id,
+                &run.context.owner_id,
+                artifact.call_id.clone(),
+                &artifact.relative_path,
+                b"verified completion bytes",
+                "text/plain",
+                "verified",
+            )
+            .expect("sealed completion must permit an exact read-only artifact retry");
+        assert_eq!(exact_retry, artifact);
+        assert!(
+            store
+                .put_artifact(
+                    &run.context.project_id,
+                    &run.context.run_id,
+                    &run.context.owner_id,
+                    artifact.call_id.clone(),
+                    &artifact.relative_path,
+                    b"changed completion bytes",
+                    "text/plain",
+                    "verified",
+                )
+                .is_err(),
+            "completion seal accepted a changed artifact retry"
+        );
+        assert!(
+            store
+                .put_artifact(
+                    &run.context.project_id,
+                    &run.context.run_id,
+                    &run.context.owner_id,
+                    artifact.call_id.clone(),
+                    Path::new("late.txt"),
+                    b"late",
+                    "text/plain",
+                    "late",
+                )
+                .is_err(),
+            "completion seal accepted a new artifact"
+        );
+        assert!(
+            store
+                .append_event(
+                    &run.context.run_id,
+                    "Intruder",
+                    "event.after-completion-seal",
+                    serde_json::json!({}),
+                )
+                .is_err(),
+            "completion seal accepted a late event before the terminal write"
+        );
+        assert!(
+            store
+                .add_evidence(Evidence {
+                    run_id: run.context.run_id.clone(),
+                    claim: "late".into(),
+                    source: "fixture://late".into(),
+                    artifact_sha256: Some(artifact.sha256.clone()),
+                    verified_at: Utc::now(),
+                })
+                .is_err(),
+            "completion seal accepted a late output before the terminal write"
+        );
+        assert!(
+            store
+                .transition(
+                    &run.context.run_id,
+                    RunState::Failed,
+                    Some("late rollback".into()),
+                )
+                .is_err(),
+            "completion seal allowed an unsuccessful rollback"
+        );
+        assert!(
+            store.load_run(&run.context.run_id).is_err(),
+            "unfinished exact completion was exposed before recovery"
+        );
+        let run_dir = store.open_run_directory(&run.context.run_id).unwrap();
+        let still_running =
+            ScienceStore::load_run_record_from_directory(&run_dir, &run.context.run_id).unwrap();
+        assert_eq!(still_running.state, RunState::Running);
+
+        let store_root = store.root().to_path_buf();
+        drop(store);
+        let reopened = ScienceStore::new(store_root);
+        let succeeded = reopened.recover_interrupted(&run.context.run_id).unwrap();
+        assert_eq!(succeeded.state, RunState::Succeeded);
+        assert_eq!(
+            reopened.events_after(&run.context.run_id, 0, 1_000).unwrap(),
+            manifest.events,
+            "restart recovery changed the sealed event collection"
+        );
+    }
+
+    #[test]
+    fn sealed_restart_recovery_rejects_collection_tamper() {
+        let (_temp, store, run, _call, _artifact) =
+            successful_completion_fixture("manifest-seal-tamper");
+        let manifest = completion_manifest(&store, &run);
+        {
+            let _guard = store.writes.lock().unwrap();
+            let run_dir = store.open_run_directory(&run.context.run_id).unwrap();
+            let running =
+                ScienceStore::load_run_record_from_directory(&run_dir, &run.context.run_id)
+                    .unwrap();
+            let approval = ScienceStore::running_allowed_approval(
+                &run_dir,
+                &running,
+                &run.context.run_id,
+                None,
+            )
+            .unwrap();
+            ScienceStore::persist_successful_completion_seal_unlocked(
+                &run_dir, &running, &approval, &manifest,
+            )
+            .unwrap();
+        }
+
+        let mut tampered_events = manifest.events.clone();
+        tampered_events.push(Event {
+            schema_version: SCHEMA_VERSION,
+            run_id: run.context.run_id.clone(),
+            seq: u64::try_from(tampered_events.len()).unwrap() + 1,
+            actor: "Intruder".into(),
+            timestamp: Utc::now(),
+            kind: "event.after-seal".into(),
+            payload: serde_json::json!({}),
+        });
+        fs::write(
+            store
+                .run_dir(&run.context.run_id)
+                .unwrap()
+                .join("events.json"),
+            serde_json::to_vec_pretty(&tampered_events).unwrap(),
+        )
+        .unwrap();
+
+        let store_root = store.root().to_path_buf();
+        drop(store);
+        let reopened = ScienceStore::new(store_root);
+        assert!(
+            reopened.recover_interrupted(&run.context.run_id).is_err(),
+            "restart recovery accepted a collection changed after its durable seal"
+        );
+        let run_dir = reopened.open_run_directory(&run.context.run_id).unwrap();
+        let still_running =
+            ScienceStore::load_run_record_from_directory(&run_dir, &run.context.run_id).unwrap();
+        assert_eq!(still_running.state, RunState::Running);
+    }
+
+    #[test]
+    fn exact_completion_anchor_prevents_seal_deletion_downgrade() {
+        let (_temp, store, run, _call, _artifact) =
+            successful_completion_fixture("manifest-seal-deletion");
+        let manifest = completion_manifest(&store, &run);
+        store.transition_succeeded_with_manifest(&manifest).unwrap();
+        fs::remove_file(
+            store
+                .run_dir(&run.context.run_id)
+                .unwrap()
+                .join(SUCCESSFUL_COMPLETION_SEAL_FILE),
+        )
+        .unwrap();
+
+        assert!(
+            store
+                .append_event(
+                    &run.context.run_id,
+                    "Intruder",
+                    "event.after-seal-deletion",
+                    serde_json::json!({}),
+                )
+                .is_err(),
+            "deleting the seal downgraded exact completion to legacy event semantics"
+        );
+        assert!(
+            store.recover_interrupted(&run.context.run_id).is_err(),
+            "Succeeded exact completion ignored its missing durable seal"
+        );
+        assert!(
+            store.load_run(&run.context.run_id).is_err(),
+            "ordinary run reads ignored the missing exact-completion seal"
+        );
+    }
+
+    #[test]
+    fn exact_succeeded_public_reads_reject_collection_tamper() {
+        let (_temp, store, run, _call, artifact) =
+            successful_completion_fixture("manifest-public-read-tamper");
+        let manifest = completion_manifest(&store, &run);
+        store.transition_succeeded_with_manifest(&manifest).unwrap();
+
+        let mut tampered_events = manifest.events.clone();
+        tampered_events.push(Event {
+            schema_version: SCHEMA_VERSION,
+            run_id: run.context.run_id.clone(),
+            seq: u64::try_from(tampered_events.len()).unwrap() + 1,
+            actor: "Intruder".into(),
+            timestamp: Utc::now(),
+            kind: "event.after-exact-success".into(),
+            payload: serde_json::json!({}),
+        });
+        fs::write(
+            store
+                .run_dir(&run.context.run_id)
+                .unwrap()
+                .join("events.json"),
+            serde_json::to_vec_pretty(&tampered_events).unwrap(),
+        )
+        .unwrap();
+
+        assert!(store.load_run(&run.context.run_id).is_err());
+        assert!(
+            store
+                .load_run_bounded(&run.context.run_id, 64 * 1024)
+                .is_err()
+        );
+        assert!(store.events_after(&run.context.run_id, 0, 1_000).is_err());
+        assert!(store.artifacts(&run.context.run_id).is_err());
+        assert!(store.evidence(&run.context.run_id).is_err());
+        assert!(store.provenance(&run.context.run_id).is_err());
+        assert!(store.previews(&run.context.run_id).is_err());
+        assert!(store.approvals(&run.context.run_id).is_err());
+        assert!(
+            store
+                .artifacts_bounded(&run.context.run_id, 100, 1024 * 1024)
+                .is_err()
+        );
+        assert!(
+            store
+                .evidence_bounded(&run.context.run_id, 100, 1024 * 1024)
+                .is_err()
+        );
+        assert!(
+            store
+                .provenance_bounded(&run.context.run_id, 100, 1024 * 1024)
+                .is_err()
+        );
+        assert!(
+            store
+                .artifact_bytes_in_state(
+                    &run.context.project_id,
+                    &run.context.run_id,
+                    &run.context.owner_id,
+                    &artifact.relative_path,
+                    RunState::Succeeded,
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn exact_succeeded_reads_reject_terminal_and_approval_tamper() {
+        let (_temp, store, run, _call, _artifact) =
+            successful_completion_fixture("manifest-authority-tamper");
+        let manifest = completion_manifest(&store, &run);
+        let succeeded = store.transition_succeeded_with_manifest(&manifest).unwrap();
+        let run_dir = store.run_dir(&run.context.run_id).unwrap();
+
+        let mut changed_terminal = succeeded.clone();
+        changed_terminal.terminal_reason = Some("raw filesystem rewrite".into());
+        fs::write(
+            run_dir.join("run.json"),
+            serde_json::to_vec_pretty(&changed_terminal).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            store.load_run(&run.context.run_id).is_err(),
+            "exact completion served a changed terminal record"
+        );
+        fs::write(
+            run_dir.join("run.json"),
+            serde_json::to_vec_pretty(&succeeded).unwrap(),
+        )
+        .unwrap();
+
+        let mut approvals = store.approvals(&run.context.run_id).unwrap();
+        approvals[0].decided_at = Some(Utc::now() + chrono::Duration::seconds(1));
+        fs::write(
+            run_dir.join("approvals.json"),
+            serde_json::to_vec_pretty(&approvals).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            store.approvals(&run.context.run_id).is_err(),
+            "exact completion served an approval changed after sealing"
+        );
+        assert!(
+            store.load_run(&run.context.run_id).is_err(),
+            "run reads ignored the changed sealed approval"
+        );
     }
 
     #[test]
@@ -5574,9 +6523,26 @@ mod tests {
             .unwrap();
         allow_running_call(&store, &run, "terminal-call");
         store
+            .append_event(
+                &run.context.run_id,
+                "SessionActor",
+                "run.before-terminal",
+                serde_json::json!({}),
+            )
+            .unwrap();
+        let events_before = store.events_after(&run.context.run_id, 0, 1_000).unwrap();
+        store
             .transition_succeeded_verified(&run.context.run_id)
             .unwrap();
 
+        let terminal_audit = store
+            .append_event(
+                &run.context.run_id,
+                "LegacyAudit",
+                "event.after-legacy-terminal",
+                serde_json::json!({}),
+            )
+            .expect("legacy completion retains its existing terminal audit behavior");
         assert!(
             store
                 .put_artifact(
@@ -5620,6 +6586,13 @@ mod tests {
         assert!(store.artifacts(&run.context.run_id).unwrap().is_empty());
         assert!(store.evidence(&run.context.run_id).unwrap().is_empty());
         assert!(store.provenance(&run.context.run_id).unwrap().is_empty());
+        let mut expected_events = events_before;
+        expected_events.push(terminal_audit);
+        assert_eq!(
+            store.events_after(&run.context.run_id, 0, 1_000).unwrap(),
+            expected_events,
+            "legacy terminal audit compatibility changed"
+        );
     }
 
     #[cfg(unix)]

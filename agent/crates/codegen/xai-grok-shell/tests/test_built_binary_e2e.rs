@@ -8252,8 +8252,18 @@ async fn test_stdio_science_workflow_execute_is_actor_gated_and_idempotent() {
         // event whose payload commits the full normalized workflow report. A
         // missing, duplicated, non-final, mis-authored, or digest-tampered
         // marker must not degrade into a metadata-only replay.
-        let events_path = store_root.join("runs").join(&run_id).join("events.json");
+        let authority_run_root = store_root.join("runs").join(&run_id);
+        let events_path = authority_run_root.join("events.json");
         let original_events = std::fs::read(&events_path).expect("read authority event log");
+        let artifacts_path = authority_run_root.join("artifacts.json");
+        let evidence_path = authority_run_root.join("evidence.json");
+        let provenance_path = authority_run_root.join("provenance.json");
+        let original_artifact_registry =
+            std::fs::read(&artifacts_path).expect("read authority artifact registry");
+        let original_evidence_registry =
+            std::fs::read(&evidence_path).expect("read authority evidence registry");
+        let original_provenance_registry =
+            std::fs::read(&provenance_path).expect("read authority provenance registry");
         let original_event_values: Vec<Value> =
             serde_json::from_slice(&original_events).expect("parse authority event log");
         let finish_index = original_event_values
@@ -8328,23 +8338,47 @@ async fn test_stdio_science_workflow_execute_is_actor_gated_and_idempotent() {
                 vec![attempt_id.clone()],
                 "{tamper} event tamper executed another kernel attempt"
             );
-            assert_eq!(
-                authority_store.artifacts(&authority_run_id).unwrap(),
-                authority_artifacts,
-                "{tamper} event tamper rewrote artifacts"
+            assert!(
+                authority_store.artifacts(&authority_run_id).is_err(),
+                "{tamper} event tamper remained serviceable through artifact reads"
+            );
+            assert!(
+                authority_store.evidence(&authority_run_id).is_err(),
+                "{tamper} event tamper remained serviceable through evidence reads"
+            );
+            assert!(
+                authority_store.provenance(&authority_run_id).is_err(),
+                "{tamper} event tamper remained serviceable through provenance reads"
             );
             assert_eq!(
-                authority_store.evidence(&authority_run_id).unwrap(),
-                authority_evidence,
-                "{tamper} event tamper rewrote evidence"
+                std::fs::read(&artifacts_path).expect("reopen artifact registry"),
+                original_artifact_registry,
+                "{tamper} event tamper replay rewrote artifacts"
             );
             assert_eq!(
-                authority_store.provenance(&authority_run_id).unwrap(),
-                authority_provenance,
-                "{tamper} event tamper rewrote provenance"
+                std::fs::read(&evidence_path).expect("reopen evidence registry"),
+                original_evidence_registry,
+                "{tamper} event tamper replay rewrote evidence"
+            );
+            assert_eq!(
+                std::fs::read(&provenance_path).expect("reopen provenance registry"),
+                original_provenance_registry,
+                "{tamper} event tamper replay rewrote provenance"
             );
         }
         std::fs::write(&events_path, &original_events).expect("restore authority event log");
+        assert_eq!(
+            authority_store.artifacts(&authority_run_id).unwrap(),
+            authority_artifacts
+        );
+        assert_eq!(
+            authority_store.evidence(&authority_run_id).unwrap(),
+            authority_evidence
+        );
+        assert_eq!(
+            authority_store.provenance(&authority_run_id).unwrap(),
+            authority_provenance
+        );
         let event_restored_replay: Value = serde_json::from_str(
             client
                 .ext_method("x.ai/science/workflow_execute", params("op-wf-exec-1"))
@@ -8392,19 +8426,31 @@ async fn test_stdio_science_workflow_execute_is_actor_gated_and_idempotent() {
             b"tampered authority artifact",
             "terminal replay silently repaired attacker-visible bytes"
         );
+        assert!(
+            authority_store.artifacts(&authority_run_id).is_err(),
+            "tampered artifact remained serviceable through artifact metadata"
+        );
+        assert!(
+            authority_store.evidence(&authority_run_id).is_err(),
+            "tampered artifact remained serviceable through evidence metadata"
+        );
+        assert!(
+            authority_store.provenance(&authority_run_id).is_err(),
+            "tampered artifact remained serviceable through provenance metadata"
+        );
         assert_eq!(
-            authority_store.artifacts(&authority_run_id).unwrap(),
-            authority_artifacts,
+            std::fs::read(&artifacts_path).expect("reopen artifact registry"),
+            original_artifact_registry,
             "tampered terminal replay rewrote the artifact registry"
         );
         assert_eq!(
-            authority_store.evidence(&authority_run_id).unwrap(),
-            authority_evidence,
+            std::fs::read(&evidence_path).expect("reopen evidence registry"),
+            original_evidence_registry,
             "tampered terminal replay rewrote evidence"
         );
         assert_eq!(
-            authority_store.provenance(&authority_run_id).unwrap(),
-            authority_provenance,
+            std::fs::read(&provenance_path).expect("reopen provenance registry"),
+            original_provenance_registry,
             "tampered terminal replay rewrote provenance"
         );
 

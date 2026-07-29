@@ -90,6 +90,43 @@ fn validate_project_mutation_actor_roots(
     Ok(())
 }
 
+fn finish_replayed_project_mutation(
+    prepared: &PreparedScienceProjectMutation,
+    outcome: &xai_grok_science::project::MutationOutcome,
+    decision: xai_grok_science::ApprovalDecision,
+) -> xai_grok_science::Result<xai_grok_science::project::MutationOutcome> {
+    if decision != xai_grok_science::ApprovalDecision::Allow
+        || prepared.permission_grant.is_some()
+        || prepared.resume_allowed
+    {
+        return Err(xai_grok_science::ScienceError::Invalid(
+            "project mutation replay cannot carry a fresh decision or permission grant".into(),
+        ));
+    }
+    match &prepared.request.mutation {
+        xai_grok_science::project::ProjectMutation::ProjectMigrate { .. } => {
+            verify_migration_replay(
+                &prepared.store,
+                &prepared.project_store,
+                &prepared.request,
+                outcome,
+            )?;
+        }
+        xai_grok_science::project::ProjectMutation::ReviewRecord { .. } => {
+            commit_review_authority_success(
+                &prepared.store,
+                &prepared.project_store,
+                &prepared.ticket,
+                &prepared.expected_context,
+                &prepared.request,
+                outcome,
+            )?;
+        }
+        _ => {}
+    }
+    Ok(outcome.clone())
+}
+
 fn validate_kernel_admission_actor_roots(
     actor_workspace: &std::path::Path,
     store: &xai_grok_science::ScienceStore,
@@ -2007,17 +2044,8 @@ impl SessionActor {
         decision: xai_grok_science::ApprovalDecision,
         reason: String,
     ) -> xai_grok_science::Result<xai_grok_science::project::MutationOutcome> {
-        if let Some(outcome) = prepared.replayed {
-            if decision != xai_grok_science::ApprovalDecision::Allow
-                || prepared.permission_grant.is_some()
-                || prepared.resume_allowed
-            {
-                return Err(xai_grok_science::ScienceError::Invalid(
-                    "project mutation replay cannot carry a fresh decision or permission grant"
-                        .into(),
-                ));
-            }
-            return Ok(outcome);
+        if let Some(outcome) = prepared.replayed.as_ref() {
+            return finish_replayed_project_mutation(&prepared, outcome, decision);
         }
         if prepared.resume_allowed {
             if decision != xai_grok_science::ApprovalDecision::Allow
@@ -6573,7 +6601,7 @@ fn verify_migration_replay(
         return Err(ScienceError::Ownership);
     }
     let authority_run_id = RunId::new(&result.authority_run_id);
-    let authority = store.load_run(&authority_run_id)?;
+    let authority = store.recover_interrupted(&authority_run_id)?;
     if authority.state != RunState::Succeeded
         || authority.context.run_id != authority_run_id
         || authority.context.project_id.0 != result.target_project_id.0
@@ -7387,6 +7415,11 @@ fn commit_review_authority_success_inner(
     }
 
     let run = store.load_run(&ticket.run_id)?;
+    let run = if run.state == RunState::Succeeded {
+        store.recover_interrupted(&ticket.run_id)?
+    } else {
+        run
+    };
     if run.context != *expected_context {
         return Err(ScienceError::Ownership);
     }
@@ -7829,6 +7862,128 @@ mod actor_root_tests {
     }
 
     #[test]
+    fn migration_replay_begin_finish_window_rejects_late_event() {
+        let (_root, store, project_store, context, request, ticket) =
+            migration_protocol_fixture("replay-finish-revalidation");
+        ensure_created_migration_begin_event(&store, &project_store, &ticket, &context, &request)
+            .unwrap();
+        store
+            .request_approval(xai_grok_science::Approval {
+                project_id: ticket.project_id.clone(),
+                run_id: ticket.run_id.clone(),
+                call_id: ticket.call_id.clone(),
+                owner_id: ticket.owner_id.clone(),
+                decision: xai_grok_science::ApprovalDecision::Pending,
+                decided_at: None,
+            })
+            .unwrap();
+        store
+            .transition(
+                &ticket.run_id,
+                xai_grok_science::RunState::AwaitingApproval,
+                None,
+            )
+            .unwrap();
+        store
+            .decide_approval(
+                &ticket.project_id,
+                &ticket.run_id,
+                &ticket.owner_id,
+                &ticket.call_id,
+                xai_grok_science::ApprovalDecision::Allow,
+            )
+            .unwrap();
+        ensure_migration_allowed_event(&store, &ticket, &context, &request).unwrap();
+        store
+            .transition(&ticket.run_id, xai_grok_science::RunState::Running, None)
+            .unwrap();
+        let artifact = store
+            .put_artifact(
+                &ticket.project_id,
+                &ticket.run_id,
+                &ticket.owner_id,
+                ticket.call_id.clone(),
+                std::path::Path::new("migration.json"),
+                br#"{"migration":"replay-finish-revalidation"}"#,
+                "application/json",
+                "migration",
+            )
+            .unwrap();
+        store
+            .add_evidence(xai_grok_science::Evidence {
+                run_id: ticket.run_id.clone(),
+                claim: "The migration replay fixture is store-owned.".into(),
+                source: "fixture://migration-replay-finish".into(),
+                artifact_sha256: Some(artifact.sha256.clone()),
+                verified_at: chrono::Utc::now(),
+            })
+            .unwrap();
+        store
+            .add_provenance(xai_grok_science::Provenance {
+                run_id: ticket.run_id.clone(),
+                source_uri: "fixture://migration-replay-finish".into(),
+                source_commit: None,
+                source_path: Some("migration.json".into()),
+                license: "test-only".into(),
+                retrieved_at: chrono::Utc::now(),
+                input_sha256: artifact.sha256,
+                tool: "migration-replay-finish-fixture".into(),
+                environment: std::collections::BTreeMap::new(),
+            })
+            .unwrap();
+
+        let outcome = xai_grok_science::project::MutationOutcome {
+            operation_id: request.operation_id.clone(),
+            kind: "project_migrate".into(),
+            project_id: xai_grok_science::project::ProjectId(ticket.project_id.0.clone()),
+            revision: "migration-replay-finish-revision".into(),
+            result: serde_json::json!({}),
+            replayed: false,
+        };
+        store
+            .append_recoverable_commit_event(
+                &ticket.run_id,
+                "SessionActor",
+                "project.mutation.applied",
+                project_mutation_applied_payload(&outcome),
+            )
+            .unwrap();
+        let events =
+            validate_migration_success_events(&store, &ticket, &context, &request, &outcome)
+                .unwrap();
+        let final_event = events.last().cloned().unwrap();
+        store
+            .transition_succeeded_with_manifest(&xai_grok_science::SuccessfulCompletionManifest {
+                context: context.clone(),
+                artifacts: store.artifacts(&ticket.run_id).unwrap(),
+                evidence: store.evidence(&ticket.run_id).unwrap(),
+                provenance: store.provenance(&ticket.run_id).unwrap(),
+                previews: Vec::new(),
+                events: events.clone(),
+                final_event,
+            })
+            .unwrap();
+
+        assert!(
+            store
+                .append_event(
+                    &ticket.run_id,
+                    "Intruder",
+                    "migration.late-after-replay-begin",
+                    serde_json::json!({}),
+                )
+                .is_err(),
+            "Succeeded migration accepted a late event in the replay Begin/Finish window"
+        );
+        assert_eq!(
+            validate_migration_success_events(&store, &ticket, &context, &request, &outcome)
+                .unwrap(),
+            events,
+            "rejected late event changed the exact migration success protocol"
+        );
+    }
+
+    #[test]
     fn raw_project_mutation_allow_without_private_grant_durably_denies_and_writes_nothing() {
         let root = tempfile::tempdir().unwrap();
         let workspace = dunce::canonicalize(root.path()).unwrap();
@@ -8167,6 +8322,75 @@ mod actor_root_tests {
             ]
         );
         assert!(events[2].payload.get("replayed").is_none());
+
+        let replay_outcome = xai_grok_science::project::MutationOutcome {
+            operation_id: operation.operation_id.clone(),
+            kind: operation.kind.clone(),
+            project_id: operation.project_id.clone(),
+            revision: operation.revision.clone(),
+            result: operation.result.clone(),
+            replayed: true,
+        };
+        let prepared_replay = PreparedScienceProjectMutation {
+            store: store.clone(),
+            project_store: project_store.clone(),
+            ticket: xai_grok_science::csv::ScienceRunTicket {
+                project_id: xai_grok_science::ProjectId::new(project.project_id.0.clone()),
+                run_id: authority_run.clone(),
+                owner_id: "owner-1".into(),
+                call_id: call_id.clone(),
+            },
+            expected_context: authority_context,
+            request: request.clone(),
+            project_revision: Some(review.review_project_revision.clone()),
+            project_root: store_root.clone(),
+            review_admission: None,
+            migration_admission: None,
+            target: "verified review replay".into(),
+            replayed: Some(replay_outcome.clone()),
+            resume_allowed: false,
+            permission_grant: None,
+        };
+        assert_eq!(
+            finish_replayed_project_mutation(
+                &prepared_replay,
+                &replay_outcome,
+                xai_grok_science::ApprovalDecision::Allow,
+            )
+            .unwrap(),
+            replay_outcome
+        );
+
+        let seal_path = store_root
+            .join("runs")
+            .join(&authority_run.0)
+            .join("successful-completion-seal.json");
+        let seal_bytes = std::fs::read(&seal_path).unwrap();
+        std::fs::write(&seal_path, b"{}").unwrap();
+        assert!(
+            finish_replayed_project_mutation(
+                &prepared_replay,
+                &replay_outcome,
+                xai_grok_science::ApprovalDecision::Allow,
+            )
+            .is_err(),
+            "Finish replay accepted a corrupt exact-completion seal"
+        );
+        assert!(
+            store.load_run(&authority_run).is_err(),
+            "ordinary reads served a run with a corrupt exact-completion seal"
+        );
+        std::fs::write(seal_path, seal_bytes).unwrap();
+        assert_eq!(
+            store.load_run(&authority_run).unwrap().state,
+            xai_grok_science::RunState::Succeeded,
+            "restoring the seal did not preserve the terminal authority state"
+        );
+        assert_eq!(
+            store.events_after(&authority_run, 0, 1_000).unwrap(),
+            events,
+            "rejected replay Finish changed the durable event protocol"
+        );
     }
 
     #[test]
