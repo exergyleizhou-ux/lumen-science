@@ -9,7 +9,7 @@
 //!
 //! Records only — SessionActor remains sole execution authority.
 
-use super::capability::PinnedDirectory;
+use super::capability::{PinnedDirectory, ProjectWriteFileLock};
 use super::claim::{Claim, ClaimStatus};
 use super::evidence_graph::{
     EdgeKind, EvidenceEdge, EvidenceGraph, EvidenceNode, NodeId, NodeKind, validate_sha256_hex,
@@ -128,13 +128,23 @@ pub struct ProjectStore {
 /// section.
 pub struct HeldProjectRootWriteGuard<'a> {
     writes: &'a Arc<Mutex<()>>,
-    _guard: MutexGuard<'a, ()>,
+    _guard: ProjectStoreWriteGuard<'a>,
 }
 
 impl HeldProjectRootWriteGuard<'_> {
     pub(crate) fn authorizes(&self, writes: &Arc<Mutex<()>>) -> bool {
         Arc::ptr_eq(self.writes, writes)
     }
+}
+
+/// One complete project-store writer lease.
+///
+/// The cross-process file lock is declared first so it is released while the
+/// process mutex is still held. No local writer can enter the small hand-off
+/// window between releasing `flock` and releasing the mutex.
+pub(super) struct ProjectStoreWriteGuard<'a> {
+    _cross_process: ProjectWriteFileLock,
+    _process: MutexGuard<'a, ()>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -264,14 +274,25 @@ impl ProjectStore {
 
     /// Take the per-root write lock for the duration of one mutation.
     ///
-    /// Fails closed on poisoning: a writer that panicked mid-mutation may have
-    /// left the records half-applied, and callers must run
-    /// [`ProjectStore::recover_project`] in a fresh process rather than write
-    /// more on top of it.
-    pub(super) fn write_guard(&self) -> Result<MutexGuard<'_, ()>> {
-        self.writes
+    /// Unix writers retain both the process-wide mutex and a descriptor-bound
+    /// blocking `flock`, so independently launched Lumen processes cannot
+    /// interleave a revision recheck with another project mutation. Other
+    /// platforms currently retain the process mutex only and make no
+    /// cross-process safety claim.
+    ///
+    /// Fails closed on poisoning or an unsafe/unavailable Unix lock record: a
+    /// writer that panicked mid-mutation may have left records half-applied,
+    /// and callers must recover before writing more on top of them.
+    pub(super) fn write_guard(&self) -> Result<ProjectStoreWriteGuard<'_>> {
+        let process = self
+            .writes
             .lock()
-            .map_err(|_| ScienceError::Invalid("project store write lock poisoned".into()))
+            .map_err(|_| ScienceError::Invalid("project store write lock poisoned".into()))?;
+        let cross_process = self.confined()?.lock_project_writes()?;
+        Ok(ProjectStoreWriteGuard {
+            _cross_process: cross_process,
+            _process: process,
+        })
     }
 
     /// Durably replace `path` with `value`.
@@ -1346,6 +1367,335 @@ impl ProjectStore {
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[cfg(unix)]
+    const PROJECT_LOCK_CHILD_ROOT_ENV: &str = "LUMEN_TEST_PROJECT_LOCK_CHILD_ROOT";
+    #[cfg(unix)]
+    const PROJECT_LOCK_CHILD_READY_ENV: &str = "LUMEN_TEST_PROJECT_LOCK_CHILD_READY";
+    #[cfg(unix)]
+    const PROJECT_LOCK_CHILD_PROJECT_ENV: &str = "LUMEN_TEST_PROJECT_LOCK_CHILD_PROJECT";
+    #[cfg(unix)]
+    const PROJECT_LOCK_CHILD_STARTED_ENV: &str = "LUMEN_TEST_PROJECT_LOCK_CHILD_STARTED";
+    #[cfg(unix)]
+    const PROJECT_LOCK_CHILD_FINISHED_ENV: &str = "LUMEN_TEST_PROJECT_LOCK_CHILD_FINISHED";
+
+    /// Subprocess-only helper for
+    /// `cross_process_writer_waits_until_crashed_holder_releases_lock`.
+    ///
+    /// A normal test-harness invocation has no root environment variable and
+    /// returns immediately. The parent launches this exact test in a fresh
+    /// process, waits until the descriptor lock is held, then terminates it.
+    #[cfg(unix)]
+    #[test]
+    fn project_write_lock_child_helper() {
+        let Some(root) = std::env::var_os(PROJECT_LOCK_CHILD_ROOT_ENV) else {
+            return;
+        };
+        let ready = std::env::var_os(PROJECT_LOCK_CHILD_READY_ENV)
+            .expect("parent must provide the child-ready marker");
+        let store = ProjectStore::new(PathBuf::from(root));
+        let _guard = store
+            .write_guard()
+            .expect("child must acquire the project-store lock");
+        fs::write(ready, b"locked").expect("child must publish its ready marker");
+        loop {
+            std::thread::park();
+        }
+    }
+
+    /// Subprocess-only ProjectStore writer used to prove that the guarded
+    /// revision seam excludes a mutation from another Lumen process.
+    #[cfg(unix)]
+    #[test]
+    fn project_mutation_child_helper() {
+        let Some(root) = std::env::var_os(PROJECT_LOCK_CHILD_ROOT_ENV) else {
+            return;
+        };
+        let project_id = ProjectId(
+            std::env::var(PROJECT_LOCK_CHILD_PROJECT_ENV)
+                .expect("parent must provide the child project id"),
+        );
+        let started = std::env::var_os(PROJECT_LOCK_CHILD_STARTED_ENV)
+            .expect("parent must provide the child-started marker");
+        let finished = std::env::var_os(PROJECT_LOCK_CHILD_FINISHED_ENV)
+            .expect("parent must provide the child-finished marker");
+        let store = ProjectStore::new(PathBuf::from(root));
+        fs::write(started, b"attempting").expect("child must publish its attempted mutation");
+        store
+            .transition_project(&project_id, "owner", ProjectStatus::Planned)
+            .expect("child project mutation must complete after the parent releases its guard");
+        fs::write(finished, b"finished").expect("child must publish mutation completion");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn guarded_revision_recheck_blocks_cross_process_project_mutation() {
+        use std::{
+            process::{Command, Stdio},
+            time::{Duration, Instant},
+        };
+
+        let dir = tempdir().unwrap();
+        let root = dir.path().join("store");
+        let started = dir.path().join("child-started");
+        let finished = dir.path().join("child-finished");
+        fs::create_dir(&root).unwrap();
+        let store = ProjectStore::new(&root);
+        let project = store
+            .create_project("owner", "Revision guard", "Is the snapshot stable?")
+            .unwrap();
+
+        let mut child = store
+            .with_owned_project_revision_guarded(
+                &project.project_id,
+                "owner",
+                |rechecked_project, revision, _guard| {
+                    assert_eq!(rechecked_project.project_id, project.project_id);
+                    assert_eq!(revision, store.project_revision(&project.project_id)?);
+
+                    let mut child = Command::new(std::env::current_exe()?)
+                        .arg("--exact")
+                        .arg("project::store::tests::project_mutation_child_helper")
+                        .arg("--nocapture")
+                        .env(PROJECT_LOCK_CHILD_ROOT_ENV, &root)
+                        .env(PROJECT_LOCK_CHILD_PROJECT_ENV, &project.project_id.0)
+                        .env(PROJECT_LOCK_CHILD_STARTED_ENV, &started)
+                        .env(PROJECT_LOCK_CHILD_FINISHED_ENV, &finished)
+                        .stdin(Stdio::null())
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
+                        .spawn()?;
+
+                    let started_deadline = Instant::now() + Duration::from_secs(10);
+                    loop {
+                        if started.is_file() {
+                            break;
+                        }
+                        if let Some(status) = child.try_wait()? {
+                            return Err(ScienceError::Invalid(format!(
+                                "project-mutation child exited before attempting its write: {status}"
+                            )));
+                        }
+                        if Instant::now() >= started_deadline {
+                            let _ = child.kill();
+                            let _ = child.wait();
+                            return Err(ScienceError::Invalid(
+                                "project-mutation child did not start within 10 seconds".into(),
+                            ));
+                        }
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+
+                    std::thread::sleep(Duration::from_millis(300));
+                    if finished.exists() {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return Err(ScienceError::Invalid(
+                            "cross-process mutation crossed the guarded revision seam".into(),
+                        ));
+                    }
+                    if let Some(status) = child.try_wait()? {
+                        return Err(ScienceError::Invalid(format!(
+                            "project-mutation child exited while the revision guard was held: {status}"
+                        )));
+                    }
+                    Ok(child)
+                },
+            )
+            .unwrap();
+
+        let finish_deadline = Instant::now() + Duration::from_secs(10);
+        let status = loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                break status;
+            }
+            if Instant::now() >= finish_deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("child mutation remained blocked after the revision guard was dropped");
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert!(
+            status.success(),
+            "child mutation failed after the revision guard was dropped: {status}"
+        );
+        assert!(finished.is_file());
+        assert_eq!(
+            store.load_project(&project.project_id).unwrap().status,
+            ProjectStatus::Planned
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cross_process_writer_waits_until_crashed_holder_releases_lock() {
+        use std::{
+            process::{Command, Stdio},
+            sync::mpsc::{self, RecvTimeoutError},
+            time::{Duration, Instant},
+        };
+
+        let dir = tempdir().unwrap();
+        let root = dir.path().join("store");
+        let ready = dir.path().join("child-ready");
+        fs::create_dir(&root).unwrap();
+        let store = ProjectStore::new(&root);
+        let project = store
+            .create_project("owner", "Cross-process lock", "Does it block?")
+            .unwrap();
+
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .arg("--exact")
+            .arg("project::store::tests::project_write_lock_child_helper")
+            .arg("--nocapture")
+            .env(PROJECT_LOCK_CHILD_ROOT_ENV, &root)
+            .env(PROJECT_LOCK_CHILD_READY_ENV, &ready)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+
+        let ready_deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            if ready.is_file() {
+                break;
+            }
+            if let Some(status) = child.try_wait().unwrap() {
+                panic!("lock-holder child exited before acquiring the lock: {status}");
+            }
+            if Instant::now() >= ready_deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("lock-holder child did not acquire the lock within 10 seconds");
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        let writer = ProjectStore::new(&root);
+        let project_id = project.project_id.clone();
+        let (finished_tx, finished_rx) = mpsc::channel();
+        let writer_thread = std::thread::spawn(move || {
+            let result = writer.transition_project(&project_id, "owner", ProjectStatus::Planned);
+            finished_tx.send(result).unwrap();
+        });
+
+        assert!(
+            matches!(
+                finished_rx.recv_timeout(Duration::from_millis(300)),
+                Err(RecvTimeoutError::Timeout)
+            ),
+            "a second process mutated the project while the child held the root lock"
+        );
+
+        child.kill().unwrap();
+        let status = child.wait().unwrap();
+        assert!(
+            !status.success(),
+            "the crash-cut child unexpectedly succeeded"
+        );
+
+        let transitioned = finished_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("writer remained blocked after the crashed holder released its descriptors")
+            .expect("writer failed after the crashed holder released the lock");
+        assert_eq!(transitioned.status, ProjectStatus::Planned);
+        writer_thread.join().unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn project_write_lock_symlink_fails_closed_without_project_output() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let root = dir.path().join("store");
+        fs::create_dir(&root).unwrap();
+        let outside = dir.path().join("outside-lock");
+        fs::write(&outside, b"").unwrap();
+        symlink(
+            &outside,
+            root.join(super::super::capability::PROJECT_WRITE_LOCK_FILE),
+        )
+        .unwrap();
+
+        let store = ProjectStore::new(&root);
+        assert!(store.create_project("owner", "title", "question").is_err());
+        assert!(!root.join("projects").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn project_write_lock_non_file_path_fails_closed_without_project_output() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().join("store");
+        fs::create_dir(&root).unwrap();
+        fs::create_dir(root.join(super::super::capability::PROJECT_WRITE_LOCK_FILE)).unwrap();
+
+        let store = ProjectStore::new(&root);
+        assert!(store.create_project("owner", "title", "question").is_err());
+        assert!(!root.join("projects").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn project_write_lock_unsafe_permissions_fail_closed() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir = tempdir().unwrap();
+        let root = dir.path().join("store");
+        fs::create_dir(&root).unwrap();
+        let lock = root.join(super::super::capability::PROJECT_WRITE_LOCK_FILE);
+        fs::write(&lock, b"").unwrap();
+        fs::set_permissions(&lock, fs::Permissions::from_mode(0o660)).unwrap();
+
+        let store = ProjectStore::new(&root);
+        assert!(store.write_guard().is_err());
+        assert!(!root.join("projects").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn project_write_lock_hard_link_fails_closed() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir = tempdir().unwrap();
+        let root = dir.path().join("store");
+        fs::create_dir(&root).unwrap();
+        let outside = dir.path().join("outside-lock");
+        fs::write(&outside, b"").unwrap();
+        fs::set_permissions(&outside, fs::Permissions::from_mode(0o600)).unwrap();
+        fs::hard_link(
+            &outside,
+            root.join(super::super::capability::PROJECT_WRITE_LOCK_FILE),
+        )
+        .unwrap();
+
+        let store = ProjectStore::new(&root);
+        assert!(store.write_guard().is_err());
+        assert!(!root.join("projects").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn project_write_lock_rejects_group_or_world_writable_root() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir = tempdir().unwrap();
+        let root = dir.path().join("store");
+        fs::create_dir(&root).unwrap();
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o777)).unwrap();
+
+        let store = ProjectStore::new(&root);
+        assert!(store.write_guard().is_err());
+        assert!(
+            !root
+                .join(super::super::capability::PROJECT_WRITE_LOCK_FILE)
+                .exists()
+        );
+        assert!(!root.join("projects").exists());
+    }
 
     #[test]
     fn create_claim_attach_evidence_roundtrip() {

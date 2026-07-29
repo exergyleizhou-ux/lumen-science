@@ -18,6 +18,26 @@ use std::{
 };
 use uuid::Uuid;
 
+/// Fixed lock record used to serialise every project-store mutation.
+///
+/// The name is deliberately not derived from a pathname or project id: one
+/// retained store-root capability has exactly one writer domain.
+#[cfg(unix)]
+pub(crate) const PROJECT_WRITE_LOCK_FILE: &str = ".lumen-project-write.lock";
+
+/// Held proof that the project-store writer domain is locked.
+///
+/// Unix retains the locked file description for the lifetime of this value.
+/// Other backends currently provide process-only serialisation in
+/// `ProjectStore`; the empty marker is intentionally not described as a
+/// cross-process lock.
+pub(crate) struct ProjectWriteFileLock {
+    #[cfg(unix)]
+    _file: fs::File,
+    #[cfg(not(unix))]
+    _process_only: (),
+}
+
 fn validate_relative(path: &Path) -> Result<()> {
     if path.as_os_str().is_empty() || path.is_absolute() {
         return Err(ScienceError::Invalid(
@@ -177,6 +197,91 @@ impl PinnedDirectory {
             ));
         }
         Ok(opened)
+    }
+
+    /// Block until this exact retained store root owns its cross-process
+    /// writer lock.
+    ///
+    /// The root and lock record are validated through retained descriptors.
+    /// A pathname symlink, non-private lock record, hard link, foreign owner,
+    /// or inode swap fails closed before a caller can mutate project state.
+    pub(crate) fn lock_project_writes(&self) -> Result<ProjectWriteFileLock> {
+        use std::os::{
+            fd::AsRawFd as _,
+            unix::fs::{MetadataExt as _, PermissionsExt as _},
+        };
+
+        let root_metadata = self.file.metadata()?;
+        // The retained root need not be unreadable (0755 is acceptable), but
+        // another uid/group must not be able to replace the fixed lock name.
+        if !root_metadata.is_dir()
+            || root_metadata.uid() != effective_user_id()
+            || root_metadata.permissions().mode() & 0o022 != 0
+        {
+            return Err(ScienceError::Invalid(
+                "project store root must be owner-controlled and not group/world writable".into(),
+            ));
+        }
+
+        let lock_name = OsStr::new(PROJECT_WRITE_LOCK_FILE);
+        let file = openat(
+            &self.file,
+            lock_name,
+            libc::O_RDWR | libc::O_CREAT | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+            Some(0o600),
+        )
+        .map_err(|error| match error {
+            ScienceError::Io(io)
+                if io.raw_os_error() == Some(libc::ELOOP)
+                    || io.raw_os_error() == Some(libc::EISDIR) =>
+            {
+                ScienceError::Invalid(
+                    "project store write lock must be a private regular file".into(),
+                )
+            }
+            error => error,
+        })?;
+        validate_project_write_lock_file(&file)?;
+
+        loop {
+            // SAFETY: `file` owns a live descriptor and remains retained by
+            // the returned guard after flock succeeds.
+            if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } == 0 {
+                break;
+            }
+            let error = std::io::Error::last_os_error();
+            if error.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(error.into());
+        }
+
+        // Reopen the fixed name *after* locking and compare identities. This
+        // detects replacement between the initial open and acquisition.
+        let reopened = openat(
+            &self.file,
+            lock_name,
+            libc::O_RDWR | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+            None,
+        )
+        .map_err(|error| match error {
+            ScienceError::Io(io) if io.raw_os_error() == Some(libc::ELOOP) => {
+                ScienceError::Invalid("project store write lock must not be a symlink".into())
+            }
+            error => error,
+        })?;
+        validate_project_write_lock_file(&reopened)?;
+        let locked_metadata = file.metadata()?;
+        let reopened_metadata = reopened.metadata()?;
+        if locked_metadata.dev() != reopened_metadata.dev()
+            || locked_metadata.ino() != reopened_metadata.ino()
+        {
+            return Err(ScienceError::Invalid(
+                "project store write lock identity changed during acquisition".into(),
+            ));
+        }
+
+        Ok(ProjectWriteFileLock { _file: file })
     }
 
     pub(crate) fn read_optional(&self, relative: &Path) -> Result<Option<Vec<u8>>> {
@@ -487,6 +592,30 @@ impl PinnedDirectory {
 }
 
 #[cfg(unix)]
+fn validate_project_write_lock_file(file: &fs::File) -> Result<()> {
+    use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
+
+    let metadata = file.metadata()?;
+    if !metadata.is_file()
+        || metadata.uid() != effective_user_id()
+        || metadata.permissions().mode() & 0o777 != 0o600
+        || metadata.nlink() != 1
+    {
+        return Err(ScienceError::Invalid(
+            "project store write lock must be an owner-owned 0600 regular file with one link"
+                .into(),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn effective_user_id() -> libc::uid_t {
+    // SAFETY: geteuid has no preconditions and reads process credentials.
+    unsafe { libc::geteuid() }
+}
+
+#[cfg(unix)]
 fn os_name(name: &OsStr) -> Result<std::ffi::CString> {
     use std::os::unix::ffi::OsStrExt as _;
     std::ffi::CString::new(name.as_bytes())
@@ -714,6 +843,16 @@ impl PinnedDirectory {
         }
         opened.assert_stable()?;
         Ok(opened)
+    }
+
+    /// Windows currently retains process-wide writer serialisation only.
+    ///
+    /// Do not treat this marker as cross-process proof. A Windows file-locking
+    /// backend needs its own handle-relative, no-reparse implementation and
+    /// platform CI before it can make that claim.
+    pub(crate) fn lock_project_writes(&self) -> Result<ProjectWriteFileLock> {
+        self.assert_stable()?;
+        Ok(ProjectWriteFileLock { _process_only: () })
     }
 
     pub(crate) fn read_optional(&self, relative: &Path) -> Result<Option<Vec<u8>>> {
@@ -1235,6 +1374,11 @@ impl PinnedDirectory {
         Err(ScienceError::FeatureDisabled(
             "confined project-store I/O has no backend for this platform".into(),
         ))
+    }
+
+    /// Unsupported platforms retain only the in-process mutex.
+    pub(crate) fn lock_project_writes(&self) -> Result<ProjectWriteFileLock> {
+        Ok(ProjectWriteFileLock { _process_only: () })
     }
 
     pub(crate) fn read_optional(&self, _relative: &Path) -> Result<Option<Vec<u8>>> {
