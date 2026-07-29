@@ -74,25 +74,35 @@ The Science authority integration commit is:
 
 - `75fa66b70a8795c582b18b9e38b8d0486f6488d4`
 
-That commit is not a Lumen version admission. It closes durable Science
-SessionActor paths and intentionally makes
-`xai-grok-shell/src/session/science_goal.rs` one newly diverged shared path.
-The machine lock records the exact resulting path set and byte manifest instead
-of treating the count increase as implicit or harmless.
+The sealed `seq_analyze` follow-up commits are:
+
+- `d38f948d491069ae6002b7c63adc515a145e45a9`
+- `c54bb88ada7fbbc55a5a3a0e9c47ca8f29b07f20`
+- `63f27da0d74ed050a7691c349805c69f26f2623d`
+
+These commits are not Lumen version admissions. They close durable Science
+SessionActor paths and intentionally make
+`xai-grok-shell/src/session/science_goal.rs` one newly diverged shared path,
+then change bytes in seven paths already classified as shared-diverged for the
+sealed sequence authority route, cross-process serialization, and product
+counterexamples. The machine lock records the exact resulting path set and
+byte manifest instead of treating a count or byte change as implicit or
+harmless.
 
 ## Current evidence
 
-At Science code head `75fa66b`:
+At Science code head `63f27da`:
 
-- `cargo test -p xai-grok-science --lib --locked`: 548 passed, 0 failed, 8 explicit live
-  network probes ignored.
-- `cargo test -p xai-grok-shell --lib --locked actor_root_tests`: 7 passed,
-  0 failed.
-- Science strict clippy and Shell all-target check both exited 0.
+- `cargo check -p xai-grok-science --all-targets --locked`: exit 0.
+- `cargo test -p xai-grok-science --locked`: 589 passed, 0 failed, 8 explicit
+  live network probes ignored; doc-tests 0.
+- `cargo clippy -p xai-grok-science --all-targets --locked -- -D warnings`:
+  exit 0 with 0 warnings.
+- `cargo check -p xai-grok-shell --lib --locked`: exit 0.
 - Exact-head `lumen` binary SHA-256:
-  `127a9c4a0666da120edc1dbadc9e8eeed45ffc2e9975fa095fe2e6d0392aae4b`.
-- Built-binary authority product tests: 25 passed across project migration,
-  sequence analysis, project mutation, review, and workflow; 0 failed.
+  `8d7bd563028b24c73ad8aff7a67b93b373ce410ba5505f17748ccad54d36b545`.
+- Exact-head built-binary `seq_analyze` ACP product tests: 10 passed, 0 failed.
+  Other product families were not rerun for this admission update.
 - The core drift reporter finds all 8 tracked security markers present.
 
 This is source, focused/offline test, and local built-binary evidence. It is not
