@@ -159,7 +159,7 @@ def collect_versions() -> dict[str, Any]:
         "rustCoreVersion": {
             "value": pager,
             "path": "agent/crates/codegen/xai-grok-pager/Cargo.toml",
-            "role": "Lumen Core coding agent; single Rust base NOT complete (known drift vs v0.1.251 is machine-gated)",
+            "role": "Lumen Core coding agent; single Rust base NOT complete (known drift vs audited Lumen head is machine-gated; v0.1.251 is the admission target)",
             "authoritative": True,
         },
         "rustCoreBinVersion": {
