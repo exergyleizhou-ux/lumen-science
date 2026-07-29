@@ -87,10 +87,10 @@
     },
     {
       "name": "seq_analyze sealed actor authority and cross-process serialization",
-      "science_commits": [
+      "science_commit": "63f27da0d74ed050a7691c349805c69f26f2623d",
+      "supporting_commits": [
         "d38f948d491069ae6002b7c63adc515a145e45a9",
-        "c54bb88ada7fbbc55a5a3a0e9c47ca8f29b07f20",
-        "63f27da0d74ed050a7691c349805c69f26f2623d"
+        "c54bb88ada7fbbc55a5a3a0e9c47ca8f29b07f20"
       ],
       "coverage": [
         "write-once authority-prefix seal across fresh execution, restart recovery, replay, and terminal verification",
