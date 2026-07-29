@@ -174,6 +174,26 @@ jobs:
         working-directory: agent
         run: cargo build --bin lumen --locked
 
+      # LS5-D8: Python discovery diagnosis on the runner BEFORE Electron starts.
+      # This is a read-only diagnostic, not a production fix. It proves whether
+      # the runner has a Python the Electron app CAN discover. Must NOT be used
+      # to paper over a real discovery failure.
+      - name: Runner Python diagnosis (read-only)
+        run: |
+          set +e
+          echo "=== runner python facts ==="
+          command -v python3 || echo "no python3 on PATH"
+          python3 --version 2>&1 || echo "python3 --version failed"
+          realpath "$(command -v python3 2>/dev/null)" 2>/dev/null || echo "cannot canonicalize"
+          which python3 2>/dev/null || echo "which failed"
+          ls -la /usr/bin/python3* 2>/dev/null || echo "no /usr/bin/python3*"
+          ls -la /usr/bin/python3 2>/dev/null || echo "no /usr/bin/python3"
+          file /usr/bin/python3 2>/dev/null || echo "cannot file python3"
+          echo "uname: $(uname -a)"
+          echo "PATH=$PATH"
+          set -e
+          exit 0
+
       - name: Setup Node
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
@@ -186,6 +206,11 @@ jobs:
       - name: Install Playwright system dependencies
         working-directory: packs/science-desktop
         run: npx playwright install-deps chromium
+
+      - name: Environment discovery production smoke
+        working-directory: packs/science-desktop
+        run: |
+          npx tsx scripts/test-environment-smoke.mts
 
       - name: Live E2E under a virtual display
         working-directory: packs/science-desktop
