@@ -2600,7 +2600,7 @@ async fn test_stdio_science_connector_fetch_product_path() {
             .expect("start mock server");
         let workdir = git_workdir();
         let store_root = workdir.path().join("science-store");
-        let artifact_root = workdir.path().join("science-artifacts");
+        let artifact_root = store_root.join("runs");
         for name in [
             "connector_pubmed_esearch.json",
             "connector_pubmed_esummary.json",
@@ -2625,6 +2625,15 @@ async fn test_stdio_science_connector_fetch_product_path() {
         let client = GrokStdioClient::spawn(&server, workdir.path()).await;
         client.initialize_with_timeout().await;
         let session_id = client.create_session_with_timeout(workdir.path()).await;
+        let project = xai_grok_science::project::ProjectStore::new(&store_root)
+            .create_project(
+                "science-owner",
+                "Connector product proof",
+                "Do all admitted connectors preserve durable evidence?",
+            )
+            .expect("create connector project");
+        let project_id = project.project_id.0;
+        std::fs::create_dir_all(&artifact_root).expect("create connector run root");
 
         let cases: [(&str, &str, Vec<&str>, usize, &str); 8] = [
             (
@@ -2698,7 +2707,7 @@ async fn test_stdio_science_connector_fetch_product_path() {
                     "x.ai/science/connector_fetch",
                     serde_json::json!({
                         "sessionId": session_id.0.as_ref(),
-                        "projectId": "science-product-connector",
+                        "projectId": project_id,
                         "ownerId": "science-owner",
                         "storeRoot": store_root,
                         "artifactRoot": artifact_root,
@@ -2782,6 +2791,401 @@ async fn test_stdio_science_connector_fetch_product_path() {
             assert_eq!(
                 store.artifacts(&run_id).expect("reopen artifacts").len(),
                 exchange_count
+            );
+        }
+    })
+    .await;
+}
+
+/// Biomni query_uniprot → capability_run → fixed uniprot connector_fetch.
+/// Real rebuilt binary, ACP stdio, SessionActor approval, local fixture bytes.
+/// Succeed path checks artifact/evidence/provenance + Biomni admission identity.
+/// Deny path leaves zero payload artifacts.
+#[tokio::test]
+#[ignore]
+async fn test_stdio_science_biomni_uniprot_capability_product_path() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let store_root = workdir.path().join("science-store");
+        let artifact_root = store_root.join("runs");
+        let fixture_name = "connector_uniprot_search.json";
+        std::fs::copy(
+            format!(
+                "{}/../xai-grok-science/fixtures/{fixture_name}",
+                env!("CARGO_MANIFEST_DIR")
+            ),
+            workdir.path().join(fixture_name),
+        )
+        .expect("copy uniprot fixture");
+        let fixture_path = workdir.path().join(fixture_name);
+        let fixture_data_base64 =
+            base64::engine::general_purpose::STANDARD.encode(std::fs::read(&fixture_path).unwrap());
+
+        // ── Succeed with production Allow ────────────────────────────
+        let client = GrokStdioClient::spawn(&server, workdir.path()).await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(workdir.path()).await;
+        let project = xai_grok_science::project::ProjectStore::new(&store_root)
+            .create_project(
+                "science-owner",
+                "Biomni UniProt product proof",
+                "What does UniProt report for human insulin?",
+            )
+            .expect("create Biomni UniProt project");
+        let project_id = project.project_id.0;
+        std::fs::create_dir_all(&artifact_root).expect("create Biomni run root");
+
+        let runs_before_invalid: std::collections::BTreeSet<_> =
+            std::fs::read_dir(&artifact_root)
+                .expect("read initial Biomni runs")
+                .map(|entry| entry.unwrap().file_name())
+                .collect();
+        for (label, candidate_project, candidate_owner) in [
+            ("missing project", "does-not-exist", "science-owner"),
+            ("wrong owner", project_id.as_str(), "mallory"),
+        ] {
+            let rejected = client
+                .ext_method(
+                    "x.ai/science/capability_run",
+                    serde_json::json!({
+                        "sessionId": session_id.0.as_ref(),
+                        "projectId": candidate_project,
+                        "ownerId": candidate_owner,
+                        "storeRoot": store_root,
+                        "artifactRoot": artifact_root,
+                        "capabilityId": "ecosystem/biomni/query_uniprot",
+                        "input": { "prompt": "human insulin", "maxResults": 5 },
+                        "fixtureDataBase64": [fixture_data_base64],
+                        "approvalTimeoutMs": 5_000,
+                    }),
+                )
+                .await;
+            assert!(
+                rejected.is_err(),
+                "{label} crossed the project ownership boundary: {rejected:?}"
+            );
+            let runs_after: std::collections::BTreeSet<_> =
+                std::fs::read_dir(&artifact_root)
+                    .expect("read Biomni runs after rejected identity")
+                    .map(|entry| entry.unwrap().file_name())
+                    .collect();
+            assert_eq!(
+                runs_after, runs_before_invalid,
+                "{label} created a durable run before project validation"
+            );
+        }
+
+        let response = tokio::time::timeout(
+            Duration::from_secs(30),
+            client.ext_method(
+                "x.ai/science/capability_run",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": project_id,
+                    "ownerId": "science-owner",
+                    "storeRoot": store_root,
+                    "artifactRoot": artifact_root,
+                    "capabilityId": "ecosystem/biomni/query_uniprot",
+                    "input": {
+                        "prompt": "  human insulin  ",
+                        "maxResults": 5
+                    },
+                    "fixtureDataBase64": [fixture_data_base64],
+                    "approvalTimeoutMs": 5_000,
+                }),
+            ),
+        )
+        .await
+        .expect("capability_run timed out")
+        .unwrap_or_else(|error| {
+            panic!(
+                "capability_run failed: {error:?}\nstderr:\n{}",
+                client.stderr()
+            )
+        });
+        let result: serde_json::Value =
+            serde_json::from_str(response.0.get()).expect("capability_run returned JSON");
+        assert_eq!(result["run"]["state"], "succeeded", "result: {result}");
+        assert_eq!(
+            result["artifacts"].as_array().map(Vec::len),
+            Some(1),
+            "result: {result}"
+        );
+        assert_eq!(
+            result["parsed"]["records"][0]["title"].as_str(),
+            Some("Insulin"),
+            "result: {result}"
+        );
+        // Capability provenance block from mapping overlay.
+        assert_eq!(
+            result["capability"]["id"].as_str(),
+            Some("ecosystem/biomni/query_uniprot")
+        );
+        assert_eq!(result["capability"]["source"].as_str(), Some("Biomni"));
+        assert_eq!(result["capability"]["dataSource"].as_str(), Some("UniProt"));
+        assert_eq!(
+            result["capability"]["mode"].as_str(),
+            Some("fixture/offline")
+        );
+        assert_eq!(
+            result["capability"]["provenance"]["exactCommit"].as_str(),
+            Some("400c1f366b96a35ca253e13c9b06c5076af41d65")
+        );
+        assert_eq!(
+            result["capability"]["provenance"]["license"].as_str(),
+            Some("Apache-2.0")
+        );
+        assert_eq!(
+            result["capability"]["provenance"]["lumenConnectorId"].as_str(),
+            Some("uniprot")
+        );
+        assert_eq!(
+            result["capability"]["provenance"]["sourcePath"].as_str(),
+            Some("biomni/tool/tool_description/database.py")
+        );
+        assert_eq!(
+            result["capability"]["provenance"]["sourceSha256"].as_str(),
+            Some("875473dc5473cf4f7615c2b4fd886f543ca8a295f7c58eca00fdceb22d2883b6")
+        );
+        let claim = result["evidence"][0]["claim"].as_str().unwrap_or_default();
+        assert!(claim.contains("human insulin"), "claim: {claim}");
+        assert!(
+            result["provenance"][0]["license"]
+                .as_str()
+                .is_some_and(|tos| tos.starts_with("https://")),
+            "result: {result}"
+        );
+
+        let store = xai_grok_science::ScienceStore::new(&store_root);
+        let run_id = xai_grok_science::RunId::new(
+            result["run"]["context"]["run_id"]
+                .as_str()
+                .expect("response must include durable run id"),
+        );
+        let run = store.load_run(&run_id).expect("reopen durable run");
+        assert_eq!(run.state, xai_grok_science::RunState::Succeeded);
+        assert_eq!(store.artifacts(&run_id).expect("reopen artifacts").len(), 1);
+        let durable_evidence = store.evidence(&run_id).expect("evidence");
+        let durable_provenance = store.provenance(&run_id).expect("provenance");
+        let capability_provenance = durable_provenance
+            .iter()
+            .find(|record| {
+                record.environment.get("capability_id")
+                    == Some(&"ecosystem/biomni/query_uniprot".to_owned())
+            })
+            .expect("durable Biomni capability provenance");
+        assert_eq!(
+            capability_provenance.source_uri,
+            "https://github.com/snap-stanford/Biomni.git"
+        );
+        assert_eq!(
+            capability_provenance.source_commit.as_deref(),
+            Some("400c1f366b96a35ca253e13c9b06c5076af41d65")
+        );
+        assert_eq!(
+            capability_provenance.source_path.as_deref(),
+            Some("biomni/tool/tool_description/database.py")
+        );
+        assert_eq!(capability_provenance.license, "Apache-2.0");
+        assert_eq!(
+            capability_provenance.input_sha256,
+            "875473dc5473cf4f7615c2b4fd886f543ca8a295f7c58eca00fdceb22d2883b6"
+        );
+        assert_eq!(
+            capability_provenance.tool,
+            "x.ai/science/connector_fetch"
+        );
+        assert_eq!(
+            capability_provenance.environment.get("reuse_mode").map(String::as_str),
+            Some("adapted-capability-mapping")
+        );
+        assert_eq!(
+            capability_provenance.environment.get("connector").map(String::as_str),
+            Some("uniprot")
+        );
+        assert!(
+            durable_evidence.iter().any(|record| {
+                record.claim.contains("exact audited source")
+                    && record.source
+                        == "https://github.com/snap-stanford/Biomni.git@400c1f366b96a35ca253e13c9b06c5076af41d65#biomni/tool/tool_description/database.py"
+            }),
+            "durable evidence did not bind the Biomni repository, commit, and path"
+        );
+
+        // Unknown / non-admitted capability must fail closed before a run.
+        let rejected = client
+            .ext_method(
+                "x.ai/science/capability_run",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": project_id,
+                    "ownerId": "science-owner",
+                    "storeRoot": store_root,
+                    "artifactRoot": artifact_root,
+                    "capabilityId": "ecosystem/biomni/analyze_enzyme_kinetics_assay",
+                    "input": { "prompt": "x", "maxResults": 5 },
+                    "fixtureDataBase64": [fixture_data_base64],
+                    "approvalTimeoutMs": 5_000,
+                }),
+            )
+            .await;
+        assert!(
+            rejected.is_err(),
+            "non-admitted Biomni tool must fail: {rejected:?}"
+        );
+
+        // Forbidden endpoint field must fail closed.
+        let forbidden = client
+            .ext_method(
+                "x.ai/science/capability_run",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": project_id,
+                    "ownerId": "science-owner",
+                    "storeRoot": store_root,
+                    "artifactRoot": artifact_root,
+                    "capabilityId": "ecosystem/biomni/query_uniprot",
+                    "input": {
+                        "prompt": "human insulin",
+                        "maxResults": 5,
+                        "endpoint": "https://evil.example/x"
+                    },
+                    "fixtureDataBase64": [fixture_data_base64],
+                    "approvalTimeoutMs": 5_000,
+                }),
+            )
+            .await;
+        assert!(
+            forbidden.is_err(),
+            "endpoint escape must fail: {forbidden:?}"
+        );
+
+        // ── Non-Allow terminals: durable state, zero payload/staging ──
+        let terminal_cases = [
+            (
+                "deny",
+                PermissionResponse::DenyOnce,
+                xai_grok_science::RunState::Denied,
+                xai_grok_science::ApprovalDecision::Deny,
+                5_000,
+            ),
+            (
+                "cancel",
+                PermissionResponse::Reject,
+                xai_grok_science::RunState::Cancelled,
+                xai_grok_science::ApprovalDecision::Cancel,
+                5_000,
+            ),
+            (
+                "timeout",
+                PermissionResponse::NeverRespond,
+                xai_grok_science::RunState::TimedOut,
+                xai_grok_science::ApprovalDecision::Timeout,
+                50,
+            ),
+        ];
+        for (label, permission, expected_state, expected_decision, timeout_ms) in terminal_cases {
+            let terminal_workdir = git_workdir();
+            let terminal_store = terminal_workdir
+                .path()
+                .join(format!("science-store-{label}"));
+            let terminal_artifacts = terminal_store.join("runs");
+            let terminal_project =
+                xai_grok_science::project::ProjectStore::new(&terminal_store)
+                    .create_project(
+                        "science-owner",
+                        format!("{label} Biomni UniProt product proof"),
+                        "Must a non-Allow decision publish no bytes?",
+                    )
+                    .expect("create terminal Biomni project");
+            std::fs::create_dir_all(&terminal_artifacts)
+                .expect("create terminal Biomni run root");
+            let runs_before: std::collections::BTreeSet<_> =
+                std::fs::read_dir(&terminal_artifacts)
+                    .expect("read terminal Biomni runs before request")
+                    .map(|entry| entry.unwrap().file_name())
+                    .collect();
+            let terminal_client = GrokStdioClient::spawn_with_permission_response(
+                &server,
+                terminal_workdir.path(),
+                permission,
+            )
+            .await;
+            terminal_client.initialize_with_timeout().await;
+            let terminal_session = terminal_client
+                .create_session_with_timeout(terminal_workdir.path())
+                .await;
+            let outcome = terminal_client
+                .ext_method(
+                    "x.ai/science/capability_run",
+                    serde_json::json!({
+                        "sessionId": terminal_session.0.as_ref(),
+                        "projectId": terminal_project.project_id.0,
+                        "ownerId": "science-owner",
+                        "storeRoot": terminal_store,
+                        "artifactRoot": terminal_artifacts,
+                        "capabilityId": "ecosystem/biomni/query_uniprot",
+                        "input": { "prompt": "human insulin", "maxResults": 5 },
+                        "fixtureDataBase64": [fixture_data_base64],
+                        "approvalTimeoutMs": timeout_ms,
+                    }),
+                )
+                .await;
+            assert!(
+                outcome.is_err(),
+                "{label} capability run reported success: {outcome:?}"
+            );
+            let store = xai_grok_science::ScienceStore::new(&terminal_store);
+            let runs_after: std::collections::BTreeSet<_> =
+                std::fs::read_dir(terminal_store.join("runs"))
+                    .expect("non-Allow must leave a durable run directory")
+                    .map(|entry| entry.unwrap().file_name())
+                    .collect();
+            let run_id = runs_after
+                .difference(&runs_before)
+                .next()
+                .and_then(|name| name.to_str())
+                .map(xai_grok_science::RunId::new)
+                .unwrap_or_else(|| panic!("{label} must create exactly one new durable run"));
+            assert_eq!(
+                runs_after.len(),
+                runs_before.len() + 1,
+                "{label} created an unexpected number of runs"
+            );
+            assert_eq!(
+                store.load_run(&run_id).expect("load terminal run").state,
+                expected_state,
+                "{label} terminal state"
+            );
+            assert_eq!(
+                store.approvals(&run_id).expect("terminal approval")[0].decision,
+                expected_decision,
+                "{label} approval decision"
+            );
+            assert!(
+                store.artifacts(&run_id).expect("terminal artifacts").is_empty(),
+                "{label} published artifacts"
+            );
+            assert!(
+                store.evidence(&run_id).expect("terminal evidence").is_empty(),
+                "{label} published evidence"
+            );
+            assert!(
+                store
+                    .provenance(&run_id)
+                    .expect("terminal provenance")
+                    .is_empty(),
+                "{label} published provenance"
+            );
+            assert!(
+                !terminal_artifacts
+                    .join(&run_id.0)
+                    .join("tool-staging")
+                    .exists(),
+                "{label} staged fixture bytes before Allow"
             );
         }
     })

@@ -40,6 +40,10 @@ extraResources:
     to: science/biomni-resource-catalog.json
   - from: ../../docs/science/fusion-sources.lock.json
     to: science/fusion-sources.lock.json
+  - from: ../../agent/crates/codegen/xai-grok-science/fixtures/connector_uniprot_search.json
+    to: science/fixtures/connector_uniprot_search.json
+  - from: ../../docs/science/5.0/admissions/biomni-query-uniprot.admission.json
+    to: science/admissions/biomni-query-uniprot.json
 
 asarUnpack:
   - resources/**

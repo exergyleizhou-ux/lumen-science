@@ -4,17 +4,8 @@
  * Plan / dry-run locally; live execute via the engine's `workflow_execute`.
  * Never imports or constructs KernelExecutor.
  *
- * ## Why workflow_execute and not notebook_execute
- *
- * This service originally called `notebook_execute` — which is on the method
- * registry's REJECTED list ("Go MCP tool, not a Rust ACP extension method").
- * The registry refused it before it ever reached the wire, so the "Run in
- * engine" button could not succeed against any engine, ever. Meanwhile LS5-K8
- * had already given the Rust engine a real cell-execution route:
- * `workflow_execute` runs a NotebookCell step through the SessionActor —
- * permission prompt, kernel admission from a pinned interpreter path, sandboxed
- * exec-loop, run record. A cell is exactly a one-step workflow, so that is what
- * this sends.
+ * Trusted identity is always an explicit argument from the IPC boundary.
+ * This service never reads process-global or sender maps itself.
  */
 
 import {
@@ -26,7 +17,7 @@ import {
   type NotebookHistoryCell,
   type NotebookLanguage,
 } from './notebook-plan'
-import { getTrustedPreviewContext } from './session-identity'
+import type { TrustedPreviewContext } from './session-identity'
 import { randomUUID } from 'node:crypto'
 
 export type AcpNotebookCall = (
@@ -53,10 +44,15 @@ export type NotebookService = {
     plan: NotebookCellPlan
     wouldCall: { tool: string; args: { code: string } }
   } | { ok: false; reason: string }
-  execute: (req: NotebookCellRequest) => Promise<unknown>
+  execute: (
+    req: NotebookCellRequest,
+    trusted: TrustedPreviewContext | null,
+  ) => Promise<unknown>
   history: () => NotebookHistoryCell[]
   clearHistory: () => void
-  exportIpynb: () => Record<string, unknown> | { ok: false; reason: string }
+  exportIpynb: (
+    trusted: TrustedPreviewContext | null,
+  ) => Record<string, unknown> | { ok: false; reason: string }
 }
 
 export function createNotebookService(opts: {
@@ -92,16 +88,18 @@ export function createNotebookService(opts: {
       }
     },
 
-    async execute(req) {
+    async execute(req, trusted) {
       const planned = planNotebookCell({ ...req, dryRun: false })
       if ('ok' in planned && planned.ok === false) {
         return planned
       }
       const plan = planned as NotebookCellPlan
-      const context = getTrustedPreviewContext()
-      const access = assertNotebookExecuteAccess(plan, context)
+      const access = assertNotebookExecuteAccess(plan, trusted)
       if (!access.ok) {
         return { ok: false, reason: access.reason, plan }
+      }
+      if (!trusted) {
+        return { ok: false, reason: 'no trusted session — open a project first', plan }
       }
       if (!opts.acpCall) {
         return {
@@ -131,7 +129,7 @@ export function createNotebookService(opts: {
         // invalid_params error, not ignored), while the INNER spec is
         // snake_case (WorkflowSpec derives serde without a rename).
         const result = await opts.acpCall('workflow_execute', {
-          ownerId: context?.ownerId ?? opts.defaultOwnerId ?? 'local-user',
+          ownerId: trusted.ownerId,
           storeRoot: opts.storeRoot ?? 'science-store',
           // Idempotency key: a retried IPC must not run the cell twice.
           operationId: (opts.newOperationId ?? randomUUID)(),
@@ -143,7 +141,7 @@ export function createNotebookService(opts: {
           approvalTimeoutMs: opts.approvalTimeoutMs ?? 110_000,
           workflowSpec: {
             workflow_id: `notebook-${plan.cellId}`,
-            project_id: context?.projectId ?? '',
+            project_id: trusted.projectId,
             name: 'Notebook cell',
             steps: [
               {
@@ -218,8 +216,7 @@ export function createNotebookService(opts: {
       history.length = 0
     },
 
-    exportIpynb() {
-      const trusted = getTrustedPreviewContext()
+    exportIpynb(trusted) {
       if (!trusted) {
         return { ok: false, reason: 'no trusted session for export' }
       }

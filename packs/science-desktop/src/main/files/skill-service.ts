@@ -16,7 +16,7 @@ import {
   type SkillAdmitRequest,
   type SkillRecord,
 } from './skill-plan'
-import { getTrustedPreviewContext } from './session-identity'
+import type { TrustedPreviewContext } from './session-identity'
 
 export type LumenRegistrySkill = {
   skill_id: string
@@ -40,14 +40,32 @@ export type EcosystemSkillCandidate = {
     | 'knowledge-document'
   sourceRepository: string
   exactCommit: string
+  sourcePath: string
   sourceSha256: string
+  fileLicense: string
   candidateLumenRoutes: string[]
   requiredUpstreamToolCount: number
   parameterCount: number
   riskFlags: string[]
   admissionTrack: string
-  disposition: 'quarantined'
+  disposition: 'quarantined' | 'admitted-executable'
+  /**
+   * Product may show "Run via Lumen" only when true.
+   * Today: only ecosystem/biomni/query_uniprot after admission overlay.
+   */
+  canRunViaLumen: boolean
+  runVia?: {
+    source: 'Biomni'
+    executor: 'Rust Lumen SessionActor'
+    dataSource: 'UniProt'
+    lumenMethod: 'x.ai/science/capability_run'
+    connectorId: 'uniprot'
+    mode: 'fixture/offline'
+  }
 }
+
+/** Sole admitted Biomni executable capability (1 of 224). */
+export const ADMITTED_BIOMNI_CAPABILITY_ID = 'ecosystem/biomni/query_uniprot'
 
 export type SkillService = {
   listInventory: () => {
@@ -58,8 +76,14 @@ export type SkillService = {
     quarantined: SkillRecord[]
     ecosystem: {
       candidates: EcosystemSkillCandidate[]
-      summary: { total: number; approved: 0; quarantined: number }
-      authority: 'catalog-only; Rust SessionActor required'
+      summary: { total: number; approved: number; quarantined: number }
+      authority: string
+      honesty?: {
+        biomniCatalogTotal: number
+        admittedExecutable: number
+        stillQuarantined: number
+        claimForbidden: string
+      }
       unavailable?: string
     }
     summary: {
@@ -70,9 +94,13 @@ export type SkillService = {
       total: number
     }
   }
-  import: (req: SkillImportRequest) => unknown
-  admit: (req: SkillAdmitRequest) => unknown
-  reject: (skillId: string, reason: string) => unknown
+  import: (req: SkillImportRequest, trusted: TrustedPreviewContext | null) => unknown
+  admit: (req: SkillAdmitRequest, trusted: TrustedPreviewContext | null) => unknown
+  reject: (
+    skillId: string,
+    reason: string,
+    trusted: TrustedPreviewContext | null,
+  ) => unknown
   /** Explicitly reject bulk approve attempts */
   bulkAdmit: (skillIds: string[]) => unknown
   quarantineList: () => SkillRecord[]
@@ -85,6 +113,12 @@ export function createSkillService(opts: {
   ecosystemCatalogPath?: string
   /** Optional complete set of read-only, zero-approved ecosystem catalogs. */
   ecosystemCatalogPaths?: string[]
+  /**
+   * Machine-backed admission dossier. Optional at the API boundary so older
+   * callers fail closed; without a valid dossier no ecosystem candidate is
+   * executable.
+   */
+  admissionPath?: string
 }): SkillService {
   const quarantine = new Map<string, SkillRecord>()
 
@@ -160,6 +194,8 @@ export function createSkillService(opts: {
           source_repository?: string
           exact_commit?: string
           source_sha256?: string
+          source_path?: string
+          file_license?: string
           source_kind?: string
           candidate_lumen_routes?: string[]
           required_upstream_tools?: unknown[]
@@ -280,7 +316,9 @@ export function createSkillService(opts: {
           sourceKind: sourceKind as EcosystemSkillCandidate['sourceKind'],
           sourceRepository: skill.source_repository,
           exactCommit: skill.exact_commit!,
+          sourcePath: skill.source_path ?? '',
           sourceSha256: skill.source_sha256!,
+          fileLicense: skill.file_license ?? '',
           candidateLumenRoutes: Array.isArray(skill.candidate_lumen_routes)
             ? skill.candidate_lumen_routes.filter(
                 (route): route is string => typeof route === 'string',
@@ -302,7 +340,10 @@ export function createSkillService(opts: {
               )
             : [],
           admissionTrack: skill.admission_track || 'per-skill-review',
+          // Admission is applied only after every catalog has validated and the
+          // machine-readable dossier has matched the source row exactly.
           disposition: 'quarantined',
+          canRunViaLumen: false,
         }
       })
       return { candidates }
@@ -343,13 +384,136 @@ export function createSkillService(opts: {
       }
       ids.add(candidate.skillId)
     }
+    const admission = loadAdmission(candidates)
+    if (!admission.ok) {
+      return { candidates, unavailable: admission.reason }
+    }
+    const admitted = candidates.find(
+      (candidate) => candidate.skillId === admission.capabilityId,
+    )
+    if (!admitted) {
+      return {
+        candidates,
+        unavailable: `ecosystem admission candidate missing after validation: ${admission.capabilityId}`,
+      }
+    }
+    admitted.disposition = 'admitted-executable'
+    admitted.canRunViaLumen = true
+    admitted.runVia = {
+      source: 'Biomni',
+      executor: 'Rust Lumen SessionActor',
+      dataSource: 'UniProt',
+      lumenMethod: 'x.ai/science/capability_run',
+      connectorId: 'uniprot',
+      mode: 'fixture/offline',
+    }
     return { candidates }
+  }
+
+  function loadAdmission(
+    candidates: EcosystemSkillCandidate[],
+  ): { ok: true; capabilityId: string } | { ok: false; reason: string } {
+    if (!opts.admissionPath) {
+      return {
+        ok: false,
+        reason: 'ecosystem admission unavailable: no admissionPath configured',
+      }
+    }
+    try {
+      const raw = JSON.parse(fs.readFileSync(opts.admissionPath, 'utf-8')) as {
+        schema_version?: number
+        biomni_catalog?: {
+          path?: string
+          total?: number
+          admitted_executable?: number
+          still_quarantined?: number
+        }
+        capability?: {
+          id?: string
+          display_name?: string
+          source?: {
+            repository?: string
+            exact_commit?: string
+            source_path?: string
+            source_sha256?: string
+            license?: string
+            reuse_mode?: string
+          }
+          mapping?: {
+            lumen_method?: string
+            connector_id?: string
+            prompt_maps_to?: string
+            controlled_tools?: unknown[]
+          }
+          status?: string
+        }
+      }
+      const biomni = candidates.filter(
+        (candidate) =>
+          candidate.sourceRepository === 'https://github.com/snap-stanford/Biomni.git' &&
+          candidate.sourceKind === 'tool-descriptor',
+      )
+      const capability = raw.capability
+      const source = capability?.source
+      const mapping = capability?.mapping
+      const candidate = candidates.find(
+        (item) => item.skillId === capability?.id,
+      )
+      const controlledTools = mapping?.controlled_tools
+      if (
+        raw.schema_version !== 1 ||
+        raw.biomni_catalog?.path !==
+          'packs/science/skills/ecosystem/biomni-tool-catalog.json' ||
+        raw.biomni_catalog.total !== biomni.length ||
+        raw.biomni_catalog.total !== 224 ||
+        raw.biomni_catalog.admitted_executable !== 1 ||
+        raw.biomni_catalog.still_quarantined !== biomni.length - 1 ||
+        capability?.id !== ADMITTED_BIOMNI_CAPABILITY_ID ||
+        capability.display_name !== candidate?.displayName ||
+        source?.repository !== candidate?.sourceRepository ||
+        source?.exact_commit !== candidate?.exactCommit ||
+        source?.source_path !== candidate?.sourcePath ||
+        source?.source_sha256 !== candidate?.sourceSha256 ||
+        source?.license !== candidate?.fileLicense ||
+        source?.reuse_mode !== 'adapted-capability-mapping' ||
+        mapping?.lumen_method !== 'x.ai/science/connector_fetch' ||
+        mapping?.connector_id !== 'uniprot' ||
+        mapping?.prompt_maps_to !== 'query' ||
+        !Array.isArray(controlledTools) ||
+        controlledTools.length !== 1 ||
+        controlledTools[0] !== 'x.ai/science/connector_fetch' ||
+        capability.status !== 'admitted-executable'
+      ) {
+        throw new Error(
+          'Biomni admission does not exactly match catalog source, mapping, and counts',
+        )
+      }
+      return { ok: true, capabilityId: capability.id }
+    } catch (e: unknown) {
+      return {
+        ok: false,
+        reason: `ecosystem admission unreadable or mismatched at ${opts.admissionPath}: ${(e as Error).message}`,
+      }
+    }
+  }
+
+  // Read catalog + admission once. A later pathname replacement cannot change
+  // which capability this service instance exposes.
+  let cachedEcosystem:
+    | { candidates: EcosystemSkillCandidate[]; unavailable?: string }
+    | undefined
+  function cachedEcosystemCatalog(): {
+    candidates: EcosystemSkillCandidate[]
+    unavailable?: string
+  } {
+    cachedEcosystem ??= loadEcosystemCatalog()
+    return cachedEcosystem
   }
 
   return {
     listInventory() {
       const reg = loadRegistry()
-      const ecosystem = loadEcosystemCatalog()
+      const ecosystem = cachedEcosystemCatalog()
       const quarantined = [...quarantine.values()]
       const reasons = [reg.unavailable, ecosystem.unavailable].filter((reason): reason is string =>
         Boolean(reason),
@@ -364,24 +528,51 @@ export function createSkillService(opts: {
           candidates: ecosystem.candidates,
           summary: {
             total: ecosystem.candidates.length,
-            approved: 0,
-            quarantined: ecosystem.candidates.length,
+            // Exactly one Biomni tool is admitted-executable (query_uniprot).
+            approved: ecosystem.candidates.filter((c) => c.canRunViaLumen).length,
+            quarantined: ecosystem.candidates.filter((c) => !c.canRunViaLumen).length,
           },
-          authority: 'catalog-only; Rust SessionActor required',
+          authority:
+            'catalog + admission overlay; only admitted capabilities run via SessionActor',
+          honesty: {
+            biomniCatalogTotal: ecosystem.candidates.filter(
+              (candidate) =>
+                candidate.sourceRepository ===
+                  'https://github.com/snap-stanford/Biomni.git' &&
+                candidate.sourceKind === 'tool-descriptor',
+            ).length,
+            admittedExecutable: ecosystem.candidates.filter(
+              (candidate) =>
+                candidate.sourceRepository ===
+                  'https://github.com/snap-stanford/Biomni.git' &&
+                candidate.sourceKind === 'tool-descriptor' &&
+                candidate.canRunViaLumen,
+            ).length,
+            stillQuarantined: ecosystem.candidates.filter(
+              (candidate) =>
+                candidate.sourceRepository ===
+                  'https://github.com/snap-stanford/Biomni.git' &&
+                candidate.sourceKind === 'tool-descriptor' &&
+                !candidate.canRunViaLumen,
+            ).length,
+            claimForbidden: 'Biomni is not fully integrated',
+          },
           ...(ecosystem.unavailable ? { unavailable: ecosystem.unavailable } : {}),
         },
         summary: {
           approved: reg.approved.length,
           pending: reg.pending.length,
           quarantined: quarantined.length,
-          ecosystemQuarantined: ecosystem.candidates.length,
+          ecosystemQuarantined: ecosystem.candidates.filter(
+            (candidate) => !candidate.canRunViaLumen,
+          ).length,
           total: reg.total + quarantined.length + ecosystem.candidates.length,
         },
       }
     },
 
-    import(req) {
-      const session = assertSkillSession(getTrustedPreviewContext())
+    import(req, trusted) {
+      const session = assertSkillSession(trusted)
       if (!session.ok) return { ok: false, reason: session.reason }
 
       const planned = planSkillImport(req)
@@ -399,8 +590,8 @@ export function createSkillService(opts: {
       }
     },
 
-    admit(req) {
-      const session = assertSkillSession(getTrustedPreviewContext())
+    admit(req, trusted) {
+      const session = assertSkillSession(trusted)
       if (!session.ok) return { ok: false, reason: session.reason }
 
       const record = quarantine.get(req.skillId)
@@ -424,8 +615,8 @@ export function createSkillService(opts: {
       }
     },
 
-    reject(skillId, reason) {
-      const session = assertSkillSession(getTrustedPreviewContext())
+    reject(skillId, reason, trusted) {
+      const session = assertSkillSession(trusted)
       if (!session.ok) return { ok: false, reason: session.reason }
 
       const record = quarantine.get(skillId)

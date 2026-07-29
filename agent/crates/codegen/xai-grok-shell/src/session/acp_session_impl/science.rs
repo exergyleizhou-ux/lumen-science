@@ -448,9 +448,7 @@ impl SessionActor {
                     project_id: context.project_id.clone(),
                     run_id: context.run_id.clone(),
                     owner_id: context.owner_id.clone(),
-                    call_id: xai_grok_science::CallId::new(
-                        "science_skill_quarantine_import",
-                    ),
+                    call_id: xai_grok_science::CallId::new("science_skill_quarantine_import"),
                 };
                 let replayed = xai_grok_science::skill_quarantine::aggregate(
                     &store,
@@ -490,12 +488,8 @@ impl SessionActor {
         prepared: PreparedScienceSkillQuarantine,
         decision: xai_grok_science::ApprovalDecision,
         reason: String,
-        permission_grant: Option<
-            crate::session::handle::ScienceSkillQuarantinePermissionGrant,
-        >,
-    ) -> xai_grok_science::Result<
-        xai_grok_science::skill_quarantine::SkillQuarantineResult,
-    > {
+        permission_grant: Option<crate::session::handle::ScienceSkillQuarantinePermissionGrant>,
+    ) -> xai_grok_science::Result<xai_grok_science::skill_quarantine::SkillQuarantineResult> {
         if decision != xai_grok_science::ApprovalDecision::Allow {
             let terminal = xai_grok_science::csv::finish_without_execution(
                 &prepared.store,
@@ -823,24 +817,46 @@ impl SessionActor {
         query: String,
         requests: Vec<xai_grok_science::connectors::ValidatedRequest>,
         fixture_bytes: Vec<Vec<u8>>,
+        capability_provenance: Option<
+            xai_grok_science::connectors::fetch::CapabilitySourceProvenance,
+        >,
     ) -> xai_grok_science::Result<PreparedScienceFetch> {
+        if context.session_id != self.session_info.id.0.as_ref() {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "connector fetch session does not match this SessionActor".into(),
+            ));
+        }
         if requests.len() != fixture_bytes.len() || requests.is_empty() {
             return Err(xai_grok_science::ScienceError::Invalid(
                 "fetch requires one staged response per request".into(),
             ));
+        }
+        let actor_workspace = dunce::canonicalize(&self.session_info.cwd)?;
+        let project_root = store.root().to_path_buf();
+        validate_project_mutation_actor_roots(&actor_workspace, &store, &project_root, &context)?;
+        let project_store =
+            xai_grok_science::project::ProjectStore::new_confined(&project_root, &actor_workspace)?
+                .with_gates(self.science_feature_gates.clone());
+        if !store.shares_root_capability_with(&project_store)? {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "connector fetch science and project stores pin different root identities".into(),
+            ));
+        }
+        let project_id = xai_grok_science::project::ProjectId(context.project_id.0.clone());
+        let project = project_store.load_project(&project_id)?;
+        if project.owner_id.0 != context.owner_id {
+            return Err(xai_grok_science::ScienceError::Ownership);
         }
         let ticket = xai_grok_science::connectors::fetch::begin_fetch(&store, context.clone())?;
         let staging = context
             .artifact_root
             .join(&ticket.run_id.0)
             .join("tool-staging");
-        std::fs::create_dir_all(&staging)?;
         let mut command = format!("python3 -c {}", quote(FETCH_TOOL_SCRIPT)?);
         let mut output_paths = Vec::with_capacity(fixture_bytes.len());
-        for (index, bytes) in fixture_bytes.iter().enumerate() {
+        for index in 0..fixture_bytes.len() {
             let input_path = staging.join(format!("input_{index}.bin"));
             let output_path = staging.join(format!("output_{index}.bin"));
-            std::fs::write(&input_path, bytes)?;
             command.push_str(&format!(
                 " {} {}",
                 quote(&input_path.to_string_lossy())?,
@@ -855,6 +871,7 @@ impl SessionActor {
             query,
             requests,
             fixture_bytes,
+            capability_provenance,
             command,
             output_paths,
         })
@@ -880,6 +897,27 @@ impl SessionActor {
         }
 
         xai_grok_science::csv::mark_allowed(&prepared.store, &prepared.ticket)?;
+        let staging_result = (|| -> std::io::Result<()> {
+            let staging = prepared
+                .output_paths
+                .first()
+                .and_then(|path| path.parent())
+                .ok_or_else(|| std::io::Error::other("fetch has no staging directory"))?;
+            std::fs::create_dir_all(staging)?;
+            for (index, bytes) in prepared.fixture_bytes.iter().enumerate() {
+                std::fs::write(staging.join(format!("input_{index}.bin")), bytes)?;
+            }
+            Ok(())
+        })();
+        if let Err(error) = staging_result {
+            let reason = format!("failed to stage allowed connector bytes: {error}");
+            let _ = xai_grok_science::csv::fail_running(
+                &prepared.store,
+                &prepared.ticket,
+                reason.clone(),
+            );
+            return Err(xai_grok_science::ScienceError::Invalid(reason));
+        }
         let tool_name = self
             .agent
             .borrow()
@@ -978,6 +1016,7 @@ impl SessionActor {
             &prepared.query,
             exchanges,
             format!("{tool_name} via WorkspaceOps::call_tool"),
+            prepared.capability_provenance,
         )
     }
 

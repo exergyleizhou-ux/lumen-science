@@ -26,9 +26,9 @@ import { resolvePreview } from '../src/main/files/preview-resolver.js'
 import type { PreviewFileStore } from '../src/main/files/preview-resolver.js'
 import { assertArtifactPreviewAccess } from '../src/main/lumen-authority-policy.js'
 import {
-  getTrustedPreviewContext,
-  setTrustedPreviewContext,
-  clearTrustedPreviewContext,
+  setTrustedPreviewContextForSender,
+  getTrustedPreviewContextForSender,
+  clearAllTrustedPreviewContexts,
 } from '../src/main/files/session-identity.js'
 import { loadArtifactPreview } from '../src/main/files/preview-service.js'
 
@@ -180,25 +180,24 @@ async function runTests() {
     ok(missing.access.reason!.includes('not found'))
   })
 
-  // ── Session identity (trusted context source) ──────────────────
-  clearTrustedPreviewContext()
-  await test('session-identity: default null', () => {
-    strictEqual(getTrustedPreviewContext(), null)
+  // ── Session identity (sender-scoped trusted context) ────────────
+  clearAllTrustedPreviewContexts()
+  await test('session-identity: default null for sender', () => {
+    strictEqual(getTrustedPreviewContextForSender(1), null)
   })
-  setTrustedPreviewContext({ ownerId: 'o1', projectId: 'p1' })
-  await test('session-identity: set/get', () => {
-    const ctx = getTrustedPreviewContext()
+  setTrustedPreviewContextForSender(1, { ownerId: 'o1', projectId: 'p1' })
+  await test('session-identity: set/get for sender', () => {
+    const ctx = getTrustedPreviewContextForSender(1)
     ok(ctx)
     strictEqual(ctx!.ownerId, 'o1')
     strictEqual(ctx!.projectId, 'p1')
   })
-  clearTrustedPreviewContext()
 
-  // ── Product path: loadArtifactPreview ──────────────────────────
-  setTrustedPreviewContext({ ownerId: 'o1', projectId: 'p1' })
+  // ── Product path: loadArtifactPreview (explicit trusted arg) ───
   const product = await loadArtifactPreview(
     { artifactId: 'a1', expectedSha256: A1_SHA, mimeType: 'text/csv' },
     { store },
+    { ownerId: 'o1', projectId: 'p1' },
   )
   await test('product: loadArtifactPreview ok with trusted session', () => {
     ok(product.access.ok, `expected ok got ${JSON.stringify(product)}`)
@@ -208,8 +207,7 @@ async function runTests() {
     )
   })
 
-  clearTrustedPreviewContext()
-  const noSession = await loadArtifactPreview({ artifactId: 'a1' }, { store })
+  const noSession = await loadArtifactPreview({ artifactId: 'a1' }, { store }, null)
   await test('product: rejects when no trusted session identity', () => {
     ok(!noSession.access.ok, `expected deny got ${JSON.stringify(noSession)}`)
     ok(
@@ -218,8 +216,11 @@ async function runTests() {
     )
   })
 
-  setTrustedPreviewContext({ ownerId: 'o2', projectId: 'p2' })
-  const wrongSession = await loadArtifactPreview({ artifactId: 'a1' }, { store })
+  const wrongSession = await loadArtifactPreview(
+    { artifactId: 'a1' },
+    { store },
+    { ownerId: 'o2', projectId: 'p2' },
+  )
   await test('product: rejects artifact owned by other session identity', () => {
     ok(!wrongSession.access.ok, `expected deny got ${JSON.stringify(wrongSession)}`)
     ok(
@@ -227,7 +228,8 @@ async function runTests() {
       `reason: ${wrongSession.access.reason}`,
     )
   })
-  clearTrustedPreviewContext()
+
+  clearAllTrustedPreviewContexts()
 
   // ── Source constraints ─────────────────────────────────────────
   const src = fs.readFileSync('src/main/files/preview-resolver.ts', 'utf-8')

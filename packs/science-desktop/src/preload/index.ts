@@ -679,6 +679,15 @@ type OpenScienceAPI = {
     skillsList: () => Promise<unknown>
     skillsQuarantineList: () => Promise<unknown>
     skillsBulkAdmit: (request: { skillIds: string[] }) => Promise<unknown>
+    /**
+     * Admitted ecosystem capability only (Biomni query_uniprot).
+     * Identity from main-process sender binding; connector_id fixed server-side.
+     */
+    skillsRunCapability: (request: {
+      capabilityId: string
+      prompt: string
+      maxResults?: number
+    }) => Promise<unknown>
     /** OSF-6 Compute — dry-run plan; live execute always denied on desktop */
     computePlan: (request: {
       hostname: string
@@ -1336,6 +1345,8 @@ const api: OpenScienceAPI = {
       ipcRenderer.invoke('skills:quarantine-list') as Promise<unknown>,
     skillsBulkAdmit: (request) =>
       ipcRenderer.invoke('skills:bulk-admit', request) as Promise<unknown>,
+    skillsRunCapability: (request) =>
+      ipcRenderer.invoke('skills:run-capability', request) as Promise<unknown>,
     computePlan: (request) =>
       ipcRenderer.invoke('compute:plan', request) as Promise<unknown>,
     computeSubmitPlan: (request) =>

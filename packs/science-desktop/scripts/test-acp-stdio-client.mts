@@ -120,9 +120,10 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lumen-acp-test-'))
 // mirrored here. That is exactly how it caught workflow_execute, which LS5-K8
 // added to the engine while the desktop had no way to call it.
 await test('registry lists exactly the 30 engine methods', () => {
-  strictEqual(SCIENCE_METHODS.length, 30)
-  strictEqual(new Set(SCIENCE_METHODS).size, 30, 'no duplicates')
-  strictEqual(listScienceMethods().length, 30)
+  strictEqual(SCIENCE_METHODS.length, 31)
+  strictEqual(new Set(SCIENCE_METHODS).size, 31, 'no duplicates')
+  strictEqual(listScienceMethods().length, 31)
+  ok(SCIENCE_METHODS.includes('capability_run'))
 })
 
 await test('registry wire form carries the ACP ext prefix', () => {

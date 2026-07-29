@@ -783,9 +783,7 @@ impl SessionHandle {
         request: xai_grok_science::skill_quarantine::SkillQuarantineRequest,
         archive_bytes: Vec<u8>,
         approval_timeout: std::time::Duration,
-    ) -> xai_grok_science::Result<
-        xai_grok_science::skill_quarantine::SkillQuarantineResult,
-    > {
+    ) -> xai_grok_science::Result<xai_grok_science::skill_quarantine::SkillQuarantineResult> {
         use xai_grok_workspace::permission::{AccessKind, Decision};
         let (begin_tx, begin_rx) = oneshot::channel();
         self.cmd_tx
@@ -807,8 +805,7 @@ impl SessionHandle {
         if let Some(replayed) = prepared.replayed.take() {
             return Ok(replayed);
         }
-        let pending =
-            PendingScienceSkillQuarantineApproval::new(self.cmd_tx.clone(), prepared);
+        let pending = PendingScienceSkillQuarantineApproval::new(self.cmd_tx.clone(), prepared);
         let prepared = pending.prepared();
         let call_id = acp::ToolCallId::new(std::sync::Arc::from(format!(
             "science-skill-quarantine-{}",
@@ -844,10 +841,7 @@ impl SessionHandle {
                     approval_timeout.as_millis()
                 ),
             ),
-            Ok(Decision::Allow) => (
-                xai_grok_science::ApprovalDecision::Allow,
-                String::new(),
-            ),
+            Ok(Decision::Allow) => (xai_grok_science::ApprovalDecision::Allow, String::new()),
             Ok(Decision::Ask) => (
                 xai_grok_science::ApprovalDecision::Deny,
                 "permission manager returned unresolved Ask".into(),
@@ -1009,6 +1003,9 @@ impl SessionHandle {
         query: String,
         requests: Vec<xai_grok_science::connectors::ValidatedRequest>,
         fixture_bytes: Vec<Vec<u8>>,
+        capability_provenance: Option<
+            xai_grok_science::connectors::fetch::CapabilitySourceProvenance,
+        >,
         approval_timeout: std::time::Duration,
     ) -> xai_grok_science::Result<xai_grok_science::connectors::fetch::FetchResult> {
         use xai_grok_workspace::permission::{AccessKind, Decision};
@@ -1022,6 +1019,7 @@ impl SessionHandle {
                     query,
                     requests,
                     fixture_bytes,
+                    capability_provenance,
                     respond_to: begin_tx,
                 },
             )))

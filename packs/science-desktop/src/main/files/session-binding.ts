@@ -6,13 +6,11 @@
  * After bind, optional artifact_list results seed the preview store so
  * files:preview-by-artifact can resolve artifact_id without path open.
  *
- * ZIP/.skill quarantine requires sender-scoped identity (`senderId`).
- * Legacy consumers still use process-global context (residual P0).
+ * Bind/rebind always requires an explicit senderId. There is no process-global
+ * identity bag for production or tests.
  */
 
 import {
-  setTrustedPreviewContext,
-  clearTrustedPreviewContext,
   clearTrustedPreviewContextForSender,
   clearAllTrustedPreviewContexts,
   attachTrustedIdentitySenderCleanup,
@@ -75,11 +73,10 @@ export type SeedableStore = {
 export type BindSessionOptions = {
   assertMembership: MembershipAsserter
   /**
-   * Electron webContents.id of the invoking renderer. When set, identity is
-   * stored only for that sender (ZIP quarantine authority path). When omitted,
-   * falls back to process-global context for legacy consumers / scripts.
+   * Electron webContents.id of the invoking renderer. Required — identity is
+   * stored only for that sender. Missing senderId is a programming error.
    */
-  senderId?: number
+  senderId: number
   /** Optional WebContents-like handle used to clear identity on teardown. */
   sender?: TrustedIdentitySender
 }
@@ -89,19 +86,20 @@ export type BindSessionResult =
   | { ok: false; reason: string }
 
 /**
- * Assert membership then set main-process trusted preview context.
+ * Assert membership then set main-process trusted preview context for sender.
  *
  * Failed rebind for a senderId ALWAYS revokes that sender's prior binding so a
- * denied membership cannot leave a stale capability in place.
+ * denied membership cannot leave a stale capability in place (begin already
+ * deletes the prior map entry and bumps epoch).
  */
 export async function bindTrustedSession(
   claim: MembershipClaim,
   opts: BindSessionOptions,
 ): Promise<BindSessionResult> {
-  const senderEpoch =
-    opts.senderId === undefined
-      ? undefined
-      : beginTrustedPreviewContextBinding(opts.senderId)
+  if (!Number.isInteger(opts.senderId) || opts.senderId < 0) {
+    return { ok: false, reason: 'bind requires a real non-negative senderId' }
+  }
+  const senderEpoch = beginTrustedPreviewContextBinding(opts.senderId)
   if (opts.sender) {
     attachTrustedIdentitySenderCleanup(opts.sender)
   }
@@ -110,42 +108,31 @@ export async function bindTrustedSession(
   }
   const result = await opts.assertMembership(claim)
   if (!result.ok) {
-    if (opts.senderId === undefined) {
-      clearTrustedPreviewContext()
-    }
+    // begin already revoked this sender's prior binding; leave it unbound.
     return { ok: false, reason: result.reason || 'membership denied' }
   }
   const trusted = {
     ownerId: result.ownerId,
     projectId: result.projectId,
   }
-  if (opts.senderId !== undefined) {
-    if (
-      senderEpoch === undefined ||
-      !commitTrustedPreviewContextForSender(opts.senderId, senderEpoch, trusted)
-    ) {
-      return {
-        ok: false,
-        reason: 'membership result was superseded by navigation, unbind, restart, or a newer bind',
-      }
+  if (!commitTrustedPreviewContextForSender(opts.senderId, senderEpoch, trusted)) {
+    return {
+      ok: false,
+      reason: 'membership result was superseded by navigation, unbind, restart, or a newer bind',
     }
-  } else {
-    // Legacy process-global path (residual P0 for non-ZIP consumers).
-    setTrustedPreviewContext(trusted)
   }
   return { ok: true, ownerId: result.ownerId, projectId: result.projectId }
 }
 
 /** Clear one sender's trusted binding (remove-current-project / unbind). */
-export function unbindTrustedSession(senderId?: number): void {
-  if (senderId !== undefined) {
-    clearTrustedPreviewContextForSender(senderId)
+export function unbindTrustedSession(senderId: number): void {
+  if (!Number.isInteger(senderId) || senderId < 0) {
     return
   }
-  clearTrustedPreviewContext()
+  clearTrustedPreviewContextForSender(senderId)
 }
 
-/** Engine stop/restart: invalidate every sender and the legacy global bag. */
+/** Engine stop/restart: invalidate every sender binding. */
 export function clearAllTrustedSessions(): void {
   clearAllTrustedPreviewContexts()
 }

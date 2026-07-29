@@ -627,6 +627,11 @@ interface OpenScienceAPI {
     skillsList(): Promise<unknown>
     skillsQuarantineList(): Promise<unknown>
     skillsBulkAdmit(request: { skillIds: string[] }): Promise<unknown>
+    skillsRunCapability(request: {
+      capabilityId: string
+      prompt: string
+      maxResults?: number
+    }): Promise<unknown>
     computePlan(request: {
       hostname: string
       targetKind?: 'local_process' | 'ssh_fixture' | 'ssh_authorized' | 'slurm_fixture'

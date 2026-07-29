@@ -18,27 +18,42 @@ export type EcosystemSkillCandidate = {
   parameterCount: number
   riskFlags: string[]
   admissionTrack: string
-  disposition: 'quarantined'
+  /** Catalog default is quarantined; exactly one Biomni tool may be admitted-executable. */
+  disposition: 'quarantined' | 'admitted-executable'
+  canRunViaLumen: boolean
+  runVia?: {
+    source: 'Biomni'
+    executor: 'Rust Lumen SessionActor'
+    dataSource: 'UniProt'
+    lumenMethod: 'x.ai/science/capability_run'
+    connectorId: 'uniprot'
+    mode: 'fixture/offline'
+  }
 }
 
 export type EcosystemSkillInventory = {
   candidates: EcosystemSkillCandidate[]
   total: number
   quarantined: number
-  approved: 0
-  authority: 'catalog-only; Rust SessionActor required'
+  approved: number
+  admittedExecutable: number
+  stillQuarantined: number
+  authority: string
 }
 
 export type EcosystemInventoryParse =
   | { ok: true; inventory: EcosystemSkillInventory }
   | { ok: false; reason: string }
 
+/** Sole admitted Biomni executable skill id (1 of 224). */
+export const ADMITTED_BIOMNI_UNIPROT_ID = 'ecosystem/biomni/query_uniprot'
+
 /**
  * Treat the main-process response as hostile input.
  *
- * The desktop catalog is discovery metadata, not an execution registry. The
- * renderer refuses the whole catalog if any item claims approval or if the
- * SessionActor-only authority marker is missing.
+ * The desktop catalog is discovery metadata plus a single admission overlay.
+ * At most one candidate may be `admitted-executable` / `canRunViaLumen`, and it
+ * must be the Biomni UniProt capability with fixed Lumen mapping metadata.
  */
 export function parseEcosystemSkillInventory(value: unknown): EcosystemInventoryParse {
   if (!value || typeof value !== 'object') {
@@ -51,6 +66,11 @@ export function parseEcosystemSkillInventory(value: unknown): EcosystemInventory
       candidates?: unknown
       summary?: { total?: unknown; approved?: unknown; quarantined?: unknown }
       authority?: unknown
+      honesty?: {
+        biomniCatalogTotal?: unknown
+        admittedExecutable?: unknown
+        stillQuarantined?: unknown
+      }
     }
   }
   if (response.ok !== true) {
@@ -65,18 +85,22 @@ export function parseEcosystemSkillInventory(value: unknown): EcosystemInventory
 
   const ecosystem = response.ecosystem
   const rawCandidates = ecosystem?.candidates
+  const authority = String(ecosystem?.authority ?? '')
   if (
-    ecosystem?.authority !== 'catalog-only; Rust SessionActor required' ||
+    !authority.includes('SessionActor') ||
     !Array.isArray(rawCandidates) ||
-    ecosystem.summary?.approved !== 0 ||
+    typeof ecosystem?.summary?.total !== 'number' ||
     ecosystem.summary.total !== rawCandidates.length ||
-    ecosystem.summary.quarantined !== rawCandidates.length
+    typeof ecosystem.summary.approved !== 'number' ||
+    typeof ecosystem.summary.quarantined !== 'number' ||
+    ecosystem.summary.approved + ecosystem.summary.quarantined !== rawCandidates.length
   ) {
     return { ok: false, reason: 'Ecosystem catalog authority or count check failed.' }
   }
 
   const ids = new Set<string>()
   const candidates: EcosystemSkillCandidate[] = []
+  let admittedCount = 0
   for (const raw of rawCandidates) {
     if (!raw || typeof raw !== 'object') {
       return { ok: false, reason: 'Ecosystem catalog contains a malformed candidate.' }
@@ -112,7 +136,7 @@ export function parseEcosystemSkillInventory(value: unknown): EcosystemInventory
       !Array.isArray(item.riskFlags) ||
       !item.riskFlags.every((flag) => typeof flag === 'string') ||
       typeof item.admissionTrack !== 'string' ||
-      item.disposition !== 'quarantined'
+      (item.disposition !== 'quarantined' && item.disposition !== 'admitted-executable')
     ) {
       return {
         ok: false,
@@ -121,8 +145,87 @@ export function parseEcosystemSkillInventory(value: unknown): EcosystemInventory
         }.`,
       }
     }
+
+    const canRun = item.canRunViaLumen === true
+    if (item.disposition === 'admitted-executable' || canRun) {
+      admittedCount += 1
+      if (item.skillId !== ADMITTED_BIOMNI_UNIPROT_ID) {
+        return {
+          ok: false,
+          reason: `Only ${ADMITTED_BIOMNI_UNIPROT_ID} may be admitted-executable.`,
+        }
+      }
+      if (!canRun || item.disposition !== 'admitted-executable') {
+        return {
+          ok: false,
+          reason: 'Admitted capability must set canRunViaLumen and admitted-executable.',
+        }
+      }
+      const runVia = item.runVia as Record<string, unknown> | undefined
+      if (
+        !runVia ||
+        runVia.source !== 'Biomni' ||
+        runVia.executor !== 'Rust Lumen SessionActor' ||
+        runVia.dataSource !== 'UniProt' ||
+        runVia.lumenMethod !== 'x.ai/science/capability_run' ||
+        runVia.connectorId !== 'uniprot' ||
+        runVia.mode !== 'fixture/offline'
+      ) {
+        return {
+          ok: false,
+          reason: 'Admitted UniProt capability missing fixed Lumen runVia metadata.',
+        }
+      }
+    } else if (canRun) {
+      return { ok: false, reason: 'Quarantined candidates must not set canRunViaLumen.' }
+    }
+
     ids.add(item.skillId)
-    candidates.push(item as EcosystemSkillCandidate)
+    candidates.push({
+      skillId: item.skillId,
+      displayName: item.displayName as string,
+      description: item.description as string,
+      discipline: item.discipline as string,
+      sourceKind: item.sourceKind as EcosystemSkillCandidate['sourceKind'],
+      sourceRepository: item.sourceRepository as string,
+      exactCommit: item.exactCommit as string,
+      sourceSha256: item.sourceSha256 as string,
+      candidateLumenRoutes: item.candidateLumenRoutes as string[],
+      requiredUpstreamToolCount: item.requiredUpstreamToolCount as number,
+      parameterCount: item.parameterCount as number,
+      riskFlags: item.riskFlags as string[],
+      admissionTrack: item.admissionTrack as string,
+      disposition: item.disposition as EcosystemSkillCandidate['disposition'],
+      canRunViaLumen: canRun,
+      ...(canRun && item.runVia
+        ? { runVia: item.runVia as EcosystemSkillCandidate['runVia'] }
+        : {}),
+    })
+  }
+
+  if (admittedCount > 1) {
+    return { ok: false, reason: 'At most one ecosystem capability may be admitted-executable.' }
+  }
+  if (ecosystem.summary.approved !== admittedCount) {
+    return { ok: false, reason: 'Ecosystem approved count does not match admitted candidates.' }
+  }
+  if (ecosystem.summary.quarantined !== candidates.length - admittedCount) {
+    return { ok: false, reason: 'Ecosystem quarantined count does not match candidates.' }
+  }
+
+  // Honesty block is optional but if present must match Biomni 224/1/223.
+  const honesty = ecosystem.honesty
+  if (honesty) {
+    if (
+      honesty.biomniCatalogTotal !== 224 ||
+      honesty.admittedExecutable !== 1 ||
+      honesty.stillQuarantined !== 223
+    ) {
+      return {
+        ok: false,
+        reason: 'Ecosystem honesty block must report Biomni 224 total / 1 admitted / 223 quarantined.',
+      }
+    }
   }
 
   return {
@@ -130,9 +233,11 @@ export function parseEcosystemSkillInventory(value: unknown): EcosystemInventory
     inventory: {
       candidates,
       total: candidates.length,
-      approved: 0,
-      quarantined: candidates.length,
-      authority: 'catalog-only; Rust SessionActor required',
+      approved: admittedCount,
+      quarantined: candidates.length - admittedCount,
+      admittedExecutable: admittedCount,
+      stillQuarantined: candidates.length - admittedCount,
+      authority,
     },
   }
 }
@@ -156,6 +261,7 @@ export function filterEcosystemSkills(
       candidate.skillId,
       candidate.sourceKind,
       candidate.admissionTrack,
+      candidate.canRunViaLumen ? 'run via lumen admitted' : 'quarantined',
       ...candidate.riskFlags,
       ...candidate.candidateLumenRoutes,
     ]

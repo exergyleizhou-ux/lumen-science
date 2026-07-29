@@ -2,6 +2,7 @@
  * Product entry for OSF-2 Files/Preview.
  *
  * Loads preview by artifact_id using trusted main-process session identity
+ * (passed from the IPC boundary — never read from a process-global bag)
  * and a durable PreviewFileStore (ACP-backed or fixture).
  */
 
@@ -11,7 +12,7 @@ import {
   type PreviewFileResult,
   type PreviewFileStore,
 } from './preview-resolver'
-import { getTrustedPreviewContext } from './session-identity'
+import type { TrustedPreviewContext } from './session-identity'
 
 export type LoadArtifactPreviewDeps = {
   store: PreviewFileStore
@@ -20,12 +21,15 @@ export type LoadArtifactPreviewDeps = {
 /**
  * Product path: session identity → policy → store-owned handle → verified
  * bytes. No path is returned or reopened after the digest check.
+ *
+ * `trusted` must come from requireSenderTrustedContext / trySenderTrustedContext
+ * at the IPC boundary. Services never self-load identity.
  */
 export async function loadArtifactPreview(
   req: PreviewFileRequest,
   deps: LoadArtifactPreviewDeps,
+  trusted: TrustedPreviewContext | null,
 ): Promise<PreviewFileResult> {
-  const trusted = getTrustedPreviewContext()
   if (!trusted) {
     return {
       access: {

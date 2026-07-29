@@ -325,6 +325,7 @@ export const ResearchShell = (): React.JSX.Element => {
   const [skillsOut, setSkillsOut] = useState('')
   const [skillsInventory, setSkillsInventory] = useState<EcosystemSkillInventory | null>(null)
   const [skillsQuery, setSkillsQuery] = useState('')
+  const [uniprotPrompt, setUniprotPrompt] = useState('human insulin')
   const skillsList = async (): Promise<void> => {
     if (!lumen) return
     const parsed = parseEcosystemSkillInventory(await lumen.skillsList())
@@ -334,13 +335,38 @@ export const ResearchShell = (): React.JSX.Element => {
       return
     }
     setSkillsInventory(parsed.inventory)
-    setSkillsOut('')
+    setSkillsOut(
+      JSON.stringify(
+        {
+          total: parsed.inventory.total,
+          admittedExecutable: parsed.inventory.admittedExecutable,
+          stillQuarantined: parsed.inventory.stillQuarantined,
+          note: 'Biomni catalog: 1 of 224 executable (query_uniprot); 223 quarantined',
+        },
+        null,
+        2,
+      ),
+    )
   }
   const skillsBulkDeny = async (): Promise<void> => {
     if (!lumen) return
     setSkillsOut(
       JSON.stringify(
         await lumen.skillsBulkAdmit({ skillIds: ['a', 'b', 'c'] }),
+        null,
+        2,
+      ),
+    )
+  }
+  const skillsRunUniprot = async (): Promise<void> => {
+    if (!lumen) return
+    setSkillsOut(
+      JSON.stringify(
+        await lumen.skillsRunCapability({
+          capabilityId: 'ecosystem/biomni/query_uniprot',
+          prompt: uniprotPrompt,
+          maxResults: 5,
+        }),
         null,
         2,
       ),
@@ -769,6 +795,8 @@ export const ResearchShell = (): React.JSX.Element => {
                     本地科研能力目录先隔离、后逐项验收。每项必须映射到受控的 Lumen
                     工具，并由 Lumen 研究引擎管理权限、产物和证据；
                     <strong>目录本身不能执行，也不能批量批准</strong>。
+                    Biomni 工具共 224 项，当前仅 <code>query_uniprot</code> 可通过
+                    Rust Lumen 运行（fixture/offline）；其余 223 项仍为隔离候选。
                   </p>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button type="button" className={cx.btn} onClick={() => void skillsList()}>
@@ -781,8 +809,9 @@ export const ResearchShell = (): React.JSX.Element => {
                   {skillsInventory && (
                     <div style={{ marginTop: 16 }}>
                       <div className={cx.muted}>
-                        {skillsInventory.total} 项候选 · {skillsInventory.approved} 项已批准 ·{' '}
-                        {skillsInventory.quarantined} 项隔离中 · 仅 Lumen 研究引擎可执行
+                        {skillsInventory.total} 项候选 · {skillsInventory.admittedExecutable}{' '}
+                        项可执行 · {skillsInventory.stillQuarantined} 项隔离中 · 执行权仅
+                        SessionActor
                       </div>
                       <input
                         className={cx.input}
@@ -817,10 +846,15 @@ export const ResearchShell = (): React.JSX.Element => {
                                   display: 'flex',
                                   justifyContent: 'space-between',
                                   gap: 12,
+                                  alignItems: 'center',
                                 }}
                               >
                                 <strong>{candidate.displayName}</strong>
-                                <span className={cx.muted}>隔离中</span>
+                                <span className={cx.muted}>
+                                  {candidate.canRunViaLumen
+                                    ? '可通过 Lumen 运行'
+                                    : '隔离中'}
+                                </span>
                               </div>
                               <div className={cx.muted} style={{ marginTop: 4 }}>
                                 {candidate.discipline} ·{' '}
@@ -843,6 +877,40 @@ export const ResearchShell = (): React.JSX.Element => {
                               {candidate.riskFlags.length > 0 && (
                                 <div className={cx.muted} style={{ marginTop: 8 }}>
                                   待审风险：{candidate.riskFlags.join(' · ')}
+                                </div>
+                              )}
+                              {candidate.canRunViaLumen && candidate.runVia && (
+                                <div
+                                  style={{
+                                    marginTop: 12,
+                                    padding: 10,
+                                    borderRadius: 6,
+                                    background: 'var(--muted-bg, rgba(0,0,0,0.04))',
+                                  }}
+                                >
+                                  <div className={cx.muted}>
+                                    来源 {candidate.runVia.source} · 执行器{' '}
+                                    {candidate.runVia.executor} · 数据源{' '}
+                                    {candidate.runVia.dataSource} · 模式{' '}
+                                    {candidate.runVia.mode} · connector 固定为{' '}
+                                    {candidate.runVia.connectorId}
+                                  </div>
+                                  <input
+                                    className={cx.input}
+                                    style={{ width: '100%', marginTop: 8 }}
+                                    value={uniprotPrompt}
+                                    onChange={(e) => setUniprotPrompt(e.target.value)}
+                                    placeholder="prompt（映射为 UniProt query）"
+                                    aria-label="UniProt prompt"
+                                  />
+                                  <button
+                                    type="button"
+                                    className={cx.btn}
+                                    style={{ marginTop: 8 }}
+                                    onClick={() => void skillsRunUniprot()}
+                                  >
+                                    通过 Lumen 运行（fixture/offline）
+                                  </button>
                                 </div>
                               )}
                             </article>

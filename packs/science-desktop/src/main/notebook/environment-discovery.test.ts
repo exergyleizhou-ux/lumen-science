@@ -2,7 +2,8 @@
 // Upstream: https://github.com/aipoch/open-science @ d8f11e34314f
 // Change: Windows fixtures declare platform 'win32' (the pinned-path rule is platform-dependent), and the mixed-platform CRAN fixture now asserts the refusal it used to contradict.
 // Per-file diff and digests: docs/provenance/open-science-adoption.json
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { access, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -10,11 +11,37 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   collapseRscript,
+  createProductionHostEnumeration,
   defaultCandidatePaths,
   defaultDiscoveryDeps,
   discoverInterpreters,
-  type DiscoveryDeps
+  type DiscoveryDeps,
+  type HostPathEnumeration
 } from './environment-discovery'
+
+/** Hermetic host enumeration: no which/conda/host PATH/framework scans. */
+const fixtureHost = (
+  overrides: Partial<HostPathEnumeration> = {}
+): HostPathEnumeration =>
+  createProductionHostEnumeration({
+    whichAll: async () => [],
+    listCondaPrefixes: async () => [],
+    pyLauncherPaths: async () => [],
+    commonBinDirs: [],
+    readdirSync: (path) => {
+      try {
+        return readdirSync(path)
+      } catch {
+        return []
+      }
+    },
+    readdir: async (path) => readdir(path),
+    access: async (path) => {
+      await access(path)
+    },
+    exists: existsSync,
+    ...overrides
+  })
 
 describe('defaultDiscoveryDeps Windows conda R probes', () => {
   it('activates the interpreter own conda prefix for version and jsonlite probes', async () => {
@@ -307,12 +334,131 @@ describe('defaultCandidatePaths (targeted enumeration)', () => {
     mkdirSync(join(root, 'custom'), { recursive: true })
     writeFileSync(manualR, 'x')
 
-    const paths = await defaultCandidatePaths(root, () => [manualR])('r')
+    // Hermetic host: no real which/conda (CI used to hang here for 5s).
+    const paths = await defaultCandidatePaths(
+      root,
+      () => [manualR],
+      undefined,
+      fixtureHost()
+    )('r')
 
     expect(paths).toContain(join(rPrefix, 'R'))
     expect(paths).toContain(manualR)
     // The app default's Rscript sibling is collapsed (only its R remains).
     expect(paths).not.toContain(join(rPrefix, 'Rscript'))
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  it('returns no candidates when host enumeration and manual paths are empty', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'os-empty-'))
+    const paths = await defaultCandidatePaths(
+      root,
+      () => [],
+      undefined,
+      fixtureHost()
+    )('python')
+    expect(paths).toEqual([])
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  it('dedupes repeated which/manual candidates and keeps order stable', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'os-dedupe-'))
+    const py = join(root, 'bin', 'python3')
+    mkdirSync(join(root, 'bin'), { recursive: true })
+    writeFileSync(py, 'x')
+    const paths = await defaultCandidatePaths(
+      root,
+      () => [py, py],
+      undefined,
+      fixtureHost({
+        whichAll: async () => [py, py],
+        commonBinDirs: [join(root, 'bin')]
+      })
+    )('python')
+    expect(paths.filter((p) => p === py)).toHaveLength(1)
+    const again = await defaultCandidatePaths(
+      root,
+      () => [py],
+      undefined,
+      fixtureHost({ whichAll: async () => [py] })
+    )('python')
+    expect(again).toEqual(paths)
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  it('preserves manual then PATH then known-location priority instead of sorting paths', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'os-priority-'))
+    // Deliberately choose names whose lexicographic order is the reverse of
+    // product priority. A trailing `.sort()` would make this test fail.
+    const manual = join(root, 'z-manual', 'python3')
+    const fromPath = join(root, 'm-path', 'python3')
+    const knownDir = join(root, 'a-known')
+    const known = join(knownDir, 'python3')
+    for (const candidate of [manual, fromPath, known]) {
+      mkdirSync(join(candidate, '..'), { recursive: true })
+      writeFileSync(candidate, 'x')
+    }
+
+    const paths = await defaultCandidatePaths(
+      root,
+      () => [manual],
+      undefined,
+      fixtureHost({
+        whichAll: async (name) => (name === 'python3' ? [fromPath] : []),
+        commonBinDirs: [knownDir]
+      })
+    )('python')
+
+    expect(paths).toEqual([manual, fromPath, known])
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  it('refuses illegal relative manual paths without host enumeration', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'os-illegal-'))
+    const refused: string[] = []
+    const paths = await defaultCandidatePaths(
+      root,
+      () => ['python3', './local-python'],
+      (c) => refused.push(c),
+      fixtureHost()
+    )('python')
+    expect(paths).toEqual([])
+    expect(refused).toEqual(['python3', './local-python'])
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  it('treats failed conda as empty without timing out', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'os-conda-'))
+    let condaCalls = 0
+    const paths = await defaultCandidatePaths(
+      root,
+      () => [],
+      undefined,
+      fixtureHost({
+        listCondaPrefixes: async () => {
+          condaCalls += 1
+          // Production enumerator catches conda failures and returns [].
+          // Fixtures inject the same empty outcome — never a hang.
+          return []
+        }
+      })
+    )('python')
+    expect(condaCalls).toBe(1)
+    expect(paths).toEqual([])
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  it('which failure yields empty contribution (best-effort)', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'os-which-'))
+    const paths = await defaultCandidatePaths(
+      root,
+      () => [],
+      undefined,
+      fixtureHost({
+        whichAll: async () => [] // production returns [] on which failure
+      })
+    )('r')
+    expect(paths).toEqual([])
     rmSync(root, { recursive: true, force: true })
   })
 })
@@ -326,18 +472,20 @@ describe('defaultCandidatePaths Windows CRAN R detection', () => {
     writeFileSync(join(r443Dir, 'R.exe'), 'x')
     writeFileSync(join(r443Dir, 'Rscript.exe'), 'x')
 
-    // Override env to point to our fake Program Files and mock Windows platform
-    const originalEnv = process.env.ProgramFiles
-    const originalPlatform = process.platform
-    process.env.ProgramFiles = join(root, 'Program Files')
-    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
     try {
-      const paths = await defaultCandidatePaths(root)('r')
+      const paths = await defaultCandidatePaths(
+        root,
+        undefined,
+        undefined,
+        fixtureHost({
+          platform: 'win32',
+          env: { ProgramFiles: join(root, 'Program Files') },
+          homedir: () => root
+        })
+      )('r')
       expect(paths).toContain(join(r443Dir, 'R.exe'))
       expect(paths).not.toContain(join(r443Dir, 'Rscript.exe'))
     } finally {
-      process.env.ProgramFiles = originalEnv
-      Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
       rmSync(root, { recursive: true, force: true })
     }
   })
@@ -356,18 +504,21 @@ describe('defaultCandidatePaths Windows CRAN R detection', () => {
     mkdirSync(r430bin, { recursive: true })
     writeFileSync(join(r430bin, 'R.exe'), 'x')
 
-    const originalEnv = process.env.ProgramFiles
-    const originalPlatform = process.platform
-    process.env.ProgramFiles = join(root, 'Program Files')
-    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
     try {
-      const paths = await defaultCandidatePaths(root)('r')
+      const paths = await defaultCandidatePaths(
+        root,
+        undefined,
+        undefined,
+        fixtureHost({
+          platform: 'win32',
+          env: { ProgramFiles: join(root, 'Program Files') },
+          homedir: () => root
+        })
+      )('r')
       expect(paths).toContain(join(r443x64, 'R.exe'))
       expect(paths).toContain(join(r430bin, 'R.exe'))
       expect(paths.length).toBeGreaterThanOrEqual(2)
     } finally {
-      process.env.ProgramFiles = originalEnv
-      Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
       rmSync(root, { recursive: true, force: true })
     }
   })
@@ -387,22 +538,23 @@ describe('defaultCandidatePaths Windows CRAN R detection', () => {
     mkdirSync(rLocal, { recursive: true })
     writeFileSync(join(rLocal, 'R.exe'), 'x')
 
-    const original86 = process.env['ProgramFiles(x86)']
-    const originalLocal = process.env.LOCALAPPDATA
-    const originalPlatform = process.platform
-    process.env['ProgramFiles(x86)'] = join(root, 'Program Files (x86)')
-    process.env.LOCALAPPDATA = join(root, 'AppData', 'Local')
-    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
     try {
-      const paths = await defaultCandidatePaths(root)('r')
+      const paths = await defaultCandidatePaths(
+        root,
+        undefined,
+        undefined,
+        fixtureHost({
+          platform: 'win32',
+          env: {
+            'ProgramFiles(x86)': join(root, 'Program Files (x86)'),
+            LOCALAPPDATA: join(root, 'AppData', 'Local')
+          },
+          homedir: () => root
+        })
+      )('r')
       expect(paths).toContain(join(r32bit, 'R.exe'))
       expect(paths).toContain(join(rLocal, 'R.exe'))
     } finally {
-      if (original86 !== undefined) process.env['ProgramFiles(x86)'] = original86
-      else delete process.env['ProgramFiles(x86)']
-      if (originalLocal !== undefined) process.env.LOCALAPPDATA = originalLocal
-      else delete process.env.LOCALAPPDATA
-      Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
       rmSync(root, { recursive: true, force: true })
     }
   })
@@ -421,18 +573,21 @@ describe('defaultCandidatePaths Windows CRAN R detection', () => {
     mkdirSync(join(programFiles, 'R-alpha'), { recursive: true })
     mkdirSync(join(programFiles, '4.4.1'), { recursive: true })
 
-    const originalEnv = process.env.ProgramFiles
-    const originalPlatform = process.platform
-    process.env.ProgramFiles = join(root, 'Program Files')
-    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
     try {
-      const paths = await defaultCandidatePaths(root)('r')
+      const paths = await defaultCandidatePaths(
+        root,
+        undefined,
+        undefined,
+        fixtureHost({
+          platform: 'win32',
+          env: { ProgramFiles: join(root, 'Program Files') },
+          homedir: () => root
+        })
+      )('r')
       expect(paths).toContain(join(rValid, 'R.exe'))
       expect(paths.filter((p) => p.includes('docs')).length).toBe(0)
       expect(paths.filter((p) => p.includes('R-alpha')).length).toBe(0)
     } finally {
-      process.env.ProgramFiles = originalEnv
-      Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
       rmSync(root, { recursive: true, force: true })
     }
   })
@@ -443,22 +598,33 @@ describe('defaultCandidatePaths Windows CRAN R detection', () => {
     mkdirSync(join(programFiles, 'R-4.4.3', 'bin', 'x64'), { recursive: true })
     writeFileSync(join(programFiles, 'R-4.4.3', 'bin', 'x64', 'R.exe'), 'x')
 
-    const originalEnv = process.env.ProgramFiles
-    const originalPlatform = process.platform
-    process.env.ProgramFiles = join(root, 'Program Files')
     try {
       // On Windows: Python should not scan R paths
-      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
-      const pythonPaths = await defaultCandidatePaths(root)('python')
+      const pythonPaths = await defaultCandidatePaths(
+        root,
+        undefined,
+        undefined,
+        fixtureHost({
+          platform: 'win32',
+          env: { ProgramFiles: join(root, 'Program Files') },
+          homedir: () => root
+        })
+      )('python')
       expect(pythonPaths.filter((p) => p.includes('R-4.4.3')).length).toBe(0)
 
       // On non-Windows: R should not enumerate CRAN Program Files roots
-      Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
-      const rPaths = await defaultCandidatePaths(root)('r')
+      const rPaths = await defaultCandidatePaths(
+        root,
+        undefined,
+        undefined,
+        fixtureHost({
+          platform: 'darwin',
+          env: { ProgramFiles: join(root, 'Program Files') },
+          homedir: () => root
+        })
+      )('r')
       expect(rPaths.filter((p) => p.includes('R-4.4.3')).length).toBe(0)
     } finally {
-      process.env.ProgramFiles = originalEnv
-      Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
       rmSync(root, { recursive: true, force: true })
     }
   })

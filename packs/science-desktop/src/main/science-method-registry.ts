@@ -43,6 +43,9 @@ export const SCIENCE_METHODS = [
   'run_csv',
   'import_preview',
   'connector_fetch',
+  // Admitted ecosystem capability entry (Biomni UniProt first). Maps to
+  // connector_fetch with a server-fixed connector_id; not a second authority.
+  'capability_run',
   'evidence_dossier',
   'ssh_scp_fixture',
   'goal_host_verify',
@@ -80,7 +83,12 @@ export const SCIENCE_METHODS = [
 export type ScienceMethodName = (typeof SCIENCE_METHODS)[number]
 
 const ALLOWED = new Set<string>(SCIENCE_METHODS)
-const SENDER_BOUND_METHODS = new Set<ScienceMethodName>(['skill_quarantine_import'])
+const SENDER_BOUND_METHODS = new Set<ScienceMethodName>([
+  'skill_quarantine_import',
+  // Capability run must use Desktop sender-bound IPC so renderer cannot choose
+  // owner/project/connector_id. Generic acp:call is rejected for this method.
+  'capability_run',
+])
 
 /**
  * Names the desktop sends that exist in NEITHER engine — not in the Rust ACP

@@ -20,10 +20,7 @@ import {
   runDossierGoldPath,
   type DossierFixture,
 } from '../src/main/files/dossier-service.js'
-import {
-  setTrustedPreviewContext,
-  clearTrustedPreviewContext,
-} from '../src/main/files/session-identity.js'
+import type { TrustedPreviewContext } from '../src/main/files/session-identity.js'
 import {
   registerScienceIpcHandlers,
   type IpcMainLike,
@@ -96,8 +93,7 @@ async function run() {
   })
 
   // ── Access gate ──────────────────────────────────────────────
-  clearTrustedPreviewContext()
-  const plan = planReview({
+    const plan = planReview({
     runId: SOURCE_RUN,
     verdict: 'pass',
     summary: REVIEW_SUMMARY,
@@ -109,8 +105,7 @@ async function run() {
   )
   await test('access denied without session', () => ok(!denied.ok))
 
-  setTrustedPreviewContext({ ownerId: 'o1', projectId: 'p1' })
-  const allowed = assertReviewAccess(makeFullPlan(plan), { ownerId: 'o1', projectId: 'p1' })
+    const allowed = assertReviewAccess(makeFullPlan(plan), { ownerId: 'o1', projectId: 'p1' })
   await test('access ok with session', () => ok(allowed.ok))
 
   // ── isVerdictStale ───────────────────────────────────────────
@@ -164,9 +159,7 @@ async function run() {
   })
 
   // ── ACP payload includes artifacts ───────────────────────────
-  clearTrustedPreviewContext()
-  setTrustedPreviewContext({ ownerId: 'o1', projectId: 'p1' })
-  const acpP = buildReviewAcpPayload(
+      const acpP = buildReviewAcpPayload(
     makeFullPlan(plan),
     [{ artifactId: A_HASH, expectedSha256: A_HASH }],
     { ownerId: 'o1', projectId: 'p1' },
@@ -234,21 +227,19 @@ async function run() {
     storeRoot: 'science-store',
   })
 
-  clearTrustedPreviewContext()
-  const noSess = await svc.submit({
+    const noSess = await svc.submit({
     runId: SOURCE_RUN,
     verdict: 'pass',
     summary: REVIEW_SUMMARY,
     artifacts: [{ artifactId: A_HASH, expectedSha256: A_HASH }],
-  })
+  }, null)
   await test('submit fails without session', () => {
     ok((noSess as { ok?: boolean }).ok === false)
   })
 
   // Hash mismatch: the content-addressed index key claims A but its record
   // claims B. The desktop catches this early; Rust rehashes again after Allow.
-  setTrustedPreviewContext({ ownerId: 'o1', projectId: 'p1' })
-  store.put(A_HASH, {
+    store.put(A_HASH, {
     path: '/s/a1',
     sha256: B_HASH,
     ownerId: 'o1',
@@ -260,7 +251,7 @@ async function run() {
     verdict: 'pass',
     summary: REVIEW_SUMMARY,
     artifacts: [{ artifactId: A_HASH, expectedSha256: A_HASH }],
-  })
+  }, { ownerId: "o1", projectId: "p1" })
   await test('submit rejects hash mismatch via store', () => {
     ok((badSubmit as { ok?: boolean }).ok === false)
     ok(
@@ -280,7 +271,7 @@ async function run() {
     verdict: 'pass',
     summary: REVIEW_SUMMARY,
     artifacts: [{ artifactId: A_HASH, expectedSha256: A_HASH }],
-  })
+  }, { ownerId: "o1", projectId: "p1" })
   await test('submit succeeds with valid store hash', () => {
     ok((submit as { ok?: boolean }).ok)
     strictEqual(acpCalls, 1)
@@ -332,13 +323,13 @@ async function run() {
     verdict: 'pass',
     summary: REVIEW_SUMMARY,
     artifacts: [{ artifactId: A_HASH, expectedSha256: A_HASH }],
-  })
+  }, { ownerId: "o1", projectId: "p1" })
   await test('submit rejects legacy loose review response', () => {
     strictEqual((looseResponse as { ok?: boolean }).ok, false)
   })
 
   // ── Dossier export projection ────────────────────────────────
-  const doss = svc.exportDossier()
+  const doss = svc.exportDossier({ ownerId: "o1", projectId: "p1" })
   await test('dossier export has artifacts + hashes + refs', () => {
     ok(!('ok' in doss && (doss as { ok: boolean }).ok === false))
     const d = doss as { projectId: string; verdictRefs: string[]; artifacts: { artifactId: string; sha256: string }[]; planRefs: string[] }
@@ -406,7 +397,6 @@ async function run() {
     previewStore: dsStore,
   })
 
-  clearTrustedPreviewContext()
 
   const dossierResult = await runDossierGoldPath(fixture, {
     catalog,

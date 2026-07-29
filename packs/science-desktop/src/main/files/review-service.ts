@@ -30,7 +30,7 @@ import {
   type ReviewVerdictProjection,
   type ReviewEvidence,
 } from './review-plan'
-import { getTrustedPreviewContext } from './session-identity'
+import type { TrustedPreviewContext } from './session-identity'
 import type { PreviewFileStore } from './preview-resolver'
 
 export type AcpReviewCall = (
@@ -40,10 +40,15 @@ export type AcpReviewCall = (
 
 export type ReviewService = {
   plan: (req: ReviewRequest) => ReturnType<typeof planReview>
-  submit: (req: ReviewRequest) => Promise<unknown>
+  submit: (
+    req: ReviewRequest,
+    trusted: TrustedPreviewContext | null,
+  ) => Promise<unknown>
   history: () => ReviewVerdictProjection[]
   latest: () => ReviewVerdictProjection | null
-  exportDossier: () => DossierExportProjection | { ok: false; reason: string }
+  exportDossier: (
+    trusted: TrustedPreviewContext | null,
+  ) => DossierExportProjection | { ok: false; reason: string }
   /** Check if latest verdict has gone stale against fresh evidence */
   checkStale: (evidence: ReviewEvidence[]) => { stale: boolean; mismatches: string[] } | { ok: false; reason: string }
   clear: () => void
@@ -72,8 +77,7 @@ export function createReviewService(opts: {
       return planReview(req)
     },
 
-    async submit(req) {
-      const trusted = getTrustedPreviewContext()
+    async submit(req, trusted) {
       if (!trusted) {
         return { ok: false, reason: 'no trusted session — open a project before submitting review' }
       }
@@ -238,8 +242,7 @@ export function createReviewService(opts: {
       return history.length > 0 ? history[history.length - 1] : null
     },
 
-    exportDossier() {
-      const trusted = getTrustedPreviewContext()
+    exportDossier(trusted) {
       if (!trusted) {
         return { ok: false, reason: 'no trusted session for dossier export' }
       }

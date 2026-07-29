@@ -12,10 +12,7 @@ import {
   hashNotebookCode,
 } from '../src/main/files/notebook-plan.js'
 import { createNotebookService } from '../src/main/files/notebook-service.js'
-import {
-  setTrustedPreviewContext,
-  clearTrustedPreviewContext,
-} from '../src/main/files/session-identity.js'
+import type { TrustedPreviewContext } from '../src/main/files/session-identity.js'
 import {
   registerScienceIpcHandlers,
   type IpcMainLike,
@@ -70,8 +67,7 @@ async function run() {
     strictEqual(p.codeHash, hashNotebookCode('print(1+1)\n'))
   })
 
-  clearTrustedPreviewContext()
-  const livePlan = planNotebookCell({ language: 'python', code: 'x=1\n' }) as {
+    const livePlan = planNotebookCell({ language: 'python', code: 'x=1\n' }) as {
     dryRun: boolean
     tool: string
     authority: string
@@ -84,8 +80,7 @@ async function run() {
     ok(!a.ok)
   })
 
-  setTrustedPreviewContext({ ownerId: 'o1', projectId: 'p1' })
-  await test('execute access ok with session', () => {
+    await test('execute access ok with session', () => {
     const a = assertNotebookExecuteAccess(
       {
         planId: 'p',
@@ -131,15 +126,13 @@ async function run() {
     strictEqual(acpCalls, 0)
   })
 
-  clearTrustedPreviewContext()
-  const noSess = await svc.execute({ language: 'python', code: 'print(1)\n' })
+    const noSess = await svc.execute({ language: 'python', code: 'print(1)\n' }, null)
   await test('service execute fails without session', () => {
     ok(noSess && (noSess as { ok?: boolean }).ok === false)
     strictEqual(acpCalls, 0)
   })
 
-  setTrustedPreviewContext({ ownerId: 'o1', projectId: 'p1' })
-  const exec = await svc.execute({ language: 'python', code: 'print(2)\n' })
+    const exec = await svc.execute({ language: 'python', code: 'print(2)\n' }, { ownerId: 'o1', projectId: 'p1' })
   await test('service execute via ACP', () => {
     ok((exec as { ok?: boolean }).ok, JSON.stringify(exec))
     strictEqual(acpCalls, 1)
@@ -178,7 +171,7 @@ async function run() {
       acpCall: async () => ({ state: 'denied' }),
       resolveInterpreter: async () => ({ ok: true, interpreterPath: '/usr/bin/python3' }),
     })
-    await failing.execute({ language: 'python', code: 'print(3)\n' })
+    await failing.execute({ language: 'python', code: 'print(3)\n' }, { ownerId: 'o1', projectId: 'p1' })
     strictEqual(failing.history()[0]?.ok, false)
   })
 
@@ -191,7 +184,7 @@ async function run() {
       },
       resolveInterpreter: async () => ({ ok: false, reason: 'no runnable Python' }),
     })
-    const out = (await bare.execute({ language: 'python', code: 'print(4)\n' })) as {
+    const out = (await bare.execute({ language: 'python', code: 'print(4)\n' }, { ownerId: 'o1', projectId: 'p1' })) as {
       ok?: boolean
       reason?: string
     }
@@ -200,7 +193,7 @@ async function run() {
     strictEqual(called, 0)
   })
 
-  const ipynb = svc.exportIpynb()
+  const ipynb = svc.exportIpynb({ ownerId: 'o1', projectId: 'p1' })
   await test('export ipynb projection', () => {
     ok(!('ok' in ipynb && (ipynb as { ok: boolean }).ok === false))
     const nb = ipynb as { nbformat: number; cells: unknown[] }
@@ -238,8 +231,7 @@ async function run() {
     },
   }
   const catalog = new LocalProjectCatalog()
-  clearTrustedPreviewContext()
-  registerScienceIpcHandlers(ipc, {
+    registerScienceIpcHandlers(ipc, {
     safeHandle,
     getLumenBinaryHash: () => 'h',
     previewStore: new AcpPreviewStore(),
@@ -268,19 +260,14 @@ async function run() {
     ok(dryRes.ok)
   })
 
-  // create+open project then execute
+  // create+open project then execute (sender-bound identity)
+  const senderEvt = { sender: { id: 1, on() {} } }
   const create = handlers.get('files:create-ui-project')!
-  const created = await create({}, { name: 'nb-proj' })
+  const created = await create(senderEvt, { name: 'nb-proj' })
   const open = handlers.get('files:open-ui-project')!
-  await open({}, { projectId: created.project.id, ownerId: 'local-user' })
-  // re-bind trust for our svc which uses global identity — open set it for local-user
-  // defaultOwner is local-user but catalog owner is local-user; hybrid ok
-  setTrustedPreviewContext({
-    ownerId: created.project.ownerId,
-    projectId: created.project.id,
-  })
+  await open(senderEvt, { projectId: created.project.id, ownerId: 'local-user' })
   const exH = handlers.get('notebook:execute-cell')!
-  const exRes = await exH({}, { language: 'python', code: 'print(9)\n' })
+  const exRes = await exH(senderEvt, { language: 'python', code: 'print(9)\n' })
   await test('ipc execute after project open', () => {
     ok(exRes.ok, JSON.stringify(exRes))
   })

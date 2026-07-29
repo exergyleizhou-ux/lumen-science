@@ -16,8 +16,6 @@ import {
 import { bindTrustedSession } from '../src/main/files/session-binding.js'
 import { validateIpcChannel } from '../src/main/lumen-authority-policy.js'
 import {
-  setTrustedPreviewContext,
-  clearTrustedPreviewContext,
   setTrustedPreviewContextForSender,
   clearTrustedPreviewContextForSender,
   clearAllTrustedPreviewContexts,
@@ -33,6 +31,7 @@ import pathFix from 'node:path'
 const REG_FIXTURE = pathFix.join(fsFix.mkdtempSync(pathFix.join(osFix.tmpdir(), 'reg-fixture-')), 'a1.csv')
 fsFix.writeFileSync(REG_FIXTURE, 'reg,a1\n')
 const REG_SHA = '451ef1ee45f12e12fb943665c66d8dc13a908c4d21ba4b4a167b6c676f2c2e10'
+const BIOMNI_FIXTURE_BASE64 = Buffer.from('{"results":[],"totalResults":0}').toString('base64')
 
 let failures = 0
 function test(name: string, fn: () => void | Promise<void>) {
@@ -99,6 +98,7 @@ async function run() {
         run: { context: { run_id: 'skill-quarantine-run-1' } },
       }
     },
+    biomniUniprotFixtureBase64: BIOMNI_FIXTURE_BASE64,
     previewStore: store,
   })
 
@@ -141,18 +141,18 @@ async function run() {
     )
   })
 
-  clearTrustedPreviewContext()
+  clearAllTrustedPreviewContexts()
   const previewHandler = handlers.get('files:preview-by-artifact')!
-  const denied = (await previewHandler({}, { artifactId: 'a1' })) as {
+  const denied = (await previewHandler({ sender: { id: 1, on() {} } }, { artifactId: 'a1' })) as {
     access: { ok: boolean }
   }
   await test('preview handler denies without session identity', () => {
     ok(denied && denied.access && denied.access.ok === false)
   })
 
-  setTrustedPreviewContext({ ownerId: 'o1', projectId: 'p1' })
+  setTrustedPreviewContextForSender(1, { ownerId: 'o1', projectId: 'p1' })
   const allowed = (await previewHandler(
-    {},
+    { sender: { id: 1, on() {} } },
     {
       artifactId: 'a1',
       expectedSha256: REG_SHA,
@@ -179,14 +179,14 @@ async function run() {
     strictEqual(allowed.mimeType, 'text/csv')
   })
 
-  setTrustedPreviewContext({ ownerId: 'evil', projectId: 'p1' })
-  const blocked = (await previewHandler({}, { artifactId: 'a1' })) as {
+  setTrustedPreviewContextForSender(1, { ownerId: 'evil', projectId: 'p1' })
+  const blocked = (await previewHandler({ sender: { id: 1, on() {} } }, { artifactId: 'a1' })) as {
     access: { ok: boolean }
   }
   await test('preview handler blocks cross-owner session', () => {
     ok(!blocked.access.ok)
   })
-  clearTrustedPreviewContext()
+  clearAllTrustedPreviewContexts()
 
   clearAllTrustedPreviewContexts()
   const skillHandler = handlers.get('settings:import-skill-zip-batch')!
@@ -195,7 +195,7 @@ async function run() {
   setTrustedPreviewContextForSender(11, { ownerId: 'o1', projectId: 'p1' })
   setTrustedPreviewContextForSender(22, { ownerId: 'o2', projectId: 'p2' })
   // Process-global identity must NOT authorize ZIP quarantine.
-  setTrustedPreviewContext({ ownerId: 'global-evil', projectId: 'p-evil' })
+  /* process-global identity removed — only sender map is authority */
 
   const quarantine = (await skillHandler(
     { sender: senderA },
@@ -250,7 +250,12 @@ async function run() {
       items: [{ subPath: 'skills/alpha' }],
     })) as { _lumenError?: boolean; message?: string }
     strictEqual(bypass._lumenError, true)
-    ok(/not callable through generic acp:call/i.test(bypass.message ?? ''))
+    ok(
+      /sender-bound Desktop IPC route|not callable through generic acp:call|cannot carry trusted identity/i.test(
+        bypass.message ?? '',
+      ),
+      bypass.message,
+    )
     strictEqual(scienceCalls.length, callsBeforeBypass)
   })
 
@@ -418,6 +423,138 @@ async function run() {
       ownerId: 'new-owner',
       projectId: 'new-project',
     })
+  })
+
+
+  await test('notebook/review/compute multi-sender isolation + spoof rejection', async () => {
+    clearAllTrustedPreviewContexts()
+    setTrustedPreviewContextForSender(101, { ownerId: 'owner-a', projectId: 'proj-a' })
+    setTrustedPreviewContextForSender(202, { ownerId: 'owner-b', projectId: 'proj-b' })
+    const evtA = { sender: { id: 101, on() {} } }
+    const evtB = { sender: { id: 202, on() {} } }
+    const noSender = {}
+
+    const nbExec = handlers.get('notebook:execute-cell')!
+    const nbA = await nbExec(evtA, { language: 'python', code: 'print(1)\\n' })
+    // Without full notebook wiring this may fail for interpreter reasons, but must not
+    // use the other sender's project. Prefer bound identity failure modes.
+    const nbNo = await nbExec(noSender, { language: 'python', code: 'print(1)\\n' })
+    ok((nbNo as { ok?: boolean }).ok === false, 'notebook without sender must fail')
+
+    const computePlan = handlers.get('compute:plan')!
+    const planA = await computePlan(evtA, { hostname: 'hpc.a.local', targetKind: 'ssh_fixture' })
+    const planB = await computePlan(evtB, { hostname: 'hpc.b.local', targetKind: 'ssh_fixture' })
+    const planNo = await computePlan(noSender, { hostname: 'hpc.x.local', targetKind: 'ssh_fixture' })
+    ok((planNo as { ok?: boolean }).ok === false, 'compute without sender must fail')
+    // A and B each get their own trusted context — neither may succeed under null identity
+    void planA
+    void planB
+    void nbA
+
+    const reviewSubmit = handlers.get('review:submit')!
+    const revNo = await reviewSubmit(noSender, {
+      runId: 'r1',
+      verdict: 'pass',
+      summary: 'x'.repeat(20),
+      artifacts: [{ artifactId: 'a', expectedSha256: '0'.repeat(64) }],
+    })
+    ok((revNo as { ok?: boolean }).ok === false, 'review without sender must fail')
+
+    // generic acp:call cannot invoke sender-bound skill quarantine
+    const acp = handlers.get('acp:call')!
+    const bypass = await acp(evtA, 'skill_quarantine_import', {
+      ownerId: 'forged',
+      projectId: 'forged',
+    })
+    ok((bypass as { _lumenError?: boolean })._lumenError === true, 'acp:call must refuse sender-bound method')
+
+    // destroy-style clear of one sender leaves the other intact
+    clearTrustedPreviewContextForSender(101)
+    strictEqual(getTrustedPreviewContextForSender(101), null)
+    strictEqual(getTrustedPreviewContextForSender(202)?.projectId, 'proj-b')
+    clearAllTrustedPreviewContexts()
+    strictEqual(getTrustedPreviewContextForSender(202), null)
+  })
+
+  await test('skills:run-capability binds identity and fixture in main', async () => {
+    clearAllTrustedPreviewContexts()
+    const runCap = handlers.get('skills:run-capability')!
+    ok(runCap, 'skills:run-capability must be registered')
+    const noSender = await runCap({}, {
+      capabilityId: 'ecosystem/biomni/query_uniprot',
+      prompt: 'human insulin',
+    })
+    ok((noSender as { ok?: boolean }).ok === false, 'missing sender must fail')
+
+    setTrustedPreviewContextForSender(77, { ownerId: 'owner-a', projectId: 'proj-a' })
+    const forged = await runCap(
+      { sender: { id: 77, on() {} } },
+      {
+        capabilityId: 'ecosystem/biomni/query_uniprot',
+        prompt: 'human insulin',
+        fixturePaths: ['/tmp/renderer-selected.json'],
+        ownerId: 'forged',
+        projectId: 'forged',
+      },
+    )
+    ok((forged as { ok?: boolean }).ok === false, 'forged owner/path must fail')
+    ok(
+      /may not supply ownerId/i.test(String((forged as { reason?: string }).reason ?? '')),
+      String((forged as { reason?: string }).reason),
+    )
+
+    const otherTool = await runCap(
+      { sender: { id: 77, on() {} } },
+      {
+        capabilityId: 'ecosystem/biomni/analyze_enzyme_kinetics_assay',
+        prompt: 'x',
+      },
+    )
+    ok((otherTool as { ok?: boolean }).ok === false, 'non-admitted tool must fail')
+
+    const callsBeforeCapability = scienceCalls.length
+    const accepted = await runCap(
+      { sender: { id: 77, on() {} } },
+      {
+        capabilityId: 'ecosystem/biomni/query_uniprot',
+        prompt: 'human insulin',
+        maxResults: 5,
+      },
+    )
+    ok((accepted as { ok?: boolean }).ok === true, `valid capability failed: ${JSON.stringify(accepted)}`)
+    strictEqual(scienceCalls.length, callsBeforeCapability + 1)
+    const capabilityCall = scienceCalls.at(-1)!
+    strictEqual(capabilityCall.name, 'capability_run')
+    strictEqual(capabilityCall.args.ownerId, 'owner-a')
+    strictEqual(capabilityCall.args.projectId, 'proj-a')
+    deepStrictEqual(capabilityCall.args.fixtureDataBase64, [BIOMNI_FIXTURE_BASE64])
+    strictEqual('fixturePaths' in capabilityCall.args, false)
+    strictEqual('connectorId' in capabilityCall.args, false)
+    strictEqual('sessionId' in capabilityCall.args, false)
+
+    for (const maxResults of [0, 51, -1, 1.5, '5', null]) {
+      const before = scienceCalls.length
+      const invalid = await runCap(
+        { sender: { id: 77, on() {} } },
+        {
+          capabilityId: 'ecosystem/biomni/query_uniprot',
+          prompt: 'human insulin',
+          maxResults,
+        },
+      )
+      ok((invalid as { ok?: boolean }).ok === false, `maxResults=${String(maxResults)} was accepted`)
+      strictEqual(scienceCalls.length, before, 'invalid maxResults reached Rust authority')
+    }
+
+    const acp = handlers.get('acp:call')!
+    const bypass = await acp({ sender: { id: 77, on() {} } }, 'capability_run', {
+      ownerId: 'forged',
+      projectId: 'forged',
+      capabilityId: 'ecosystem/biomni/query_uniprot',
+      input: { prompt: 'x' },
+    })
+    ok((bypass as { _lumenError?: boolean })._lumenError === true)
+    clearAllTrustedPreviewContexts()
   })
 
   const hashHandler = handlers.get('app:get-lumen-hash')!

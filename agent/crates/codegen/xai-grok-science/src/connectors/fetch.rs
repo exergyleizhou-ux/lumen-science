@@ -184,6 +184,22 @@ pub fn begin_fetch(store: &ScienceStore, context: RunContext) -> Result<ScienceR
     Ok(ticket)
 }
 
+/// Optional admission provenance for an ecosystem capability mapped onto a
+/// connector fetch. This value is carried through the SessionActor command;
+/// adapters may not append it after the actor has already declared success.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CapabilitySourceProvenance {
+    pub capability_id: String,
+    pub repository: String,
+    pub exact_commit: String,
+    pub source_path: String,
+    pub source_sha256: String,
+    pub license: String,
+    pub reuse_mode: String,
+    pub lumen_executor: String,
+}
+
 /// Complete an allowed fetch run. Re-parses every exchange; a malformed
 /// response fails the run closed with no artifacts registered.
 pub fn finish_fetch(
@@ -193,6 +209,7 @@ pub fn finish_fetch(
     query: &str,
     exchanges: Vec<FetchExchange>,
     tool_identity: impl Into<String>,
+    capability_provenance: Option<CapabilitySourceProvenance>,
 ) -> Result<FetchResult> {
     let run = store.load_run(&ticket.run_id)?;
     if run.state != RunState::Running
@@ -320,6 +337,37 @@ pub fn finish_fetch(
             verified_at: Utc::now(),
         })?;
     }
+    if let Some(capability) = capability_provenance {
+        let source = format!(
+            "{}@{}#{}",
+            capability.repository, capability.exact_commit, capability.source_path
+        );
+        store.add_provenance(Provenance {
+            run_id: ticket.run_id.clone(),
+            source_uri: capability.repository.clone(),
+            source_commit: Some(capability.exact_commit.clone()),
+            source_path: Some(capability.source_path.clone()),
+            license: capability.license.clone(),
+            retrieved_at: Utc::now(),
+            input_sha256: capability.source_sha256.clone(),
+            tool: capability.lumen_executor.clone(),
+            environment: BTreeMap::from([
+                ("capability_id".into(), capability.capability_id.clone()),
+                ("reuse_mode".into(), capability.reuse_mode.clone()),
+                ("connector".into(), connector_id.to_owned()),
+            ]),
+        })?;
+        store.add_evidence(Evidence {
+            run_id: ticket.run_id.clone(),
+            claim: format!(
+                "capability {} was admitted from the exact audited source",
+                capability.capability_id
+            ),
+            source,
+            artifact_sha256: artifacts.first().map(|artifact| artifact.sha256.clone()),
+            verified_at: Utc::now(),
+        })?;
+    }
     store.append_event(
         &ticket.run_id,
         "LumenToolDispatch",
@@ -370,6 +418,7 @@ pub fn execute_approved_fetch(
         query,
         exchanges,
         "kernel-test-only/direct-executor",
+        None,
     )
 }
 
@@ -419,6 +468,40 @@ mod tests {
                 ESUMMARY,
             ),
         ]
+    }
+
+    #[test]
+    fn finish_fetch_rejects_a_stale_call_id_without_outputs() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path());
+        let ticket = begin_fetch(
+            &store,
+            csv::fixture_context(temp.path(), ProjectId::new("p"), "alice"),
+        )
+        .unwrap();
+        csv::mark_allowed(&store, &ticket).unwrap();
+        let run_id = ticket.run_id.clone();
+        let mut stale = ticket;
+        stale.call_id = CallId::new("stale-science-connector-fetch");
+
+        let rejected = finish_fetch(
+            &store,
+            stale,
+            "uniprot",
+            "human insulin",
+            vec![exchange(
+                "uniprot",
+                &super::super::uniprot::search_path("human insulin", 5),
+                UNIPROT,
+            )],
+            "kernel-test-only/stale-call",
+            None,
+        );
+        assert!(rejected.is_err(), "stale approval finished the fetch");
+        assert_eq!(store.load_run(&run_id).unwrap().state, RunState::Running);
+        assert!(store.artifacts(&run_id).unwrap().is_empty());
+        assert!(store.evidence(&run_id).unwrap().is_empty());
+        assert!(store.provenance(&run_id).unwrap().is_empty());
     }
 
     #[test]

@@ -14,8 +14,8 @@ import {
 } from '../src/main/files/science-ipc.js'
 import { validateIpcChannel } from '../src/main/lumen-authority-policy.js'
 import {
-  clearTrustedPreviewContext,
-  getTrustedPreviewContext,
+  clearAllTrustedPreviewContexts,
+  getTrustedPreviewContextForSender,
 } from '../src/main/files/session-identity.js'
 
 // Real fixture file: the resolver reads the bytes.
@@ -71,7 +71,7 @@ async function run() {
     },
   }
 
-  clearTrustedPreviewContext()
+  clearAllTrustedPreviewContexts()
   registerScienceIpcHandlers(ipc, {
     safeHandle,
     getLumenBinaryHash: () => 'abc',
@@ -166,29 +166,30 @@ async function run() {
 
   // Foreign owner cannot open catalog project
   const open = handlers.get('files:open-ui-project')!
-  const denied = await open({}, {
+  const senderEvt = { sender: { id: 1, on() {} } }
+  const denied = await open(senderEvt, {
     projectId: created.project.id,
     ownerId: 'attacker',
   })
   await test('open denies foreign owner', () => {
     ok(!denied.ok)
-    strictEqual(getTrustedPreviewContext(), null)
+    strictEqual(getTrustedPreviewContextForSender(1), null)
   })
 
-  const opened = await open({}, {
+  const opened = await open(senderEvt, {
     projectId: created.project.id,
     ownerId: 'local-user',
   })
   await test('open binds + seeds', () => {
     ok(opened.ok, JSON.stringify(opened))
     strictEqual(opened.seeded, 1)
-    const ctx = getTrustedPreviewContext()
+    const ctx = getTrustedPreviewContextForSender(1)
     strictEqual(ctx?.projectId, created.project.id)
     strictEqual(ctx?.ownerId, 'local-user')
   })
 
   const preview = handlers.get('files:preview-by-artifact')!
-  const prev = await preview({}, {
+  const prev = await preview(senderEvt, {
     artifactId: 'from-list',
     expectedSha256: LIST_SHA,
   })

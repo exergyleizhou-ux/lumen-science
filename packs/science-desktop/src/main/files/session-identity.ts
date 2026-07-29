@@ -4,9 +4,8 @@
  * Owner/project for artifact access MUST come from main-process session
  * state set at project/session open — never from renderer self-attestation.
  *
- * Sender-scoped map is the authority path for ZIP/.skill quarantine.
- * A process-global bag remains only for legacy consumers that have not yet
- * migrated (notebook/review/compute/skill/preview). Those remain P0.
+ * Sender-scoped map is the sole authority path. Process-global identity is
+ * gone: every identity-sensitive IPC derives binding from event.sender.id.
  *
  * State lives on globalThis so ESM/CJS dual-graph (tsx .js vs .ts imports)
  * still share one identity — OSF-2 isolation must not silently diverge.
@@ -17,13 +16,11 @@ export interface TrustedPreviewContext {
   projectId: string
 }
 
-const GLOBAL_KEY = '__lumenTrustedPreviewContext__'
 const SENDER_MAP_KEY = '__lumenTrustedPreviewContextBySender__'
 const SENDER_CLEANUP_KEY = '__lumenTrustedPreviewSenderCleanupAttached__'
 const SENDER_EPOCH_KEY = '__lumenTrustedPreviewContextEpochBySender__'
 
 type GlobalBag = typeof globalThis & {
-  [GLOBAL_KEY]?: TrustedPreviewContext | null
   [SENDER_MAP_KEY]?: Map<number, TrustedPreviewContext>
   [SENDER_CLEANUP_KEY]?: Set<number>
   [SENDER_EPOCH_KEY]?: Map<number, number>
@@ -93,24 +90,6 @@ export function commitTrustedPreviewContextForSender(
   return true
 }
 
-/** @deprecated Process-global identity — residual P0 for non-ZIP consumers. */
-export function setTrustedPreviewContext(ctx: TrustedPreviewContext): void {
-  if (!ctx.ownerId || !ctx.projectId) {
-    throw new Error('trusted preview context requires ownerId and projectId')
-  }
-  bag()[GLOBAL_KEY] = { ownerId: ctx.ownerId, projectId: ctx.projectId }
-}
-
-/** @deprecated Process-global identity — residual P0 for non-ZIP consumers. */
-export function getTrustedPreviewContext(): TrustedPreviewContext | null {
-  return bag()[GLOBAL_KEY] ?? null
-}
-
-/** @deprecated Process-global identity — residual P0 for non-ZIP consumers. */
-export function clearTrustedPreviewContext(): void {
-  bag()[GLOBAL_KEY] = null
-}
-
 export function setTrustedPreviewContextForSender(
   senderId: number,
   ctx: TrustedPreviewContext,
@@ -137,7 +116,6 @@ export function clearTrustedPreviewContextForSender(senderId: number): void {
 
 /** Engine stop/restart or full identity invalidation. */
 export function clearAllTrustedPreviewContexts(): void {
-  bag()[GLOBAL_KEY] = null
   const epochs = senderEpochs()
   for (const senderId of epochs.keys()) {
     epochs.set(senderId, (epochs.get(senderId) ?? 0) + 1)
@@ -147,6 +125,53 @@ export function clearAllTrustedPreviewContexts(): void {
 
 export function listTrustedPreviewSenderIds(): number[] {
   return [...senderMap().keys()].sort((a, b) => a - b)
+}
+
+/**
+ * Extract Electron webContents.id from an IPC event (or test double).
+ * Returns null when the event has no usable sender identity.
+ */
+export function senderIdFromEvent(event: unknown): number | null {
+  const sender = (event as { sender?: { id?: unknown } } | null)?.sender
+  if (!sender || typeof sender.id !== 'number' || !Number.isInteger(sender.id) || sender.id < 0) {
+    return null
+  }
+  return sender.id
+}
+
+/**
+ * Fail-closed helper for identity-sensitive Desktop IPC.
+ * Only reads event.sender.id → getTrustedPreviewContextForSender.
+ * Never consults renderer payload fields or any process-global bag.
+ */
+export function requireSenderTrustedContext(event: unknown): TrustedPreviewContext {
+  const senderId = senderIdFromEvent(event)
+  if (senderId === null) {
+    throw new Error('identity-sensitive IPC requires a real IPC sender identity')
+  }
+  const trusted = getTrustedPreviewContextForSender(senderId)
+  if (!trusted) {
+    throw new Error('open and bind a Science project before this operation')
+  }
+  return trusted
+}
+
+/**
+ * Soft lookup for handlers that prefer `{ ok: false }` over throw.
+ * Same authority rules as requireSenderTrustedContext.
+ */
+export function trySenderTrustedContext(
+  event: unknown,
+): { ok: true; trusted: TrustedPreviewContext; senderId: number } | { ok: false; reason: string } {
+  const senderId = senderIdFromEvent(event)
+  if (senderId === null) {
+    return { ok: false, reason: 'identity-sensitive IPC requires a real IPC sender identity' }
+  }
+  const trusted = getTrustedPreviewContextForSender(senderId)
+  if (!trusted) {
+    return { ok: false, reason: 'open and bind a Science project before this operation' }
+  }
+  return { ok: true, trusted, senderId }
 }
 
 /**
@@ -180,7 +205,7 @@ export function attachTrustedIdentitySenderCleanup(sender: TrustedIdentitySender
     cleanupAttached().delete(senderId)
   }
   // destroyed / render-process-gone cover crash and window close.
-  // did-navigate-main-frame / did-frame-navigate cover main-frame navigation.
+  // did-navigate / did-navigate-in-page cover main-frame navigation.
   const on = sender.on.bind(sender)
   // Keep one listener set for the lifetime of this WebContents. Unbind,
   // navigation and engine restart revoke identity but must not cause a later

@@ -100,6 +100,8 @@ const ALLOWED_CHANNELS = new Set<string>([
   'skills:list',
   'skills:quarantine-list',
   'skills:bulk-admit',
+  // Admitted ecosystem capability (Biomni UniProt): sender-bound identity only.
+  'skills:run-capability',
   // OSF-6 Remote Compute — dry-run plan only; no desktop SSH/SCP
   'compute:plan',
   'compute:submit-plan',

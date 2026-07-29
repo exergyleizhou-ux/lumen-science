@@ -60,7 +60,7 @@ import { createAcpAuthoritativeMembershipAsserter } from './files/hybrid-members
 import { getDefaultLocalProjectCatalog } from './files/local-project-catalog'
 import { resolveStorageRoot } from './storage-root'
 import { runtimeRoot } from './notebook/runtime-paths'
-import { writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 
 type IpcRegistrationOptions = {
@@ -130,6 +130,15 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
   const wiredStore = new AcpPreviewStore(acpTool)
   const catalogPath = join(app.getPath('userData'), 'lumen-ui-projects.json')
   const projectCatalog = getDefaultLocalProjectCatalog(catalogPath)
+  const biomniUniprotFixturePath = app.isPackaged
+    ? join(process.resourcesPath, 'science', 'fixtures', 'connector_uniprot_search.json')
+    : join(
+        __dirname,
+        '../../../../agent/crates/codegen/xai-grok-science/fixtures/connector_uniprot_search.json',
+      )
+  const biomniUniprotFixtureBase64 = (
+    await readFile(biomniUniprotFixturePath)
+  ).toString('base64')
 
   /**
    * Write an export to a path the USER chooses.
@@ -206,6 +215,13 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
             '../../../../packs/science/skills/ecosystem/biomni-resource-catalog.json',
           ),
         ],
+    biomniUniprotFixtureBase64,
+    skillsAdmissionPath: app.isPackaged
+      ? join(process.resourcesPath, 'science', 'admissions', 'biomni-query-uniprot.json')
+      : join(
+          __dirname,
+          '../../../../docs/science/5.0/admissions/biomni-query-uniprot.admission.json',
+        ),
     connectorLockPath: app.isPackaged
       ? join(process.resourcesPath, 'science', 'fusion-sources.lock.json')
       : join(__dirname, '../../../../docs/science/fusion-sources.lock.json'),

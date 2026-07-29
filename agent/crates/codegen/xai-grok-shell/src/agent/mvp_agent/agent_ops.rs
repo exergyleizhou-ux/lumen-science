@@ -2185,6 +2185,9 @@ impl MvpAgent {
         query: String,
         requests: Vec<xai_grok_science::connectors::ValidatedRequest>,
         fixture_bytes: Vec<Vec<u8>>,
+        capability_provenance: Option<
+            xai_grok_science::connectors::fetch::CapabilitySourceProvenance,
+        >,
         approval_timeout: std::time::Duration,
     ) -> xai_grok_science::Result<xai_grok_science::connectors::fetch::FetchResult> {
         if context.session_id != session_id.0.as_ref() {
@@ -2203,6 +2206,7 @@ impl MvpAgent {
                 query,
                 requests,
                 fixture_bytes,
+                capability_provenance,
                 approval_timeout,
             )
             .await

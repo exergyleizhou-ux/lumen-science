@@ -16,6 +16,7 @@ use std::{
 use uuid::Uuid;
 
 pub mod api;
+pub mod capability;
 pub mod collaboration;
 pub mod connector;
 pub mod connectors;

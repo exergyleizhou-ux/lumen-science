@@ -177,8 +177,7 @@ pub struct PreparedScienceSkillQuarantine {
     pub(crate) target: String,
     /// A byte-verified succeeded operation with the same id and bindings.
     /// Returned without issuing a second permission request.
-    pub(crate) replayed:
-        Option<xai_grok_science::skill_quarantine::SkillQuarantineResult>,
+    pub(crate) replayed: Option<xai_grok_science::skill_quarantine::SkillQuarantineResult>,
 }
 pub struct BeginScienceSkillQuarantine {
     pub(crate) store: xai_grok_science::ScienceStore,
@@ -239,6 +238,8 @@ pub struct PreparedScienceFetch {
     pub(crate) query: String,
     pub(crate) requests: Vec<xai_grok_science::connectors::ValidatedRequest>,
     pub(crate) fixture_bytes: Vec<Vec<u8>>,
+    pub(crate) capability_provenance:
+        Option<xai_grok_science::connectors::fetch::CapabilitySourceProvenance>,
     pub(crate) command: String,
     pub(crate) output_paths: Vec<std::path::PathBuf>,
 }
@@ -249,6 +250,8 @@ pub struct BeginScienceFetch {
     pub(crate) query: String,
     pub(crate) requests: Vec<xai_grok_science::connectors::ValidatedRequest>,
     pub(crate) fixture_bytes: Vec<Vec<u8>>,
+    pub(crate) capability_provenance:
+        Option<xai_grok_science::connectors::fetch::CapabilitySourceProvenance>,
     pub(crate) respond_to: oneshot::Sender<xai_grok_science::Result<PreparedScienceFetch>>,
 }
 pub struct FinishScienceFetch {

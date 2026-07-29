@@ -449,6 +449,28 @@ struct ConnectorFetchParams {
     approval_timeout_ms: u64,
 }
 
+/// Admitted ecosystem capability entry (Biomni UniProt first).
+///
+/// Identity (session/project/owner) is session-bound, not taken from capability
+/// input. Capability input may only carry the typed product fields after mapping.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CapabilityRunParams {
+    session_id: String,
+    project_id: String,
+    owner_id: String,
+    store_root: PathBuf,
+    artifact_root: PathBuf,
+    capability_id: String,
+    /// Typed capability args (e.g. { prompt, maxResults } for Biomni UniProt).
+    input: serde_json::Value,
+    /// Main/CLI-owned offline response bytes. This is transport data, not a
+    /// renderer-selectable filesystem capability.
+    fixture_data_base64: Vec<String>,
+    #[serde(default = "default_approval_timeout_ms")]
+    approval_timeout_ms: u64,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct EvidenceDossierParams {
@@ -503,13 +525,12 @@ pub async fn handle(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
         "x.ai/science/run_csv" => handle_run_csv(agent, args).await,
         "x.ai/science/import_preview" => handle_import_preview(agent, args).await,
         "x.ai/science/connector_fetch" => handle_connector_fetch(agent, args).await,
+        "x.ai/science/capability_run" => handle_capability_run(agent, args).await,
         "x.ai/science/evidence_dossier" => handle_evidence_dossier(agent, args).await,
         "x.ai/science/ssh_scp_fixture" => handle_ssh_scp_fixture(agent, args).await,
         "x.ai/science/goal_host_verify" => handle_goal_host_verify(agent, args).await,
         "x.ai/science/seq_analyze" => handle_seq_analyze(agent, args).await,
-        "x.ai/science/skill_quarantine_import" => {
-            handle_skill_quarantine_import(agent, args).await
-        }
+        "x.ai/science/skill_quarantine_import" => handle_skill_quarantine_import(agent, args).await,
         "x.ai/science/artifact_list" => handle_artifact_list(agent, args).await,
         "x.ai/science/project_create" => handle_project_create(agent, args).await,
         "x.ai/science/project_get" => handle_project_get(agent, args).await,
@@ -1518,10 +1539,7 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
 /// bounded base64 through ACP; this adapter independently decodes and hashes it
 /// in memory before delegating all durable authority to SessionActor. No loose
 /// archive payload is written before Allow.
-async fn handle_skill_quarantine_import(
-    agent: &MvpAgent,
-    args: &acp::ExtRequest,
-) -> ExtResult {
+async fn handle_skill_quarantine_import(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: SkillQuarantineImportParams = parse_params(args)?;
     if params.project_id.is_empty() || params.owner_id.is_empty() {
         return Err(acp::Error::invalid_params().data("projectId and ownerId are required"));
@@ -1570,8 +1588,7 @@ async fn handle_skill_quarantine_import(
         .get_session_handle(&session_id)
         .ok_or_else(|| acp::Error::invalid_params().data("session not found"))?;
     let workspace = dunce::canonicalize(&handle.info.cwd).map_err(internal)?;
-    let artifact_root =
-        canonical_dir_within(workspace.join(&params.store_root), &workspace)?;
+    let artifact_root = canonical_dir_within(workspace.join(&params.store_root), &workspace)?;
 
     let project_id = ProjectId::new(params.project_id);
     let run_id = xai_grok_science::skill_quarantine::operation_run_id(
@@ -1605,11 +1622,7 @@ async fn handle_skill_quarantine_import(
             context,
             xai_grok_science::skill_quarantine::SkillQuarantineRequest {
                 operation_id: params.operation_id,
-                selected_subpaths: params
-                    .items
-                    .into_iter()
-                    .map(|item| item.sub_path)
-                    .collect(),
+                selected_subpaths: params.items.into_iter().map(|item| item.sub_path).collect(),
             },
             bytes,
             Duration::from_millis(params.approval_timeout_ms),
@@ -1792,11 +1805,87 @@ async fn handle_ssh_scp_fixture(agent: &MvpAgent, args: &acp::ExtRequest) -> Ext
     to_raw_response(&result)
 }
 
+/// Admitted ecosystem capability → fixed connector_fetch mapping.
+///
+/// Currently only `ecosystem/biomni/query_uniprot`. Does not run Biomni Python,
+/// does not accept endpoint/URL/headers, and never lets the renderer choose
+/// connector_id (always `uniprot`).
+async fn handle_capability_run(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
+    let params: CapabilityRunParams = parse_params(args)?;
+    let mapped = xai_grok_science::capability::map_biomni_query_uniprot(
+        &params.capability_id,
+        &params.input,
+    )
+    .map_err(|error| acp::Error::invalid_params().data(error.to_string()))?;
+    use base64::Engine as _;
+    let fixture_bytes = params
+        .fixture_data_base64
+        .iter()
+        .map(|encoded| {
+            base64::engine::general_purpose::STANDARD
+                .decode(encoded)
+                .map_err(|_| acp::Error::invalid_params().data("fixtureDataBase64 is malformed"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    // Reuse the connector_fetch product path with the server-fixed connector.
+    let fetch_params = ConnectorFetchParams {
+        session_id: params.session_id,
+        project_id: params.project_id,
+        owner_id: params.owner_id,
+        store_root: params.store_root,
+        artifact_root: params.artifact_root,
+        connector_id: mapped.connector_id.to_owned(),
+        query: mapped.query,
+        max_results: mapped.max_results,
+        fixture_paths: Vec::new(),
+        approval_timeout_ms: params.approval_timeout_ms,
+    };
+    let provenance = xai_grok_science::connectors::fetch::CapabilitySourceProvenance {
+        capability_id: mapped.capability_id.to_owned(),
+        repository: mapped.provenance.repository.to_owned(),
+        exact_commit: mapped.provenance.exact_commit.to_owned(),
+        source_path: mapped.provenance.source_path.to_owned(),
+        source_sha256: mapped.provenance.source_sha256.to_owned(),
+        license: mapped.provenance.license.to_owned(),
+        reuse_mode: mapped.provenance.reuse_mode.to_owned(),
+        lumen_executor: mapped.provenance.lumen_executor.to_owned(),
+    };
+    let result =
+        execute_connector_fetch(agent, fetch_params, Some(provenance), Some(fixture_bytes)).await?;
+    // Attach capability provenance for product audit without inventing a second authority.
+    let mut value = serde_json::to_value(&result).map_err(internal)?;
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert(
+            "capability".into(),
+            serde_json::json!({
+                "id": mapped.capability_id,
+                "source": "Biomni",
+                "executor": "Rust Lumen SessionActor",
+                "dataSource": "UniProt",
+                "mode": "fixture/offline",
+                "provenance": mapped.provenance,
+                "controlledTools": mapped.controlled_tools,
+            }),
+        );
+    }
+    to_raw_response(&value)
+}
+
 /// S3 connector fetch entry: validates the connector, builds the protocol's
 /// policy-gated request sequence, pairs each request with its offline
 /// fixture, then drives the SessionActor begin/permission/finish protocol.
 async fn handle_connector_fetch(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     let params: ConnectorFetchParams = parse_params(args)?;
+    let result = execute_connector_fetch(agent, params, None, None).await?;
+    to_raw_response(&result)
+}
+
+async fn execute_connector_fetch(
+    agent: &MvpAgent,
+    params: ConnectorFetchParams,
+    capability_provenance: Option<xai_grok_science::connectors::fetch::CapabilitySourceProvenance>,
+    supplied_fixture_bytes: Option<Vec<Vec<u8>>>,
+) -> Result<xai_grok_science::connectors::fetch::FetchResult, acp::Error> {
     if params.project_id.is_empty() || params.owner_id.is_empty() {
         return Err(acp::Error::invalid_params().data("projectId and ownerId are required"));
     }
@@ -1814,7 +1903,10 @@ async fn handle_connector_fetch(agent: &MvpAgent, args: &acp::ExtRequest) -> Ext
         .get(descriptor.id)
         .ok_or_else(|| acp::Error::invalid_params().data("no protocol adapter for connector"))?;
     let expected = adapter.expected_exchanges();
-    if params.fixture_paths.len() != expected {
+    let supplied_count = supplied_fixture_bytes
+        .as_ref()
+        .map_or(params.fixture_paths.len(), Vec::len);
+    if supplied_count != expected {
         return Err(acp::Error::invalid_params().data(format!(
             "connector {} requires exactly {expected} fixture exchange(s)",
             descriptor.id
@@ -1827,20 +1919,29 @@ async fn handle_connector_fetch(agent: &MvpAgent, args: &acp::ExtRequest) -> Ext
     let workspace = std::fs::canonicalize(&handle.info.cwd).map_err(internal)?;
     let store_root = canonical_dir_within(params.store_root, &workspace)?;
     let artifact_root = canonical_dir_within(params.artifact_root, &workspace)?;
-    let mut fixture_bytes = Vec::with_capacity(expected);
-    for path in &params.fixture_paths {
-        let path = std::fs::canonicalize(path).map_err(internal)?;
-        if !path.starts_with(&workspace) || !path.is_file() {
-            return Err(
-                acp::Error::invalid_params().data("fixturePaths must be files inside session cwd")
-            );
+    let fixture_bytes = if let Some(bytes) = supplied_fixture_bytes {
+        for item in &bytes {
+            if item.len() as u64 > xai_grok_science::preview::DEFAULT_MAX_BYTES {
+                return Err(acp::Error::invalid_params().data("fixture exceeds the size cap"));
+            }
         }
-        let bytes = std::fs::read(&path).map_err(internal)?;
-        if bytes.len() as u64 > xai_grok_science::preview::DEFAULT_MAX_BYTES {
-            return Err(acp::Error::invalid_params().data("fixture exceeds the size cap"));
+        bytes
+    } else {
+        let mut bytes = Vec::with_capacity(expected);
+        for path in &params.fixture_paths {
+            let path = std::fs::canonicalize(path).map_err(internal)?;
+            if !path.starts_with(&workspace) || !path.is_file() {
+                return Err(acp::Error::invalid_params()
+                    .data("fixturePaths must be files inside session cwd"));
+            }
+            let item = std::fs::read(&path).map_err(internal)?;
+            if item.len() as u64 > xai_grok_science::preview::DEFAULT_MAX_BYTES {
+                return Err(acp::Error::invalid_params().data("fixture exceeds the size cap"));
+            }
+            bytes.push(item);
         }
-        fixture_bytes.push(bytes);
-    }
+        bytes
+    };
     // Build the protocol's policy-gated request sequence through the adapter.
     let paths = adapter
         .build_fixture_paths(&params.query, params.max_results, &fixture_bytes)
@@ -1867,7 +1968,7 @@ async fn handle_connector_fetch(agent: &MvpAgent, args: &acp::ExtRequest) -> Ext
             ("locale".into(), "C".into()),
         ]),
     };
-    let result = agent
+    agent
         .run_science_fetch(
             &session_id,
             ScienceStore::new_confined(&store_root, &context.workspace_root).map_err(internal)?,
@@ -1876,11 +1977,11 @@ async fn handle_connector_fetch(agent: &MvpAgent, args: &acp::ExtRequest) -> Ext
             params.query,
             requests,
             fixture_bytes,
+            capability_provenance,
             Duration::from_millis(params.approval_timeout_ms),
         )
         .await
-        .map_err(internal)?;
-    to_raw_response(&result)
+        .map_err(internal)
 }
 
 /// Compose already-succeeded Science runs into a self-contained, byte-verified
