@@ -1560,17 +1560,21 @@ pub(crate) fn parse_linux_elf_interp(path: &std::path::Path) -> Result<std::path
 
     let (phoff, phnum, phentsize) = if is_64bit {
         let mut hdr = [0u8; 64];
+        // After e_ident[16], file pos=16. ELF64 offsets from hdr[0]:
+        //   e_phoff[16..24] e_phentsize[38..40] e_phnum[40..42]
         f.read_exact(&mut hdr).map_err(|e| format!("read ELF64 header: {e}"))?;
-        let phoff = u64::from_le_bytes(hdr[32..40].try_into().unwrap());
-        let phentsize = u16::from_le_bytes(hdr[54..56].try_into().unwrap());
-        let phnum = u16::from_le_bytes(hdr[56..58].try_into().unwrap());
+        let phoff = u64::from_le_bytes(hdr[16..24].try_into().unwrap());
+        let phentsize = u16::from_le_bytes(hdr[38..40].try_into().unwrap());
+        let phnum = u16::from_le_bytes(hdr[40..42].try_into().unwrap());
         (phoff, u64::from(phnum), u64::from(phentsize))
     } else {
         let mut hdr = [0u8; 52];
+        // After e_ident[16], file pos=16. ELF32 offsets from hdr[0]:
+        //   e_phoff[12..16] e_phentsize[26..28] e_phnum[28..30]
         f.read_exact(&mut hdr).map_err(|e| format!("read ELF32 header: {e}"))?;
-        let phoff = u32::from_le_bytes(hdr[28..32].try_into().unwrap()) as u64;
-        let phentsize = u16::from_le_bytes(hdr[42..44].try_into().unwrap());
-        let phnum = u16::from_le_bytes(hdr[44..46].try_into().unwrap());
+        let phoff = u32::from_le_bytes(hdr[12..16].try_into().unwrap()) as u64;
+        let phentsize = u16::from_le_bytes(hdr[26..28].try_into().unwrap());
+        let phnum = u16::from_le_bytes(hdr[28..30].try_into().unwrap());
         (phoff, u64::from(phnum), u64::from(phentsize))
     };
 
