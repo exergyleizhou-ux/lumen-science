@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "recorded_at": "2026-07-29T23:05:24+08:00",
+  "recorded_at": "2026-07-30T00:58:22+08:00",
   "purpose": "Record selective Lumen core v0.1.251 admission into Lumen Science without claiming full source or release parity.",
   "policy": {
     "source_of_truth": "lumen",
@@ -90,14 +90,14 @@
     "tool": "scripts/check-core-drift.py",
     "basis": "audited_lumen_main_head",
     "lumen_head": "dc563b1e0db9eaca7e970d56d7816e1522511723",
-    "science_code_head": "75fa66b70a8795c582b18b9e38b8d0486f6488d4",
-    "comparison_scope": "Science working-tree bytes based on science_code_head; CI rederives the manifest from exact committed bytes",
+    "science_code_head": "989501a6e875441107ff646b347321efe3654c74",
+    "comparison_scope": "Exact committed Science source bytes at science_code_head; CI rederives the manifest from the checked-out bytes",
     "diverged_rust_files": 130,
     "missing_in_science_rust_files": 5,
     "science_only_rust_files": 0,
     "total_drift": 135,
     "drift_manifest_schema": "lumen-core-drift-v1",
-    "drift_manifest_sha256": "aee86324223e722c8a48fbf5fc66b8e6d3d3316891048df1b198fff2ad0c4c44",
+    "drift_manifest_sha256": "2dfad561a4179c3d21536731f476864ee90ce92c350cca5d467ebb94617fdd58",
     "tracked_security_markers_present": 8,
     "tracked_security_markers_total": 8,
     "strict_zero_drift_gate": false
@@ -105,15 +105,15 @@
   "verification": {
     "source_and_focused_tests": [
       {
-        "command": "cargo test -p xai-grok-science --lib --locked -- --test-threads=2",
-        "passed": 548,
+        "command": "cargo test -p xai-grok-science --all-targets --locked -- --test-threads=2",
+        "passed": 553,
         "failed": 0,
         "ignored": 8,
         "exit_code": 0
       },
       {
         "command": "cargo test -p xai-grok-shell --lib --locked actor_root_tests -- --test-threads=2",
-        "passed": 7,
+        "passed": 8,
         "failed": 0,
         "ignored": 0,
         "exit_code": 0
@@ -134,16 +134,20 @@
       }
     ],
     "built_binary": {
-      "source_commit": "75fa66b70a8795c582b18b9e38b8d0486f6488d4",
+      "source_commit": "989501a6e875441107ff646b347321efe3654c74",
       "path": "agent/target/debug/lumen",
-      "sha256": "127a9c4a0666da120edc1dbadc9e8eeed45ffc2e9975fa095fe2e6d0392aae4b",
+      "sha256": "11916604ddc859068905e84f068a3b4820020325953f5f26d9958ae8967d9c7e",
       "product_tests": {
         "project_migrate": 7,
         "seq_analyze": 6,
-        "project_mutation": 4,
+        "project_mutation": 3,
         "review_record": 2,
+        "kernel_admission": 2,
+        "skill_quarantine": 4,
         "workflow": 6,
-        "total_passed": 25
+        "connector_fetch": 1,
+        "biomni_uniprot": 1,
+        "total_passed": 32
       },
       "failures": 0
     }
