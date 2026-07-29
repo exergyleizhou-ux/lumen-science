@@ -1645,6 +1645,43 @@ pub(crate) fn parse_linux_elf_interp(path: &std::path::Path) -> Result<std::path
     Ok(resolved)
 }
 
+/// Validate the dynamic loader (PT_INTERP) of a verified executable.
+/// O_PATH|CLOEXEC|NOFOLLOW capability + hash + dev/inode capture.
+/// Does NOT grant EXECUTE — identity proof only for Codex's future seal.
+#[cfg(target_os = "linux")]
+pub(crate) fn open_verified_linux_loader_capability(
+    executable_path: &Path,
+) -> Result<(File, String), String> {
+    let loader_path = parse_linux_elf_interp(executable_path)
+        .map_err(|e| format!("PT_INTERP parse: {e}"))?;
+    let mut f = File::open(&loader_path)
+        .map_err(|e| format!("open loader {loader_path:?}: {e}"))?;
+    let mut magic = [0u8; 4];
+    f.read_exact(&mut magic).map_err(|e| format!("read loader magic: {e}"))?;
+    if &magic != b"\x7fELF" { return Err("loader is not ELF".into()); }
+    let hash = {
+        f.seek(io::SeekFrom::Start(0)).map_err(|e| format!("seek loader: {e}"))?;
+        let mut h = sha2::Sha256::new();
+        let mut buf = [0u8; 64 * 1024];
+        loop {
+            let n = f.read(&mut buf).map_err(|e| format!("read loader: {e}"))?;
+            if n == 0 { break; }
+            h.update(&buf[..n]);
+        }
+        format!("{:x}", h.finalize())
+    };
+    let capability = open_linux_path_capability(&loader_path)
+        .map_err(|_| "cannot retain loader O_PATH capability".to_string())?;
+    let cap_meta = capability.metadata()
+        .map_err(|e| format!("stat loader cap: {e}"))?;
+    let cur_meta = loader_path.symlink_metadata()
+        .map_err(|e| format!("stat loader: {e}"))?;
+    if cur_meta.dev() != cap_meta.dev() || cur_meta.ino() != cap_meta.ino() {
+        return Err("loader identity changed during open".into());
+    }
+    Ok((capability, hash))
+}
+
 /// Build a seccomp BPF filter that denies execve and execveat.
 /// Arch-safe with x32-ABI rejection on x86_64. NOT wired to production.
 #[cfg(target_os = "linux")]
@@ -2067,27 +2104,16 @@ raise SystemExit('exec-should-have-failed')
         let loader = super::parse_linux_elf_interp(&python)
             .unwrap_or_else(|e| panic!("PT_INTERP parse: {e}"));
         let nonce = std::process::id();
+        let suc_marker = format!("{}_{nonce}", MARKER_SUCCEEDED);
+        let bs_marker = format!("{}_{nonce}", MARKER_BOOTSTRAP);
         let code = format!(
-r#"import os, sys
-print('{MBS}_{nonce}', flush=True)
-os.execv('{ld}', ['{ld}', '/bin/true'])
-"#,
-            MBS = MARKER_BOOTSTRAP,
-            ld = loader.display(),
+            "import os, sys\nprint('{}', flush=True)\nos.execv('{}', ['{}', '/bin/sh', '-c', 'echo {}'])",
+            bs_marker, loader.display(), loader.display(), suc_marker,
         );
         let (result, stdout, _stderr) = run_unsandboxed(&python, &code);
-        let bs_marker = format!("{MARKER_BOOTSTRAP}_{nonce}");
+        assert!(result.status.success(), "unsandboxed attack failed. status={:?}", result.status);
         assert_marker_count(&stdout, &bs_marker, 1, "bootstrap");
-        // In unsandboxed run, execv succeeds: the child (loader + /bin/true)
-        // exits 0, and stdout from the new process may not contain our SUCCEEDED
-        // marker because it's a different image. What we need to prove is:
-        // the loader was found and exec didn't raise — the parent exits 0
-        // (which the successful exec produces) or the child produces its own output.
-        assert!(
-            result.status.success(),
-            "unsandboxed loader-direct attack failed (payload may be broken). status={:?}",
-            result.status
-        );
+        assert_marker_count(&stdout, &suc_marker, 1, "ATTACK_SUCCEEDED");
     }
 
     // ── ELF parser tests ──────────────────────────────────────────
@@ -2279,17 +2305,18 @@ os.execv('{ld}', ['{ld}', '/bin/true'])
         }
         let result = cmd.output().unwrap_or_else(|e| panic!("run audit: {e}"));
         let stdout = String::from_utf8_lossy(&result.stdout);
-        // Without env_clear, these would be visible. The production
-        // runner clears env first, so this test documents the gap.
         assert!(!stdout.is_empty(), "audit produced no output");
-        // Record all observations for the audit report
+        // Every dangerous var MUST be UNSET or NOT at the injected value.
+        let mut leaked = Vec::new();
         for var in &dangerous_vars {
-            let present = stdout.contains(&format!("{var}=ATTACK_VALUE"));
-            // This is an audit, not a pass/fail assertion — it documents
-            // what the current spawn_command does. The Landlock-sandboxed
-            // spawn_linux_sandboxed_command would additionally have env_clear.
-            let _ = present; // audit observation only
+            if stdout.contains(&format!("{var}=ATTACK_VALUE")) {
+                leaked.push(*var);
+            }
         }
+        assert!(leaked.is_empty(),
+            "env attack surface leak: {:?} carried ATTACK_VALUE into child. \
+             Codex must add env_clear or explicit deny list before user code runs.",
+            leaked);
     }
 
     // ── deny-exec builder: strengthened assertions ─────────────────
