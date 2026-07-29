@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "recorded_at": "2026-07-27T20:27:22+08:00",
+  "recorded_at": "2026-07-29T14:29:17+08:00",
   "purpose": "Record selective Lumen core v0.1.251 admission into Lumen Science without claiming full source or release parity.",
   "policy": {
     "source_of_truth": "lumen",
@@ -78,14 +78,14 @@
     "tool": "scripts/check-core-drift.py",
     "basis": "audited_lumen_main_head",
     "lumen_head": "dc563b1e0db9eaca7e970d56d7816e1522511723",
-    "science_code_head": "ad221a4b89c28fb777acf7a3c69a245d01671840",
+    "science_code_head": "b07c2bfaa9a5a4d5cf9179f0a91ea24e35285a7e",
     "comparison_scope": "Science working-tree bytes based on science_code_head; CI rederives the manifest from exact committed bytes",
     "diverged_rust_files": 129,
     "missing_in_science_rust_files": 5,
     "science_only_rust_files": 0,
     "total_drift": 134,
     "drift_manifest_schema": "lumen-core-drift-v1",
-    "drift_manifest_sha256": "7ab550a2ad36aae99e2f20e49846448dfc0a247da608532fa9ba51a634a114a8",
+    "drift_manifest_sha256": "c07f3a957b876f4178dd3f140a0589308e729307f41d49f2db1448d7c74bc28f",
     "tracked_security_markers_present": 8,
     "tracked_security_markers_total": 8,
     "strict_zero_drift_gate": false
