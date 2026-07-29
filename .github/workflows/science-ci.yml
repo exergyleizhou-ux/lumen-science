@@ -247,6 +247,7 @@ jobs:
             test_stdio_science_skill_quarantine_boundaries_fail_closed
             test_stdio_science_workflow_execute_is_actor_gated_and_idempotent
             test_stdio_science_workflow_deterministic_reuse_refuses_tampered_cas
+            test_stdio_science_workflow_execute_retains_store_across_approval
             test_stdio_science_workflow_execute_retains_store_and_interpreter_across_approval
             test_stdio_science_workflow_execute_fails_closed
             test_stdio_science_workflow_execute_denied_runs_nothing

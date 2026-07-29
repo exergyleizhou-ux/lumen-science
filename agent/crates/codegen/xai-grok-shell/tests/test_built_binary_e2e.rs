@@ -8009,13 +8009,65 @@ async fn test_stdio_science_workflow_execute_retains_store_across_approval() {
         let stored: serde_json::Value = serde_json::from_str(
             result.unwrap_or_else(|e| panic!("store-race workflow: {e:?}")).0.get()
         ).expect("store-race JSON");
-        // The store swap must not redirect the Allow-side write: either the run
-        // is Denied/TimedOut, or the run is Succeeded but artifacts landed in
-        // the original store (retained_store), NOT the symlinked outside.
+        assert_eq!(stored["state"], "succeeded", "store-race: {stored}");
+        assert_eq!(
+            stored["artifactsCommitted"], 1,
+            "the allowed workflow did not commit exactly one artifact set: {stored}"
+        );
+        let commits = stored["commits"]
+            .as_array()
+            .unwrap_or_else(|| panic!("workflow response has no commits array: {stored}"));
+        assert_eq!(commits.len(), 1, "workflow response: {stored}");
+        let manifest = commits[0]["outputManifest"]
+            .as_object()
+            .unwrap_or_else(|| panic!("workflow commit has no output manifest: {stored}"));
+        let expected_result = format!("{:x}", Sha256::digest(b"{\"mean\": 1.5}"));
+        let expected_stdout = format!("{:x}", Sha256::digest(b"acp-computed\n"));
+        assert_eq!(
+            manifest.get("result.json"),
+            Some(&Value::String(expected_result.clone())),
+            "result artifact was not committed by its true digest: {stored}"
+        );
+        assert_eq!(
+            manifest.get("stdout.txt"),
+            Some(&Value::String(expected_stdout.clone())),
+            "stdout artifact was not committed by its true digest: {stored}"
+        );
+
+        // The pathname now targets `outside`, but every Allow-side durable
+        // write must stay on the capability retained before the prompt.
         assert!(
-            stored["run"]["state"].as_str() != Some("succeeded")
-                || !stored["artifacts"].as_array().map_or(true, |a| a.is_empty()),
-            "store-race: {stored}"
+            store_root.symlink_metadata().expect("stat replacement store").file_type().is_symlink(),
+            "the adversarial store replacement did not remain a symlink"
+        );
+        assert!(
+            std::fs::read_dir(&outside)
+                .expect("read replacement store")
+                .next()
+                .is_none(),
+            "replacement store received workflow bytes"
+        );
+        for directory in [
+            "workflow-runs",
+            "workflow-operations",
+            "workflow-commits",
+            "workflow-artifacts",
+            "workflow-outputs",
+        ] {
+            assert!(
+                retained_store.join(directory).is_dir(),
+                "{directory} did not remain on the retained store"
+            );
+        }
+        assert_workflow_cas_blob(
+            &retained_store,
+            &expected_result,
+            b"{\"mean\": 1.5}",
+        );
+        assert_workflow_cas_blob(
+            &retained_store,
+            &expected_stdout,
+            b"acp-computed\n",
         );
     }).await;
 }
