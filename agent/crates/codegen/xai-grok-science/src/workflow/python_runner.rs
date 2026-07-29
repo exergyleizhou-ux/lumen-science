@@ -26,6 +26,8 @@
 //! platforms without one must fail closed before user code is spawned.
 
 use std::io::Read;
+#[cfg(target_os = "linux")]
+use std::io::Write;
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -95,6 +97,58 @@ fn permanent(class: ErrorClass, detail: impl Into<String>) -> StepFailure {
 
 fn hex_sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
+}
+
+fn validate_invocation_environment(
+    environment: &std::collections::BTreeMap<String, String>,
+) -> std::result::Result<(), StepFailure> {
+    for key in environment.keys() {
+        if key.starts_with("LD_")
+            || key.starts_with("PYTHON")
+            || matches!(
+                key.as_str(),
+                "GCONV_PATH" | "GLIBC_TUNABLES" | "LOCPATH" | "MALLOC_CHECK_" | "MALLOC_TRACE"
+            )
+        {
+            return Err(permanent(
+                ErrorClass::PolicyViolation,
+                format!(
+                    "kernel environment key '{key}' can alter the dynamic loader or Python runtime"
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn linux_post_load_exec_seal_bootstrap() -> std::io::Result<String> {
+    let filter = super::pinned_executable::linux_deny_exec_filter()?;
+    let instructions = filter
+        .instructions
+        .iter()
+        .map(|instruction| {
+            format!(
+                "F({},{},{},{})",
+                instruction.code, instruction.jt, instruction.jf, instruction.k
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    Ok(format!(
+        r#"import ctypes as _c, os as _o, sys as _s
+class F(_c.Structure):
+ _fields_=[("code",_c.c_ushort),("jt",_c.c_ubyte),("jf",_c.c_ubyte),("k",_c.c_uint)]
+class P(_c.Structure):
+ _fields_=[("len",_c.c_ushort),("filter",_c.POINTER(F))]
+_f=[{instructions}]
+_a=(F*len(_f))(*_f);_p=P(len(_f),_a);_l=_c.CDLL(None,use_errno=True)
+if _l.prctl(38,1,0,0,0)!=0 or _l.prctl(22,2,_c.byref(_p))!=0:
+ _o.write(2,b"LUMEN_POST_LOAD_EXEC_SEAL_FAILED\n");_o._exit(190)
+_source=_s.stdin.buffer.read()
+exec(compile(_source,"<lumen-cell>","exec"),{{"__name__":"__main__","__builtins__":__builtins__}})
+"#
+    ))
 }
 
 fn drain_bounded<R: Read>(reader: Option<R>, retain_limit: u64) -> (Vec<u8>, u64) {
@@ -228,6 +282,7 @@ impl StepRunner for PythonLoopRunner {
                 "cell source is not valid UTF-8",
             )
         })?;
+        validate_invocation_environment(&invocation.environment)?;
 
         let attempt = self
             .io
@@ -316,10 +371,26 @@ impl StepRunner for PythonLoopRunner {
                 )
             })?;
         let command = pinned_command.command_mut();
+        #[cfg(target_os = "linux")]
+        let exec_seal_bootstrap = linux_post_load_exec_seal_bootstrap().map_err(|error| {
+            permanent(
+                ErrorClass::PolicyViolation,
+                format!("cannot construct Linux post-load exec seal: {error}"),
+            )
+        })?;
+        #[cfg(target_os = "linux")]
+        command
+            // Isolated mode ignores every PYTHON* setting; -S prevents
+            // sitecustomize/.pth execution before the kernel seal is installed.
+            .args(["-I", "-S", "-u", "-c"])
+            .arg(exec_seal_bootstrap)
+            .args(&invocation.argv);
+        #[cfg(not(target_os = "linux"))]
         command
             .arg("-c")
             .arg(&code)
-            .args(&invocation.argv)
+            .args(&invocation.argv);
+        command
             .env_clear()
             .envs(&invocation.environment)
             .env("LUMEN_KERNEL_OUTPUT_DIR", child_paths.output_path())
@@ -352,6 +423,25 @@ impl StepRunner for PythonLoopRunner {
                 ),
             )
         })?;
+        #[cfg(target_os = "linux")]
+        {
+            let mut stdin = child.stdin.take().ok_or_else(|| {
+                permanent(
+                    ErrorClass::RunnerError,
+                    "confined Python bootstrap did not expose its source pipe",
+                )
+            })?;
+            if let Err(error) = stdin.write_all(code.as_bytes()) {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(permanent(
+                    ErrorClass::RunnerError,
+                    format!("cannot deliver cell source to confined Python bootstrap: {error}"),
+                ));
+            }
+            drop(stdin);
+        }
+        #[cfg(not(target_os = "linux"))]
         drop(child.stdin.take());
 
         let stdout = child.stdout.take();
@@ -806,6 +896,113 @@ mod tests {
         let (retained, total) = drain_bounded(Some(std::io::Cursor::new(bytes.clone())), 1024);
         assert_eq!(retained, bytes[..1024]);
         assert_eq!(total, bytes.len() as u64);
+    }
+
+    #[test]
+    fn invocation_environment_rejects_loader_and_python_injection_keys() {
+        for key in [
+            "LD_PRELOAD",
+            "LD_AUDIT",
+            "LD_LIBRARY_PATH",
+            "GLIBC_TUNABLES",
+            "GCONV_PATH",
+            "LOCPATH",
+            "PYTHONPATH",
+            "PYTHONHOME",
+            "PYTHONSTARTUP",
+            "PYTHONINSPECT",
+            "PYTHONUSERBASE",
+        ] {
+            let environment =
+                std::collections::BTreeMap::from([(key.to_string(), "ATTACK_VALUE".to_string())]);
+            let failure = validate_invocation_environment(&environment)
+                .unwrap_err();
+            assert_eq!(failure.class, ErrorClass::PolicyViolation);
+            assert!(
+                failure.detail.contains(key),
+                "diagnostic did not name rejected key {key}: {}",
+                failure.detail
+            );
+            assert!(!failure.retryable);
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_post_load_seal_denies_python_and_loader_reexec_before_user_artifacts() {
+        let python = python3().expect("real Python is required for post-load exec-seal proof");
+        let loader = super::super::pinned_executable::parse_linux_elf_interp(&python)
+            .expect("parse admitted Python PT_INTERP");
+        let fixture = fixture(&python);
+        let code = format!(
+            r#"
+import errno
+import ctypes
+import json
+import os
+import sys
+
+attack = "open('ATTACK_SUCCEEDED', 'w').write('unsafe')"
+libc = ctypes.CDLL(None, use_errno=True)
+argv = (ctypes.c_char_p * 7)(
+    sys.executable.encode(), b"-I", b"-S", b"-c", attack.encode(), None, None
+)
+envp = (ctypes.c_char_p * 1)(None)
+result = libc.syscall(
+    {execveat}, -100, sys.executable.encode(), argv, envp, 0
+)
+if result != -1 or ctypes.get_errno() != errno.EPERM:
+    raise RuntimeError(
+        f"execveat returned {{result}} errno {{ctypes.get_errno()}}, expected -1/EPERM"
+    )
+
+targets = [
+    ("python", sys.executable, [sys.executable, "-I", "-S", "-c", attack]),
+    ("loader", {loader}, [{loader}, sys.executable, "-I", "-S", "-c", attack]),
+]
+blocked = {{}}
+blocked["execveat"] = errno.EPERM
+for label, executable, argv in targets:
+    try:
+        os.execv(executable, argv)
+    except OSError as error:
+        if error.errno != errno.EPERM:
+            raise RuntimeError(f"{{label}} exec returned errno {{error.errno}}, expected EPERM")
+        blocked[label] = error.errno
+    else:
+        raise RuntimeError(f"{{label}} exec unexpectedly returned")
+
+with open("exec-denied.json", "w") as output:
+    json.dump(blocked, output, sort_keys=True)
+"#,
+            loader = serde_json::to_string(
+                loader
+                    .to_str()
+                    .expect("Linux loader path must be valid UTF-8"),
+            )
+            .expect("encode loader path"),
+            execveat = libc::SYS_execveat,
+        );
+        put_cell(&fixture.io, &code);
+        let report = fixture
+            .executor
+            .execute(&request(spec(&code), "op-linux-post-load-exec-seal"))
+            .expect("execute post-load exec-seal proof");
+        assert_eq!(
+            report.run.state,
+            WorkflowState::Succeeded,
+            "{}",
+            failure_detail(&report)
+        );
+        let manifest = &report.commits[0].output_manifest;
+        assert!(
+            manifest.contains_key("exec-denied.json"),
+            "the cell did not observe exact EPERM denials: {manifest:?}"
+        );
+        assert!(
+            !manifest.contains_key("ATTACK_SUCCEEDED"),
+            "a secondary executable image ran before artifact commit: {manifest:?}"
+        );
     }
 
     #[test]
