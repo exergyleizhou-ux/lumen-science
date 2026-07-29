@@ -2187,30 +2187,225 @@ mod tests {
 
 use crate::csv::ScienceRunTicket;
 use crate::{
-    Approval, ApprovalDecision, Artifact, CallId, Evidence, Provenance, RunContext, RunRecord,
-    RunState, ScienceError, ScienceStore,
+    Approval, ApprovalDecision, Artifact, CallId, Evidence, Provenance, RunContext, RunId,
+    RunRecord, RunState, ScienceError, ScienceStore,
 };
 use chrono::Utc;
 use std::path::Path;
 
 const ANALYSIS_ARTIFACT_PATH: &str = "analysis.json";
 const REPORT_ARTIFACT_PATH: &str = "report.md";
+const ANALYSIS_REPLAY_MAX_BYTES: u64 = 512 * 1024 * 1024;
+const REPORT_REPLAY_MAX_BYTES: u64 = 256 * 1024 * 1024;
+
+#[cfg(test)]
+thread_local! {
+    static STOP_AFTER_COMPLETED_EVENT_BEFORE_SEAL: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
+pub const OPERATION_ENV: &str = "seq_operation_id";
+pub const REQUEST_SHA256_ENV: &str = "seq_request_sha256";
+pub const SOURCE_SHA256_ENV: &str = "seq_source_sha256";
+pub const SOURCE_BYTES_ENV: &str = "seq_source_bytes";
+pub const SOURCE_RELATIVE_PATH_ENV: &str = "seq_source_relative_path";
+pub const PROJECT_REVISION_ENV: &str = "seq_project_revision";
+
+/// Keep operation ids portable because they become stable durable addresses.
+pub fn validate_operation_id(operation_id: &str) -> crate::Result<()> {
+    if !(8..=128).contains(&operation_id.len())
+        || !operation_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'))
+    {
+        return Err(ScienceError::Invalid(
+            "operationId must be 8..=128 ASCII letters, digits, '.', '-' or '_'".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Stable authority address for one sequence-analysis operation.
+///
+/// Identity and request payload are deliberately excluded from the address.
+/// Reusing one operation id with another owner, project, session, workspace,
+/// source or option set must collide with the original durable context and
+/// fail closed instead of silently creating a second run.
+pub fn operation_run_id(operation_id: &str) -> RunId {
+    let mut hasher = Sha256::new();
+    update_canonical_field(
+        &mut hasher,
+        b"domain",
+        b"lumen-science.seq-analyze.operation.v1",
+    );
+    update_canonical_field(&mut hasher, b"operation_id", operation_id.as_bytes());
+    let digest = format!("{:x}", hasher.finalize());
+    RunId::new(format!("seqa-{}", &digest[..40]))
+}
+
+/// Feed one named value to a hash without depending on serializer map order,
+/// platform word size, locale, or a dependency feature such as
+/// `serde_json/preserve_order`.
+fn update_canonical_field(hasher: &mut Sha256, name: &[u8], value: &[u8]) {
+    hasher.update(u64::try_from(name.len()).unwrap_or(u64::MAX).to_be_bytes());
+    hasher.update(name);
+    hasher.update(u64::try_from(value.len()).unwrap_or(u64::MAX).to_be_bytes());
+    hasher.update(value);
+}
+
+/// Canonical, workspace-relative UTF-8 identity for a confined source file.
+pub fn source_relative_binding(workspace_root: &Path, source_path: &Path) -> crate::Result<String> {
+    let relative = source_path.strip_prefix(workspace_root).map_err(|_| {
+        ScienceError::Invalid("sequence source is outside the actor workspace".into())
+    })?;
+    let mut parts = Vec::new();
+    for component in relative.components() {
+        let std::path::Component::Normal(part) = component else {
+            return Err(ScienceError::Invalid(
+                "sequence source path is not a canonical relative path".into(),
+            ));
+        };
+        parts.push(
+            part.to_str()
+                .ok_or_else(|| {
+                    ScienceError::Invalid("sequence source path is not valid UTF-8".into())
+                })?
+                .to_owned(),
+        );
+    }
+    if parts.is_empty() {
+        return Err(ScienceError::Invalid(
+            "sequence source path does not identify a file".into(),
+        ));
+    }
+    Ok(parts.join("/"))
+}
+
+/// Deterministic admission digest for the exact source snapshot and options.
+pub fn request_sha256(
+    source_relative_path: &str,
+    source_bytes: &[u8],
+    options: &SeqAnalyzeOptions,
+) -> crate::Result<String> {
+    let table = translation_table(options.translation_table_id).ok_or_else(|| {
+        ScienceError::Invalid(format!(
+            "unsupported NCBI translation table {}",
+            options.translation_table_id
+        ))
+    })?;
+    let digest_enzymes = canonical_restriction_digest_enzymes(&options.restriction_digest_enzymes)
+        .map_err(ScienceError::Invalid)?;
+    if digest_enzymes != options.restriction_digest_enzymes {
+        return Err(ScienceError::Invalid(
+            "restriction digest enzymes must use canonical names and catalog order".into(),
+        ));
+    }
+    let source_digest = Sha256::digest(source_bytes);
+    let mut hasher = Sha256::new();
+    update_canonical_field(
+        &mut hasher,
+        b"domain",
+        b"lumen-science.seq-analyze.request.v1",
+    );
+    update_canonical_field(
+        &mut hasher,
+        b"source_relative_path",
+        source_relative_path.as_bytes(),
+    );
+    update_canonical_field(&mut hasher, b"source_sha256", &source_digest);
+    update_canonical_field(
+        &mut hasher,
+        b"source_bytes",
+        &u64::try_from(source_bytes.len())
+            .map_err(|_| ScienceError::Invalid("sequence source is too large".into()))?
+            .to_be_bytes(),
+    );
+    update_canonical_field(&mut hasher, b"translation_table_id", &[table.id]);
+    update_canonical_field(
+        &mut hasher,
+        b"restriction_topology",
+        options.topology.as_str().as_bytes(),
+    );
+    update_canonical_field(
+        &mut hasher,
+        b"restriction_digest_count",
+        &u64::try_from(digest_enzymes.len())
+            .map_err(|_| ScienceError::Invalid("too many restriction enzymes".into()))?
+            .to_be_bytes(),
+    );
+    for enzyme in &digest_enzymes {
+        update_canonical_field(&mut hasher, b"restriction_digest_enzyme", enzyme.as_bytes());
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
 
 /// Phase one: create the durable run and its pending approval BEFORE the
 /// permission manager is awaited, so every allow/deny/timeout/cancel has a
 /// record to finish rather than vanishing.
-pub fn begin_analysis(
-    store: &ScienceStore,
-    context: RunContext,
-) -> crate::Result<ScienceRunTicket> {
+#[cfg(test)]
+fn begin_analysis(store: &ScienceStore, context: RunContext) -> crate::Result<ScienceRunTicket> {
     begin_analysis_with_options(store, context, &SeqAnalyzeOptions::default())
 }
 
 pub fn begin_analysis_with_options(
     store: &ScienceStore,
-    mut context: RunContext,
+    context: RunContext,
     options: &SeqAnalyzeOptions,
 ) -> crate::Result<ScienceRunTicket> {
+    begin_analysis_with_options_witnessed(store, context, options).map(|(ticket, _)| ticket)
+}
+
+/// Actor-only Begin seam which returns the actual in-memory Event produced by
+/// `append_event`. Fresh permission retains this value without reopening the
+/// mutable event registry; restart paths deliberately use durable recovery.
+pub fn begin_analysis_with_options_witnessed(
+    store: &ScienceStore,
+    mut context: RunContext,
+    options: &SeqAnalyzeOptions,
+) -> crate::Result<(ScienceRunTicket, crate::Event)> {
+    let operation_id = context.environment.get(OPERATION_ENV).ok_or_else(|| {
+        ScienceError::Invalid("sequence Begin requires an operationId binding".into())
+    })?;
+    validate_operation_id(operation_id)?;
+    let source_relative = context
+        .environment
+        .get(SOURCE_RELATIVE_PATH_ENV)
+        .ok_or_else(|| {
+            ScienceError::Invalid("sequence Begin requires a relative source binding".into())
+        })?;
+    let source_relative_path = Path::new(source_relative);
+    if source_relative.is_empty()
+        || source_relative_path.is_absolute()
+        || source_relative_path
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+        || context.run_id != operation_run_id(operation_id)
+        || context.provider != "offline-deterministic"
+        || context.approval_policy != "production-session-permission"
+        || context.tool_profile != "science-seqbench-v4"
+        || context.environment.get("network").map(String::as_str) != Some("disabled")
+        || context.environment.get("locale").map(String::as_str) != Some("C")
+        || context
+            .environment
+            .get(SOURCE_SHA256_ENV)
+            .is_none_or(|value| !is_lower_hex_sha256(value))
+        || context
+            .environment
+            .get(REQUEST_SHA256_ENV)
+            .is_none_or(|value| !is_lower_hex_sha256(value))
+        || context
+            .environment
+            .get(SOURCE_BYTES_ENV)
+            .is_none_or(|value| value.parse::<u64>().is_err())
+        || context
+            .environment
+            .get(PROJECT_REVISION_ENV)
+            .is_none_or(String::is_empty)
+    {
+        return Err(ScienceError::Invalid(
+            "sequence Begin authority or request bindings are incomplete".into(),
+        ));
+    }
     let table = translation_table(options.translation_table_id).ok_or_else(|| {
         ScienceError::Invalid(format!(
             "unsupported NCBI translation table {}",
@@ -2245,18 +2440,13 @@ pub fn begin_analysis_with_options(
         owner_id: context.owner_id.clone(),
         call_id: CallId::new("science_seq_analyze"),
     };
+    let created_payload = created_event_payload(&context, options)?;
     store.create_run(context)?;
-    store.append_event(
+    let created_event = store.append_event(
         &ticket.run_id,
         "SessionActor",
         "run.created",
-        serde_json::json!({
-            "kind": "seq_analyze",
-            "translation_table_id": table.id,
-            "translation_table_name": table.name,
-            "restriction_topology": options.topology,
-            "restriction_digest_enzymes": digest_enzymes,
-        }),
+        created_payload,
     )?;
     store.request_approval(Approval {
         project_id: ticket.project_id.clone(),
@@ -2267,7 +2457,386 @@ pub fn begin_analysis_with_options(
         decided_at: None,
     })?;
     store.transition(&ticket.run_id, RunState::AwaitingApproval, None)?;
-    Ok(ticket)
+    Ok((ticket, created_event))
+}
+
+fn is_lower_hex_sha256(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+}
+
+fn created_event_payload(
+    context: &RunContext,
+    options: &SeqAnalyzeOptions,
+) -> crate::Result<serde_json::Value> {
+    let table = translation_table(options.translation_table_id).ok_or_else(|| {
+        ScienceError::Invalid(format!(
+            "unsupported NCBI translation table {}",
+            options.translation_table_id
+        ))
+    })?;
+    let digest_enzymes = canonical_restriction_digest_enzymes(&options.restriction_digest_enzymes)
+        .map_err(ScienceError::Invalid)?;
+    if digest_enzymes != options.restriction_digest_enzymes {
+        return Err(ScienceError::Invalid(
+            "restriction digest enzymes must use canonical names and catalog order".into(),
+        ));
+    }
+    Ok(serde_json::json!({
+        "kind": "seq_analyze",
+        "operation_id": context.environment.get(OPERATION_ENV),
+        "request_sha256": context.environment.get(REQUEST_SHA256_ENV),
+        "source_sha256": context.environment.get(SOURCE_SHA256_ENV),
+        "source_bytes": context.environment.get(SOURCE_BYTES_ENV),
+        "source_relative_path": context.environment.get(SOURCE_RELATIVE_PATH_ENV),
+        "project_revision": context.environment.get(PROJECT_REVISION_ENV),
+        "translation_table_id": table.id,
+        "translation_table_name": table.name,
+        "restriction_topology": options.topology,
+        "restriction_digest_enzymes": digest_enzymes,
+    }))
+}
+
+fn decision_event_is_exact(
+    event: &crate::Event,
+    ticket: &ScienceRunTicket,
+    approval: &Approval,
+    kind: &str,
+    reason: Option<&str>,
+) -> bool {
+    let payload = match reason {
+        Some(reason) => serde_json::json!({
+            "call_id": ticket.call_id.0,
+            "decided_at": approval.decided_at,
+            "reason": reason,
+        }),
+        None => serde_json::json!({
+            "call_id": ticket.call_id.0,
+            "decided_at": approval.decided_at,
+        }),
+    };
+    approval_binds_ticket(approval, ticket)
+        && approval.decided_at.is_some()
+        && event.schema_version == crate::SCHEMA_VERSION
+        && event.run_id == ticket.run_id
+        && event.seq == 2
+        && event.actor == "LumenApproval"
+        && event.kind == kind
+        && event.payload == payload
+        && approval
+            .decided_at
+            .is_some_and(|decided_at| event.timestamp >= decided_at)
+}
+
+fn append_recoverable_decision_event(
+    store: &ScienceStore,
+    ticket: &ScienceRunTicket,
+    approval: &Approval,
+    kind: &str,
+    reason: Option<&str>,
+) -> crate::Result<crate::Event> {
+    let payload = match reason {
+        Some(reason) => serde_json::json!({
+            "call_id": ticket.call_id.0,
+            "decided_at": approval.decided_at,
+            "reason": reason,
+        }),
+        None => serde_json::json!({
+            "call_id": ticket.call_id.0,
+            "decided_at": approval.decided_at,
+        }),
+    };
+    let write =
+        store.append_recoverable_commit_event(&ticket.run_id, "LumenApproval", kind, payload);
+    if write
+        .as_ref()
+        .is_ok_and(|event| decision_event_is_exact(event, ticket, approval, kind, reason))
+    {
+        return write;
+    }
+    // Atomic replacement may be visible even though directory sync returned
+    // an error. Read back the exact event before deciding this cut is still
+    // incomplete; a later retry can append if it was not visible.
+    if let Ok(events) = store.events_after(&ticket.run_id, 0, 1_000)
+        && let [_, event] = events.as_slice()
+        && decision_event_is_exact(event, ticket, approval, kind, reason)
+    {
+        return Ok(event.clone());
+    }
+    match write {
+        Err(error) => Err(error),
+        Ok(_) => Err(ScienceError::Invalid(
+            "sequence approval event did not match its exact decision".into(),
+        )),
+    }
+}
+
+fn transition_reconciled(
+    store: &ScienceStore,
+    run_id: &RunId,
+    state: RunState,
+    reason: Option<String>,
+) -> crate::Result<RunRecord> {
+    match store.transition(run_id, state, reason.clone()) {
+        Ok(run) => Ok(run),
+        Err(error) => match store.load_run(run_id) {
+            Ok(run) if run.state == state && run.terminal_reason == reason => Ok(run),
+            _ => Err(error),
+        },
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SeqAllowedWitnessOrigin {
+    FreshActor,
+    RestartRecovery,
+}
+
+/// Opaque proof retained by the SessionActor between durable Allow and
+/// scientific execution. Its private fields bind the exact context, complete
+/// approval, both authority events, and the create-new store seal digest.
+#[derive(Debug)]
+pub struct SeqAllowedWitness {
+    context: RunContext,
+    approval: Approval,
+    created_event: crate::Event,
+    allowed_event: crate::Event,
+    authority_sha256: String,
+    origin: SeqAllowedWitnessOrigin,
+}
+
+fn options_from_durable_context(context: &RunContext) -> crate::Result<SeqAnalyzeOptions> {
+    let translation_table_id = context
+        .environment
+        .get("translation_table_id")
+        .ok_or_else(|| {
+            ScienceError::Invalid("sequence authority context lost its translation table".into())
+        })?
+        .parse::<u8>()
+        .map_err(|_| {
+            ScienceError::Invalid("sequence authority translation table is malformed".into())
+        })?;
+    let topology = match context
+        .environment
+        .get("restriction_topology")
+        .map(String::as_str)
+    {
+        Some("linear") => SequenceTopology::Linear,
+        Some("circular") => SequenceTopology::Circular,
+        _ => {
+            return Err(ScienceError::Invalid(
+                "sequence authority topology is malformed".into(),
+            ));
+        }
+    };
+    let digest_enzymes = context
+        .environment
+        .get("restriction_digest_enzymes")
+        .ok_or_else(|| {
+            ScienceError::Invalid("sequence authority digest enzyme binding is missing".into())
+        })?;
+    let restriction_digest_enzymes = if digest_enzymes.is_empty() {
+        Vec::new()
+    } else {
+        digest_enzymes.split(',').map(str::to_owned).collect()
+    };
+    let options = SeqAnalyzeOptions {
+        translation_table_id,
+        topology,
+        restriction_digest_enzymes,
+    };
+    let canonical = canonical_restriction_digest_enzymes(&options.restriction_digest_enzymes)
+        .map_err(ScienceError::Invalid)?;
+    if translation_table(translation_table_id).is_none()
+        || canonical != options.restriction_digest_enzymes
+    {
+        return Err(ScienceError::Invalid(
+            "sequence authority options are unsupported or non-canonical".into(),
+        ));
+    }
+    Ok(options)
+}
+
+fn mark_allowed_recoverable_inner(
+    store: &ScienceStore,
+    ticket: &ScienceRunTicket,
+    actor_created_event: &crate::Event,
+    origin: SeqAllowedWitnessOrigin,
+) -> crate::Result<SeqAllowedWitness> {
+    let run = store.load_run(&ticket.run_id)?;
+    let options = options_from_durable_context(&run.context)?;
+    if run.context.project_id != ticket.project_id
+        || run.context.owner_id != ticket.owner_id
+        || !matches!(run.state, RunState::AwaitingApproval | RunState::Running)
+    {
+        return Err(ScienceError::Invalid(
+            "sequence Allow requires the exact awaiting or running authority context".into(),
+        ));
+    }
+    let before = store.events_after(&ticket.run_id, 0, 1_000)?;
+    let Some(created_before) = before.first() else {
+        return Err(ScienceError::Invalid(
+            "sequence Allow lost its created event".into(),
+        ));
+    };
+    if !exact_created_event(created_before, &run.context, &options)?
+        || actor_created_event != created_before
+        || !matches!(before.len(), 1 | 2)
+    {
+        return Err(ScienceError::Invalid(
+            "sequence Allow changed after its actor-held created witness".into(),
+        ));
+    }
+
+    let approval = store.decide_approval(
+        &ticket.project_id,
+        &ticket.run_id,
+        &ticket.owner_id,
+        &ticket.call_id,
+        ApprovalDecision::Allow,
+    )?;
+    let events = store.events_after(&ticket.run_id, 0, 1_000)?;
+    let (created_event, allowed_event) = match events.as_slice() {
+        [created]
+            if created == created_before
+                && exact_created_event(created, &run.context, &options)? =>
+        {
+            let allowed = append_recoverable_decision_event(
+                store,
+                ticket,
+                &approval,
+                "approval.allowed",
+                None,
+            )?;
+            (created.clone(), allowed)
+        }
+        [created, allowed]
+            if created == created_before
+                && exact_created_event(created, &run.context, &options)?
+                && exact_allowed_event(allowed, ticket, &approval) =>
+        {
+            (created.clone(), allowed.clone())
+        }
+        _ => {
+            return Err(ScienceError::Invalid(
+                "sequence Allow had an invalid authority event cut".into(),
+            ));
+        }
+    };
+    let authority_sha256 = store.persist_seq_authority_prefix(
+        &run.context,
+        &approval,
+        &created_event,
+        &allowed_event,
+    )?;
+    transition_reconciled(store, &ticket.run_id, RunState::Running, None)?;
+    Ok(SeqAllowedWitness {
+        context: run.context,
+        approval,
+        created_event,
+        allowed_event,
+        authority_sha256,
+        origin,
+    })
+}
+
+/// Persist one fresh or restart-recovered Allow without turning a durable
+/// approval into Failed when its companion event write is temporarily
+/// unavailable.
+pub fn mark_allowed_recoverable(
+    store: &ScienceStore,
+    ticket: &ScienceRunTicket,
+) -> crate::Result<SeqAllowedWitness> {
+    recover_allowed_witness(store, ticket)
+}
+
+/// Fresh permission completion must present the exact Event returned by this
+/// actor's Begin. A changed created event is rejected before Allow is decided.
+pub fn mark_allowed_recoverable_fresh(
+    store: &ScienceStore,
+    ticket: &ScienceRunTicket,
+    actor_created_event: &crate::Event,
+) -> crate::Result<SeqAllowedWitness> {
+    mark_allowed_recoverable_inner(
+        store,
+        ticket,
+        actor_created_event,
+        SeqAllowedWitnessOrigin::FreshActor,
+    )
+}
+
+/// A restarted Pending operation may issue a new real permission prompt. The
+/// actor must retain the reopened created Event before awaiting that prompt and
+/// present it here; durable Allow discovered at startup uses verify-only
+/// recovery instead.
+pub fn mark_allowed_recoverable_after_reprompt(
+    store: &ScienceStore,
+    ticket: &ScienceRunTicket,
+    actor_created_event: &crate::Event,
+) -> crate::Result<SeqAllowedWitness> {
+    mark_allowed_recoverable_inner(
+        store,
+        ticket,
+        actor_created_event,
+        SeqAllowedWitnessOrigin::RestartRecovery,
+    )
+}
+
+/// Persist a non-executing sequence decision while retaining its exact
+/// Denied/TimedOut/Cancelled/Interrupted meaning across event/state crash cuts.
+pub fn finish_without_execution_recoverable(
+    store: &ScienceStore,
+    ticket: &ScienceRunTicket,
+    decision: ApprovalDecision,
+    reason: impl Into<String>,
+) -> crate::Result<RunRecord> {
+    let (state, kind) = match &decision {
+        ApprovalDecision::Deny => (RunState::Denied, "approval.denied"),
+        ApprovalDecision::Timeout => (RunState::TimedOut, "approval.timed_out"),
+        ApprovalDecision::Cancel => (RunState::Cancelled, "approval.cancelled"),
+        ApprovalDecision::Interrupted => (RunState::Interrupted, "approval.interrupted"),
+        _ => {
+            return Err(ScienceError::Invalid(
+                "non-execution finish requires deny, timeout, cancel, or interrupted".into(),
+            ));
+        }
+    };
+    let reason = reason.into();
+    store.reject_seq_authority_prefix(&ticket.run_id)?;
+    let approval = store.decide_approval(
+        &ticket.project_id,
+        &ticket.run_id,
+        &ticket.owner_id,
+        &ticket.call_id,
+        decision,
+    )?;
+    let events = store.events_after(&ticket.run_id, 0, 1_000)?;
+    match events.as_slice() {
+        [created]
+            if created.schema_version == crate::SCHEMA_VERSION
+                && created.run_id == ticket.run_id
+                && created.seq == 1
+                && created.actor == "SessionActor"
+                && created.kind == "run.created" =>
+        {
+            append_recoverable_decision_event(store, ticket, &approval, kind, Some(&reason))?;
+        }
+        [created, decided]
+            if created.schema_version == crate::SCHEMA_VERSION
+                && created.run_id == ticket.run_id
+                && created.seq == 1
+                && created.actor == "SessionActor"
+                && created.kind == "run.created"
+                && decision_event_is_exact(decided, ticket, &approval, kind, Some(&reason)) => {}
+        _ => {
+            return Err(ScienceError::Invalid(
+                "sequence terminal decision had an invalid authority event cut".into(),
+            ));
+        }
+    }
+    transition_reconciled(store, &ticket.run_id, state, Some(reason))
 }
 
 /// What an allowed analysis produced, all of it store-committed.
@@ -2281,12 +2850,14 @@ pub struct SeqAnalyzeResult {
     pub approvals: Vec<Approval>,
     pub records: usize,
     pub replay_after: u64,
+    pub replayed: bool,
 }
 
 /// Phase two, on an allowed run: compute, commit both outputs as ARTIFACTS
 /// (hashed and owned by the store, not loose files), record provenance, and
 /// land the run in a terminal state.
-pub fn finish_analysis(
+#[cfg(test)]
+fn finish_analysis(
     store: &ScienceStore,
     ticket: ScienceRunTicket,
     source_path: &Path,
@@ -2301,12 +2872,37 @@ pub fn finish_analysis(
     )
 }
 
-pub fn finish_analysis_with_options(
+#[cfg(test)]
+fn finish_analysis_with_options(
     store: &ScienceStore,
     ticket: ScienceRunTicket,
     source_path: &Path,
     source_bytes: &[u8],
     options: &SeqAnalyzeOptions,
+) -> crate::Result<SeqAnalyzeResult> {
+    let witness = recover_allowed_witness(store, &ticket)?;
+    finish_analysis_authorized_with_options(
+        store,
+        ticket,
+        source_path,
+        source_bytes,
+        options,
+        witness,
+    )
+}
+
+/// Execute one exact durable Allow while consuming its opaque actor witness.
+///
+/// Callers cannot synthesize this value outside this module. Fresh permission
+/// uses `mark_allowed_recoverable_fresh`; restart recovery only obtains one
+/// after the write-once authority seal matches all durable prefix fields.
+pub fn finish_analysis_authorized_with_options(
+    store: &ScienceStore,
+    ticket: ScienceRunTicket,
+    source_path: &Path,
+    source_bytes: &[u8],
+    options: &SeqAnalyzeOptions,
+    witness: SeqAllowedWitness,
 ) -> crate::Result<SeqAnalyzeResult> {
     // Authorization is the first finish-side operation. Validation, parsing,
     // analysis and persistence are all execution and must not happen for a
@@ -2326,42 +2922,59 @@ pub fn finish_analysis_with_options(
         ));
     }
 
-    match finish_allowed_analysis(store, &ticket, source_path, source_bytes, options) {
+    verify_allowed_witness(store, &ticket, &witness)?;
+
+    match finish_allowed_analysis(store, &ticket, source_path, source_bytes, options, &witness) {
         Ok(result) => Ok(result),
         Err(error) => {
+            // Only an already anchored/sealed completion can override a
+            // reported finish error. A merely visible completed event is not a
+            // durability or integrity proof and must never be self-sealed from
+            // disk after the in-memory witness has been lost.
+            if let Ok(run) = store.load_run(&ticket.run_id)
+                && let Ok(Some(recovered)) = store.recover_exact_completion(&run.context)
+                && let Ok(recovered) =
+                    aggregate(store, recovered, source_path, source_bytes, options)
+            {
+                return Ok(recovered);
+            }
+
             let detail = error.to_string();
             let cleanup = discard_failed_analysis_outputs(store, &ticket);
-            let failure_detail = match &cleanup {
-                Ok(()) => detail.clone(),
-                Err(cleanup_error) => {
-                    format!("{detail}; failed to discard partial outputs: {cleanup_error}")
-                }
-            };
-            let _ = store.append_event(
+            if let Err(cleanup_error) = cleanup {
+                // Never make Failed visible while any output may remain. A
+                // still-Running, durably Allowed run is intentionally
+                // recoverable by the same operation after cleanup succeeds.
+                return Err(ScienceError::Invalid(format!(
+                    "seq analysis failed ({error}) and remains Running because partial outputs could not be discarded: {cleanup_error}"
+                )));
+            }
+            reject_terminal_outputs(store, &store.load_run(&ticket.run_id)?)?;
+            let _ = store.append_recoverable_commit_event(
                 &ticket.run_id,
                 "SessionActor",
                 "analysis.failed",
-                serde_json::json!({ "reason": failure_detail }),
+                serde_json::json!({ "reason": detail }),
             );
             let run = store.load_run(&ticket.run_id)?;
-            if run.state != RunState::Failed {
+            if run.state == RunState::Running {
                 store
                     .transition(
                         &ticket.run_id,
                         RunState::Failed,
-                        Some(failure_detail.clone()),
+                        Some(detail.clone()),
                     )
                     .map_err(|terminal_error| {
                         ScienceError::Invalid(format!(
                             "seq analysis failed ({error}) and its Failed terminal could not be persisted: {terminal_error}"
                         ))
                     })?;
+            } else if run.state != RunState::Failed {
+                return Err(ScienceError::Invalid(format!(
+                    "seq analysis failed ({error}) and changed unexpectedly to {:?}",
+                    run.state
+                )));
             }
-            cleanup.map_err(|cleanup_error| {
-                ScienceError::Invalid(format!(
-                    "seq analysis failed ({error}) and partial outputs could not be discarded: {cleanup_error}"
-                ))
-            })?;
             Err(error)
         }
     }
@@ -2373,6 +2986,7 @@ fn finish_allowed_analysis(
     source_path: &Path,
     source_bytes: &[u8],
     options: &SeqAnalyzeOptions,
+    witness: &SeqAllowedWitness,
 ) -> crate::Result<SeqAnalyzeResult> {
     let table = translation_table(options.translation_table_id).ok_or_else(|| {
         ScienceError::Invalid(format!(
@@ -2400,6 +3014,46 @@ fn finish_allowed_analysis(
             "seq analysis options do not match the durably approved run".into(),
         ));
     }
+    let source_relative = source_relative_binding(&run.context.workspace_root, source_path)?;
+    let source_sha256 = hex_sha256(source_bytes);
+    let request_sha256 = request_sha256(&source_relative, source_bytes, options)?;
+    if run.context.environment.get(SOURCE_RELATIVE_PATH_ENV) != Some(&source_relative)
+        || run.context.environment.get(SOURCE_SHA256_ENV) != Some(&source_sha256)
+        || run.context.environment.get(SOURCE_BYTES_ENV) != Some(&source_bytes.len().to_string())
+        || run.context.environment.get(REQUEST_SHA256_ENV) != Some(&request_sha256)
+    {
+        return Err(ScienceError::Invalid(
+            "seq analysis source does not match the durably approved request".into(),
+        ));
+    }
+    let approvals = store.approvals(&ticket.run_id)?;
+    let [approval] = approvals.as_slice() else {
+        return Err(ScienceError::Invalid(
+            "seq analysis requires exactly one durable approval".into(),
+        ));
+    };
+    if !approval_binds_ticket(approval, ticket)
+        || approval.decision != ApprovalDecision::Allow
+        || approval.decided_at.is_none()
+    {
+        return Err(ScienceError::Invalid(
+            "seq analysis lost its exact durable Allow".into(),
+        ));
+    }
+    let authority_prefix = store.events_after(&ticket.run_id, 0, 1_000)?;
+    let [created, allowed] = authority_prefix.as_slice() else {
+        return Err(ScienceError::Invalid(
+            "seq analysis requires the exact created and allowed event prefix".into(),
+        ));
+    };
+    if !exact_created_event(created, &run.context, options)?
+        || !exact_allowed_event(allowed, ticket, approval)
+    {
+        return Err(ScienceError::Invalid(
+            "seq analysis authority prefix failed exact verification".into(),
+        ));
+    }
+    verify_allowed_witness(store, ticket, witness)?;
 
     let records = parse_analysis_input(source_path, source_bytes).map_err(ScienceError::Invalid)?;
     let analysis =
@@ -2435,7 +3089,7 @@ fn finish_allowed_analysis(
     )?;
 
     let tool_identity = format!("{TOOL} {TOOL_VERSION} inside SessionActor");
-    store.add_provenance(Provenance {
+    let provenance_record = Provenance {
         run_id: ticket.run_id.clone(),
         source_uri: format!("file://{}", source_path.display()),
         source_commit: None,
@@ -2468,8 +3122,9 @@ fn finish_allowed_analysis(
                 digest_enzymes.join(","),
             ),
         ]),
-    })?;
-    store.add_evidence(Evidence {
+    };
+    store.add_provenance(provenance_record.clone())?;
+    let analysis_evidence = Evidence {
         run_id: ticket.run_id.clone(),
         claim: format!(
             "analyzed {} sequence record(s) with {TOOL} {TOOL_VERSION}",
@@ -2478,8 +3133,9 @@ fn finish_allowed_analysis(
         source: source_path.display().to_string(),
         artifact_sha256: Some(analysis_artifact.sha256.clone()),
         verified_at: Utc::now(),
-    })?;
-    store.add_evidence(Evidence {
+    };
+    store.add_evidence(analysis_evidence.clone())?;
+    let report_evidence = Evidence {
         run_id: ticket.run_id.clone(),
         claim: format!(
             "rendered the verified analysis of {} sequence record(s) as a Markdown report",
@@ -2488,12 +3144,23 @@ fn finish_allowed_analysis(
         source: source_path.display().to_string(),
         artifact_sha256: Some(report_artifact.sha256.clone()),
         verified_at: Utc::now(),
-    })?;
-    let final_event = store.append_event(
+    };
+    store.add_evidence(report_evidence.clone())?;
+    // This is a recoverable commit marker, not a reason to make the run
+    // terminal Failed by itself. If the event write fails, the outer finish
+    // path must still be able to de-publish every Running output before it
+    // persists the Failed terminal.
+    let completed_event = store.append_recoverable_commit_event(
         &ticket.run_id,
         "SessionActor",
         "analysis.completed",
         serde_json::json!({
+            "operation_id": run.context.environment.get(OPERATION_ENV),
+            "request_sha256": run.context.environment.get(REQUEST_SHA256_ENV),
+            "source_sha256": run.context.environment.get(SOURCE_SHA256_ENV),
+            "source_bytes": run.context.environment.get(SOURCE_BYTES_ENV),
+            "source_relative_path": run.context.environment.get(SOURCE_RELATIVE_PATH_ENV),
+            "project_revision": run.context.environment.get(PROJECT_REVISION_ENV),
             "tool": tool_identity,
             "records": analysis.records.len(),
             "translation_table_id": table.id,
@@ -2501,55 +3168,1162 @@ fn finish_allowed_analysis(
             "restriction_topology": options.topology,
             "restriction_digest_enzymes": digest_enzymes,
             "artifacts": [
-                analysis_artifact.sha256,
-                report_artifact.sha256,
+                {
+                    "path": ANALYSIS_ARTIFACT_PATH,
+                    "sha256": analysis_artifact.sha256,
+                    "bytes": analysis_artifact.bytes,
+                },
+                {
+                    "path": REPORT_ARTIFACT_PATH,
+                    "sha256": report_artifact.sha256,
+                    "bytes": report_artifact.bytes,
+                },
             ],
         }),
     )?;
-    // Gather the complete response before the terminal write. After Succeeded
-    // is durable no fallible operation remains, so success cannot be returned
-    // for a partially assembled result and a late error cannot strand Running.
-    let artifacts = store.artifacts(&ticket.run_id)?;
-    let evidence = store.evidence(&ticket.run_id)?;
-    let provenance = store.provenance(&ticket.run_id)?;
-    let previews = store.previews(&ticket.run_id)?;
-    let approvals = store.approvals(&ticket.run_id)?;
-    let events = store.events_after(&ticket.run_id, 0, 1_000)?;
-    let event_contract: Vec<_> = events
-        .iter()
-        .map(|event| (event.actor.as_str(), event.kind.as_str()))
-        .collect();
-    if event_contract
-        != [
-            ("SessionActor", "run.created"),
-            ("LumenApproval", "approval.allowed"),
-            ("SessionActor", "analysis.completed"),
-        ]
-        || events.last() != Some(&final_event)
-    {
+    #[cfg(test)]
+    if STOP_AFTER_COMPLETED_EVENT_BEFORE_SEAL.with(|stop| stop.replace(false)) {
         return Err(ScienceError::Invalid(
-            "sequence analysis authority event contract changed before completion".into(),
+            "test crash after completed event before completion seal".into(),
         ));
     }
-    let replay_after = events.last().map_or(0, |event| event.seq);
-    let records = analysis.records.len();
-    // Reopen every candidate artifact and prove exact approval/evidence/
-    // provenance coverage while the run is still rollback-capable. Succeeded
-    // is then the final verified write, including the visible-write/read-back
-    // reconciliation used by other actor-owned science commits.
-    let running = store.load_run(&ticket.run_id)?;
-    let run = store.transition_succeeded_with_manifest(&crate::SuccessfulCompletionManifest {
-        context: running.context,
-        artifacts: artifacts.clone(),
-        evidence: evidence.clone(),
-        provenance: provenance.clone(),
-        previews,
-        events,
-        final_event,
+    let mut witnessed_events = authority_prefix;
+    witnessed_events.push(completed_event);
+    let witness = FreshCompletionWitness {
+        run: run.clone(),
+        artifacts: vec![analysis_artifact, report_artifact],
+        evidence: vec![analysis_evidence, report_evidence],
+        provenance: vec![provenance_record],
+        approvals,
+        events: witnessed_events,
+    };
+    // Reopen through the Allowed-Running seam, recompute the deterministic
+    // payloads, and compare every durable field with the in-memory records
+    // created by this process before writing the exact completion seal.
+    let mut result = aggregate_inner(
+        store,
+        store.load_run(&ticket.run_id)?,
+        source_path,
+        source_bytes,
+        options,
+        Some(&witness),
+        true,
+    )?;
+    result.replayed = false;
+    Ok(result)
+}
+
+/// Actor action required after reopening one deterministic operation.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SeqAnalyzeAdmission {
+    /// No durable run exists; the actor must execute the ordinary Begin.
+    New,
+    /// The exact Pending approval already exists and may be prompted again.
+    AwaitingApproval(ScienceRunTicket),
+    /// A durable Allow already exists; the actor may resume without prompting.
+    ResumeAllowed(ScienceRunTicket),
+    /// An exact completion was sealed or recovered and is safe to return.
+    Replay(Box<SeqAnalyzeResult>),
+}
+
+/// Reopen a deterministic operation before creating a new durable Begin.
+///
+/// This is an actor recovery protocol, not merely a replay lookup. It repairs
+/// each durable cut between Created → Pending → Allow → Running, reuses the
+/// same run and approval, and only recomputes an Allowed Running operation
+/// after all partial outputs have been de-published. Terminal non-success
+/// attempts remain terminal and require a fresh operation id.
+pub fn replay_or_recover_existing(
+    store: &ScienceStore,
+    expected_context: &RunContext,
+    source_path: &Path,
+    source_bytes: &[u8],
+    options: &SeqAnalyzeOptions,
+) -> crate::Result<SeqAnalyzeAdmission> {
+    let loaded = match store.load_run_optional(&expected_context.run_id) {
+        Ok(run) => run,
+        Err(load_error) => {
+            return match store.recover_exact_completion(expected_context) {
+                Ok(Some(run)) => aggregate(store, run, source_path, source_bytes, options)
+                    .map(Box::new)
+                    .map(SeqAnalyzeAdmission::Replay),
+                Ok(None) => Err(load_error),
+                Err(recovery_error) => Err(recovery_error),
+            };
+        }
+    };
+    let Some(run) = loaded else {
+        return Ok(SeqAnalyzeAdmission::New);
+    };
+    if !operation_retry_context_matches(&run.context, expected_context) {
+        return Err(ScienceError::Invalid(
+            "sequence operation id was reused with different authority or request bindings".into(),
+        ));
+    }
+
+    if run.state == RunState::Succeeded {
+        return aggregate(store, run, source_path, source_bytes, options)
+            .map(Box::new)
+            .map(SeqAnalyzeAdmission::Replay);
+    }
+    if let Some(recovered) = store.recover_exact_completion(&run.context)? {
+        return aggregate(store, recovered, source_path, source_bytes, options)
+            .map(Box::new)
+            .map(SeqAnalyzeAdmission::Replay);
+    }
+
+    let ticket = ticket_for_context(&run.context);
+    match run.state {
+        RunState::Created => recover_created_begin(store, &run, &ticket, options),
+        RunState::AwaitingApproval => recover_awaiting_approval(store, &run, &ticket, options),
+        RunState::Running => {
+            recover_allowed_running(store, run, &ticket, source_path, source_bytes, options)
+        }
+        RunState::Succeeded => unreachable!("succeeded was handled above"),
+        RunState::Failed
+        | RunState::Denied
+        | RunState::TimedOut
+        | RunState::Cancelled
+        | RunState::Interrupted => {
+            reject_terminal_outputs(store, &run)?;
+            Err(ScienceError::Invalid(format!(
+                "sequence operation already ended as {:?}; use a new operationId",
+                run.state
+            )))
+        }
+    }
+}
+
+/// Compare a retry derived by the current actor with the immutable authority
+/// context captured by the original Begin.
+///
+/// Project revision is deliberately excluded from equality here: it is a
+/// point-in-time admission snapshot, not caller-controlled request input. The
+/// actor must retain the durable revision and compare it with the current
+/// ProjectStore revision before either re-prompting or resuming execution.
+/// Every other identity, request, source, workspace and policy field remains
+/// byte-exact.
+fn operation_retry_context_matches(durable: &RunContext, candidate: &RunContext) -> bool {
+    let Some(durable_revision) = durable.environment.get(PROJECT_REVISION_ENV) else {
+        return false;
+    };
+    let Some(candidate_revision) = candidate.environment.get(PROJECT_REVISION_ENV) else {
+        return false;
+    };
+    if durable_revision.trim().is_empty() || candidate_revision.trim().is_empty() {
+        return false;
+    }
+    let mut durable_without_revision = durable.clone();
+    durable_without_revision
+        .environment
+        .remove(PROJECT_REVISION_ENV);
+    let mut candidate_without_revision = candidate.clone();
+    candidate_without_revision
+        .environment
+        .remove(PROJECT_REVISION_ENV);
+    durable_without_revision == candidate_without_revision
+}
+
+fn ticket_for_context(context: &RunContext) -> ScienceRunTicket {
+    ScienceRunTicket {
+        project_id: context.project_id.clone(),
+        run_id: context.run_id.clone(),
+        owner_id: context.owner_id.clone(),
+        call_id: CallId::new("science_seq_analyze"),
+    }
+}
+
+fn exact_created_event(
+    event: &crate::Event,
+    context: &RunContext,
+    options: &SeqAnalyzeOptions,
+) -> crate::Result<bool> {
+    Ok(event.run_id == context.run_id
+        && event.schema_version == crate::SCHEMA_VERSION
+        && event.seq == 1
+        && event.actor == "SessionActor"
+        && event.kind == "run.created"
+        && event.payload == created_event_payload(context, options)?)
+}
+
+fn exact_allowed_event(
+    event: &crate::Event,
+    ticket: &ScienceRunTicket,
+    approval: &Approval,
+) -> bool {
+    approval.decision == ApprovalDecision::Allow
+        && decision_event_is_exact(event, ticket, approval, "approval.allowed", None)
+}
+
+/// Reconstruct an actor capability only from an already-sealed durable Allow.
+/// This never creates a missing seal and never issues a second permission. A
+/// seal-visible Awaiting crash cut may only advance to Running after exact
+/// verification.
+pub fn recover_allowed_witness(
+    store: &ScienceStore,
+    ticket: &ScienceRunTicket,
+) -> crate::Result<SeqAllowedWitness> {
+    let run = store.load_run(&ticket.run_id)?;
+    if !matches!(run.state, RunState::AwaitingApproval | RunState::Running)
+        || run.terminal_reason.is_some()
+    {
+        return Err(ScienceError::Invalid(
+            "sequence recovery witness requires an awaiting or running durable Allow".into(),
+        ));
+    }
+    let options = options_from_durable_context(&run.context)?;
+    let approvals = store.approvals(&ticket.run_id)?;
+    let [approval] = approvals.as_slice() else {
+        return Err(ScienceError::Invalid(
+            "sequence recovery witness requires exactly one approval".into(),
+        ));
+    };
+    let events = store.events_after(&ticket.run_id, 0, 1_000)?;
+    let (Some(created_event), Some(allowed_event)) = (events.first(), events.get(1)) else {
+        return Err(ScienceError::Invalid(
+            "sequence recovery witness lost its authority prefix".into(),
+        ));
+    };
+    if run.context.project_id != ticket.project_id
+        || run.context.owner_id != ticket.owner_id
+        || !exact_created_event(created_event, &run.context, &options)?
+        || !exact_allowed_event(allowed_event, ticket, approval)
+    {
+        return Err(ScienceError::Invalid(
+            "sequence recovery witness failed exact authority verification".into(),
+        ));
+    }
+    let authority_sha256 =
+        store.verify_seq_authority_prefix(&run.context, approval, created_event, allowed_event)?;
+    if run.state == RunState::AwaitingApproval {
+        transition_reconciled(store, &ticket.run_id, RunState::Running, None)?;
+    }
+    Ok(SeqAllowedWitness {
+        context: run.context,
+        approval: approval.clone(),
+        created_event: created_event.clone(),
+        allowed_event: allowed_event.clone(),
+        authority_sha256,
+        origin: SeqAllowedWitnessOrigin::RestartRecovery,
+    })
+}
+
+fn verify_allowed_witness(
+    store: &ScienceStore,
+    ticket: &ScienceRunTicket,
+    witness: &SeqAllowedWitness,
+) -> crate::Result<()> {
+    let run = store.load_run(&ticket.run_id)?;
+    let durable_options = options_from_durable_context(&witness.context)?;
+    let approvals = store.approvals(&ticket.run_id)?;
+    let events = store.events_after(&ticket.run_id, 0, 1_000)?;
+    if run.context != witness.context
+        || run.state != RunState::Running
+        || run.terminal_reason.is_some()
+        || witness.context.project_id != ticket.project_id
+        || witness.context.run_id != ticket.run_id
+        || witness.context.owner_id != ticket.owner_id
+        || approvals.as_slice() != [witness.approval.clone()]
+        || events.first() != Some(&witness.created_event)
+        || events.get(1) != Some(&witness.allowed_event)
+        || !exact_created_event(&witness.created_event, &witness.context, &durable_options)?
+        || !exact_allowed_event(&witness.allowed_event, ticket, &witness.approval)
+    {
+        return Err(ScienceError::Invalid(
+            "sequence actor witness differs from durable authority records".into(),
+        ));
+    }
+    let durable_sha256 = store.verify_seq_authority_prefix(
+        &witness.context,
+        &witness.approval,
+        &witness.created_event,
+        &witness.allowed_event,
+    )?;
+    if durable_sha256 != witness.authority_sha256 {
+        return Err(ScienceError::Invalid(
+            "sequence actor witness differs from its durable authority seal".into(),
+        ));
+    }
+    match witness.origin {
+        SeqAllowedWitnessOrigin::FreshActor | SeqAllowedWitnessOrigin::RestartRecovery => Ok(()),
+    }
+}
+
+fn exact_unsealed_completed_event(
+    event: &crate::Event,
+    allowed: &crate::Event,
+    run: &RunRecord,
+    source_path: &Path,
+    source_bytes: &[u8],
+    options: &SeqAnalyzeOptions,
+) -> crate::Result<bool> {
+    let table = translation_table(options.translation_table_id).ok_or_else(|| {
+        ScienceError::Invalid(format!(
+            "unsupported NCBI translation table {}",
+            options.translation_table_id
+        ))
     })?;
+    let digest_enzymes = canonical_restriction_digest_enzymes(&options.restriction_digest_enzymes)
+        .map_err(ScienceError::Invalid)?;
+    if digest_enzymes != options.restriction_digest_enzymes {
+        return Err(ScienceError::Invalid(
+            "restriction digest enzymes must use canonical names and catalog order".into(),
+        ));
+    }
+    let records = parse_analysis_input(source_path, source_bytes).map_err(ScienceError::Invalid)?;
+    let analysis =
+        analyze_with_options(&records, source_bytes, options).map_err(ScienceError::Invalid)?;
+    let analysis_json = serde_json::to_vec_pretty(&analysis)?;
+    let report = markdown_report(
+        &analysis,
+        source_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("input.fa"),
+    );
+    let analysis_bytes = u64::try_from(analysis_json.len())
+        .map_err(|_| ScienceError::Invalid("sequence analysis artifact is too large".into()))?;
+    let report_bytes = u64::try_from(report.len())
+        .map_err(|_| ScienceError::Invalid("sequence report artifact is too large".into()))?;
+
+    Ok(event.schema_version == crate::SCHEMA_VERSION
+        && event.run_id == run.context.run_id
+        && event.seq == 3
+        && event.timestamp >= allowed.timestamp
+        && event.actor == "SessionActor"
+        && event.kind == "analysis.completed"
+        && event.payload
+            == serde_json::json!({
+                "operation_id": run.context.environment.get(OPERATION_ENV),
+                "request_sha256": run.context.environment.get(REQUEST_SHA256_ENV),
+                "source_sha256": run.context.environment.get(SOURCE_SHA256_ENV),
+                "source_bytes": run.context.environment.get(SOURCE_BYTES_ENV),
+                "source_relative_path": run.context.environment.get(SOURCE_RELATIVE_PATH_ENV),
+                "project_revision": run.context.environment.get(PROJECT_REVISION_ENV),
+                "tool": format!("{TOOL} {TOOL_VERSION} inside SessionActor"),
+                "records": analysis.records.len(),
+                "translation_table_id": table.id,
+                "translation_table_name": table.name,
+                "restriction_topology": options.topology,
+                "restriction_digest_enzymes": digest_enzymes,
+                "artifacts": [
+                    {
+                        "path": ANALYSIS_ARTIFACT_PATH,
+                        "sha256": hex_sha256(&analysis_json),
+                        "bytes": analysis_bytes,
+                    },
+                    {
+                        "path": REPORT_ARTIFACT_PATH,
+                        "sha256": hex_sha256(report.as_bytes()),
+                        "bytes": report_bytes,
+                    },
+                ],
+            }))
+}
+
+fn approval_binds_ticket(approval: &Approval, ticket: &ScienceRunTicket) -> bool {
+    approval.project_id == ticket.project_id
+        && approval.run_id == ticket.run_id
+        && approval.owner_id == ticket.owner_id
+        && approval.call_id == ticket.call_id
+}
+
+fn recover_created_begin(
+    store: &ScienceStore,
+    run: &RunRecord,
+    ticket: &ScienceRunTicket,
+    options: &SeqAnalyzeOptions,
+) -> crate::Result<SeqAnalyzeAdmission> {
+    reject_terminal_outputs(store, run)?;
+    let events = store.events_after(&ticket.run_id, 0, 1_000)?;
+    match events.as_slice() {
+        [] => {
+            store.append_event(
+                &ticket.run_id,
+                "SessionActor",
+                "run.created",
+                created_event_payload(&run.context, options)?,
+            )?;
+        }
+        [created] if exact_created_event(created, &run.context, options)? => {}
+        _ => {
+            let terminal = store.recover_interrupted(&ticket.run_id)?;
+            reject_terminal_outputs(store, &terminal)?;
+            return Err(ScienceError::Invalid(
+                "Created sequence operation had an invalid authority event cut".into(),
+            ));
+        }
+    }
+
+    let approvals = store.approvals(&ticket.run_id)?;
+    match approvals.as_slice() {
+        [] => store.request_approval(Approval {
+            project_id: ticket.project_id.clone(),
+            run_id: ticket.run_id.clone(),
+            call_id: ticket.call_id.clone(),
+            owner_id: ticket.owner_id.clone(),
+            decision: ApprovalDecision::Pending,
+            decided_at: None,
+        })?,
+        [approval]
+            if approval_binds_ticket(approval, ticket)
+                && approval.decision == ApprovalDecision::Pending
+                && approval.decided_at.is_none() => {}
+        _ => {
+            let terminal = store.recover_interrupted(&ticket.run_id)?;
+            reject_terminal_outputs(store, &terminal)?;
+            return Err(ScienceError::Invalid(
+                "Created sequence operation had an invalid approval cut".into(),
+            ));
+        }
+    }
+    store.transition(&ticket.run_id, RunState::AwaitingApproval, None)?;
+    Ok(SeqAnalyzeAdmission::AwaitingApproval(ticket.clone()))
+}
+
+fn recover_awaiting_approval(
+    store: &ScienceStore,
+    run: &RunRecord,
+    ticket: &ScienceRunTicket,
+    options: &SeqAnalyzeOptions,
+) -> crate::Result<SeqAnalyzeAdmission> {
+    reject_terminal_outputs(store, run)?;
+    let events = store.events_after(&ticket.run_id, 0, 1_000)?;
+    let Some(created) = events.first() else {
+        return interrupt_invalid_pending(
+            store,
+            ticket,
+            "AwaitingApproval sequence operation lost its created event",
+        );
+    };
+    if !exact_created_event(created, &run.context, options)? {
+        return interrupt_invalid_pending(
+            store,
+            ticket,
+            "AwaitingApproval sequence operation changed its created event",
+        );
+    }
+    let approvals = store.approvals(&ticket.run_id)?;
+    let [approval] = approvals.as_slice() else {
+        return interrupt_invalid_pending(
+            store,
+            ticket,
+            "AwaitingApproval sequence operation requires exactly one approval",
+        );
+    };
+    if !approval_binds_ticket(approval, ticket) {
+        return Err(ScienceError::Ownership);
+    }
+
+    match approval.decision {
+        ApprovalDecision::Pending if approval.decided_at.is_none() => {
+            if events.len() != 1 {
+                return interrupt_invalid_pending(
+                    store,
+                    ticket,
+                    "Pending sequence operation had a decision event",
+                );
+            }
+            Ok(SeqAnalyzeAdmission::AwaitingApproval(ticket.clone()))
+        }
+        ApprovalDecision::Allow if approval.decided_at.is_some() => {
+            match recover_allowed_witness(store, ticket) {
+                Ok(_) => Ok(SeqAnalyzeAdmission::ResumeAllowed(ticket.clone())),
+                Err(error @ ScienceError::Io(_)) => Err(error),
+                Err(error) => fail_awaiting_allowed_recovery(
+                    store,
+                    ticket,
+                    &format!(
+                        "AwaitingApproval durable Allow failed authority seal verification: {error}"
+                    ),
+                ),
+            }
+        }
+        ApprovalDecision::Deny
+        | ApprovalDecision::Timeout
+        | ApprovalDecision::Cancel
+        | ApprovalDecision::Interrupted
+            if approval.decided_at.is_some() =>
+        {
+            recover_terminal_approval(store, ticket, approval, &events)
+        }
+        _ => interrupt_invalid_pending(
+            store,
+            ticket,
+            "sequence approval decision timestamp was inconsistent",
+        ),
+    }
+}
+
+fn fail_awaiting_allowed_recovery(
+    store: &ScienceStore,
+    ticket: &ScienceRunTicket,
+    reason: &str,
+) -> crate::Result<SeqAnalyzeAdmission> {
+    let run = store.load_run(&ticket.run_id)?;
+    reject_terminal_outputs(store, &run)?;
+    let terminal = transition_reconciled(
+        store,
+        &ticket.run_id,
+        RunState::Failed,
+        Some(reason.to_owned()),
+    )?;
+    reject_terminal_outputs(store, &terminal)?;
+    Err(ScienceError::Invalid(format!(
+        "{reason}; operation ended as Failed"
+    )))
+}
+
+fn recover_terminal_approval(
+    store: &ScienceStore,
+    ticket: &ScienceRunTicket,
+    approval: &Approval,
+    events: &[crate::Event],
+) -> crate::Result<SeqAnalyzeAdmission> {
+    store.reject_seq_authority_prefix(&ticket.run_id)?;
+    let decision = &approval.decision;
+    let (state, kind) = match decision {
+        ApprovalDecision::Deny => (RunState::Denied, "approval.denied"),
+        ApprovalDecision::Timeout => (RunState::TimedOut, "approval.timed_out"),
+        ApprovalDecision::Cancel => (RunState::Cancelled, "approval.cancelled"),
+        ApprovalDecision::Interrupted => (RunState::Interrupted, "approval.interrupted"),
+        _ => {
+            return Err(ScienceError::Invalid(
+                "terminal approval recovery received a non-terminal decision".into(),
+            ));
+        }
+    };
+    let recovered_reason = format!("recovered durable {decision:?} decision after restart");
+    let reason = match events {
+        [_] => {
+            append_recoverable_decision_event(
+                store,
+                ticket,
+                approval,
+                kind,
+                Some(&recovered_reason),
+            )?;
+            recovered_reason.clone()
+        }
+        [_, event]
+            if event
+                .payload
+                .get("reason")
+                .and_then(serde_json::Value::as_str)
+                .is_some()
+                && decision_event_is_exact(
+                    event,
+                    ticket,
+                    approval,
+                    kind,
+                    event.payload["reason"].as_str(),
+                ) =>
+        {
+            event.payload["reason"]
+                .as_str()
+                .expect("guarded reason")
+                .to_owned()
+        }
+        _ => {
+            return interrupt_invalid_pending(
+                store,
+                ticket,
+                "terminal sequence approval had an invalid decision event cut",
+            );
+        }
+    };
+    let terminal = transition_reconciled(store, &ticket.run_id, state, Some(reason))?;
+    reject_terminal_outputs(store, &terminal)?;
+    Err(ScienceError::Invalid(format!(
+        "sequence operation already ended as {:?}; use a new operationId",
+        terminal.state
+    )))
+}
+
+fn interrupt_invalid_pending(
+    store: &ScienceStore,
+    ticket: &ScienceRunTicket,
+    reason: &str,
+) -> crate::Result<SeqAnalyzeAdmission> {
+    let terminal = store.recover_interrupted(&ticket.run_id)?;
+    reject_terminal_outputs(store, &terminal)?;
+    Err(ScienceError::Invalid(format!(
+        "{reason}; operation ended as {:?}",
+        terminal.state
+    )))
+}
+
+fn recover_allowed_running(
+    store: &ScienceStore,
+    run: RunRecord,
+    ticket: &ScienceRunTicket,
+    source_path: &Path,
+    source_bytes: &[u8],
+    options: &SeqAnalyzeOptions,
+) -> crate::Result<SeqAnalyzeAdmission> {
+    let approvals = store.approvals(&ticket.run_id)?;
+    let [approval] = approvals.as_slice() else {
+        return fail_running_recovery(
+            store,
+            ticket,
+            "Running sequence operation requires exactly one approval",
+        );
+    };
+    if !approval_binds_ticket(approval, ticket)
+        || approval.decision != ApprovalDecision::Allow
+        || approval.decided_at.is_none()
+    {
+        return fail_running_recovery(
+            store,
+            ticket,
+            "Running sequence operation lost its exact durable Allow",
+        );
+    }
+    if let Err(error) = recover_allowed_witness(store, ticket) {
+        return fail_running_recovery(
+            store,
+            ticket,
+            &format!("Running sequence authority seal failed verification: {error}"),
+        );
+    }
+    let events = match store.events_after(&ticket.run_id, 0, 1_000) {
+        Ok(events) => events,
+        Err(error) => {
+            return fail_running_recovery(
+                store,
+                ticket,
+                &format!("Running sequence event registry failed verification: {error}"),
+            );
+        }
+    };
+    let exact_prefix = match events.first() {
+        Some(event) => exact_created_event(event, &run.context, options)?,
+        None => false,
+    } && events
+        .get(1)
+        .is_some_and(|event| exact_allowed_event(event, ticket, approval));
+    if exact_prefix && events.len() == 3 {
+        let final_event = events[2].clone();
+        if !exact_unsealed_completed_event(
+            &final_event,
+            &events[1],
+            &run,
+            source_path,
+            source_bytes,
+            options,
+        )? {
+            return fail_running_recovery(
+                store,
+                ticket,
+                "Running sequence completion event failed exact verification",
+            );
+        }
+        store.discard_running_completion_attempt(
+            &ticket.project_id,
+            &ticket.run_id,
+            &ticket.owner_id,
+            &ticket.call_id,
+            &[
+                Path::new(ANALYSIS_ARTIFACT_PATH),
+                Path::new(REPORT_ARTIFACT_PATH),
+            ],
+            &final_event,
+        )?;
+        reject_terminal_outputs(store, &store.load_run(&ticket.run_id)?)?;
+        return Ok(SeqAnalyzeAdmission::ResumeAllowed(ticket.clone()));
+    }
+    if exact_prefix && events.len() == 2 {
+        store.discard_running_outputs(
+            &ticket.project_id,
+            &ticket.run_id,
+            &ticket.owner_id,
+            &ticket.call_id,
+            &[
+                Path::new(ANALYSIS_ARTIFACT_PATH),
+                Path::new(REPORT_ARTIFACT_PATH),
+            ],
+        )?;
+        reject_terminal_outputs(store, &store.load_run(&ticket.run_id)?)?;
+        return Ok(SeqAnalyzeAdmission::ResumeAllowed(ticket.clone()));
+    }
+    fail_running_recovery(
+        store,
+        ticket,
+        "Running sequence operation had an invalid authority event cut",
+    )
+}
+
+fn fail_running_recovery(
+    store: &ScienceStore,
+    ticket: &ScienceRunTicket,
+    reason: &str,
+) -> crate::Result<SeqAnalyzeAdmission> {
+    fail_allowed_analysis_recoverably(store, ticket, reason)?;
+    Err(ScienceError::Invalid(format!(
+        "{reason}; operation ended as Failed"
+    )))
+}
+
+/// De-publish every candidate output before making an already-Allowed
+/// sequence operation Failed. If cleanup is incomplete the run intentionally
+/// remains Running and unavailable for serving, so the same operation can
+/// retry cleanup without exposing a Failed terminal that retains outputs.
+pub fn fail_allowed_analysis_recoverably(
+    store: &ScienceStore,
+    ticket: &ScienceRunTicket,
+    reason: impl Into<String>,
+) -> crate::Result<RunRecord> {
+    let reason = reason.into();
+    store.discard_running_outputs(
+        &ticket.project_id,
+        &ticket.run_id,
+        &ticket.owner_id,
+        &ticket.call_id,
+        &[
+            Path::new(ANALYSIS_ARTIFACT_PATH),
+            Path::new(REPORT_ARTIFACT_PATH),
+        ],
+    )?;
+    reject_terminal_outputs(store, &store.load_run(&ticket.run_id)?)?;
+    let _ = store.append_recoverable_commit_event(
+        &ticket.run_id,
+        "SessionActor",
+        "analysis.failed",
+        serde_json::json!({"reason": reason.clone()}),
+    );
+    let terminal = transition_reconciled(store, &ticket.run_id, RunState::Failed, Some(reason))?;
+    reject_terminal_outputs(store, &terminal)?;
+    Ok(terminal)
+}
+
+fn reject_terminal_outputs(store: &ScienceStore, run: &RunRecord) -> crate::Result<()> {
+    if !store.artifacts(&run.context.run_id)?.is_empty()
+        || !store.evidence(&run.context.run_id)?.is_empty()
+        || !store.provenance(&run.context.run_id)?.is_empty()
+        || !store.previews(&run.context.run_id)?.is_empty()
+    {
+        return Err(ScienceError::Invalid(
+            "non-success sequence operation retained scientific outputs".into(),
+        ));
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct FreshCompletionWitness {
+    run: RunRecord,
+    artifacts: Vec<Artifact>,
+    evidence: Vec<Evidence>,
+    provenance: Vec<Provenance>,
+    approvals: Vec<Approval>,
+    events: Vec<crate::Event>,
+}
+
+/// Rebuild and verify the exact public projection of one completed operation.
+///
+/// Sealed `Succeeded` runs replay read-only. A caller inside the same process
+/// may also seal a fresh `Running` completion, but only while presenting the
+/// exact in-memory records it just committed. Restart recovery never seals an
+/// unanchored on-disk completion in place; it verifies, rolls it back, and
+/// deterministically executes again.
+pub fn aggregate(
+    store: &ScienceStore,
+    run: RunRecord,
+    source_path: &Path,
+    source_bytes: &[u8],
+    options: &SeqAnalyzeOptions,
+) -> crate::Result<SeqAnalyzeResult> {
+    aggregate_inner(store, run, source_path, source_bytes, options, None, true)
+}
+
+fn aggregate_inner(
+    store: &ScienceStore,
+    run: RunRecord,
+    source_path: &Path,
+    source_bytes: &[u8],
+    options: &SeqAnalyzeOptions,
+    fresh_witness: Option<&FreshCompletionWitness>,
+    finalize_running: bool,
+) -> crate::Result<SeqAnalyzeResult> {
+    let durable = store.load_run(&run.context.run_id)?;
+    if durable != run {
+        return Err(ScienceError::Invalid(
+            "sequence replay caller record does not match the durable run".into(),
+        ));
+    }
+    let run = durable;
+    if run.schema_version != crate::SCHEMA_VERSION {
+        return Err(ScienceError::Invalid(
+            "sequence replay run schema version is unsupported".into(),
+        ));
+    }
+    let recovering_running = match run.state {
+        RunState::Succeeded if run.successful_completion_manifest_sha256.is_some() => false,
+        RunState::Running if run.successful_completion_manifest_sha256.is_none() => true,
+        _ => {
+            return Err(ScienceError::Invalid(
+                "sequence replay requires a sealed Succeeded run or exact Running completion"
+                    .into(),
+            ));
+        }
+    };
+    if run.terminal_reason.is_some() {
+        return Err(ScienceError::Invalid(
+            "sequence replay cannot carry a terminal reason".into(),
+        ));
+    }
+    let operation_id = run
+        .context
+        .environment
+        .get(OPERATION_ENV)
+        .ok_or_else(|| ScienceError::Invalid("sequence operation binding is missing".into()))?;
+    validate_operation_id(operation_id)?;
+    if run.context.run_id != operation_run_id(operation_id)
+        || run.context.provider != "offline-deterministic"
+        || run.context.approval_policy != "production-session-permission"
+        || run.context.tool_profile != "science-seqbench-v4"
+        || run.context.environment.get("network").map(String::as_str) != Some("disabled")
+        || run.context.environment.get("locale").map(String::as_str) != Some("C")
+        || run
+            .context
+            .environment
+            .get(PROJECT_REVISION_ENV)
+            .is_none_or(String::is_empty)
+    {
+        return Err(ScienceError::Invalid(
+            "sequence replay authority context is incomplete or mismatched".into(),
+        ));
+    }
+    let source_relative = source_relative_binding(&run.context.workspace_root, source_path)?;
+    let source_sha256 = hex_sha256(source_bytes);
+    let request_sha256 = request_sha256(&source_relative, source_bytes, options)?;
+    if run.context.environment.get(SOURCE_RELATIVE_PATH_ENV) != Some(&source_relative)
+        || run.context.environment.get(SOURCE_SHA256_ENV) != Some(&source_sha256)
+        || run.context.environment.get(SOURCE_BYTES_ENV) != Some(&source_bytes.len().to_string())
+        || run.context.environment.get(REQUEST_SHA256_ENV) != Some(&request_sha256)
+    {
+        return Err(ScienceError::Invalid(
+            "sequence replay source snapshot does not match durable admission".into(),
+        ));
+    }
+
+    let table = translation_table(options.translation_table_id).ok_or_else(|| {
+        ScienceError::Invalid(format!(
+            "unsupported NCBI translation table {}",
+            options.translation_table_id
+        ))
+    })?;
+    let digest_enzymes = canonical_restriction_digest_enzymes(&options.restriction_digest_enzymes)
+        .map_err(ScienceError::Invalid)?;
+    if digest_enzymes != options.restriction_digest_enzymes
+        || run.context.environment.get("translation_table_id")
+            != Some(&options.translation_table_id.to_string())
+        || run.context.environment.get("translation_table_name") != Some(&table.name.to_string())
+        || run.context.environment.get("restriction_topology")
+            != Some(&options.topology.as_str().to_string())
+        || run.context.environment.get("restriction_digest_enzymes")
+            != Some(&digest_enzymes.join(","))
+    {
+        return Err(ScienceError::Invalid(
+            "sequence replay options do not match durable admission".into(),
+        ));
+    }
+
+    let artifacts = store.artifacts(&run.context.run_id)?;
+    let [analysis_artifact, report_artifact] = artifacts.as_slice() else {
+        return Err(ScienceError::Invalid(
+            "sequence replay requires exactly two artifacts".into(),
+        ));
+    };
+    let expected_call = CallId::new("science_seq_analyze");
+    if analysis_artifact.run_id != run.context.run_id
+        || report_artifact.run_id != run.context.run_id
+        || analysis_artifact.call_id != expected_call
+        || report_artifact.call_id != expected_call
+        || analysis_artifact.relative_path != Path::new(ANALYSIS_ARTIFACT_PATH)
+        || report_artifact.relative_path != Path::new(REPORT_ARTIFACT_PATH)
+        || analysis_artifact.mime != "application/json"
+        || analysis_artifact.preview != "table"
+        || report_artifact.mime != "text/markdown"
+        || report_artifact.preview != "document"
+    {
+        return Err(ScienceError::Invalid(
+            "sequence replay artifact registry failed verification".into(),
+        ));
+    }
+    let read_artifact = |relative: &Path, max_bytes: u64| {
+        if recovering_running {
+            store.allowed_running_artifact_bytes_bounded(
+                &run.context.project_id,
+                &run.context.run_id,
+                &run.context.owner_id,
+                &expected_call,
+                relative,
+                max_bytes,
+            )
+        } else {
+            store.artifact_bytes_bounded(
+                &run.context.project_id,
+                &run.context.run_id,
+                &run.context.owner_id,
+                relative,
+                max_bytes,
+            )
+        }
+    };
+    let analysis_bytes =
+        read_artifact(Path::new(ANALYSIS_ARTIFACT_PATH), ANALYSIS_REPLAY_MAX_BYTES)?;
+    let report_bytes = read_artifact(Path::new(REPORT_ARTIFACT_PATH), REPORT_REPLAY_MAX_BYTES)?;
+    if analysis_artifact.sha256 != hex_sha256(&analysis_bytes)
+        || analysis_artifact.bytes != analysis_bytes.len() as u64
+        || report_artifact.sha256 != hex_sha256(&report_bytes)
+        || report_artifact.bytes != report_bytes.len() as u64
+    {
+        return Err(ScienceError::Invalid(
+            "sequence replay artifact bytes failed verification".into(),
+        ));
+    }
+    let analysis: Analysis = serde_json::from_slice(&analysis_bytes)?;
+    if serde_json::to_vec_pretty(&analysis)? != analysis_bytes {
+        return Err(ScienceError::Invalid(
+            "sequence analysis artifact is not the canonical JSON projection".into(),
+        ));
+    }
+    let records = parse_analysis_input(source_path, source_bytes).map_err(ScienceError::Invalid)?;
+    let expected_analysis =
+        analyze_with_options(&records, source_bytes, options).map_err(ScienceError::Invalid)?;
+    if analysis != expected_analysis {
+        return Err(ScienceError::Invalid(
+            "sequence replay analysis does not match the admitted source bytes".into(),
+        ));
+    }
+    let expected_report = markdown_report(
+        &analysis,
+        source_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("input.fa"),
+    );
+    if report_bytes != expected_report.as_bytes() {
+        return Err(ScienceError::Invalid(
+            "sequence replay report does not match the verified analysis".into(),
+        ));
+    }
+
+    let approvals = store.approvals(&run.context.run_id)?;
+    let [approval] = approvals.as_slice() else {
+        return Err(ScienceError::Invalid(
+            "sequence replay requires exactly one approval".into(),
+        ));
+    };
+    if approval.project_id != run.context.project_id
+        || approval.run_id != run.context.run_id
+        || approval.owner_id != run.context.owner_id
+        || approval.call_id != expected_call
+        || approval.decision != ApprovalDecision::Allow
+        || approval.decided_at.is_none()
+    {
+        return Err(ScienceError::Invalid(
+            "sequence replay approval chain failed verification".into(),
+        ));
+    }
+
+    let evidence = store.evidence(&run.context.run_id)?;
+    let [analysis_evidence, report_evidence] = evidence.as_slice() else {
+        return Err(ScienceError::Invalid(
+            "sequence replay requires exactly two evidence records".into(),
+        ));
+    };
+    let source = source_path.display().to_string();
+    let expected_analysis_evidence = Evidence {
+        run_id: run.context.run_id.clone(),
+        claim: format!(
+            "analyzed {} sequence record(s) with {TOOL} {TOOL_VERSION}",
+            analysis.records.len()
+        ),
+        source: source.clone(),
+        artifact_sha256: Some(analysis_artifact.sha256.clone()),
+        verified_at: analysis_evidence.verified_at,
+    };
+    let expected_report_evidence = Evidence {
+        run_id: run.context.run_id.clone(),
+        claim: format!(
+            "rendered the verified analysis of {} sequence record(s) as a Markdown report",
+            analysis.records.len()
+        ),
+        source: source.clone(),
+        artifact_sha256: Some(report_artifact.sha256.clone()),
+        verified_at: report_evidence.verified_at,
+    };
+    if analysis_evidence != &expected_analysis_evidence
+        || report_evidence != &expected_report_evidence
+    {
+        return Err(ScienceError::Invalid(
+            "sequence replay evidence chain failed verification".into(),
+        ));
+    }
+
+    let provenance = store.provenance(&run.context.run_id)?;
+    let [recorded_provenance] = provenance.as_slice() else {
+        return Err(ScienceError::Invalid(
+            "sequence replay requires exactly one provenance record".into(),
+        ));
+    };
+    let expected_provenance = Provenance {
+        run_id: run.context.run_id.clone(),
+        source_uri: format!("file://{source}"),
+        source_commit: None,
+        source_path: Some(source.clone()),
+        license: "caller-supplied input".into(),
+        retrieved_at: recorded_provenance.retrieved_at,
+        input_sha256: source_sha256,
+        tool: format!("{TOOL} {TOOL_VERSION} inside SessionActor"),
+        environment: BTreeMap::from([
+            ("algorithm".into(), "seqbench-v6".into()),
+            (
+                "algorithm_source_repository".into(),
+                MOTIF_REPOSITORY.into(),
+            ),
+            ("algorithm_source_commit".into(), MOTIF_COMMIT.into()),
+            ("algorithm_source_license".into(), MOTIF_LICENSE.into()),
+            ("authority".into(), "SessionActor".into()),
+            ("network".into(), "disabled".into()),
+            (
+                "translation_table_id".into(),
+                options.translation_table_id.to_string(),
+            ),
+            ("translation_table_name".into(), table.name.into()),
+            (
+                "restriction_topology".into(),
+                options.topology.as_str().into(),
+            ),
+            (
+                "restriction_digest_enzymes".into(),
+                digest_enzymes.join(","),
+            ),
+        ]),
+    };
+    let previews = store.previews(&run.context.run_id)?;
+    if recorded_provenance != &expected_provenance || !previews.is_empty() {
+        return Err(ScienceError::Invalid(
+            "sequence replay provenance or preview chain failed verification".into(),
+        ));
+    }
+
+    let events = store.events_after(&run.context.run_id, 0, 1_000)?;
+    let [created, allowed, completed] = events.as_slice() else {
+        return Err(ScienceError::Invalid(
+            "sequence replay requires exactly three authority events".into(),
+        ));
+    };
+    if [
+        created.schema_version,
+        allowed.schema_version,
+        completed.schema_version,
+    ] != [crate::SCHEMA_VERSION; 3]
+        || created.run_id != run.context.run_id
+        || allowed.run_id != run.context.run_id
+        || completed.run_id != run.context.run_id
+        || [created.seq, allowed.seq, completed.seq] != [1, 2, 3]
+        || created.timestamp > allowed.timestamp
+        || allowed.timestamp > completed.timestamp
+        || created.actor != "SessionActor"
+        || created.kind != "run.created"
+        || created.payload
+            != serde_json::json!({
+                "kind": "seq_analyze",
+                "operation_id": operation_id,
+                "request_sha256": request_sha256,
+                "source_sha256": run.context.environment.get(SOURCE_SHA256_ENV),
+                "source_bytes": run.context.environment.get(SOURCE_BYTES_ENV),
+                "source_relative_path": source_relative,
+                "project_revision": run.context.environment.get(PROJECT_REVISION_ENV),
+                "translation_table_id": table.id,
+                "translation_table_name": table.name,
+                "restriction_topology": options.topology,
+                "restriction_digest_enzymes": digest_enzymes,
+            })
+        || allowed.actor != "LumenApproval"
+        || allowed.kind != "approval.allowed"
+        || allowed.payload
+            != serde_json::json!({
+                "call_id": expected_call.0,
+                "decided_at": approval.decided_at,
+            })
+        || approval
+            .decided_at
+            .is_none_or(|decided_at| allowed.timestamp < decided_at)
+        || completed.actor != "SessionActor"
+        || completed.kind != "analysis.completed"
+        || completed.payload
+            != serde_json::json!({
+                "operation_id": operation_id,
+                "request_sha256": run.context.environment.get(REQUEST_SHA256_ENV),
+                "source_sha256": run.context.environment.get(SOURCE_SHA256_ENV),
+                "source_bytes": run.context.environment.get(SOURCE_BYTES_ENV),
+                "source_relative_path": run.context.environment.get(SOURCE_RELATIVE_PATH_ENV),
+                "project_revision": run.context.environment.get(PROJECT_REVISION_ENV),
+                "tool": format!("{TOOL} {TOOL_VERSION} inside SessionActor"),
+                "records": analysis.records.len(),
+                "translation_table_id": table.id,
+                "translation_table_name": table.name,
+                "restriction_topology": options.topology,
+                "restriction_digest_enzymes": digest_enzymes,
+                "artifacts": [
+                    {
+                        "path": ANALYSIS_ARTIFACT_PATH,
+                        "sha256": analysis_artifact.sha256,
+                        "bytes": analysis_artifact.bytes,
+                    },
+                    {
+                        "path": REPORT_ARTIFACT_PATH,
+                        "sha256": report_artifact.sha256,
+                        "bytes": report_artifact.bytes,
+                    },
+                ],
+            })
+    {
+        return Err(ScienceError::Invalid(
+            "sequence replay authority event contract failed verification".into(),
+        ));
+    }
+    store.verify_seq_authority_prefix(&run.context, approval, created, allowed)?;
+
+    if let Some(witness) = fresh_witness
+        && (run != witness.run
+            || artifacts != witness.artifacts
+            || evidence != witness.evidence
+            || provenance != witness.provenance
+            || approvals != witness.approvals
+            || events != witness.events)
+    {
+        return Err(ScienceError::Invalid(
+            "fresh sequence completion changed after its in-memory authority witness".into(),
+        ));
+    }
+
+    let replay_after = completed.seq;
+    let run = if recovering_running && finalize_running {
+        store.transition_seq_succeeded_with_manifest(
+            &crate::SuccessfulCompletionManifest {
+                context: run.context.clone(),
+                artifacts: artifacts.clone(),
+                evidence: evidence.clone(),
+                provenance: provenance.clone(),
+                previews,
+                events: events.clone(),
+                final_event: completed.clone(),
+            },
+            approval,
+            created,
+            allowed,
+        )?
+    } else {
+        run
+    };
 
     Ok(SeqAnalyzeResult {
-        records,
+        records: analysis.records.len(),
         artifacts,
         evidence,
         provenance,
@@ -2557,6 +4331,7 @@ fn finish_allowed_analysis(
         replay_after,
         run,
         analysis,
+        replayed: true,
     })
 }
 
@@ -2654,23 +4429,587 @@ fn discard_failed_analysis_outputs(
 #[cfg(test)]
 mod protocol_tests {
     use super::*;
-    use crate::{ProjectId, RunId};
+    use crate::ProjectId;
+    use std::path::PathBuf;
 
     const FASTA: &[u8] = b">seq1\nACGTACGT\n>seq2\nGAATTC\n";
 
+    fn mark_allowed_recoverable(
+        store: &ScienceStore,
+        ticket: &ScienceRunTicket,
+    ) -> crate::Result<SeqAllowedWitness> {
+        let created_event = store
+            .events_after(&ticket.run_id, 0, 1_000)?
+            .into_iter()
+            .next()
+            .ok_or_else(|| ScienceError::Invalid("test Begin lost its created event".into()))?;
+        super::mark_allowed_recoverable_fresh(store, ticket, &created_event)
+    }
+
     fn context(root: &Path, project: &str, owner: &str) -> RunContext {
+        let source_path = root.join("input.fa");
+        std::fs::write(&source_path, FASTA).unwrap();
+        operation_context(
+            root,
+            project,
+            owner,
+            "session-seq",
+            "seq-test-operation-0001",
+            &source_path,
+            FASTA,
+            &SeqAnalyzeOptions::default(),
+        )
+    }
+
+    fn operation_context(
+        workspace: &Path,
+        project: &str,
+        owner: &str,
+        session: &str,
+        operation_id: &str,
+        source_path: &Path,
+        source_bytes: &[u8],
+        options: &SeqAnalyzeOptions,
+    ) -> RunContext {
+        let source_relative = source_relative_binding(workspace, source_path).unwrap();
         RunContext {
-            run_id: RunId::new_v7(),
+            run_id: operation_run_id(operation_id),
             project_id: ProjectId::new(project),
-            session_id: "session-seq".into(),
+            session_id: session.into(),
             owner_id: owner.into(),
-            workspace_root: root.to_path_buf(),
+            workspace_root: workspace.to_path_buf(),
             provider: "offline-deterministic".into(),
             approval_policy: "production-session-permission".into(),
-            tool_profile: "science-seqbench-v1".into(),
-            artifact_root: root.join("science-store"),
-            environment: BTreeMap::from([("network".into(), "disabled".into())]),
+            tool_profile: "science-seqbench-v4".into(),
+            artifact_root: workspace.join("science-store"),
+            environment: BTreeMap::from([
+                ("network".into(), "disabled".into()),
+                ("locale".into(), "C".into()),
+                (OPERATION_ENV.into(), operation_id.into()),
+                (
+                    REQUEST_SHA256_ENV.into(),
+                    request_sha256(&source_relative, source_bytes, options).unwrap(),
+                ),
+                (SOURCE_SHA256_ENV.into(), hex_sha256(source_bytes)),
+                (SOURCE_BYTES_ENV.into(), source_bytes.len().to_string()),
+                (SOURCE_RELATIVE_PATH_ENV.into(), source_relative),
+                (PROJECT_REVISION_ENV.into(), "project-revision-1".into()),
+                (
+                    "translation_table_id".into(),
+                    options.translation_table_id.to_string(),
+                ),
+                (
+                    "translation_table_name".into(),
+                    translation_table_name(options.translation_table_id)
+                        .unwrap()
+                        .into(),
+                ),
+                (
+                    "restriction_topology".into(),
+                    options.topology.as_str().into(),
+                ),
+                (
+                    "restriction_digest_enzymes".into(),
+                    options.restriction_digest_enzymes.join(","),
+                ),
+            ]),
         }
+    }
+
+    #[test]
+    fn deterministic_operation_and_request_hashes_match_golden_vectors() {
+        assert_eq!(
+            operation_run_id("seq-golden-operation-0001").0,
+            "seqa-3516858cfa7f65f8e18bd94f89aef23c71e9e702"
+        );
+        let options = SeqAnalyzeOptions {
+            translation_table_id: 2,
+            topology: SequenceTopology::Circular,
+            restriction_digest_enzymes: vec!["EcoRI".into(), "BamHI".into()],
+        };
+        assert_eq!(
+            request_sha256("inputs/golden.fasta", FASTA, &options).unwrap(),
+            "8da3bdd51407a8fa3d2d63b98235a46311f1a36f8aaf2e50e423856aa861b177"
+        );
+    }
+
+    #[test]
+    fn created_crash_cuts_resume_one_pending_run_without_duplicate_records() {
+        for cut in 0..=2 {
+            let temp = tempfile::tempdir().unwrap();
+            let workspace = dunce::canonicalize(temp.path()).unwrap();
+            let source_path = workspace.join("created-cut.fasta");
+            std::fs::write(&source_path, FASTA).unwrap();
+            let options = SeqAnalyzeOptions::default();
+            let context = operation_context(
+                &workspace,
+                "project-created-cut",
+                "alice",
+                "session-created-cut",
+                &format!("seq-created-cut-{cut}-0001"),
+                &source_path,
+                FASTA,
+                &options,
+            );
+            let store = ScienceStore::new(&context.artifact_root);
+            store.create_run(context.clone()).unwrap();
+            let ticket = ticket_for_context(&context);
+            if cut >= 1 {
+                store
+                    .append_event(
+                        &ticket.run_id,
+                        "SessionActor",
+                        "run.created",
+                        created_event_payload(&context, &options).unwrap(),
+                    )
+                    .unwrap();
+            }
+            if cut >= 2 {
+                store
+                    .request_approval(Approval {
+                        project_id: ticket.project_id.clone(),
+                        run_id: ticket.run_id.clone(),
+                        call_id: ticket.call_id.clone(),
+                        owner_id: ticket.owner_id.clone(),
+                        decision: ApprovalDecision::Pending,
+                        decided_at: None,
+                    })
+                    .unwrap();
+            }
+
+            assert!(matches!(
+                replay_or_recover_existing(
+                    &store,
+                    &context,
+                    &source_path,
+                    FASTA,
+                    &options,
+                )
+                .unwrap(),
+                SeqAnalyzeAdmission::AwaitingApproval(ref recovered) if recovered == &ticket
+            ));
+            assert_eq!(
+                store.load_run(&ticket.run_id).unwrap().state,
+                RunState::AwaitingApproval
+            );
+            assert_eq!(
+                store.events_after(&ticket.run_id, 0, 1_000).unwrap().len(),
+                1
+            );
+            assert_eq!(store.approvals(&ticket.run_id).unwrap().len(), 1);
+        }
+    }
+
+    #[test]
+    fn durable_decision_crash_cuts_preserve_every_actor_decision() {
+        for (label, decision, expected_state) in [
+            ("allow", ApprovalDecision::Allow, RunState::Failed),
+            ("deny", ApprovalDecision::Deny, RunState::Denied),
+            ("timeout", ApprovalDecision::Timeout, RunState::TimedOut),
+            ("cancel", ApprovalDecision::Cancel, RunState::Cancelled),
+            (
+                "interrupted",
+                ApprovalDecision::Interrupted,
+                RunState::Interrupted,
+            ),
+        ] {
+            for event_persisted in [false, true] {
+                let temp = tempfile::tempdir().unwrap();
+                let workspace = dunce::canonicalize(temp.path()).unwrap();
+                let source_path = workspace.join("decision-cut.fasta");
+                std::fs::write(&source_path, FASTA).unwrap();
+                let options = SeqAnalyzeOptions::default();
+                let context = operation_context(
+                    &workspace,
+                    "project-decision-cut",
+                    "alice",
+                    "session-decision-cut",
+                    &format!("seq-{label}-cut-{event_persisted}-0001"),
+                    &source_path,
+                    FASTA,
+                    &options,
+                );
+                let store = ScienceStore::new(&context.artifact_root);
+                let ticket =
+                    begin_analysis_with_options(&store, context.clone(), &options).unwrap();
+                let approval = store
+                    .decide_approval(
+                        &ticket.project_id,
+                        &ticket.run_id,
+                        &ticket.owner_id,
+                        &ticket.call_id,
+                        decision.clone(),
+                    )
+                    .unwrap();
+                if event_persisted {
+                    let (kind, reason) = match &decision {
+                        ApprovalDecision::Allow => ("approval.allowed", None),
+                        ApprovalDecision::Deny => ("approval.denied", Some("operator denied")),
+                        ApprovalDecision::Timeout => {
+                            ("approval.timed_out", Some("operator timed out"))
+                        }
+                        ApprovalDecision::Cancel => {
+                            ("approval.cancelled", Some("operator cancelled"))
+                        }
+                        ApprovalDecision::Interrupted => {
+                            ("approval.interrupted", Some("actor interrupted"))
+                        }
+                        _ => unreachable!(),
+                    };
+                    append_recoverable_decision_event(&store, &ticket, &approval, kind, reason)
+                        .unwrap();
+                }
+
+                let recovery =
+                    replay_or_recover_existing(&store, &context, &source_path, FASTA, &options);
+                assert!(recovery.is_err());
+                assert_eq!(
+                    store.load_run(&ticket.run_id).unwrap().state,
+                    expected_state
+                );
+                assert_eq!(
+                    store.approvals(&ticket.run_id).unwrap()[0].decision,
+                    decision
+                );
+                assert_eq!(
+                    store.events_after(&ticket.run_id, 0, 1_000).unwrap().len(),
+                    if decision == ApprovalDecision::Allow && !event_persisted {
+                        1
+                    } else {
+                        2
+                    }
+                );
+                assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
+                assert!(
+                    !store
+                        .root()
+                        .join("runs")
+                        .join(&ticket.run_id.0)
+                        .join(crate::SEQ_AUTHORITY_PREFIX_SEAL_FILE)
+                        .exists(),
+                    "restart synthesized an authority-prefix seal from durable records"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn completed_event_crash_cut_discards_unsealed_projection_and_reexecutes() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = dunce::canonicalize(temp.path()).unwrap();
+        let source_path = workspace.join("completed-cut.fasta");
+        std::fs::write(&source_path, FASTA).unwrap();
+        let options = SeqAnalyzeOptions::default();
+        let context = operation_context(
+            &workspace,
+            "project-completed-cut",
+            "alice",
+            "session-completed-cut",
+            "seq-completed-cut-operation-0001",
+            &source_path,
+            FASTA,
+            &options,
+        );
+        let store = ScienceStore::new(&context.artifact_root);
+        let ticket = begin_analysis_with_options(&store, context.clone(), &options).unwrap();
+        let witness = mark_allowed_recoverable(&store, &ticket).unwrap();
+        STOP_AFTER_COMPLETED_EVENT_BEFORE_SEAL.with(|stop| stop.set(true));
+        assert!(
+            finish_allowed_analysis(&store, &ticket, &source_path, FASTA, &options, &witness)
+                .is_err()
+        );
+        assert_eq!(
+            store.load_run(&ticket.run_id).unwrap().state,
+            RunState::Running
+        );
+        assert_eq!(store.artifacts(&ticket.run_id).unwrap().len(), 2);
+        assert_eq!(
+            store.events_after(&ticket.run_id, 0, 1_000).unwrap().len(),
+            3
+        );
+        drop(store);
+
+        let reopened = ScienceStore::new(&context.artifact_root);
+        let SeqAnalyzeAdmission::ResumeAllowed(recovered) =
+            replay_or_recover_existing(&reopened, &context, &source_path, FASTA, &options).unwrap()
+        else {
+            panic!("unsealed completed projection must resume under its durable Allow");
+        };
+        assert_eq!(recovered, ticket);
+        assert_eq!(
+            reopened.load_run(&ticket.run_id).unwrap().state,
+            RunState::Running
+        );
+        assert!(reopened.artifacts(&ticket.run_id).unwrap().is_empty());
+        assert!(reopened.evidence(&ticket.run_id).unwrap().is_empty());
+        assert!(reopened.provenance(&ticket.run_id).unwrap().is_empty());
+        assert_eq!(reopened.approvals(&ticket.run_id).unwrap().len(), 1);
+        assert_eq!(
+            reopened
+                .events_after(&ticket.run_id, 0, 1_000)
+                .unwrap()
+                .len(),
+            2
+        );
+        let completed =
+            finish_analysis_with_options(&reopened, ticket, &source_path, FASTA, &options).unwrap();
+        assert_eq!(completed.run.state, RunState::Succeeded);
+        assert_eq!(completed.artifacts.len(), 2);
+        assert!(!completed.replayed);
+    }
+
+    #[test]
+    fn completed_rollback_crash_after_output_clear_removes_event_and_reexecutes() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = dunce::canonicalize(temp.path()).unwrap();
+        let source_path = workspace.join("completed-rollback-cut.fasta");
+        std::fs::write(&source_path, FASTA).unwrap();
+        let options = SeqAnalyzeOptions::default();
+        let context = operation_context(
+            &workspace,
+            "project-completed-rollback-cut",
+            "alice",
+            "session-completed-rollback-cut",
+            "seq-completed-rollback-cut-operation-0001",
+            &source_path,
+            FASTA,
+            &options,
+        );
+        let store = ScienceStore::new(&context.artifact_root);
+        let ticket = begin_analysis_with_options(&store, context.clone(), &options).unwrap();
+        let witness = mark_allowed_recoverable(&store, &ticket).unwrap();
+        STOP_AFTER_COMPLETED_EVENT_BEFORE_SEAL.with(|stop| stop.set(true));
+        assert!(
+            finish_allowed_analysis(&store, &ticket, &source_path, FASTA, &options, &witness)
+                .is_err()
+        );
+
+        // This is the exact power-loss cut between output de-publication and
+        // removal of the unsealed third event.
+        store
+            .discard_running_outputs(
+                &ticket.project_id,
+                &ticket.run_id,
+                &ticket.owner_id,
+                &ticket.call_id,
+                &[
+                    Path::new(ANALYSIS_ARTIFACT_PATH),
+                    Path::new(REPORT_ARTIFACT_PATH),
+                ],
+            )
+            .unwrap();
+        assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
+        assert!(store.evidence(&ticket.run_id).unwrap().is_empty());
+        assert!(store.provenance(&ticket.run_id).unwrap().is_empty());
+        assert_eq!(
+            store.events_after(&ticket.run_id, 0, 1_000).unwrap().len(),
+            3,
+            "the simulated crash cut must retain the exact completed event"
+        );
+        drop(store);
+
+        let reopened = ScienceStore::new(&context.artifact_root);
+        let SeqAnalyzeAdmission::ResumeAllowed(recovered) =
+            replay_or_recover_existing(&reopened, &context, &source_path, FASTA, &options).unwrap()
+        else {
+            panic!("partially rolled-back completion did not resume its durable Allow");
+        };
+        assert_eq!(recovered, ticket);
+        assert_eq!(
+            reopened
+                .events_after(&ticket.run_id, 0, 1_000)
+                .unwrap()
+                .len(),
+            2,
+            "recovery must finish removing the unsealed completed event"
+        );
+        assert_eq!(
+            reopened.load_run(&ticket.run_id).unwrap().state,
+            RunState::Running
+        );
+
+        let completed =
+            finish_analysis_with_options(&reopened, ticket, &source_path, FASTA, &options).unwrap();
+        assert_eq!(completed.run.state, RunState::Succeeded);
+        assert_eq!(completed.artifacts.len(), 2);
+        assert!(!completed.replayed);
+    }
+
+    #[test]
+    fn current_project_revision_drift_still_reaches_durable_running_allow() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = dunce::canonicalize(temp.path()).unwrap();
+        let source_path = workspace.join("revision-recovery.fasta");
+        std::fs::write(&source_path, FASTA).unwrap();
+        let options = SeqAnalyzeOptions::default();
+        let context = operation_context(
+            &workspace,
+            "project-revision-recovery",
+            "alice",
+            "session-revision-recovery",
+            "seq-revision-recovery-operation-0001",
+            &source_path,
+            FASTA,
+            &options,
+        );
+        let store = ScienceStore::new(&context.artifact_root);
+        let ticket = begin_analysis_with_options(&store, context.clone(), &options).unwrap();
+        mark_allowed_recoverable(&store, &ticket).unwrap();
+
+        let mut current_candidate = context.clone();
+        current_candidate.environment.insert(
+            PROJECT_REVISION_ENV.into(),
+            "project-revision-after-process-restart".into(),
+        );
+        let admission =
+            replay_or_recover_existing(&store, &current_candidate, &source_path, FASTA, &options)
+                .unwrap();
+        assert!(matches!(
+            admission,
+            SeqAnalyzeAdmission::ResumeAllowed(ref recovered) if recovered == &ticket
+        ));
+        assert_eq!(
+            store.load_run(&ticket.run_id).unwrap().context,
+            context,
+            "retry replaced the immutable Begin revision with the current project revision"
+        );
+    }
+
+    #[test]
+    fn completed_cut_approval_timestamp_tamper_fails_without_outputs() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = dunce::canonicalize(temp.path()).unwrap();
+        let source_path = workspace.join("approval-time-tamper.fasta");
+        std::fs::write(&source_path, FASTA).unwrap();
+        let options = SeqAnalyzeOptions::default();
+        let context = operation_context(
+            &workspace,
+            "project-approval-time-tamper",
+            "alice",
+            "session-approval-time-tamper",
+            "seq-approval-time-tamper-operation-0001",
+            &source_path,
+            FASTA,
+            &options,
+        );
+        let store = ScienceStore::new(&context.artifact_root);
+        let ticket = begin_analysis_with_options(&store, context.clone(), &options).unwrap();
+        let witness = mark_allowed_recoverable(&store, &ticket).unwrap();
+        STOP_AFTER_COMPLETED_EVENT_BEFORE_SEAL.with(|stop| stop.set(true));
+        assert!(
+            finish_allowed_analysis(&store, &ticket, &source_path, FASTA, &options, &witness)
+                .is_err()
+        );
+
+        let mut approvals = store.approvals(&ticket.run_id).unwrap();
+        approvals[0].decided_at = approvals[0]
+            .decided_at
+            .map(|time| time + chrono::Duration::days(1));
+        let run_root = store.root().join("runs").join(&ticket.run_id.0);
+        std::fs::write(
+            run_root.join("approvals.json"),
+            serde_json::to_vec_pretty(&approvals).unwrap(),
+        )
+        .unwrap();
+        drop(store);
+
+        let reopened = ScienceStore::new(&context.artifact_root);
+        assert!(
+            replay_or_recover_existing(&reopened, &context, &source_path, FASTA, &options,)
+                .is_err(),
+            "changed approval timestamp was sealed as an exact completion"
+        );
+        assert_eq!(
+            reopened.load_run(&ticket.run_id).unwrap().state,
+            RunState::Failed
+        );
+        assert!(reopened.artifacts(&ticket.run_id).unwrap().is_empty());
+        assert!(reopened.evidence(&ticket.run_id).unwrap().is_empty());
+        assert!(reopened.provenance(&ticket.run_id).unwrap().is_empty());
+        assert!(
+            !run_root.join("successful-completion-seal.json").exists(),
+            "tampered approval received a completion seal"
+        );
+    }
+
+    #[test]
+    fn completed_cut_unanchored_audit_times_are_discarded_before_reexecution() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = dunce::canonicalize(temp.path()).unwrap();
+        let source_path = workspace.join("audit-time-tamper.fasta");
+        std::fs::write(&source_path, FASTA).unwrap();
+        let options = SeqAnalyzeOptions::default();
+        let context = operation_context(
+            &workspace,
+            "project-audit-time-tamper",
+            "alice",
+            "session-audit-time-tamper",
+            "seq-audit-time-tamper-operation-0001",
+            &source_path,
+            FASTA,
+            &options,
+        );
+        let store = ScienceStore::new(&context.artifact_root);
+        let ticket = begin_analysis_with_options(&store, context.clone(), &options).unwrap();
+        let witness = mark_allowed_recoverable(&store, &ticket).unwrap();
+        STOP_AFTER_COMPLETED_EVENT_BEFORE_SEAL.with(|stop| stop.set(true));
+        assert!(
+            finish_allowed_analysis(&store, &ticket, &source_path, FASTA, &options, &witness)
+                .is_err()
+        );
+
+        let forged_time = Utc::now() + chrono::Duration::days(30);
+        let mut evidence = store.evidence(&ticket.run_id).unwrap();
+        for item in &mut evidence {
+            item.verified_at = forged_time;
+        }
+        let mut provenance = store.provenance(&ticket.run_id).unwrap();
+        provenance[0].retrieved_at = forged_time;
+        let mut events = store.events_after(&ticket.run_id, 0, 1_000).unwrap();
+        events[2].timestamp = forged_time;
+        let run_root = store.root().join("runs").join(&ticket.run_id.0);
+        for (name, bytes) in [
+            (
+                "evidence.json",
+                serde_json::to_vec_pretty(&evidence).unwrap(),
+            ),
+            (
+                "provenance.json",
+                serde_json::to_vec_pretty(&provenance).unwrap(),
+            ),
+            ("events.json", serde_json::to_vec_pretty(&events).unwrap()),
+        ] {
+            std::fs::write(run_root.join(name), bytes).unwrap();
+        }
+        drop(store);
+
+        let reopened = ScienceStore::new(&context.artifact_root);
+        let SeqAnalyzeAdmission::ResumeAllowed(recovered) =
+            replay_or_recover_existing(&reopened, &context, &source_path, FASTA, &options).unwrap()
+        else {
+            panic!("unanchored audit records were trusted instead of rolled back");
+        };
+        assert_eq!(recovered, ticket);
+        assert!(reopened.artifacts(&ticket.run_id).unwrap().is_empty());
+        assert!(reopened.evidence(&ticket.run_id).unwrap().is_empty());
+        assert!(reopened.provenance(&ticket.run_id).unwrap().is_empty());
+        assert_eq!(
+            reopened
+                .events_after(&ticket.run_id, 0, 1_000)
+                .unwrap()
+                .len(),
+            2
+        );
+        let completed =
+            finish_analysis_with_options(&reopened, ticket, &source_path, FASTA, &options).unwrap();
+        assert_eq!(completed.run.state, RunState::Succeeded);
+        assert!(
+            completed
+                .evidence
+                .iter()
+                .all(|item| item.verified_at != forged_time)
+        );
+        assert!(completed.provenance[0].retrieved_at != forged_time);
     }
 
     #[test]
@@ -2726,21 +5065,38 @@ mod protocol_tests {
 
     #[test]
     fn malformed_fasta_and_fastq_fail_without_outputs() {
-        for (source_path, source_bytes) in [
-            (Path::new("malformed.fasta"), b">empty\n".as_slice()),
-            (
-                Path::new("malformed.fastq"),
-                b"@seq\nACGT\n+\n!!!\n".as_slice(),
-            ),
+        for (source_name, source_bytes) in [
+            ("malformed.fasta", b">empty\n".as_slice()),
+            ("malformed.fastq", b"@seq\nACGT\n+\n!!!\n".as_slice()),
         ] {
             let temp = tempfile::tempdir().unwrap();
-            let store = ScienceStore::new(temp.path().join("science-store"));
-            let ticket =
-                begin_analysis(&store, context(temp.path(), "project-a", "alice")).unwrap();
-            crate::csv::mark_allowed(&store, &ticket).unwrap();
+            let workspace = dunce::canonicalize(temp.path()).unwrap();
+            let source_path = workspace.join(source_name);
+            std::fs::write(&source_path, source_bytes).unwrap();
+            let options = SeqAnalyzeOptions::default();
+            let context = operation_context(
+                &workspace,
+                "project-malformed",
+                "alice",
+                "session-malformed",
+                &format!("seq-malformed-{}-0001", source_name.replace('.', "-")),
+                &source_path,
+                source_bytes,
+                &options,
+            );
+            let store = ScienceStore::new(&context.artifact_root);
+            let ticket = begin_analysis_with_options(&store, context, &options).unwrap();
+            mark_allowed_recoverable(&store, &ticket).unwrap();
 
             assert!(
-                finish_analysis(&store, ticket.clone(), source_path, source_bytes,).is_err(),
+                finish_analysis_with_options(
+                    &store,
+                    ticket.clone(),
+                    &source_path,
+                    source_bytes,
+                    &options,
+                )
+                .is_err(),
                 "{} was accepted",
                 source_path.display()
             );
@@ -2755,11 +5111,25 @@ mod protocol_tests {
     }
 
     #[test]
-    fn artifact_write_failure_fails_run_and_disables_partial_output_service() {
+    fn artifact_cleanup_failure_stays_running_and_resumes_same_allowed_run() {
         let temp = tempfile::tempdir().unwrap();
-        let store = ScienceStore::new(temp.path().join("science-store"));
-        let ticket = begin_analysis(&store, context(temp.path(), "project-a", "alice")).unwrap();
-        crate::csv::mark_allowed(&store, &ticket).unwrap();
+        let workspace = dunce::canonicalize(temp.path()).unwrap();
+        let source_path = workspace.join("input.fa");
+        std::fs::write(&source_path, FASTA).unwrap();
+        let options = SeqAnalyzeOptions::default();
+        let context = operation_context(
+            &workspace,
+            "project-a",
+            "alice",
+            "session-artifact-cleanup",
+            "seq-artifact-cleanup-0001",
+            &source_path,
+            FASTA,
+            &options,
+        );
+        let store = ScienceStore::new(&context.artifact_root);
+        let ticket = begin_analysis_with_options(&store, context.clone(), &options).unwrap();
+        mark_allowed_recoverable(&store, &ticket).unwrap();
 
         // The first artifact is committed, then publishing report.md fails
         // because its target is a directory. This exercises the real
@@ -2771,10 +5141,14 @@ mod protocol_tests {
             .join("artifacts");
         std::fs::create_dir(artifact_root.join(REPORT_ARTIFACT_PATH)).unwrap();
 
-        assert!(finish_analysis(&store, ticket.clone(), Path::new("input.fa"), FASTA).is_err());
+        assert!(
+            finish_analysis_with_options(&store, ticket.clone(), &source_path, FASTA, &options,)
+                .is_err()
+        );
         assert_eq!(
             store.load_run(&ticket.run_id).unwrap().state,
-            RunState::Failed
+            RunState::Running,
+            "cleanup uncertainty must not create Failed with retained output"
         );
         assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
         assert!(
@@ -2790,16 +5164,48 @@ mod protocol_tests {
         );
         assert!(store.evidence(&ticket.run_id).unwrap().is_empty());
         assert!(store.provenance(&ticket.run_id).unwrap().is_empty());
+
+        std::fs::remove_dir(artifact_root.join(REPORT_ARTIFACT_PATH)).unwrap();
+        assert!(matches!(
+            replay_or_recover_existing(
+                &store,
+                &context,
+                &source_path,
+                FASTA,
+                &options,
+            )
+            .unwrap(),
+            SeqAnalyzeAdmission::ResumeAllowed(ref recovered) if recovered == &ticket
+        ));
+        let result =
+            finish_analysis_with_options(&store, ticket, &source_path, FASTA, &options).unwrap();
+        assert_eq!(result.run.state, RunState::Succeeded);
     }
 
     #[test]
     fn allow_commits_only_store_owned_hashed_artifacts_and_audit_chain() {
         let temp = tempfile::tempdir().unwrap();
-        let store_root = temp.path().join("science-store");
+        let workspace = dunce::canonicalize(temp.path()).unwrap();
+        let source_path = workspace.join("input.fa");
+        std::fs::write(&source_path, FASTA).unwrap();
+        let options = SeqAnalyzeOptions::default();
+        let context = operation_context(
+            &workspace,
+            "project-a",
+            "alice",
+            "session-commit",
+            "seq-commit-operation-0001",
+            &source_path,
+            FASTA,
+            &options,
+        );
+        let store_root = context.artifact_root.clone();
         let store = ScienceStore::new(&store_root);
-        let ticket = begin_analysis(&store, context(temp.path(), "project-a", "alice")).unwrap();
-        crate::csv::mark_allowed(&store, &ticket).unwrap();
-        let result = finish_analysis(&store, ticket.clone(), Path::new("input.fa"), FASTA).unwrap();
+        let ticket = begin_analysis_with_options(&store, context, &options).unwrap();
+        mark_allowed_recoverable(&store, &ticket).unwrap();
+        let result =
+            finish_analysis_with_options(&store, ticket.clone(), &source_path, FASTA, &options)
+                .unwrap();
 
         assert_eq!(result.run.state, RunState::Succeeded);
         assert_eq!(result.records, 2);
@@ -2840,7 +5246,7 @@ mod protocol_tests {
             let store = ScienceStore::new(temp.path().join("science-store"));
             let mut ticket =
                 begin_analysis(&store, context(temp.path(), "project-a", "alice")).unwrap();
-            crate::csv::mark_allowed(&store, &ticket).unwrap();
+            mark_allowed_recoverable(&store, &ticket).unwrap();
             match mutate {
                 "owner" => ticket.owner_id = "mallory".into(),
                 "project" => ticket.project_id = ProjectId::new("project-b"),
@@ -2873,7 +5279,7 @@ mod protocol_tests {
             &approved,
         )
         .unwrap();
-        crate::csv::mark_allowed(&store, &ticket).unwrap();
+        mark_allowed_recoverable(&store, &ticket).unwrap();
 
         let swapped = SeqAnalyzeOptions {
             translation_table_id: 1,
@@ -2917,7 +5323,7 @@ mod protocol_tests {
             &approved,
         )
         .unwrap();
-        crate::csv::mark_allowed(&store, &ticket).unwrap();
+        mark_allowed_recoverable(&store, &ticket).unwrap();
 
         let swapped = SeqAnalyzeOptions {
             translation_table_id: 1,
@@ -2961,7 +5367,7 @@ mod protocol_tests {
             &approved,
         )
         .unwrap();
-        crate::csv::mark_allowed(&store, &ticket).unwrap();
+        mark_allowed_recoverable(&store, &ticket).unwrap();
 
         let swapped = SeqAnalyzeOptions {
             translation_table_id: 1,
@@ -2993,24 +5399,32 @@ mod protocol_tests {
     #[test]
     fn allowed_translation_table_is_durable_in_output_and_provenance() {
         let temp = tempfile::tempdir().unwrap();
-        let store = ScienceStore::new(temp.path().join("science-store"));
+        let workspace = dunce::canonicalize(temp.path()).unwrap();
         let options = SeqAnalyzeOptions {
             translation_table_id: 2,
             topology: SequenceTopology::Circular,
             restriction_digest_enzymes: vec!["EcoRI".into()],
         };
-        let ticket = begin_analysis_with_options(
-            &store,
-            context(temp.path(), "project-a", "alice"),
-            &options,
-        )
-        .unwrap();
-        crate::csv::mark_allowed(&store, &ticket).unwrap();
+        let source_path = workspace.join("input.fa");
         let sequence = format!(">mitochondrial\nATG{}AGA\n", "AAA".repeat(29));
+        std::fs::write(&source_path, sequence.as_bytes()).unwrap();
+        let context = operation_context(
+            &workspace,
+            "project-a",
+            "alice",
+            "session-translation-table",
+            "seq-translation-table-0001",
+            &source_path,
+            sequence.as_bytes(),
+            &options,
+        );
+        let store = ScienceStore::new(&context.artifact_root);
+        let ticket = begin_analysis_with_options(&store, context, &options).unwrap();
+        mark_allowed_recoverable(&store, &ticket).unwrap();
         let result = finish_analysis_with_options(
             &store,
             ticket,
-            Path::new("input.fa"),
+            &source_path,
             sequence.as_bytes(),
             &options,
         )
@@ -3047,5 +5461,682 @@ mod protocol_tests {
                 .map(String::as_str),
             Some("EcoRI")
         );
+    }
+
+    #[test]
+    fn sealed_operation_replays_across_store_reopen_without_new_authority_records() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = dunce::canonicalize(temp.path()).unwrap();
+        let source_path = workspace.join("replay.fasta");
+        std::fs::write(&source_path, FASTA).unwrap();
+        let options = SeqAnalyzeOptions {
+            translation_table_id: 2,
+            topology: SequenceTopology::Circular,
+            restriction_digest_enzymes: vec!["EcoRI".into()],
+        };
+        let context = operation_context(
+            &workspace,
+            "project-replay",
+            "alice",
+            "session-replay",
+            "seq-replay-operation-0001",
+            &source_path,
+            FASTA,
+            &options,
+        );
+        let store = ScienceStore::new(&context.artifact_root);
+        let ticket = begin_analysis_with_options(&store, context.clone(), &options).unwrap();
+        mark_allowed_recoverable(&store, &ticket).unwrap();
+        let fresh =
+            finish_analysis_with_options(&store, ticket, &source_path, FASTA, &options).unwrap();
+        assert!(!fresh.replayed);
+        drop(store);
+
+        let reopened = ScienceStore::new(&context.artifact_root);
+        let SeqAnalyzeAdmission::Replay(replay) =
+            replay_or_recover_existing(&reopened, &context, &source_path, FASTA, &options).unwrap()
+        else {
+            panic!("sealed operation must replay");
+        };
+        assert!(replay.replayed);
+        let mut expected = fresh;
+        expected.replayed = true;
+        assert_eq!(*replay, expected);
+        assert_eq!(
+            reopened.approvals(&context.run_id).unwrap().len(),
+            1,
+            "replay created a second approval"
+        );
+        assert_eq!(
+            reopened
+                .events_after(&context.run_id, 0, 1_000)
+                .unwrap()
+                .len(),
+            3,
+            "replay appended an authority event"
+        );
+    }
+
+    #[test]
+    fn operation_collision_rejects_changed_authority_and_payload_bindings() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = dunce::canonicalize(temp.path()).unwrap();
+        let source_path = workspace.join("collision.fasta");
+        std::fs::write(&source_path, FASTA).unwrap();
+        let options = SeqAnalyzeOptions::default();
+        let context = operation_context(
+            &workspace,
+            "project-collision",
+            "alice",
+            "session-collision",
+            "seq-collision-operation-0001",
+            &source_path,
+            FASTA,
+            &options,
+        );
+        let store = ScienceStore::new(&context.artifact_root);
+        let ticket = begin_analysis_with_options(&store, context.clone(), &options).unwrap();
+        mark_allowed_recoverable(&store, &ticket).unwrap();
+        finish_analysis_with_options(&store, ticket, &source_path, FASTA, &options).unwrap();
+
+        let mut conflicting_contexts = Vec::new();
+        for mutate in ["owner", "project", "session", "workspace", "store"] {
+            let mut changed = context.clone();
+            match mutate {
+                "owner" => changed.owner_id = "mallory".into(),
+                "project" => changed.project_id = ProjectId::new("another-project"),
+                "session" => changed.session_id = "another-session".into(),
+                "workspace" => changed.workspace_root = workspace.join("other-workspace"),
+                "store" => changed.artifact_root = workspace.join("other-store"),
+                _ => unreachable!(),
+            }
+            conflicting_contexts.push((mutate, changed, FASTA.to_vec(), options.clone()));
+        }
+        let changed_source = b">changed\nTTTT\n".to_vec();
+        conflicting_contexts.push((
+            "source",
+            operation_context(
+                &workspace,
+                "project-collision",
+                "alice",
+                "session-collision",
+                "seq-collision-operation-0001",
+                &source_path,
+                &changed_source,
+                &options,
+            ),
+            changed_source,
+            options.clone(),
+        ));
+        let changed_options = SeqAnalyzeOptions {
+            translation_table_id: 2,
+            ..SeqAnalyzeOptions::default()
+        };
+        conflicting_contexts.push((
+            "options",
+            operation_context(
+                &workspace,
+                "project-collision",
+                "alice",
+                "session-collision",
+                "seq-collision-operation-0001",
+                &source_path,
+                FASTA,
+                &changed_options,
+            ),
+            FASTA.to_vec(),
+            changed_options,
+        ));
+
+        for (label, changed, bytes, changed_options) in conflicting_contexts {
+            assert!(
+                replay_or_recover_existing(
+                    &store,
+                    &changed,
+                    &source_path,
+                    &bytes,
+                    &changed_options,
+                )
+                .is_err(),
+                "{label} binding reused the operation"
+            );
+        }
+        assert_eq!(
+            store.load_run(&context.run_id).unwrap().state,
+            RunState::Succeeded
+        );
+        assert_eq!(store.artifacts(&context.run_id).unwrap().len(), 2);
+        assert_eq!(store.evidence(&context.run_id).unwrap().len(), 2);
+        assert_eq!(store.provenance(&context.run_id).unwrap().len(), 1);
+        assert_eq!(store.approvals(&context.run_id).unwrap().len(), 1);
+        assert_eq!(
+            store.events_after(&context.run_id, 0, 1_000).unwrap().len(),
+            3
+        );
+    }
+
+    #[test]
+    fn retry_of_active_operation_reuses_same_run_and_discards_partial_outputs() {
+        for state in [RunState::AwaitingApproval, RunState::Running] {
+            let temp = tempfile::tempdir().unwrap();
+            let workspace = dunce::canonicalize(temp.path()).unwrap();
+            let source_path = workspace.join("active.fasta");
+            std::fs::write(&source_path, FASTA).unwrap();
+            let options = SeqAnalyzeOptions::default();
+            let context = operation_context(
+                &workspace,
+                "project-active",
+                "alice",
+                "session-active",
+                &format!("seq-active-{state:?}-0001"),
+                &source_path,
+                FASTA,
+                &options,
+            );
+            let store = ScienceStore::new(&context.artifact_root);
+            let ticket = begin_analysis_with_options(&store, context.clone(), &options).unwrap();
+            if state == RunState::Running {
+                mark_allowed_recoverable(&store, &ticket).unwrap();
+                store
+                    .put_artifact(
+                        &ticket.project_id,
+                        &ticket.run_id,
+                        &ticket.owner_id,
+                        ticket.call_id.clone(),
+                        Path::new(ANALYSIS_ARTIFACT_PATH),
+                        b"{\"partial\":true}",
+                        "application/json",
+                        "table",
+                    )
+                    .unwrap();
+            }
+
+            let admission =
+                replay_or_recover_existing(&store, &context, &source_path, FASTA, &options)
+                    .unwrap();
+            match state {
+                RunState::AwaitingApproval => {
+                    assert!(matches!(
+                        admission,
+                        SeqAnalyzeAdmission::AwaitingApproval(ref recovered)
+                            if recovered == &ticket
+                    ));
+                    assert_eq!(
+                        store.load_run(&ticket.run_id).unwrap().state,
+                        RunState::AwaitingApproval
+                    );
+                }
+                RunState::Running => {
+                    assert!(matches!(
+                        admission,
+                        SeqAnalyzeAdmission::ResumeAllowed(ref recovered)
+                            if recovered == &ticket
+                    ));
+                    assert_eq!(
+                        store.load_run(&ticket.run_id).unwrap().state,
+                        RunState::Running
+                    );
+                }
+                _ => unreachable!(),
+            }
+            assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
+            assert!(store.evidence(&ticket.run_id).unwrap().is_empty());
+            assert!(store.provenance(&ticket.run_id).unwrap().is_empty());
+            assert!(
+                store
+                    .artifact_bytes(
+                        &ticket.project_id,
+                        &ticket.run_id,
+                        &ticket.owner_id,
+                        Path::new(ANALYSIS_ARTIFACT_PATH),
+                    )
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn fresh_allow_rejects_created_event_changed_during_permission_wait() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = dunce::canonicalize(temp.path()).unwrap();
+        let source_path = workspace.join("created-witness.fasta");
+        std::fs::write(&source_path, FASTA).unwrap();
+        let options = SeqAnalyzeOptions::default();
+        let context = operation_context(
+            &workspace,
+            "project-created-witness",
+            "alice",
+            "session-created-witness",
+            "seq-created-witness-operation-0001",
+            &source_path,
+            FASTA,
+            &options,
+        );
+        let store = ScienceStore::new(&context.artifact_root);
+        let (ticket, actor_created_event) =
+            begin_analysis_with_options_witnessed(&store, context, &options).unwrap();
+        let mut events = store.events_after(&ticket.run_id, 0, 1_000).unwrap();
+        events[0].timestamp += chrono::Duration::seconds(1);
+        let run_root = store.root().join("runs").join(&ticket.run_id.0);
+        std::fs::write(
+            run_root.join("events.json"),
+            serde_json::to_vec_pretty(&events).unwrap(),
+        )
+        .unwrap();
+
+        assert!(
+            super::mark_allowed_recoverable_fresh(&store, &ticket, &actor_created_event).is_err(),
+            "fresh Allow accepted a created event changed during permission wait"
+        );
+        assert_eq!(
+            store.approvals(&ticket.run_id).unwrap()[0].decision,
+            ApprovalDecision::Pending,
+            "created witness was checked only after deciding Allow"
+        );
+        assert!(
+            !run_root
+                .join(crate::SEQ_AUTHORITY_PREFIX_SEAL_FILE)
+                .exists()
+        );
+        assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
+        assert!(store.evidence(&ticket.run_id).unwrap().is_empty());
+        assert!(store.provenance(&ticket.run_id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn authority_seal_rejects_created_timestamp_after_allow_decision() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = dunce::canonicalize(temp.path()).unwrap();
+        let source_path = workspace.join("authority-time.fasta");
+        std::fs::write(&source_path, FASTA).unwrap();
+        let options = SeqAnalyzeOptions::default();
+        let context = operation_context(
+            &workspace,
+            "project-authority-time",
+            "alice",
+            "session-authority-time",
+            "seq-authority-time-operation-0001",
+            &source_path,
+            FASTA,
+            &options,
+        );
+        let store = ScienceStore::new(&context.artifact_root);
+        let ticket = begin_analysis_with_options(&store, context, &options).unwrap();
+        let approval = store
+            .decide_approval(
+                &ticket.project_id,
+                &ticket.run_id,
+                &ticket.owner_id,
+                &ticket.call_id,
+                ApprovalDecision::Allow,
+            )
+            .unwrap();
+        append_recoverable_decision_event(&store, &ticket, &approval, "approval.allowed", None)
+            .unwrap();
+        let mut events = store.events_after(&ticket.run_id, 0, 1_000).unwrap();
+        let decided_at = approval.decided_at.unwrap();
+        events[0].timestamp = decided_at + chrono::Duration::nanoseconds(1);
+        events[1].timestamp = decided_at + chrono::Duration::nanoseconds(2);
+        let run_root = store.root().join("runs").join(&ticket.run_id.0);
+        std::fs::write(
+            run_root.join("events.json"),
+            serde_json::to_vec_pretty(&events).unwrap(),
+        )
+        .unwrap();
+        let durable_context = store.load_run(&ticket.run_id).unwrap().context;
+
+        assert!(
+            store
+                .persist_seq_authority_prefix(&durable_context, &approval, &events[0], &events[1],)
+                .is_err(),
+            "authority seal accepted created > decided_at"
+        );
+        assert!(
+            !run_root
+                .join(crate::SEQ_AUTHORITY_PREFIX_SEAL_FILE)
+                .exists()
+        );
+    }
+
+    #[test]
+    fn awaiting_allow_with_exact_existing_seal_resumes_without_reprompt() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = dunce::canonicalize(temp.path()).unwrap();
+        let source_path = workspace.join("sealed-awaiting.fasta");
+        std::fs::write(&source_path, FASTA).unwrap();
+        let options = SeqAnalyzeOptions::default();
+        let context = operation_context(
+            &workspace,
+            "project-sealed-awaiting",
+            "alice",
+            "session-sealed-awaiting",
+            "seq-sealed-awaiting-operation-0001",
+            &source_path,
+            FASTA,
+            &options,
+        );
+        let store = ScienceStore::new(&context.artifact_root);
+        let (ticket, created_event) =
+            begin_analysis_with_options_witnessed(&store, context.clone(), &options).unwrap();
+        let approval = store
+            .decide_approval(
+                &ticket.project_id,
+                &ticket.run_id,
+                &ticket.owner_id,
+                &ticket.call_id,
+                ApprovalDecision::Allow,
+            )
+            .unwrap();
+        let allowed_event =
+            append_recoverable_decision_event(&store, &ticket, &approval, "approval.allowed", None)
+                .unwrap();
+        let durable_context = store.load_run(&ticket.run_id).unwrap().context;
+        store
+            .persist_seq_authority_prefix(
+                &durable_context,
+                &approval,
+                &created_event,
+                &allowed_event,
+            )
+            .unwrap();
+        assert_eq!(
+            store.load_run(&ticket.run_id).unwrap().state,
+            RunState::AwaitingApproval,
+            "test cut advanced past the seal-before-Running window"
+        );
+
+        assert!(matches!(
+            replay_or_recover_existing(&store, &context, &source_path, FASTA, &options).unwrap(),
+            SeqAnalyzeAdmission::ResumeAllowed(ref recovered) if recovered == &ticket
+        ));
+        assert_eq!(
+            store.load_run(&ticket.run_id).unwrap().state,
+            RunState::Running
+        );
+        recover_allowed_witness(&store, &ticket).unwrap();
+    }
+
+    #[test]
+    fn visible_authority_seal_requires_parent_sync_before_running_recovery() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = dunce::canonicalize(temp.path()).unwrap();
+        let source_path = workspace.join("seal-parent-sync.fasta");
+        std::fs::write(&source_path, FASTA).unwrap();
+        let options = SeqAnalyzeOptions::default();
+        let context = operation_context(
+            &workspace,
+            "project-seal-parent-sync",
+            "alice",
+            "session-seal-parent-sync",
+            "seq-seal-parent-sync-operation-0001",
+            &source_path,
+            FASTA,
+            &options,
+        );
+        let store = ScienceStore::new(&context.artifact_root);
+        let (ticket, actor_created_event) =
+            begin_analysis_with_options_witnessed(&store, context.clone(), &options).unwrap();
+
+        crate::FAIL_WRITE_NEW_PARENT_SYNC.with(|fail| fail.set(true));
+        assert!(
+            super::mark_allowed_recoverable_fresh(&store, &ticket, &actor_created_event).is_err(),
+            "visible seal with failed parent sync returned an actor witness"
+        );
+        let seal_path = store
+            .root()
+            .join("runs")
+            .join(&ticket.run_id.0)
+            .join(crate::SEQ_AUTHORITY_PREFIX_SEAL_FILE);
+        assert!(
+            seal_path.is_file(),
+            "fault injection did not reach the visible seal crash cut"
+        );
+        assert_eq!(
+            store.load_run(&ticket.run_id).unwrap().state,
+            RunState::AwaitingApproval
+        );
+        assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
+
+        crate::FAIL_EXPLICIT_DIRECTORY_SYNC.with(|fail| fail.set(true));
+        assert!(
+            replay_or_recover_existing(&store, &context, &source_path, FASTA, &options).is_err(),
+            "recovery accepted a merely visible seal without a successful retained-parent sync"
+        );
+        assert_eq!(
+            store.load_run(&ticket.run_id).unwrap().state,
+            RunState::AwaitingApproval
+        );
+        assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
+
+        assert!(matches!(
+            replay_or_recover_existing(&store, &context, &source_path, FASTA, &options).unwrap(),
+            SeqAnalyzeAdmission::ResumeAllowed(ref recovered) if recovered == &ticket
+        ));
+        assert_eq!(
+            store.load_run(&ticket.run_id).unwrap().state,
+            RunState::Running
+        );
+    }
+
+    #[test]
+    fn sealed_prefix_rejects_single_file_and_coordinated_authority_rewrites() {
+        for coordinated in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let workspace = dunce::canonicalize(temp.path()).unwrap();
+            let source_path = workspace.join("authority-rewrite.fasta");
+            std::fs::write(&source_path, FASTA).unwrap();
+            let options = SeqAnalyzeOptions::default();
+            let context = operation_context(
+                &workspace,
+                "project-authority-rewrite",
+                "alice",
+                "session-authority-rewrite",
+                &format!("seq-authority-rewrite-{coordinated}-0001"),
+                &source_path,
+                FASTA,
+                &options,
+            );
+            let store = ScienceStore::new(&context.artifact_root);
+            let (ticket, actor_created_event) =
+                begin_analysis_with_options_witnessed(&store, context, &options).unwrap();
+            let witness =
+                super::mark_allowed_recoverable_fresh(&store, &ticket, &actor_created_event)
+                    .unwrap();
+            let run_root = store.root().join("runs").join(&ticket.run_id.0);
+            let mut events = store.events_after(&ticket.run_id, 0, 1_000).unwrap();
+            if coordinated {
+                let mut approvals = store.approvals(&ticket.run_id).unwrap();
+                let forged_decision = approvals[0].decided_at.unwrap() + chrono::Duration::hours(1);
+                approvals[0].decided_at = Some(forged_decision);
+                events[1].timestamp = forged_decision + chrono::Duration::seconds(1);
+                events[1].payload = serde_json::json!({
+                    "call_id": ticket.call_id.0,
+                    "decided_at": forged_decision,
+                });
+                std::fs::write(
+                    run_root.join("approvals.json"),
+                    serde_json::to_vec_pretty(&approvals).unwrap(),
+                )
+                .unwrap();
+            } else {
+                events[1].payload["unexpected"] = serde_json::json!(true);
+            }
+            std::fs::write(
+                run_root.join("events.json"),
+                serde_json::to_vec_pretty(&events).unwrap(),
+            )
+            .unwrap();
+
+            assert!(
+                finish_analysis_authorized_with_options(
+                    &store,
+                    ticket.clone(),
+                    &source_path,
+                    FASTA,
+                    &options,
+                    witness,
+                )
+                .is_err(),
+                "rewritten authority prefix reached fresh Finish"
+            );
+            assert!(
+                recover_allowed_witness(&store, &ticket).is_err(),
+                "restart reconstructed a witness over rewritten authority records"
+            );
+            assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
+            assert!(store.evidence(&ticket.run_id).unwrap().is_empty());
+            assert!(store.provenance(&ticket.run_id).unwrap().is_empty());
+        }
+    }
+
+    #[test]
+    fn running_restart_requires_present_exact_authority_prefix_seal() {
+        for corrupt in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let workspace = dunce::canonicalize(temp.path()).unwrap();
+            let source_path = workspace.join("seal-restart.fasta");
+            std::fs::write(&source_path, FASTA).unwrap();
+            let options = SeqAnalyzeOptions::default();
+            let context = operation_context(
+                &workspace,
+                "project-seal-restart",
+                "alice",
+                "session-seal-restart",
+                &format!("seq-seal-restart-{corrupt}-0001"),
+                &source_path,
+                FASTA,
+                &options,
+            );
+            let store = ScienceStore::new(&context.artifact_root);
+            let (ticket, actor_created_event) =
+                begin_analysis_with_options_witnessed(&store, context.clone(), &options).unwrap();
+            super::mark_allowed_recoverable_fresh(&store, &ticket, &actor_created_event).unwrap();
+            let seal_path = store
+                .root()
+                .join("runs")
+                .join(&ticket.run_id.0)
+                .join(crate::SEQ_AUTHORITY_PREFIX_SEAL_FILE);
+            if corrupt {
+                let mut seal: serde_json::Value =
+                    serde_json::from_slice(&std::fs::read(&seal_path).unwrap()).unwrap();
+                seal["authority_sha256"] = serde_json::json!("0".repeat(64));
+                std::fs::write(&seal_path, serde_json::to_vec_pretty(&seal).unwrap()).unwrap();
+            } else {
+                std::fs::remove_file(&seal_path).unwrap();
+            }
+            drop(store);
+
+            let reopened = ScienceStore::new(&context.artifact_root);
+            assert!(
+                replay_or_recover_existing(&reopened, &context, &source_path, FASTA, &options)
+                    .is_err(),
+                "Running restart accepted a missing or conflicting authority seal"
+            );
+            assert_eq!(
+                reopened.load_run(&ticket.run_id).unwrap().state,
+                RunState::Failed
+            );
+            assert!(reopened.artifacts(&ticket.run_id).unwrap().is_empty());
+            assert!(reopened.evidence(&ticket.run_id).unwrap().is_empty());
+            assert!(reopened.provenance(&ticket.run_id).unwrap().is_empty());
+        }
+    }
+
+    #[test]
+    fn preauthorization_registry_entry_cannot_receive_authority_seal() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = dunce::canonicalize(temp.path()).unwrap();
+        let source_path = workspace.join("preauth-output.fasta");
+        std::fs::write(&source_path, FASTA).unwrap();
+        let options = SeqAnalyzeOptions::default();
+        let context = operation_context(
+            &workspace,
+            "project-preauth-output",
+            "alice",
+            "session-preauth-output",
+            "seq-preauth-output-operation-0001",
+            &source_path,
+            FASTA,
+            &options,
+        );
+        let store = ScienceStore::new(&context.artifact_root);
+        let (ticket, actor_created_event) =
+            begin_analysis_with_options_witnessed(&store, context, &options).unwrap();
+        let run_root = store.root().join("runs").join(&ticket.run_id.0);
+        let injected = vec![Artifact {
+            run_id: ticket.run_id.clone(),
+            call_id: ticket.call_id.clone(),
+            relative_path: PathBuf::from("analysis.json"),
+            sha256: "0".repeat(64),
+            bytes: 0,
+            mime: "application/json".into(),
+            preview: "table".into(),
+        }];
+        std::fs::write(
+            run_root.join("artifacts.json"),
+            serde_json::to_vec_pretty(&injected).unwrap(),
+        )
+        .unwrap();
+
+        assert!(
+            super::mark_allowed_recoverable_fresh(&store, &ticket, &actor_created_event).is_err(),
+            "pre-authorization structured output received an authority seal"
+        );
+        assert!(
+            !run_root
+                .join(crate::SEQ_AUTHORITY_PREFIX_SEAL_FILE)
+                .exists()
+        );
+    }
+
+    #[test]
+    fn retry_of_non_allow_terminal_never_reprompts_or_creates_outputs() {
+        for (label, decision, state) in [
+            ("deny", ApprovalDecision::Deny, RunState::Denied),
+            ("timeout", ApprovalDecision::Timeout, RunState::TimedOut),
+            ("cancel", ApprovalDecision::Cancel, RunState::Cancelled),
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let workspace = dunce::canonicalize(temp.path()).unwrap();
+            let source_path = workspace.join("terminal.fasta");
+            std::fs::write(&source_path, FASTA).unwrap();
+            let options = SeqAnalyzeOptions::default();
+            let context = operation_context(
+                &workspace,
+                "project-terminal",
+                "alice",
+                "session-terminal",
+                &format!("seq-terminal-{label}-0001"),
+                &source_path,
+                FASTA,
+                &options,
+            );
+            let store = ScienceStore::new(&context.artifact_root);
+            let ticket = begin_analysis_with_options(&store, context.clone(), &options).unwrap();
+            crate::csv::finish_without_execution(
+                &store,
+                &ticket,
+                decision.clone(),
+                "terminal replay test",
+            )
+            .unwrap();
+
+            assert!(
+                replay_or_recover_existing(&store, &context, &source_path, FASTA, &options,)
+                    .is_err()
+            );
+            assert_eq!(store.load_run(&ticket.run_id).unwrap().state, state);
+            assert_eq!(
+                store.approvals(&ticket.run_id).unwrap()[0].decision,
+                decision
+            );
+            assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
+            assert!(store.evidence(&ticket.run_id).unwrap().is_empty());
+            assert!(store.provenance(&ticket.run_id).unwrap().is_empty());
+            assert_eq!(
+                store.events_after(&ticket.run_id, 0, 1_000).unwrap().len(),
+                2
+            );
+        }
     }
 }

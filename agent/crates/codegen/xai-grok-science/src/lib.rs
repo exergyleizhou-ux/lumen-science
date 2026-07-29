@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     fs,
     io::{Read, Write},
     path::{Component, Path, PathBuf},
@@ -59,6 +59,18 @@ pub enum ScienceError {
 pub type Result<T> = std::result::Result<T, ScienceError>;
 
 const MAX_PERSISTED_ID_BYTES: usize = 128;
+
+#[cfg(test)]
+thread_local! {
+    static FAIL_RUN_PUBLICATION_AFTER_VISIBLE_RENAME: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+    static FAIL_DIRECTORY_ENTRY_PARENT_SYNC: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+    static FAIL_WRITE_NEW_PARENT_SYNC: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+    static FAIL_EXPLICIT_DIRECTORY_SYNC: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
 
 macro_rules! id {
     ($name:ident) => {
@@ -261,6 +273,7 @@ pub struct SuccessfulCompletionManifest {
 
 const AUTHORITY_COMMIT_FENCE_FILE: &str = "authority-commit-fence.json";
 const SUCCESSFUL_COMPLETION_SEAL_FILE: &str = "successful-completion-seal.json";
+pub(crate) const SEQ_AUTHORITY_PREFIX_SEAL_FILE: &str = "seq-authority-prefix-seal.json";
 
 /// Durable point-of-no-return for a cross-store authority commit.
 ///
@@ -302,11 +315,57 @@ struct SuccessfulCompletionSealPayload<'a> {
     terminal_reason: &'a Option<String>,
 }
 
+/// Write-once authorization prefix for one sequence analysis.
+///
+/// The completion seal freezes outputs and terminal state later. This earlier
+/// seal freezes the exact authority facts which made execution legal before
+/// any scientific output can be written.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct SeqAuthorityPrefixSeal {
+    schema_version: u32,
+    context: RunContext,
+    approval: Approval,
+    created_event: Event,
+    allowed_event: Event,
+    authority_sha256: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+struct SeqAuthorityPrefixSealPayload<'a> {
+    schema_version: u32,
+    context: &'a RunContext,
+    approval: &'a Approval,
+    created_event: &'a Event,
+    allowed_event: &'a Event,
+}
+
 #[derive(Debug, Clone)]
 pub struct ScienceStore {
     root: PathBuf,
     root_capability: Arc<Mutex<StoreRootCapability>>,
     writes: Arc<Mutex<()>>,
+}
+
+/// Opaque kernel-owned single-flight lease for one deterministic operation.
+///
+/// The lock descriptor is opened relative to the ScienceStore's retained root
+/// capability, so pathname replacement cannot make the actor lock one store
+/// while committing to another. Closing this value, including process death,
+/// releases the kernel lock; the retained lock file is not an ownership marker.
+#[derive(Debug)]
+pub struct ScienceOperationLease {
+    key: (StoreRootIdentity, RunId),
+    #[cfg(unix)]
+    _file: fs::File,
+}
+
+impl Drop for ScienceOperationLease {
+    fn drop(&mut self) {
+        active_science_operation_leases()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&self.key);
+    }
 }
 
 /// Retained authority for one canonical session workspace.
@@ -341,6 +400,11 @@ fn shared_science_write_lock() -> Arc<Mutex<()>> {
     Arc::clone(WRITES.get_or_init(|| Arc::new(Mutex::new(()))))
 }
 
+fn active_science_operation_leases() -> &'static Mutex<HashSet<(StoreRootIdentity, RunId)>> {
+    static ACTIVE: OnceLock<Mutex<HashSet<(StoreRootIdentity, RunId)>>> = OnceLock::new();
+    ACTIVE.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
 #[derive(Debug)]
 enum StoreRootCapability {
     Pending,
@@ -348,7 +412,7 @@ enum StoreRootCapability {
     Unavailable(String),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum StoreRootIdentity {
     #[cfg(unix)]
     Unix { device: u64, inode: u64 },
@@ -710,6 +774,52 @@ impl ScienceStore {
         &self.root
     }
 
+    /// Claim cross-process single-flight ownership relative to this store's
+    /// already-retained directory capability.
+    pub fn claim_operation_lease(&self, run_id: &RunId) -> Result<ScienceOperationLease> {
+        run_id.validate()?;
+        #[cfg(unix)]
+        {
+            let root = self.root_directory()?;
+            root.assert_private_owned_directory("science store root")?;
+            let key = (root.identity()?, run_id.clone());
+            {
+                let mut active = active_science_operation_leases().lock().map_err(|_| {
+                    ScienceError::Invalid("science operation lease registry is poisoned".into())
+                })?;
+                if !active.insert(key.clone()) {
+                    return Err(ScienceError::Invalid(format!(
+                        "operation {} is already active in this Lumen process",
+                        run_id.0
+                    )));
+                }
+            }
+
+            let lock = (|| {
+                let leases = root.create_directories(Path::new(".seq-analyze-leases"))?;
+                leases.assert_private_owned_directory("science operation lease directory")?;
+                leases.try_lock_operation_file(Path::new(&format!("{}.lock", run_id.0)))
+            })();
+            match lock {
+                Ok(file) => Ok(ScienceOperationLease { key, _file: file }),
+                Err(error) => {
+                    active_science_operation_leases()
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .remove(&key);
+                    Err(error)
+                }
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            Err(ScienceError::FeatureDisabled(
+                "descriptor-safe cross-process operation leases are unavailable on this platform"
+                    .into(),
+            ))
+        }
+    }
+
     /// Compare the retained directory handles, not their path spellings.
     ///
     /// Dossier composition joins Science run records with project records.
@@ -905,6 +1015,270 @@ impl ScienceStore {
         }
     }
 
+    fn seq_authority_prefix_digest(seal: &SeqAuthorityPrefixSeal) -> Result<String> {
+        Ok(hex_sha256(&serde_json::to_vec(
+            &SeqAuthorityPrefixSealPayload {
+                schema_version: seal.schema_version,
+                context: &seal.context,
+                approval: &seal.approval,
+                created_event: &seal.created_event,
+                allowed_event: &seal.allowed_event,
+            },
+        )?))
+    }
+
+    fn expected_seq_authority_prefix_seal(
+        context: &RunContext,
+        approval: &Approval,
+        created_event: &Event,
+        allowed_event: &Event,
+    ) -> Result<SeqAuthorityPrefixSeal> {
+        validate_context(context)?;
+        validate_approval(approval, &context.run_id)?;
+        validate_events(
+            &[created_event.clone(), allowed_event.clone()],
+            &context.run_id,
+        )?;
+        if approval.project_id != context.project_id
+            || approval.owner_id != context.owner_id
+            || approval.decision != ApprovalDecision::Allow
+            || approval.decided_at.is_none()
+            || created_event.schema_version != SCHEMA_VERSION
+            || allowed_event.schema_version != SCHEMA_VERSION
+            || created_event.seq != 1
+            || allowed_event.seq != 2
+            || created_event.actor != "SessionActor"
+            || created_event.kind != "run.created"
+            || allowed_event.actor != "LumenApproval"
+            || allowed_event.kind != "approval.allowed"
+            || created_event.timestamp > allowed_event.timestamp
+            || approval.decided_at.is_none_or(|decided_at| {
+                created_event.timestamp > decided_at || allowed_event.timestamp < decided_at
+            })
+        {
+            return Err(ScienceError::Invalid(
+                "sequence authority prefix is not one exact durable Allow".into(),
+            ));
+        }
+        let mut seal = SeqAuthorityPrefixSeal {
+            schema_version: SCHEMA_VERSION,
+            context: context.clone(),
+            approval: approval.clone(),
+            created_event: created_event.clone(),
+            allowed_event: allowed_event.clone(),
+            authority_sha256: String::new(),
+        };
+        seal.authority_sha256 = Self::seq_authority_prefix_digest(&seal)?;
+        Ok(seal)
+    }
+
+    fn seq_authority_prefix_seal(
+        run_dir: &PinnedDirectory,
+    ) -> Result<Option<SeqAuthorityPrefixSeal>> {
+        match run_dir.read_json(Path::new(SEQ_AUTHORITY_PREFIX_SEAL_FILE)) {
+            Ok(seal) => {
+                let seal: SeqAuthorityPrefixSeal = seal;
+                let expected = Self::expected_seq_authority_prefix_seal(
+                    &seal.context,
+                    &seal.approval,
+                    &seal.created_event,
+                    &seal.allowed_event,
+                )?;
+                if seal.schema_version != SCHEMA_VERSION
+                    || seal.authority_sha256 != Self::seq_authority_prefix_digest(&seal)?
+                    || seal != expected
+                {
+                    return Err(ScienceError::Invalid(
+                        "sequence authority prefix seal is malformed or corrupt".into(),
+                    ));
+                }
+                Ok(Some(seal))
+            }
+            Err(ScienceError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn verify_seq_authority_prefix_unlocked(
+        run_dir: &PinnedDirectory,
+        context: &RunContext,
+        approval: &Approval,
+        created_event: &Event,
+        allowed_event: &Event,
+    ) -> Result<String> {
+        let expected = Self::expected_seq_authority_prefix_seal(
+            context,
+            approval,
+            created_event,
+            allowed_event,
+        )?;
+        let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
+        let approvals: Vec<Approval> = run_dir.read_json(Path::new("approvals.json"))?;
+        let events: Vec<Event> = run_dir.read_json(Path::new("events.json"))?;
+        validate_context(&run.context)?;
+        validate_approvals(&approvals, &context.run_id)?;
+        validate_events(&events, &context.run_id)?;
+        if run.context != *context
+            || !matches!(
+                run.state,
+                RunState::AwaitingApproval | RunState::Running | RunState::Succeeded
+            )
+            || approvals.as_slice() != [approval.clone()]
+            || events.first() != Some(created_event)
+            || events.get(1) != Some(allowed_event)
+        {
+            return Err(ScienceError::Invalid(
+                "durable sequence authority records differ from their exact prefix".into(),
+            ));
+        }
+        let Some(seal) = Self::seq_authority_prefix_seal(run_dir)? else {
+            return Err(ScienceError::Invalid(
+                "durable sequence Allow is missing its authority prefix seal".into(),
+            ));
+        };
+        if seal != expected {
+            return Err(ScienceError::Invalid(
+                "sequence authority prefix conflicts with its write-once seal".into(),
+            ));
+        }
+        // Reading an exact seal is not a durability proof after an ambiguous
+        // create-new parent-sync error. Re-sync the retained containing
+        // directory before any recovery or replay may treat it as authority.
+        run_dir.sync_directory()?;
+        Ok(seal.authority_sha256)
+    }
+
+    /// Publish one exact sequence Allow prefix without replacing an existing
+    /// seal. If publication reports an error after the new name became visible,
+    /// only an exact read-back reconciles the cut.
+    pub(crate) fn persist_seq_authority_prefix(
+        &self,
+        context: &RunContext,
+        approval: &Approval,
+        created_event: &Event,
+        allowed_event: &Event,
+    ) -> Result<String> {
+        let _guard = self
+            .writes
+            .lock()
+            .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
+        let run_dir = self.open_run_directory(&context.run_id)?;
+        let expected = Self::expected_seq_authority_prefix_seal(
+            context,
+            approval,
+            created_event,
+            allowed_event,
+        )?;
+        let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
+        let approvals: Vec<Approval> = run_dir.read_json(Path::new("approvals.json"))?;
+        let events: Vec<Event> = run_dir.read_json(Path::new("events.json"))?;
+        let artifacts: Vec<Artifact> = run_dir.read_json(Path::new("artifacts.json"))?;
+        let evidence: Vec<Evidence> = run_dir.read_json(Path::new("evidence.json"))?;
+        let provenance: Vec<Provenance> = run_dir.read_json(Path::new("provenance.json"))?;
+        let previews: Vec<preview::PreviewRecord> =
+            run_dir.read_json(Path::new("previews.json"))?;
+        if run.context != *context
+            || !matches!(run.state, RunState::AwaitingApproval | RunState::Running)
+            || approvals.as_slice() != [approval.clone()]
+            || events.as_slice() != [created_event.clone(), allowed_event.clone()]
+            || !artifacts.is_empty()
+            || !evidence.is_empty()
+            || !provenance.is_empty()
+            || !previews.is_empty()
+        {
+            return Err(ScienceError::Invalid(
+                "sequence authority prefix cannot seal changed records or pre-authorization outputs"
+                    .into(),
+            ));
+        }
+        match Self::seq_authority_prefix_seal(&run_dir)? {
+            Some(existing) if existing == expected => {
+                // An earlier create-new publication may have become visible
+                // before its parent-directory sync failed. Only a successful
+                // sync through this retained run capability makes that retry
+                // durable enough to authorize execution.
+                run_dir.sync_directory()?;
+                return Ok(existing.authority_sha256);
+            }
+            Some(_) => {
+                return Err(ScienceError::Invalid(
+                    "sequence authority prefix seal conflicts with another Allow".into(),
+                ));
+            }
+            None => {}
+        }
+
+        let path = Path::new(SEQ_AUTHORITY_PREFIX_SEAL_FILE);
+        let bytes = serde_json::to_vec_pretty(&expected)?;
+        match run_dir.write_new_atomic(path, &bytes) {
+            Ok(()) => Ok(expected.authority_sha256),
+            // Never turn a merely visible create-new name into authority in
+            // this call. A later retry must reopen the exact seal and
+            // successfully sync the retained parent before it can proceed.
+            Err(error) => Err(error),
+        }
+    }
+
+    pub(crate) fn verify_seq_authority_prefix(
+        &self,
+        context: &RunContext,
+        approval: &Approval,
+        created_event: &Event,
+        allowed_event: &Event,
+    ) -> Result<String> {
+        let _guard = self
+            .writes
+            .lock()
+            .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
+        let run_dir = self.open_run_directory(&context.run_id)?;
+        Self::verify_seq_authority_prefix_unlocked(
+            &run_dir,
+            context,
+            approval,
+            created_event,
+            allowed_event,
+        )
+    }
+
+    pub(crate) fn reject_seq_authority_prefix(&self, run_id: &RunId) -> Result<()> {
+        let _guard = self
+            .writes
+            .lock()
+            .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
+        let run_dir = self.open_run_directory(run_id)?;
+        if Self::seq_authority_prefix_seal(&run_dir)?.is_some() {
+            return Err(ScienceError::Invalid(
+                "non-Allow sequence operation carried an authority prefix seal".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn transition_seq_succeeded_with_manifest(
+        &self,
+        manifest: &SuccessfulCompletionManifest,
+        approval: &Approval,
+        created_event: &Event,
+        allowed_event: &Event,
+    ) -> Result<RunRecord> {
+        validate_context(&manifest.context)?;
+        let _guard = self
+            .writes
+            .lock()
+            .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
+        let run_dir = self.open_run_directory(&manifest.context.run_id)?;
+        Self::verify_seq_authority_prefix_unlocked(
+            &run_dir,
+            &manifest.context,
+            approval,
+            created_event,
+            allowed_event,
+        )?;
+        Self::transition_succeeded_with_manifest_unlocked(&run_dir, manifest)
+    }
+
     fn successful_completion_anchor(run: &RunRecord) -> Result<Option<&str>> {
         match run.successful_completion_manifest_sha256.as_deref() {
             Some(digest) if is_sha256_hex(digest) => Ok(Some(digest)),
@@ -995,9 +1369,50 @@ impl ScienceStore {
         };
         let root = self.root_directory()?;
         let runs = root.create_directories(Path::new("runs"))?;
-        let dir = runs.create_directory_new(Path::new(&record.context.run_id.0))?;
+        let run_name = Path::new(&record.context.run_id.0);
+        let staging_name = format!(".run-init-{}-{}", record.context.run_id.0, Uuid::now_v7());
+        let staging_path = Path::new(&staging_name);
+        let staging = runs.create_directory_new(staging_path)?;
+        let initialized = Self::initialize_staged_run(&staging, &record);
+        if let Err(error) = initialized {
+            let _ = Self::discard_staged_run(&runs, staging_path, &staging);
+            return Err(error);
+        }
+        let publication = runs.publish_directory_new(staging_path, run_name);
+        #[cfg(test)]
+        let publication = if publication.is_ok()
+            && FAIL_RUN_PUBLICATION_AFTER_VISIBLE_RENAME.with(|fail| fail.replace(false))
+        {
+            Err(ScienceError::Io(std::io::Error::other(
+                "injected runs-directory sync failure after visible rename",
+            )))
+        } else {
+            publication
+        };
+        if let Err(error) = publication {
+            // A no-replace rename may be visible even when syncing the parent
+            // directory reports an error. Retained-directory identity may only
+            // decide whether cleanup is safe; visibility cannot prove crash
+            // durability. Return the original sync error and let a later
+            // deterministic retry reopen the visible run if it survived.
+            if let Ok(published) = runs.open_directory(run_name)
+                && published.identity()? == staging.identity()?
+                && published.read_json::<RunRecord>(Path::new("run.json"))? == record
+            {
+                return Err(error);
+            }
+            if let Ok(still_staged) = runs.open_directory(staging_path)
+                && still_staged.identity()? == staging.identity()?
+            {
+                let _ = Self::discard_staged_run(&runs, staging_path, &staging);
+            }
+            return Err(error);
+        }
+        Ok(record)
+    }
+
+    fn initialize_staged_run(dir: &PinnedDirectory, record: &RunRecord) -> Result<()> {
         dir.create_directories(Path::new("artifacts"))?;
-        dir.replace_json_atomic(Path::new("run.json"), &record)?;
         dir.replace_json_atomic(Path::new("events.json"), &Vec::<Event>::new())?;
         dir.replace_json_atomic(Path::new("artifacts.json"), &Vec::<Artifact>::new())?;
         dir.replace_json_atomic(Path::new("evidence.json"), &Vec::<Evidence>::new())?;
@@ -1007,7 +1422,39 @@ impl ScienceStore {
             Path::new("previews.json"),
             &Vec::<preview::PreviewRecord>::new(),
         )?;
-        Ok(record)
+        // Publish run.json last inside staging. The whole initialized
+        // directory is still invisible at its final runId until the
+        // no-replace directory rename below.
+        dir.replace_json_atomic(Path::new("run.json"), record)
+    }
+
+    fn discard_staged_run(
+        runs: &PinnedDirectory,
+        staging_path: &Path,
+        staging: &PinnedDirectory,
+    ) -> Result<()> {
+        for file in [
+            "run.json",
+            "events.json",
+            "artifacts.json",
+            "evidence.json",
+            "provenance.json",
+            "approvals.json",
+            "previews.json",
+        ] {
+            staging.unlink_file(Path::new(file))?;
+        }
+        staging.remove_directory_if_empty(Path::new("artifacts"))?;
+        runs.remove_directory_if_empty(staging_path)
+            .and_then(|removed| {
+                if removed {
+                    Ok(())
+                } else {
+                    Err(ScienceError::Invalid(
+                        "staged run directory retained unexpected entries".into(),
+                    ))
+                }
+            })
     }
 
     fn load_run_record_from_directory(
@@ -1330,22 +1777,16 @@ impl ScienceStore {
             Path::new("artifacts.json"),
             Self::MAX_DOSSIER_REGISTRY_BYTES,
         )?;
-        let evidence: Vec<Evidence> = run_dir.read_json_bounded(
-            Path::new("evidence.json"),
-            Self::MAX_DOSSIER_REGISTRY_BYTES,
-        )?;
+        let evidence: Vec<Evidence> = run_dir
+            .read_json_bounded(Path::new("evidence.json"), Self::MAX_DOSSIER_REGISTRY_BYTES)?;
         let provenance: Vec<Provenance> = run_dir.read_json_bounded(
             Path::new("provenance.json"),
             Self::MAX_DOSSIER_REGISTRY_BYTES,
         )?;
-        let previews: Vec<preview::PreviewRecord> = run_dir.read_json_bounded(
-            Path::new("previews.json"),
-            Self::MAX_DOSSIER_REGISTRY_BYTES,
-        )?;
-        let events: Vec<Event> = run_dir.read_json_bounded(
-            Path::new("events.json"),
-            Self::MAX_DOSSIER_REGISTRY_BYTES,
-        )?;
+        let previews: Vec<preview::PreviewRecord> = run_dir
+            .read_json_bounded(Path::new("previews.json"), Self::MAX_DOSSIER_REGISTRY_BYTES)?;
+        let events: Vec<Event> = run_dir
+            .read_json_bounded(Path::new("events.json"), Self::MAX_DOSSIER_REGISTRY_BYTES)?;
         validate_artifacts(&artifacts, run_id)?;
         validate_run_ids(evidence.iter().map(|item| &item.run_id), run_id, "evidence")?;
         validate_run_ids(
@@ -1894,7 +2335,11 @@ impl ScienceStore {
                 ));
             }
             match artifact_dir.read_regular(relative) {
-                Ok(existing) if existing == bytes => return Ok(registered.clone()),
+                Ok(existing) if existing == bytes => {
+                    artifact_dir.sync_containing_directory(relative)?;
+                    run_dir.sync_directory()?;
+                    return Ok(registered.clone());
+                }
                 Ok(_) => {
                     return Err(ScienceError::Invalid(
                         "registered artifact payload differs from the exact retry".into(),
@@ -1917,6 +2362,8 @@ impl ScienceStore {
                             "repaired artifact payload differs from its registry".into(),
                         ));
                     }
+                    artifact_dir.sync_containing_directory(relative)?;
+                    run_dir.sync_directory()?;
                     return Ok(registered.clone());
                 }
                 Err(error) => return Err(error),
@@ -1931,7 +2378,10 @@ impl ScienceStore {
         match artifact_dir.read_regular(relative) {
             Ok(existing) if existing == bytes => {
                 // Recover a payload whose no-replace publication became
-                // visible before the registry commit.
+                // visible before the registry commit. The retained actual
+                // containing parent (including nested artifact paths) must
+                // sync before the registry may reference it.
+                artifact_dir.sync_containing_directory(relative)?;
             }
             Ok(_) => {
                 return Err(ScienceError::Invalid(
@@ -1941,7 +2391,11 @@ impl ScienceStore {
             Err(ScienceError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
                 if let Err(write_error) = artifact_dir.write_new_atomic(relative, bytes) {
                     match artifact_dir.read_regular(relative) {
-                        Ok(existing) if existing == bytes => {}
+                        Ok(existing) if existing == bytes => {
+                            // The name may be visible after an ambiguous parent
+                            // sync failure, but this call must not register it.
+                            return Err(write_error);
+                        }
                         Ok(_) => {
                             return Err(ScienceError::Invalid(
                                 "artifact publication raced with different payload bytes".into(),
@@ -1963,6 +2417,8 @@ impl ScienceStore {
                 && reopened.iter().any(|registered| registered == &artifact)
                 && artifact_dir.read_regular(relative)? == bytes
             {
+                artifact_dir.sync_containing_directory(relative)?;
+                run_dir.sync_directory()?;
                 return Ok(artifact);
             }
             // Preserve an exact orphan payload for the next idempotent retry.
@@ -1970,6 +2426,8 @@ impl ScienceStore {
             // failure into a durable registry-to-missing-file corruption.
             return Err(error);
         }
+        artifact_dir.sync_containing_directory(relative)?;
+        run_dir.sync_directory()?;
         Ok(artifact)
     }
 
@@ -2112,6 +2570,58 @@ impl ScienceStore {
             }
         }
         Ok(())
+    }
+
+    /// Roll back an unsealed completion attempt so deterministic recovery can
+    /// execute it again instead of trusting records that survived a process
+    /// boundary without an exact completion seal.
+    ///
+    /// Structured outputs are de-published first through the ordinary
+    /// Running+Allow rollback. The final event is then removed only when it is
+    /// byte-for-byte the event the protocol verified before entering this
+    /// method. If a crash lands between those cuts, retrying this method is
+    /// idempotent: the two-event prefix remains the sole resumable state.
+    pub(crate) fn discard_running_completion_attempt(
+        &self,
+        project: &ProjectId,
+        run_id: &RunId,
+        owner: &str,
+        call: &CallId,
+        relative_paths: &[&Path],
+        expected_final_event: &Event,
+    ) -> Result<()> {
+        self.discard_running_outputs(project, run_id, owner, call, relative_paths)?;
+
+        let _guard = self
+            .writes
+            .lock()
+            .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
+        let run_dir = self.open_run_directory(run_id)?;
+        let run: RunRecord = run_dir.read_json(Path::new("run.json"))?;
+        Self::reject_fenced_rollback(&run_dir)?;
+        validate_context(&run.context)?;
+        if run.context.run_id != *run_id
+            || run.context.project_id != *project
+            || run.context.owner_id != owner
+            || run.state != RunState::Running
+        {
+            return Err(ScienceError::Ownership);
+        }
+        Self::running_allowed_approval(&run_dir, &run, run_id, Some(call))?;
+
+        let mut events: Vec<Event> = run_dir.read_json(Path::new("events.json"))?;
+        validate_events(&events, run_id)?;
+        match events.as_slice() {
+            [_, _] => return Ok(()),
+            [_, _, final_event] if final_event == expected_final_event => {}
+            _ => {
+                return Err(ScienceError::Invalid(
+                    "completion rollback did not find the exact unsealed final event".into(),
+                ));
+            }
+        }
+        events.pop();
+        run_dir.replace_json_atomic(Path::new("events.json"), &events)
     }
 
     /// Clear outputs that appeared before a pending approval was decided.
@@ -2404,6 +2914,47 @@ impl ScienceStore {
         self.running_artifact_bytes(project, run_id, owner, relative)
     }
 
+    /// Bounded form of `allowed_running_artifact_bytes` for restart recovery.
+    ///
+    /// Recovery must verify an already-written completion without trusting a
+    /// forged registry length to allocate an unbounded buffer. The same exact
+    /// durable Allow and call binding is required before any bytes are read.
+    pub fn allowed_running_artifact_bytes_bounded(
+        &self,
+        project: &ProjectId,
+        run_id: &RunId,
+        owner: &str,
+        call: &CallId,
+        relative: &Path,
+        max_bytes: u64,
+    ) -> Result<Vec<u8>> {
+        let approvals = self.approvals(run_id)?;
+        let [approval] = approvals.as_slice() else {
+            return Err(ScienceError::Invalid(
+                "running artifact verification requires exactly one approval".into(),
+            ));
+        };
+        if approval.project_id != *project
+            || approval.run_id != *run_id
+            || approval.owner_id != owner
+            || approval.call_id != *call
+            || approval.decision != ApprovalDecision::Allow
+            || approval.decided_at.is_none()
+        {
+            return Err(ScienceError::Invalid(
+                "running artifact verification is not bound to the allowed actor call".into(),
+            ));
+        }
+        self.artifact_bytes_in_state_bounded(
+            project,
+            run_id,
+            owner,
+            relative,
+            RunState::Running,
+            Some(max_bytes),
+        )
+    }
+
     fn artifact_bytes_in_state(
         &self,
         project: &ProjectId,
@@ -2565,6 +3116,97 @@ impl ScienceStore {
         Ok(items)
     }
 
+    /// Recover only an exact completion that was durably fenced before the
+    /// process stopped.
+    ///
+    /// Unlike `recover_interrupted`, this never terminalizes an ordinary
+    /// active run. The caller supplies the complete expected authority
+    /// context, which is compared before any recovery write, so pointing a
+    /// retry at another store cannot finish a foreign operation.
+    pub fn recover_exact_completion(
+        &self,
+        expected_context: &RunContext,
+    ) -> Result<Option<RunRecord>> {
+        validate_context(expected_context)?;
+        let _guard = self
+            .writes
+            .lock()
+            .map_err(|_| ScienceError::Invalid("science store write lock poisoned".into()))?;
+        let run_dir = self.open_run_directory(&expected_context.run_id)?;
+        let run = Self::load_run_record_from_directory(&run_dir, &expected_context.run_id)?;
+        if run.context != *expected_context {
+            return Err(ScienceError::Invalid(
+                "exact completion recovery context does not match the durable run".into(),
+            ));
+        }
+        let anchor = Self::successful_completion_anchor(&run)?;
+        let seal = Self::successful_completion_seal(&run_dir)?;
+        Self::recover_exact_completion_unlocked(&run_dir, &run, anchor, seal.as_ref())
+    }
+
+    fn recover_exact_completion_unlocked(
+        run_dir: &PinnedDirectory,
+        run: &RunRecord,
+        anchor: Option<&str>,
+        seal: Option<&SuccessfulCompletionSeal>,
+    ) -> Result<Option<RunRecord>> {
+        if run.state.terminal() {
+            match (anchor, seal) {
+                (Some(anchor), Some(seal)) => {
+                    Self::verify_succeeded_seal_unlocked(run_dir, run, anchor, seal)?;
+                    return Ok(Some(run.clone()));
+                }
+                (Some(_), None) | (None, Some(_)) => {
+                    return Err(ScienceError::Invalid(
+                        "exact completion anchor and seal must both remain durable".into(),
+                    ));
+                }
+                (None, None) => {}
+            }
+            return Ok(None);
+        }
+        if let Some(anchor) = anchor {
+            if run.state != RunState::Running {
+                return Err(ScienceError::Invalid(
+                    "exact completion anchor requires a Running recovery state".into(),
+                ));
+            }
+            let manifest = Self::durable_completion_manifest_unlocked(run_dir, &run.context)?;
+            let approval = Self::running_allowed_approval(run_dir, run, &run.context.run_id, None)?;
+            let expected = Self::expected_successful_completion_seal(run, &approval, &manifest)?;
+            if expected.manifest_sha256 != anchor {
+                return Err(ScienceError::Invalid(
+                    "durable collections differ from their completion anchor".into(),
+                ));
+            }
+            match seal {
+                Some(seal) if seal == &expected => {}
+                Some(_) => {
+                    return Err(ScienceError::Invalid(
+                        "successful completion seal conflicts with its durable anchor".into(),
+                    ));
+                }
+                None => {
+                    Self::persist_successful_completion_seal_unlocked(
+                        run_dir, run, &approval, &manifest,
+                    )?;
+                }
+            }
+            return Self::transition_succeeded_with_manifest_unlocked(run_dir, &manifest).map(Some);
+        }
+        if let Some(seal) = seal {
+            if seal.manifest.context.run_id != run.context.run_id || run.state != RunState::Running
+            {
+                return Err(ScienceError::Invalid(
+                    "unanchored successful completion seal has invalid recovery state".into(),
+                ));
+            }
+            return Self::transition_succeeded_with_manifest_unlocked(run_dir, &seal.manifest)
+                .map(Some);
+        }
+        Ok(None)
+    }
+
     pub fn recover_interrupted(&self, run_id: &RunId) -> Result<RunRecord> {
         let _guard = self
             .writes
@@ -2574,61 +3216,13 @@ impl ScienceStore {
         let run = Self::load_run_record_from_directory(&run_dir, run_id)?;
         let anchor = Self::successful_completion_anchor(&run)?;
         let seal = Self::successful_completion_seal(&run_dir)?;
+        if let Some(recovered) =
+            Self::recover_exact_completion_unlocked(&run_dir, &run, anchor, seal.as_ref())?
+        {
+            return Ok(recovered);
+        }
         if run.state.terminal() {
-            match (anchor, seal.as_ref()) {
-                (Some(anchor), Some(seal)) => {
-                    Self::verify_succeeded_seal_unlocked(&run_dir, &run, anchor, seal)?;
-                }
-                (Some(_), None) | (None, Some(_)) => {
-                    return Err(ScienceError::Invalid(
-                        "exact completion anchor and seal must both remain durable".into(),
-                    ));
-                }
-                (None, None) => {}
-            }
             return Ok(run);
-        }
-        if let Some(anchor) = anchor {
-            if run.state != RunState::Running {
-                return Err(ScienceError::Invalid(
-                    "exact completion anchor requires a Running recovery state".into(),
-                ));
-            }
-            let manifest = Self::durable_completion_manifest_unlocked(&run_dir, &run.context)?;
-            let approval =
-                Self::running_allowed_approval(&run_dir, &run, &run.context.run_id, None)?;
-            let expected =
-                Self::expected_successful_completion_seal(&run, &approval, &manifest)?;
-            if expected.manifest_sha256 != anchor {
-                return Err(ScienceError::Invalid(
-                    "durable collections differ from their completion anchor".into(),
-                ));
-            }
-            match seal.as_ref() {
-                Some(seal) if seal == &expected => {}
-                Some(_) => {
-                    return Err(ScienceError::Invalid(
-                        "successful completion seal conflicts with its durable anchor".into(),
-                    ));
-                }
-                None => {
-                    Self::persist_successful_completion_seal_unlocked(
-                        &run_dir, &run, &approval, &manifest,
-                    )?;
-                }
-            }
-            return Self::transition_succeeded_with_manifest_unlocked(&run_dir, &manifest);
-        }
-        if let Some(seal) = seal {
-            if seal.manifest.context.run_id != *run_id || run.state != RunState::Running {
-                return Err(ScienceError::Invalid(
-                    "unanchored successful completion seal has invalid recovery state".into(),
-                ));
-            }
-            return Self::transition_succeeded_with_manifest_unlocked(
-                &run_dir,
-                &seal.manifest,
-            );
         }
         let mut approvals: Vec<Approval> = run_dir.read_json(Path::new("approvals.json"))?;
         validate_approvals(&approvals, run_id)?;
@@ -2880,6 +3474,25 @@ impl PinnedDirectory {
         })
     }
 
+    fn assert_private_owned_directory(&self, kind: &str) -> Result<()> {
+        use std::os::unix::fs::MetadataExt as _;
+
+        let metadata = self.file.metadata()?;
+        // SAFETY: geteuid has no preconditions and does not retain pointers.
+        if !metadata.is_dir() {
+            return Err(ScienceError::Invalid(format!("{kind} must be a directory")));
+        }
+        if metadata.uid() != unsafe { libc::geteuid() } {
+            return Err(ScienceError::Ownership);
+        }
+        if metadata.mode() & 0o022 != 0 {
+            return Err(ScienceError::Invalid(format!(
+                "{kind} must not be group- or world-writable"
+            )));
+        }
+        Ok(())
+    }
+
     #[cfg(target_os = "macos")]
     fn final_path(&self) -> Result<PathBuf> {
         use std::os::fd::AsRawFd as _;
@@ -2938,6 +3551,63 @@ impl PinnedDirectory {
         }
     }
 
+    fn remove_directory_if_empty(&self, relative: &Path) -> Result<bool> {
+        validate_relative(relative)?;
+        let mut components = relative.components();
+        let Some(Component::Normal(name)) = components.next() else {
+            return Err(ScienceError::Invalid(
+                "directory removal received a non-normal component".into(),
+            ));
+        };
+        if components.next().is_some() {
+            return Err(ScienceError::Invalid(
+                "exclusive directory removal requires one component".into(),
+            ));
+        }
+        match unlink_directory_at(&self.file, name) {
+            Ok(()) => {
+                self.file.sync_all()?;
+                Ok(true)
+            }
+            Err(ScienceError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
+                Ok(true)
+            }
+            Err(ScienceError::Io(error))
+                if error
+                    .raw_os_error()
+                    .is_some_and(|code| code == libc::ENOTEMPTY || code == libc::EEXIST) =>
+            {
+                Ok(false)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn publish_directory_new(&self, staged: &Path, final_name: &Path) -> Result<()> {
+        validate_relative(staged)?;
+        validate_relative(final_name)?;
+        let mut staged_components = staged.components();
+        let Some(Component::Normal(staged_name)) = staged_components.next() else {
+            return Err(ScienceError::Invalid(
+                "staged directory name is not a normal component".into(),
+            ));
+        };
+        let mut final_components = final_name.components();
+        let Some(Component::Normal(final_name)) = final_components.next() else {
+            return Err(ScienceError::Invalid(
+                "final directory name is not a normal component".into(),
+            ));
+        };
+        if staged_components.next().is_some() || final_components.next().is_some() {
+            return Err(ScienceError::Invalid(
+                "directory publication requires sibling names".into(),
+            ));
+        }
+        rename_directory_noreplace_at(&self.file, staged_name, final_name)?;
+        self.file.sync_all()?;
+        Ok(())
+    }
+
     fn open_directory(&self, relative: &Path) -> Result<Self> {
         validate_relative(relative)?;
         let mut current = self.try_clone()?;
@@ -2986,6 +3656,18 @@ impl PinnedDirectory {
                     if error.kind() == std::io::ErrorKind::AlreadyExists => {}
                 Err(error) => return Err(error),
             }
+            #[cfg(test)]
+            if FAIL_DIRECTORY_ENTRY_PARENT_SYNC.with(|fail| fail.replace(false)) {
+                return Err(ScienceError::Io(std::io::Error::other(
+                    "injected directory-entry parent sync failure",
+                )));
+            }
+            // Persist both a newly created directory entry and an existing
+            // entry left behind by an earlier failed sync. Without this parent
+            // flush, a successful durable Begin could disappear after power
+            // loss even though every file inside `runs/` was individually
+            // synced.
+            current.file.sync_all()?;
             current = Self {
                 file: openat(
                     &current.file,
@@ -3005,6 +3687,67 @@ impl PinnedDirectory {
             }
         }
         Ok(current)
+    }
+
+    fn try_lock_operation_file(&self, relative: &Path) -> Result<fs::File> {
+        use std::os::{fd::AsRawFd as _, unix::fs::MetadataExt as _};
+
+        validate_relative(relative)?;
+        if relative.components().count() != 1 {
+            return Err(ScienceError::Invalid(
+                "operation lease requires one file-name component".into(),
+            ));
+        }
+        self.assert_private_owned_directory("science operation lease directory")?;
+        let name = relative
+            .file_name()
+            .ok_or_else(|| ScienceError::Invalid("operation lease name is missing".into()))?;
+        let file = openat(
+            &self.file,
+            name,
+            libc::O_RDWR | libc::O_CREAT | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
+            Some(0o600),
+        )?;
+        let metadata = file.metadata()?;
+        if !metadata.is_file()
+            || metadata.uid() != unsafe { libc::geteuid() }
+            || metadata.mode() & 0o022 != 0
+            || metadata.nlink() != 1
+        {
+            return Err(ScienceError::Invalid(
+                "operation lease must be one private process-owned regular file".into(),
+            ));
+        }
+        // SAFETY: flock receives one live descriptor and has no pointer
+        // arguments. The nonblocking exclusive lock is released on close.
+        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+            let error = std::io::Error::last_os_error();
+            if error.kind() == std::io::ErrorKind::WouldBlock {
+                return Err(ScienceError::Invalid(
+                    "operation is already active in another Lumen process".into(),
+                ));
+            }
+            return Err(error.into());
+        }
+        let reopened = openat(
+            &self.file,
+            name,
+            libc::O_RDWR | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
+            None,
+        )?;
+        let reopened_metadata = reopened.metadata()?;
+        if !reopened_metadata.is_file()
+            || reopened_metadata.uid() != unsafe { libc::geteuid() }
+            || reopened_metadata.mode() & 0o022 != 0
+            || reopened_metadata.nlink() != 1
+            || metadata.dev() != reopened_metadata.dev()
+            || metadata.ino() != reopened_metadata.ino()
+        {
+            return Err(ScienceError::Invalid(
+                "operation lease file changed during acquisition".into(),
+            ));
+        }
+        Ok(file)
     }
 
     fn read_regular(&self, relative: &Path) -> Result<Vec<u8>> {
@@ -3129,6 +3872,12 @@ impl PinnedDirectory {
                 let _ = unlinkat(&parent.file, target);
                 return Err(error);
             }
+            #[cfg(test)]
+            if FAIL_WRITE_NEW_PARENT_SYNC.with(|fail| fail.replace(false)) {
+                return Err(ScienceError::Io(std::io::Error::other(
+                    "injected write-new parent sync failure",
+                )));
+            }
             parent.file.sync_all()?;
             Ok(())
         })();
@@ -3203,6 +3952,22 @@ impl PinnedDirectory {
             Some(parent) if !parent.as_os_str().is_empty() => self.create_directories(parent),
             _ => self.try_clone(),
         }
+    }
+
+    fn sync_directory(&self) -> Result<()> {
+        #[cfg(test)]
+        if FAIL_EXPLICIT_DIRECTORY_SYNC.with(|fail| fail.replace(false)) {
+            return Err(ScienceError::Io(std::io::Error::other(
+                "injected explicit directory sync failure",
+            )));
+        }
+        self.file.sync_all()?;
+        Ok(())
+    }
+
+    fn sync_containing_directory(&self, relative: &Path) -> Result<()> {
+        validate_relative(relative)?;
+        self.open_directory_parent(relative)?.sync_directory()
     }
 
     fn try_clone(&self) -> Result<Self> {
@@ -3343,12 +4108,82 @@ fn unlink_directory_at(directory: &fs::File, name: &std::ffi::OsStr) -> Result<(
     }
 }
 
+#[cfg(target_os = "macos")]
+fn rename_directory_noreplace_at(
+    directory: &fs::File,
+    staged: &std::ffi::OsStr,
+    final_name: &std::ffi::OsStr,
+) -> Result<()> {
+    use std::os::fd::AsRawFd as _;
+
+    let staged = os_name(staged)?;
+    let final_name = os_name(final_name)?;
+    // SAFETY: both names are NUL-terminated single components relative to the
+    // same retained directory descriptor. RENAME_EXCL forbids replacement.
+    if unsafe {
+        libc::renameatx_np(
+            directory.as_raw_fd(),
+            staged.as_ptr(),
+            directory.as_raw_fd(),
+            final_name.as_ptr(),
+            libc::RENAME_EXCL,
+        )
+    } == 0
+    {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error().into())
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn rename_directory_noreplace_at(
+    directory: &fs::File,
+    staged: &std::ffi::OsStr,
+    final_name: &std::ffi::OsStr,
+) -> Result<()> {
+    use std::os::fd::AsRawFd as _;
+
+    let staged = os_name(staged)?;
+    let final_name = os_name(final_name)?;
+    // SAFETY: renameat2 receives valid retained descriptors and
+    // NUL-terminated single-component names. RENAME_NOREPLACE is atomic.
+    if unsafe {
+        libc::syscall(
+            libc::SYS_renameat2,
+            directory.as_raw_fd(),
+            staged.as_ptr(),
+            directory.as_raw_fd(),
+            final_name.as_ptr(),
+            libc::RENAME_NOREPLACE,
+        )
+    } == 0
+    {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error().into())
+    }
+}
+
+#[cfg(all(
+    unix,
+    not(any(target_os = "macos", target_os = "linux", target_os = "android"))
+))]
+fn rename_directory_noreplace_at(
+    _directory: &fs::File,
+    _staged: &std::ffi::OsStr,
+    _final_name: &std::ffi::OsStr,
+) -> Result<()> {
+    Err(ScienceError::FeatureDisabled(
+        "atomic no-replace run publication is unavailable on this Unix platform".into(),
+    ))
+}
+
 /// Windows retains directory/file handles opened with
-/// `FILE_FLAG_OPEN_REPARSE_POINT`, rejects every reparse-point component, and
-/// checks both final handle paths and stable file identities around pathname
-/// publication. Unix's openat/linkat backend remains the stronger reference
-/// implementation; Windows coverage is source-level until exercised by CI on
-/// a Windows host.
+/// `FILE_FLAG_OPEN_REPARSE_POINT` and rejects every reparse-point component
+/// for ordinary record I/O. Run-directory publication is deliberately
+/// disabled until a native handle-relative atomic no-replace backend is
+/// implemented and exercised on a Windows host.
 #[cfg(windows)]
 #[derive(Debug)]
 struct PinnedDirectory {
@@ -3432,6 +4267,46 @@ impl PinnedDirectory {
                 Err(error)
             }
         }
+    }
+
+    fn remove_directory_if_empty(&self, relative: &Path) -> Result<bool> {
+        validate_relative(relative)?;
+        let mut components = relative.components();
+        let Some(Component::Normal(name)) = components.next() else {
+            return Err(ScienceError::Invalid(
+                "directory removal received a non-normal component".into(),
+            ));
+        };
+        if components.next().is_some() {
+            return Err(ScienceError::Invalid(
+                "exclusive directory removal requires one component".into(),
+            ));
+        }
+        self.assert_path_still_matches_handle()?;
+        let child = self.path.join(name);
+        match fs::remove_dir(&child) {
+            Ok(()) => {
+                self.assert_path_still_matches_handle()?;
+                Ok(true)
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(true),
+            // ERROR_DIR_NOT_EMPTY
+            Err(error) if error.raw_os_error() == Some(145) => Ok(false),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    fn publish_directory_new(&self, staged: &Path, final_name: &Path) -> Result<()> {
+        validate_relative(staged)?;
+        validate_relative(final_name)?;
+        if staged.components().count() != 1 || final_name.components().count() != 1 {
+            return Err(ScienceError::Invalid(
+                "directory publication requires sibling names".into(),
+            ));
+        }
+        Err(ScienceError::FeatureDisabled(
+            "atomic no-replace run publication has no Windows backend".into(),
+        ))
     }
 
     fn open_directory(&self, relative: &Path) -> Result<Self> {
@@ -3569,6 +4444,13 @@ impl PinnedDirectory {
             fs::hard_link(&temp, &target)?;
             parent.assert_path_still_matches_handle()?;
             fs::remove_file(&temp)?;
+            #[cfg(test)]
+            if FAIL_WRITE_NEW_PARENT_SYNC.with(|fail| fail.replace(false)) {
+                return Err(ScienceError::Io(std::io::Error::other(
+                    "injected write-new parent sync failure",
+                )));
+            }
+            parent.sync_directory()?;
             Ok(())
         })();
         if let Err(error) = result {
@@ -3687,6 +4569,23 @@ impl PinnedDirectory {
                 file: self.file.try_clone()?,
             }),
         }
+    }
+
+    fn sync_directory(&self) -> Result<()> {
+        #[cfg(test)]
+        if FAIL_EXPLICIT_DIRECTORY_SYNC.with(|fail| fail.replace(false)) {
+            return Err(ScienceError::Io(std::io::Error::other(
+                "injected explicit directory sync failure",
+            )));
+        }
+        self.assert_path_still_matches_handle()?;
+        self.file.sync_all()?;
+        self.assert_path_still_matches_handle()
+    }
+
+    fn sync_containing_directory(&self, relative: &Path) -> Result<()> {
+        validate_relative(relative)?;
+        self.open_directory_parent(relative)?.sync_directory()
     }
 
     fn try_clone(&self) -> Result<Self> {
@@ -3889,6 +4788,18 @@ impl PinnedDirectory {
         ))
     }
 
+    fn remove_directory_if_empty(&self, _relative: &Path) -> Result<bool> {
+        Err(ScienceError::FeatureDisabled(
+            "confined artifact I/O has no backend for this platform".into(),
+        ))
+    }
+
+    fn publish_directory_new(&self, _staged: &Path, _final_name: &Path) -> Result<()> {
+        Err(ScienceError::FeatureDisabled(
+            "confined artifact I/O has no backend for this platform".into(),
+        ))
+    }
+
     fn create_directories(&self, _relative: &Path) -> Result<Self> {
         Err(ScienceError::FeatureDisabled(
             "confined artifact I/O has no backend for this platform".into(),
@@ -3942,6 +4853,18 @@ impl PinnedDirectory {
     }
 
     fn unlink_file(&self, _relative: &Path) -> Result<()> {
+        Err(ScienceError::FeatureDisabled(
+            "confined artifact I/O has no backend for this platform".into(),
+        ))
+    }
+
+    fn sync_directory(&self) -> Result<()> {
+        Err(ScienceError::FeatureDisabled(
+            "confined artifact I/O has no backend for this platform".into(),
+        ))
+    }
+
+    fn sync_containing_directory(&self, _relative: &Path) -> Result<()> {
         Err(ScienceError::FeatureDisabled(
             "confined artifact I/O has no backend for this platform".into(),
         ))
@@ -4127,6 +5050,136 @@ mod tests {
         }
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn windows_run_publication_fails_closed_without_visible_final_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("science-store");
+        let mut context = context(temp.path(), "windows-publication", "owner-a");
+        context.run_id = RunId::new("windows-publication-run");
+        let final_dir = root.join("runs").join(&context.run_id.0);
+
+        let error = ScienceStore::new(&root)
+            .create_run(context)
+            .expect_err("Windows used a pathname rename as atomic no-replace publication");
+        assert!(
+            matches!(
+                error,
+                ScienceError::FeatureDisabled(ref message)
+                    if message == "atomic no-replace run publication has no Windows backend"
+            ),
+            "unexpected Windows publication error: {error}"
+        );
+        assert!(
+            !final_dir.exists(),
+            "failed Windows run publication exposed a final authority directory"
+        );
+    }
+
+    #[test]
+    fn stale_nonempty_staging_directory_cannot_poison_final_run_id() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("science-store");
+        let runs = root.join("runs");
+        let mut context = context(temp.path(), "staged-create", "owner-a");
+        context.run_id = RunId::new("staged-create-run");
+        let stale = runs.join(format!(".run-init-{}-stale", context.run_id.0));
+        fs::create_dir_all(&stale).unwrap();
+        fs::write(stale.join(".science-orphan.tmp"), b"partial").unwrap();
+
+        let store = ScienceStore::new(&root);
+        let created = store.create_run(context.clone()).unwrap();
+        assert_eq!(created.context, context);
+        assert_eq!(store.load_run(&context.run_id).unwrap(), created);
+        assert!(root.join("runs").join(&context.run_id.0).is_dir());
+        assert!(
+            stale.is_dir(),
+            "untrusted stale staging is not deleted during publication"
+        );
+    }
+
+    #[test]
+    fn no_replace_run_publication_preserves_preexisting_final_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("science-store");
+        let mut context = context(temp.path(), "exclusive-create", "owner-a");
+        context.run_id = RunId::new("exclusive-create-run");
+        let final_dir = root.join("runs").join(&context.run_id.0);
+        fs::create_dir_all(&final_dir).unwrap();
+        fs::write(final_dir.join("foreign-record"), b"must survive").unwrap();
+
+        let store = ScienceStore::new(&root);
+        assert!(store.create_run(context).is_err());
+        assert_eq!(
+            fs::read(final_dir.join("foreign-record")).unwrap(),
+            b"must survive"
+        );
+        assert!(!final_dir.join("run.json").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn parent_sync_failure_blocks_begin_and_retry_resyncs_existing_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("science-store");
+        fs::create_dir(&root).unwrap();
+        let mut context = context(temp.path(), "directory-sync", "owner-a");
+        context.run_id = RunId::new("directory-sync-run");
+        let store = ScienceStore::new(&root);
+
+        FAIL_DIRECTORY_ENTRY_PARENT_SYNC.with(|fail| fail.set(true));
+        let error = store
+            .create_run(context.clone())
+            .expect_err("Begin ignored the runs-directory parent sync failure");
+        assert!(
+            error
+                .to_string()
+                .contains("injected directory-entry parent sync failure"),
+            "unexpected directory sync error: {error}"
+        );
+        assert!(
+            !root.join("runs").join(&context.run_id.0).exists(),
+            "failed directory durability opened a visible run"
+        );
+
+        let created = store
+            .create_run(context.clone())
+            .expect("retry must sync the retained existing runs directory entry");
+        assert_eq!(created.context, context);
+        assert_eq!(store.load_run(&context.run_id).unwrap(), created);
+    }
+
+    #[test]
+    fn visible_rename_with_failed_parent_sync_is_not_reported_durable_or_deleted() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("science-store");
+        let mut context = context(temp.path(), "visible-not-durable", "owner-a");
+        context.run_id = RunId::new("visible-not-durable-run");
+        let store = ScienceStore::new(&root);
+
+        FAIL_RUN_PUBLICATION_AFTER_VISIBLE_RENAME.with(|fail| fail.set(true));
+        let error = store
+            .create_run(context.clone())
+            .expect_err("visible rename without parent sync was reported durable");
+        assert!(
+            error
+                .to_string()
+                .contains("injected runs-directory sync failure"),
+            "unexpected publication error: {error}"
+        );
+
+        let final_dir = root.join("runs").join(&context.run_id.0);
+        assert!(
+            final_dir.is_dir(),
+            "reconciliation deleted a final directory after rename became visible"
+        );
+        assert_eq!(
+            store.load_run(&context.run_id).unwrap().context,
+            context,
+            "a later retry could not reopen the exact visible run"
+        );
+    }
+
     fn request_pending_call(store: &ScienceStore, run: &RunRecord, call: &CallId) {
         store
             .request_approval(Approval {
@@ -4242,6 +5295,80 @@ mod tests {
                 )
                 .is_err(),
             "orphan reconciliation accepted different bytes"
+        );
+    }
+
+    #[test]
+    fn put_artifact_requires_actual_parent_sync_before_registry_commit() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path().join("store"));
+        let run = store
+            .create_run(context(temp.path(), "artifact-durable-parent", "alice"))
+            .unwrap();
+        let call = allow_running_call(&store, &run, "artifact-call");
+        let relative = Path::new("nested/result.bin");
+        let payload = b"durable nested artifact";
+
+        FAIL_WRITE_NEW_PARENT_SYNC.with(|fail| fail.set(true));
+        assert!(
+            store
+                .put_artifact(
+                    &run.context.project_id,
+                    &run.context.run_id,
+                    "alice",
+                    call.clone(),
+                    relative,
+                    payload,
+                    "application/octet-stream",
+                    "durable parent",
+                )
+                .is_err(),
+            "ambiguous visible payload was registered in the failing call"
+        );
+        assert!(store.artifacts(&run.context.run_id).unwrap().is_empty());
+        let payload_path = store
+            .run_dir(&run.context.run_id)
+            .unwrap()
+            .join("artifacts")
+            .join(relative);
+        assert!(
+            payload_path.is_file(),
+            "fault injection did not reach the visible-before-parent-sync cut"
+        );
+
+        FAIL_EXPLICIT_DIRECTORY_SYNC.with(|fail| fail.set(true));
+        assert!(
+            store
+                .put_artifact(
+                    &run.context.project_id,
+                    &run.context.run_id,
+                    "alice",
+                    call.clone(),
+                    relative,
+                    payload,
+                    "application/octet-stream",
+                    "durable parent",
+                )
+                .is_err(),
+            "retry registered payload without syncing its actual nested parent"
+        );
+        assert!(store.artifacts(&run.context.run_id).unwrap().is_empty());
+
+        let recovered = store
+            .put_artifact(
+                &run.context.project_id,
+                &run.context.run_id,
+                "alice",
+                call,
+                relative,
+                payload,
+                "application/octet-stream",
+                "durable parent",
+            )
+            .unwrap();
+        assert_eq!(
+            store.artifacts(&run.context.run_id).unwrap(),
+            vec![recovered]
         );
     }
 
@@ -4545,7 +5672,9 @@ mod tests {
                 ScienceStore::expected_successful_completion_seal(&running, &approval, &manifest)
                     .unwrap();
             ScienceStore::persist_successful_completion_anchor_unlocked(
-                &run_dir, &mut running, &expected.manifest_sha256,
+                &run_dir,
+                &mut running,
+                &expected.manifest_sha256,
             )
             .unwrap();
         }
@@ -4638,10 +5767,20 @@ mod tests {
         let store_root = store.root().to_path_buf();
         drop(store);
         let reopened = ScienceStore::new(store_root);
-        let succeeded = reopened.recover_interrupted(&run.context.run_id).unwrap();
+        let succeeded = reopened
+            .recover_exact_completion(&run.context)
+            .unwrap()
+            .expect("anchor-only exact completion must recover");
         assert_eq!(succeeded.state, RunState::Succeeded);
         assert_eq!(
-            reopened.events_after(&run.context.run_id, 0, 1_000).unwrap(),
+            reopened.recover_interrupted(&run.context.run_id).unwrap(),
+            succeeded,
+            "legacy restart entrypoint changed an already recovered exact completion"
+        );
+        assert_eq!(
+            reopened
+                .events_after(&run.context.run_id, 0, 1_000)
+                .unwrap(),
             manifest.events,
             "restart recovery changed the sealed event collection"
         );
@@ -5369,6 +6508,39 @@ mod tests {
             ),
             Err(ScienceError::ApprovalConflict)
         ));
+    }
+
+    #[test]
+    fn exact_completion_recovery_leaves_an_ordinary_pending_run_unchanged() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path());
+        let run = store
+            .create_run(context(temp.path(), "exact-only", "alice"))
+            .unwrap();
+        let call = CallId::new("pending-call");
+        store
+            .request_approval(Approval {
+                project_id: run.context.project_id.clone(),
+                run_id: run.context.run_id.clone(),
+                call_id: call,
+                owner_id: run.context.owner_id.clone(),
+                decision: ApprovalDecision::Pending,
+                decided_at: None,
+            })
+            .unwrap();
+        store
+            .transition(&run.context.run_id, RunState::AwaitingApproval, None)
+            .unwrap();
+
+        assert_eq!(store.recover_exact_completion(&run.context).unwrap(), None);
+        assert_eq!(
+            store.load_run(&run.context.run_id).unwrap().state,
+            RunState::AwaitingApproval
+        );
+        assert_eq!(
+            store.approvals(&run.context.run_id).unwrap()[0].decision,
+            ApprovalDecision::Pending
+        );
     }
 
     #[test]
@@ -6647,6 +7819,89 @@ mod tests {
                 .shares_root_capability_with_workflow_io(&replacement_workflow)
                 .unwrap(),
             "replacement workflow root must not pass retained identity binding"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn operation_lease_uses_retained_store_identity_after_path_replacement() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = dunce::canonicalize(temp.path()).unwrap();
+        let root = workspace.join("lease-store");
+        fs::create_dir(&root).unwrap();
+        let science = ScienceStore::new_confined(&root, &workspace).unwrap();
+
+        let retained = workspace.join("retained-lease-store");
+        fs::rename(&root, &retained).unwrap();
+        fs::create_dir(&root).unwrap();
+        let replacement = ScienceStore::new_confined(&root, &workspace).unwrap();
+        let run_id = RunId::new("retained-operation-lease");
+
+        let retained_lease = science.claim_operation_lease(&run_id).unwrap();
+        assert!(
+            retained
+                .join(".seq-analyze-leases")
+                .join(format!("{}.lock", run_id.0))
+                .is_file(),
+            "lease must be created relative to the retained store descriptor"
+        );
+        assert!(
+            !root.join(".seq-analyze-leases").exists(),
+            "replacement pathname must remain untouched"
+        );
+        assert!(
+            science.claim_operation_lease(&run_id).is_err(),
+            "one retained store identity must be single-flight in-process"
+        );
+
+        let replacement_lease = replacement.claim_operation_lease(&run_id).unwrap();
+        assert!(
+            root.join(".seq-analyze-leases")
+                .join(format!("{}.lock", run_id.0))
+                .is_file(),
+            "a separately admitted replacement is a distinct store identity"
+        );
+        drop(replacement_lease);
+        drop(retained_lease);
+        science.claim_operation_lease(&run_id).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn operation_lease_rejects_symlink_and_writable_store_boundaries() {
+        use std::os::unix::fs::{PermissionsExt as _, symlink};
+
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("lease-store");
+        let outside = temp.path().join("outside");
+        fs::create_dir(&root).unwrap();
+        fs::create_dir(&outside).unwrap();
+        let science = ScienceStore::new(&root);
+        let run_id = RunId::new("boundary-operation-lease");
+
+        symlink(&outside, root.join(".seq-analyze-leases")).unwrap();
+        assert!(
+            science.claim_operation_lease(&run_id).is_err(),
+            "a symlinked lease directory must fail closed"
+        );
+        assert!(
+            fs::read_dir(&outside).unwrap().next().is_none(),
+            "symlink target must remain untouched"
+        );
+
+        fs::remove_file(root.join(".seq-analyze-leases")).unwrap();
+        let original_mode = fs::metadata(&root).unwrap().permissions().mode();
+        fs::set_permissions(&root, fs::Permissions::from_mode(original_mode | 0o022)).unwrap();
+        let error = science.claim_operation_lease(&run_id).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("must not be group- or world-writable"),
+            "unexpected writable-boundary error: {error}"
+        );
+        assert!(
+            !root.join(".seq-analyze-leases").exists(),
+            "rejected store boundary must not create a lease directory"
         );
     }
 }
