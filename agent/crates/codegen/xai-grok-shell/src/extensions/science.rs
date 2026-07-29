@@ -1472,6 +1472,7 @@ struct SeqAnalyzeParams {
     project_id: String,
     owner_id: String,
     artifact_root: PathBuf,
+    operation_id: String,
     source_path: PathBuf,
     #[serde(default = "default_translation_table_id")]
     translation_table_id: u8,
@@ -1510,6 +1511,12 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
     if params.project_id.is_empty() || params.owner_id.is_empty() {
         return Err(acp::Error::invalid_params().data("projectId and ownerId are required"));
     }
+    xai_grok_science::seqbench::validate_operation_id(&params.operation_id)
+        .map_err(|error| acp::Error::invalid_params().data(error.to_string()))?;
+    if params.artifact_root.as_os_str() != std::ffi::OsStr::new("science-store") {
+        return Err(acp::Error::invalid_params()
+            .data("artifactRoot must be the workspace-relative science-store authority root"));
+    }
     if !(1..=300_000).contains(&params.approval_timeout_ms) {
         return Err(acp::Error::invalid_params().data("approvalTimeoutMs must be in 1..=300000"));
     }
@@ -1542,8 +1549,20 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
         .map_err(internal)?;
     let workspace = workspace_capability.current_path().map_err(internal)?;
     let artifact_root = store.root().to_path_buf();
+    let source_relative =
+        xai_grok_science::seqbench::source_relative_binding(&workspace, &source_path)
+            .map_err(internal)?;
+    let options = xai_grok_science::seqbench::SeqAnalyzeOptions {
+        translation_table_id: params.translation_table_id,
+        topology: params.topology,
+        restriction_digest_enzymes,
+    };
+    let request_sha256 =
+        xai_grok_science::seqbench::request_sha256(&source_relative, &bytes, &options)
+            .map_err(internal)?;
+    let source_sha256 = xai_grok_science::seqbench::hex_sha256(&bytes);
     let context = RunContext {
-        run_id: RunId::new_v7(),
+        run_id: xai_grok_science::seqbench::operation_run_id(&params.operation_id),
         project_id: ProjectId::new(params.project_id),
         session_id: session_id.0.to_string(),
         owner_id: params.owner_id,
@@ -1556,6 +1575,26 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
             ("network".into(), "disabled".into()),
             ("locale".into(), "C".into()),
             (
+                xai_grok_science::seqbench::OPERATION_ENV.into(),
+                params.operation_id.clone(),
+            ),
+            (
+                xai_grok_science::seqbench::REQUEST_SHA256_ENV.into(),
+                request_sha256,
+            ),
+            (
+                xai_grok_science::seqbench::SOURCE_SHA256_ENV.into(),
+                source_sha256,
+            ),
+            (
+                xai_grok_science::seqbench::SOURCE_BYTES_ENV.into(),
+                bytes.len().to_string(),
+            ),
+            (
+                xai_grok_science::seqbench::SOURCE_RELATIVE_PATH_ENV.into(),
+                source_relative,
+            ),
+            (
                 "translation_table_id".into(),
                 params.translation_table_id.to_string(),
             ),
@@ -1565,7 +1604,7 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
             ),
             (
                 "restriction_digest_enzymes".into(),
-                restriction_digest_enzymes.join(","),
+                options.restriction_digest_enzymes.join(","),
             ),
         ]),
     };
@@ -1574,11 +1613,7 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
             &session_id,
             store,
             context,
-            xai_grok_science::seqbench::SeqAnalyzeOptions {
-                translation_table_id: params.translation_table_id,
-                topology: params.topology,
-                restriction_digest_enzymes,
-            },
+            options,
             source_path,
             bytes,
             Duration::from_millis(params.approval_timeout_ms),
@@ -1595,6 +1630,8 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
         "approvals": result.approvals,
         "recordCount": result.records,
         "replayAfter": result.replay_after,
+        "operationId": params.operation_id,
+        "replayed": result.replayed,
         "runtimeAuthority": "SessionActor-gated ACP adapter",
         "network": "disabled",
     }))

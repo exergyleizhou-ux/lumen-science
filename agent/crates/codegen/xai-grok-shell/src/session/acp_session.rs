@@ -169,6 +169,51 @@ mod recap;
 mod rewind;
 #[path = "acp_session_impl/run_loop.rs"]
 mod run_loop;
+
+/// Actor-minted capability for resuming a run that already has one durable
+/// terminal Allow. The constructor remains private to the actor module tree,
+/// so neither ACP input nor `SessionHandle` can manufacture a no-prompt path.
+pub(super) struct ScienceSeqAnalyzeRecoveryGrant {
+    run_id: xai_grok_science::RunId,
+    call_id: xai_grok_science::CallId,
+    expected_context: xai_grok_science::RunContext,
+    project_revision: String,
+    source_path: std::path::PathBuf,
+    source_sha256: String,
+    options: xai_grok_science::seqbench::SeqAnalyzeOptions,
+}
+
+impl ScienceSeqAnalyzeRecoveryGrant {
+    fn new(
+        ticket: &xai_grok_science::csv::ScienceRunTicket,
+        expected_context: &xai_grok_science::RunContext,
+        project_revision: &str,
+        source_path: &std::path::Path,
+        source_bytes: &[u8],
+        options: &xai_grok_science::seqbench::SeqAnalyzeOptions,
+    ) -> Self {
+        Self {
+            run_id: ticket.run_id.clone(),
+            call_id: ticket.call_id.clone(),
+            expected_context: expected_context.clone(),
+            project_revision: project_revision.to_owned(),
+            source_path: source_path.to_path_buf(),
+            source_sha256: xai_grok_science::seqbench::hex_sha256(source_bytes),
+            options: options.clone(),
+        }
+    }
+
+    fn authorizes(&self, prepared: &super::commands::PreparedScienceSeqAnalyze) -> bool {
+        self.run_id == prepared.ticket.run_id
+            && self.call_id == prepared.ticket.call_id
+            && self.expected_context == prepared.expected_context
+            && self.project_revision == prepared.project_revision
+            && self.source_path == prepared.source_path
+            && self.source_sha256 == xai_grok_science::seqbench::hex_sha256(&prepared.source_bytes)
+            && self.options == prepared.options
+    }
+}
+
 #[path = "acp_session_impl/science.rs"]
 mod science;
 #[path = "acp_session_impl/session_setup.rs"]

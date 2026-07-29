@@ -57,6 +57,103 @@ fn create_science_project(store_root: &Path, owner_id: &str, title: &str) -> Str
         .0
 }
 
+fn exact_seq_restart_context(
+    workspace: &Path,
+    store_root: &Path,
+    source_path: &Path,
+    source_bytes: &[u8],
+    session_id: &acp::SessionId,
+    project_id: &str,
+    operation_id: &str,
+    options: &xai_grok_science::seqbench::SeqAnalyzeOptions,
+) -> xai_grok_science::RunContext {
+    let project_store = xai_grok_science::project::ProjectStore::new(store_root);
+    let project_revision = project_store
+        .with_owned_project_revision(
+            &xai_grok_science::project::ProjectId(project_id.to_owned()),
+            "science-owner",
+            |_project, revision| Ok(revision.to_owned()),
+        )
+        .expect("capture exact sequence project revision");
+    let source_relative =
+        xai_grok_science::seqbench::source_relative_binding(workspace, source_path)
+            .expect("derive exact sequence source binding");
+    let request_sha256 =
+        xai_grok_science::seqbench::request_sha256(&source_relative, source_bytes, options)
+            .expect("derive exact sequence request digest");
+    xai_grok_science::RunContext {
+        run_id: xai_grok_science::seqbench::operation_run_id(operation_id),
+        project_id: xai_grok_science::ProjectId::new(project_id),
+        session_id: session_id.0.to_string(),
+        owner_id: "science-owner".into(),
+        workspace_root: workspace.to_path_buf(),
+        provider: "offline-deterministic".into(),
+        approval_policy: "production-session-permission".into(),
+        tool_profile: "science-seqbench-v4".into(),
+        artifact_root: store_root.to_path_buf(),
+        environment: std::collections::BTreeMap::from([
+            ("network".into(), "disabled".into()),
+            ("locale".into(), "C".into()),
+            (
+                xai_grok_science::seqbench::OPERATION_ENV.into(),
+                operation_id.into(),
+            ),
+            (
+                xai_grok_science::seqbench::REQUEST_SHA256_ENV.into(),
+                request_sha256,
+            ),
+            (
+                xai_grok_science::seqbench::SOURCE_SHA256_ENV.into(),
+                xai_grok_science::seqbench::hex_sha256(source_bytes),
+            ),
+            (
+                xai_grok_science::seqbench::SOURCE_BYTES_ENV.into(),
+                source_bytes.len().to_string(),
+            ),
+            (
+                xai_grok_science::seqbench::SOURCE_RELATIVE_PATH_ENV.into(),
+                source_relative,
+            ),
+            (
+                xai_grok_science::seqbench::PROJECT_REVISION_ENV.into(),
+                project_revision,
+            ),
+            (
+                "translation_table_id".into(),
+                options.translation_table_id.to_string(),
+            ),
+            (
+                "restriction_topology".into(),
+                options.topology.as_str().into(),
+            ),
+            (
+                "restriction_digest_enzymes".into(),
+                options.restriction_digest_enzymes.join(","),
+            ),
+        ]),
+    }
+}
+
+fn seq_restart_request(
+    session_id: &acp::SessionId,
+    project_id: &str,
+    operation_id: &str,
+    source_path: &Path,
+) -> serde_json::Value {
+    serde_json::json!({
+        "sessionId": session_id.0.as_ref(),
+        "projectId": project_id,
+        "ownerId": "science-owner",
+        "artifactRoot": "science-store",
+        "operationId": operation_id,
+        "sourcePath": source_path,
+        "translationTableId": 1,
+        "topology": "linear",
+        "restrictionDigestEnzymes": [],
+        "approvalTimeoutMs": 5_000,
+    })
+}
+
 fn skill_quarantine_zip_fixture() -> Vec<u8> {
     use std::io::{Cursor, Write as _};
     let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
@@ -1345,7 +1442,7 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             .expect("start mock server");
         let workdir = git_workdir();
         let workspace = dunce::canonicalize(workdir.path()).expect("canonical sequence workspace");
-        let artifact_root = workspace.join("science-seq-store");
+        let store_root = workspace.join("science-store");
         let source = workspace.join("micro.fasta");
         let motif_orf = format!("ATG{}AGA{}TAA", "AAA".repeat(29), "AAA".repeat(2));
         std::fs::write(
@@ -1361,23 +1458,23 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
         client.initialize_with_timeout().await;
         let session_id = client.create_session_with_timeout(&workspace).await;
         let project_id =
-            create_science_project(&artifact_root, "science-owner", "Sequence product proof");
+            create_science_project(&store_root, "science-owner", "Sequence product proof");
+        let operation_id = "seq-allow-product-0001";
+        let request = serde_json::json!({
+            "sessionId": session_id.0.as_ref(),
+            "projectId": project_id.clone(),
+            "ownerId": "science-owner",
+            "artifactRoot": "science-store",
+            "operationId": operation_id,
+            "sourcePath": source,
+            "translationTableId": 2,
+            "topology": "circular",
+            "restrictionDigestEnzymes": ["EcoRI"],
+            "approvalTimeoutMs": 5_000,
+        });
         let response = tokio::time::timeout(
             Duration::from_secs(30),
-            client.ext_method(
-                "x.ai/science/seq_analyze",
-                serde_json::json!({
-                    "sessionId": session_id.0.as_ref(),
-                    "projectId": project_id.clone(),
-                    "ownerId": "science-owner",
-                    "artifactRoot": artifact_root,
-                    "sourcePath": source,
-                    "translationTableId": 2,
-                    "topology": "circular",
-                    "restrictionDigestEnzymes": ["EcoRI"],
-                    "approvalTimeoutMs": 5_000,
-                }),
-            ),
+            client.ext_method("x.ai/science/seq_analyze", request.clone()),
         )
         .await
         .expect("seq_analyze timed out")
@@ -1391,6 +1488,8 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             serde_json::from_str(response.0.get()).expect("seq_analyze returned JSON");
 
         assert_eq!(result["runtimeAuthority"], "SessionActor-gated ACP adapter");
+        assert_eq!(result["operationId"], operation_id);
+        assert_eq!(result["replayed"], false, "fresh result: {result}");
         assert_eq!(result["run"]["state"], "succeeded", "result: {result}");
         assert_eq!(result["recordCount"], 2, "result: {result}");
         let artifacts = result["artifacts"].as_array().expect("artifacts array");
@@ -1410,13 +1509,75 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             "result: {result}"
         );
 
+        let replay: serde_json::Value = serde_json::from_str(
+            tokio::time::timeout(
+                Duration::from_secs(30),
+                client.ext_method("x.ai/science/seq_analyze", request.clone()),
+            )
+            .await
+            .expect("seq_analyze replay timed out")
+            .unwrap_or_else(|error| {
+                panic!(
+                    "seq_analyze replay failed: {error:?}\nstderr:\n{}",
+                    client.stderr()
+                )
+            })
+            .0
+            .get(),
+        )
+        .expect("seq_analyze replay returned JSON");
+        assert_eq!(replay["operationId"], operation_id);
+        assert_eq!(replay["replayed"], true, "replay result: {replay}");
+        for field in [
+            "run",
+            "analysis",
+            "artifacts",
+            "evidence",
+            "provenance",
+            "approvals",
+            "replayAfter",
+        ] {
+            assert_eq!(
+                replay.get(field),
+                result.get(field),
+                "replay changed {field}: first={result}, replay={replay}"
+            );
+        }
+        assert_eq!(
+            client.permission_request_count(),
+            1,
+            "verified replay opened a second permission prompt"
+        );
+
+        std::fs::write(&source, b">seq1 changed after success\nACGTACGT\n")
+            .expect("mutate admitted sequence source");
+        let changed_retry = client.ext_method("x.ai/science/seq_analyze", request).await;
+        assert!(
+            changed_retry.is_err(),
+            "changed source bytes replayed under the original operation id: {changed_retry:?}"
+        );
+        assert_eq!(
+            client.permission_request_count(),
+            1,
+            "mismatched replay opened a second permission prompt"
+        );
+        let durable_runs = std::fs::read_dir(store_root.join("runs"))
+            .expect("reopen sequence runs after rejected replay")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("read sequence runs after rejected replay");
+        assert_eq!(
+            durable_runs.len(),
+            1,
+            "mismatched replay opened another durable run"
+        );
+
         let run_id = xai_grok_science::RunId::new(
             result["run"]["context"]["run_id"]
                 .as_str()
                 .expect("durable run id"),
         );
         let project_id = xai_grok_science::ProjectId::new(project_id);
-        let store = xai_grok_science::ScienceStore::new(&artifact_root);
+        let store = xai_grok_science::ScienceStore::new(&store_root);
         assert_eq!(
             store.load_run(&run_id).expect("reopen durable run").state,
             xai_grok_science::RunState::Succeeded
@@ -1554,7 +1715,7 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             "result: {result}"
         );
         assert!(
-            !artifact_root.join(&project_id.0).join("seqbench").exists(),
+            !store_root.join(&project_id.0).join("seqbench").exists(),
             "legacy ACP-task loose artifact directory was written"
         );
 
@@ -1580,7 +1741,7 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
                     session_id.0.as_ref(),
                     "science-owner",
                     &project_id.0,
-                    &artifact_root,
+                    &store_root,
                 ),
             )
             .await
@@ -1594,7 +1755,7 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             serde_json::from_str(response.0.get()).expect("artifact_list returned JSON");
         let listed = listed.as_array().expect("artifact_list array");
         assert_eq!(listed.len(), durable_artifacts.len());
-        let expected_run_root = dunce::canonicalize(artifact_root.join("runs").join(&run_id.0))
+        let expected_run_root = dunce::canonicalize(store_root.join("runs").join(&run_id.0))
             .expect("canonical run root");
         for item in listed {
             let sha = item["sha256"].as_str().expect("listed sha256");
@@ -1624,7 +1785,7 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
                     session_id.0.as_ref(),
                     "other-owner",
                     &project_id.0,
-                    &artifact_root,
+                    &store_root,
                 ),
             ),
             (
@@ -1633,7 +1794,7 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
                     session_id.0.as_ref(),
                     "science-owner",
                     "other-project",
-                    &artifact_root,
+                    &store_root,
                 ),
             ),
         ] {
@@ -1654,7 +1815,7 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
                         other_session.0.as_ref(),
                         "science-owner",
                         &project_id.0,
-                        &artifact_root,
+                        &store_root,
                     ),
                 )
                 .await
@@ -1699,7 +1860,7 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
                         session_id.0.as_ref(),
                         "science-owner",
                         &project_id.0,
-                        &artifact_root,
+                        &store_root,
                     ),
                 )
                 .await
@@ -1711,6 +1872,488 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             permission_count,
             "rejected listing asked for permission"
         );
+    })
+    .await;
+}
+
+/// A rebuilt product must enforce one in-process execution for a deterministic
+/// sequence operation. While the first request owns the operation lease and is
+/// waiting at the real permission seam, an identical request must fail quickly
+/// instead of opening another prompt, durable run, or execution.
+#[tokio::test]
+#[ignore] // requires an explicitly rebuilt binary via GROK_BINARY
+async fn test_stdio_science_seq_analyze_same_operation_is_single_flight() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let workspace = dunce::canonicalize(workdir.path()).expect("canonical sequence workspace");
+        let store_root = workspace.join("science-store");
+        let source = workspace.join("single-flight.fasta");
+        std::fs::write(&source, b">single-flight\nACGTACGTACGT\n")
+            .expect("write sequence single-flight fixture");
+
+        let client = GrokStdioClient::spawn_with_permission_response(
+            &server,
+            &workspace,
+            PermissionResponse::AllowAfter(Duration::from_secs(3)),
+        )
+        .await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(&workspace).await;
+        let project_id =
+            create_science_project(&store_root, "science-owner", "Sequence single-flight proof");
+        let operation_id = "seq-single-flight-product-0001";
+        let request = serde_json::json!({
+            "sessionId": session_id.0.as_ref(),
+            "projectId": project_id.clone(),
+            "ownerId": "science-owner",
+            "artifactRoot": "science-store",
+            "operationId": operation_id,
+            "sourcePath": source,
+            "approvalTimeoutMs": 10_000,
+        });
+
+        let mut first = Box::pin(client.ext_method("x.ai/science/seq_analyze", request.clone()));
+        let permission_barrier = async {
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+            while client.permission_request_count() == 0 {
+                assert!(
+                    tokio::time::Instant::now() < deadline,
+                    "first sequence request did not reach the production permission seam"
+                );
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        };
+        tokio::select! {
+            early = &mut first => {
+                panic!(
+                    "first sequence request completed before delayed permission: {early:?}\n\
+                     stderr:\n{}",
+                    client.stderr()
+                )
+            }
+            () = permission_barrier => {}
+        }
+        assert_eq!(
+            client.permission_request_count(),
+            1,
+            "first sequence request opened more than one permission prompt"
+        );
+
+        let duplicate = tokio::time::timeout(
+            Duration::from_secs(1),
+            client.ext_method("x.ai/science/seq_analyze", request.clone()),
+        )
+        .await
+        .expect("duplicate sequence request did not fail fast while the first awaited permission");
+        let duplicate_error =
+            duplicate.expect_err("duplicate active sequence operation was accepted");
+        let duplicate_detail = format!("{duplicate_error:?}");
+        assert!(
+            duplicate_detail.contains("already active") && duplicate_detail.contains(operation_id),
+            "duplicate failed for the wrong reason: {duplicate_error:?}"
+        );
+        assert_eq!(
+            client.permission_request_count(),
+            1,
+            "duplicate active operation opened a second permission prompt"
+        );
+        let runs_during_permission = std::fs::read_dir(store_root.join("runs"))
+            .expect("first request must durably create its run before permission")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("read sequence runs during permission");
+        assert_eq!(
+            runs_during_permission.len(),
+            1,
+            "duplicate active operation opened another durable run"
+        );
+
+        let response = tokio::time::timeout(Duration::from_secs(30), &mut first)
+            .await
+            .expect("first sequence request timed out after duplicate rejection")
+            .unwrap_or_else(|error| {
+                panic!(
+                    "first sequence request failed after duplicate rejection: {error:?}\n\
+                     stderr:\n{}",
+                    client.stderr()
+                )
+            });
+        let result: serde_json::Value =
+            serde_json::from_str(response.0.get()).expect("seq_analyze returned JSON");
+        assert_eq!(result["operationId"], operation_id);
+        assert_eq!(result["replayed"], false, "fresh result: {result}");
+        assert_eq!(result["run"]["state"], "succeeded", "result: {result}");
+
+        let run_id = xai_grok_science::RunId::new(
+            result["run"]["context"]["run_id"]
+                .as_str()
+                .expect("durable run id"),
+        );
+        let store = xai_grok_science::ScienceStore::new(&store_root);
+        let runs_after_completion = std::fs::read_dir(store_root.join("runs"))
+            .expect("reopen sequence runs after completion")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("read completed sequence runs");
+        assert_eq!(
+            runs_after_completion.len(),
+            1,
+            "single-flight completion left multiple durable runs"
+        );
+        assert_eq!(
+            client.permission_request_count(),
+            1,
+            "single-flight sequence operation asked for permission more than once"
+        );
+        assert_eq!(
+            store.approvals(&run_id).expect("reopen approval").len(),
+            1,
+            "single-flight sequence operation recorded multiple approvals"
+        );
+        assert_eq!(
+            store.approvals(&run_id).expect("reopen approval")[0].decision,
+            xai_grok_science::ApprovalDecision::Allow
+        );
+        assert_eq!(
+            store.artifacts(&run_id).expect("reopen artifacts").len(),
+            2,
+            "single-flight sequence operation must publish exactly two artifacts"
+        );
+    })
+    .await;
+}
+
+/// A persisted AwaitingApproval cut must survive a real binary restart. The
+/// second process loads the original session and re-prompts exactly once for
+/// the same deterministic run instead of creating a replacement run.
+#[tokio::test]
+#[ignore] // requires an explicitly rebuilt binary via GROK_BINARY
+async fn test_stdio_science_seq_analyze_restart_reprompts_exact_pending_once() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let workspace = dunce::canonicalize(workdir.path()).expect("canonical sequence workspace");
+        let source = workspace.join("restart-pending.fasta");
+        let source_bytes = b">restart-pending\nACGTACGTACGT\n";
+        std::fs::write(&source, source_bytes).expect("write pending restart sequence fixture");
+        let source = dunce::canonicalize(source).expect("canonical pending restart source");
+
+        let mut first = GrokStdioClient::spawn(&server, &workspace).await;
+        first.initialize_with_timeout().await;
+        let session_id = first.create_session_with_timeout(&workspace).await;
+        let store_root = workspace.join("science-store");
+        let project_id = create_science_project(
+            &store_root,
+            "science-owner",
+            "Sequence pending restart proof",
+        );
+        let store_root =
+            dunce::canonicalize(store_root).expect("canonical pending restart store root");
+        let operation_id = "seq-restart-pending-product-0001";
+        let options = xai_grok_science::seqbench::SeqAnalyzeOptions::default();
+        let context = exact_seq_restart_context(
+            &workspace,
+            &store_root,
+            &source,
+            source_bytes,
+            &session_id,
+            &project_id,
+            operation_id,
+            &options,
+        );
+        let store = xai_grok_science::ScienceStore::new(&store_root);
+        let ticket =
+            xai_grok_science::seqbench::begin_analysis_with_options(&store, context, &options)
+                .expect("pre-publish exact AwaitingApproval restart cut");
+        assert_eq!(
+            store
+                .load_run(&ticket.run_id)
+                .expect("reopen pending restart run")
+                .state,
+            xai_grok_science::RunState::AwaitingApproval
+        );
+        assert_eq!(
+            store
+                .approvals(&ticket.run_id)
+                .expect("reopen pending restart approval")
+                .as_slice(),
+            &[xai_grok_science::Approval {
+                project_id: ticket.project_id.clone(),
+                run_id: ticket.run_id.clone(),
+                call_id: ticket.call_id.clone(),
+                owner_id: ticket.owner_id.clone(),
+                decision: xai_grok_science::ApprovalDecision::Pending,
+                decided_at: None,
+            }]
+        );
+        assert_eq!(
+            store
+                .events_after(&ticket.run_id, 0, 10)
+                .expect("reopen pending restart events")
+                .len(),
+            1,
+            "AwaitingApproval cut must stop after run.created"
+        );
+        assert!(
+            store
+                .artifacts(&ticket.run_id)
+                .expect("reopen pending restart artifacts")
+                .is_empty(),
+            "AwaitingApproval cut exposed output before Allow"
+        );
+
+        let shared_home = first.take_home();
+        drop(first);
+        assert_eq!(
+            store
+                .load_run(&ticket.run_id)
+                .expect("pending restart cut changed while first binary stopped")
+                .state,
+            xai_grok_science::RunState::AwaitingApproval
+        );
+
+        let second = GrokStdioClient::spawn_with_home_and_permission_response(
+            &server,
+            &workspace,
+            shared_home,
+            PermissionResponse::AllowOnce,
+        )
+        .await;
+        second.initialize_with_timeout().await;
+        let _ = second
+            .load_session_with_timeout(&session_id, &workspace)
+            .await;
+        let response = tokio::time::timeout(
+            Duration::from_secs(30),
+            second.ext_method(
+                "x.ai/science/seq_analyze",
+                seq_restart_request(&session_id, &project_id, operation_id, &source),
+            ),
+        )
+        .await
+        .expect("pending restart recovery timed out")
+        .unwrap_or_else(|error| {
+            panic!(
+                "pending restart recovery failed: {error:?}\nstderr:\n{}",
+                second.stderr()
+            )
+        });
+        let result: serde_json::Value =
+            serde_json::from_str(response.0.get()).expect("parse pending restart result");
+        assert_eq!(result["operationId"], operation_id);
+        assert_eq!(result["run"]["context"]["run_id"], ticket.run_id.0.as_str());
+        assert_eq!(
+            result["run"]["context"]["session_id"],
+            session_id.0.as_ref()
+        );
+        assert_eq!(
+            result["run"]["context"]["workspace_root"],
+            workspace.to_string_lossy().as_ref()
+        );
+        assert_eq!(result["run"]["state"], "succeeded", "result: {result}");
+        assert_eq!(
+            second.permission_request_count(),
+            1,
+            "pending restart must re-prompt exactly once"
+        );
+        assert_eq!(
+            std::fs::read_dir(store_root.join("runs"))
+                .expect("reopen pending restart runs")
+                .collect::<Result<Vec<_>, _>>()
+                .expect("read pending restart runs")
+                .len(),
+            1,
+            "pending restart created a replacement run"
+        );
+        let approval = store
+            .approvals(&ticket.run_id)
+            .expect("reopen recovered pending approval");
+        assert_eq!(approval.len(), 1);
+        assert_eq!(
+            approval[0].decision,
+            xai_grok_science::ApprovalDecision::Allow
+        );
+        assert!(approval[0].decided_at.is_some());
+        assert_eq!(
+            store
+                .artifacts(&ticket.run_id)
+                .expect("reopen pending restart artifacts")
+                .len(),
+            2
+        );
+        let events = store
+            .events_after(&ticket.run_id, 0, 10)
+            .expect("reopen recovered pending events");
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[2].kind, "analysis.completed");
+    })
+    .await;
+}
+
+/// A persisted Running+Allow cut already carries the operator decision. After
+/// loading the original session in a new process, recovery must finish the same
+/// run without issuing any second permission request.
+#[tokio::test]
+#[ignore] // requires an explicitly rebuilt binary via GROK_BINARY
+async fn test_stdio_science_seq_analyze_restart_resumes_allow_without_reprompt() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let workspace = dunce::canonicalize(workdir.path()).expect("canonical sequence workspace");
+        let source = workspace.join("restart-allowed.fasta");
+        let source_bytes = b">restart-allowed\nTTTAAACCCGGG\n";
+        std::fs::write(&source, source_bytes).expect("write allowed restart sequence fixture");
+        let source = dunce::canonicalize(source).expect("canonical allowed restart source");
+
+        let mut first = GrokStdioClient::spawn(&server, &workspace).await;
+        first.initialize_with_timeout().await;
+        let session_id = first.create_session_with_timeout(&workspace).await;
+        let store_root = workspace.join("science-store");
+        let project_id = create_science_project(
+            &store_root,
+            "science-owner",
+            "Sequence allowed restart proof",
+        );
+        let store_root =
+            dunce::canonicalize(store_root).expect("canonical allowed restart store root");
+        let operation_id = "seq-restart-allowed-product-0001";
+        let options = xai_grok_science::seqbench::SeqAnalyzeOptions::default();
+        let context = exact_seq_restart_context(
+            &workspace,
+            &store_root,
+            &source,
+            source_bytes,
+            &session_id,
+            &project_id,
+            operation_id,
+            &options,
+        );
+        let store = xai_grok_science::ScienceStore::new(&store_root);
+        let (ticket, created_event) =
+            xai_grok_science::seqbench::begin_analysis_with_options_witnessed(
+                &store, context, &options,
+            )
+            .expect("pre-publish exact Running+Allow restart cut");
+        xai_grok_science::seqbench::mark_allowed_recoverable_fresh(
+            &store,
+            &ticket,
+            &created_event,
+        )
+        .expect("persist exact Running+Allow restart cut");
+        assert_eq!(
+            store
+                .load_run(&ticket.run_id)
+                .expect("reopen allowed restart run")
+                .state,
+            xai_grok_science::RunState::Running
+        );
+        assert_eq!(
+            store
+                .events_after(&ticket.run_id, 0, 10)
+                .expect("reopen allowed restart events")
+                .len(),
+            2,
+            "Running+Allow cut must stop after approval.allowed"
+        );
+        assert!(
+            store
+                .artifacts(&ticket.run_id)
+                .expect("reopen allowed restart artifacts")
+                .is_empty(),
+            "Running+Allow cut exposed output before resumed execution"
+        );
+
+        let shared_home = first.take_home();
+        drop(first);
+        assert_eq!(
+            store
+                .load_run(&ticket.run_id)
+                .expect("allowed restart cut changed while first binary stopped")
+                .state,
+            xai_grok_science::RunState::Running
+        );
+
+        // If the resumed actor incorrectly asks again, this response denies it
+        // and the test fails both the product response and the count below.
+        let second = GrokStdioClient::spawn_with_home_and_permission_response(
+            &server,
+            &workspace,
+            shared_home,
+            PermissionResponse::DenyOnce,
+        )
+        .await;
+        second.initialize_with_timeout().await;
+        let _ = second
+            .load_session_with_timeout(&session_id, &workspace)
+            .await;
+        let response = tokio::time::timeout(
+            Duration::from_secs(30),
+            second.ext_method(
+                "x.ai/science/seq_analyze",
+                seq_restart_request(&session_id, &project_id, operation_id, &source),
+            ),
+        )
+        .await
+        .expect("allowed restart recovery timed out")
+        .unwrap_or_else(|error| {
+            panic!(
+                "allowed restart recovery failed: {error:?}\nstderr:\n{}",
+                second.stderr()
+            )
+        });
+        let result: serde_json::Value =
+            serde_json::from_str(response.0.get()).expect("parse allowed restart result");
+        assert_eq!(result["operationId"], operation_id);
+        assert_eq!(result["run"]["context"]["run_id"], ticket.run_id.0.as_str());
+        assert_eq!(
+            result["run"]["context"]["session_id"],
+            session_id.0.as_ref()
+        );
+        assert_eq!(
+            result["run"]["context"]["workspace_root"],
+            workspace.to_string_lossy().as_ref()
+        );
+        assert_eq!(result["run"]["state"], "succeeded", "result: {result}");
+        assert_eq!(
+            second.permission_request_count(),
+            0,
+            "Running+Allow restart opened a second permission prompt"
+        );
+        assert_eq!(
+            std::fs::read_dir(store_root.join("runs"))
+                .expect("reopen allowed restart runs")
+                .collect::<Result<Vec<_>, _>>()
+                .expect("read allowed restart runs")
+                .len(),
+            1,
+            "Running+Allow restart created a replacement run"
+        );
+        let approval = store
+            .approvals(&ticket.run_id)
+            .expect("reopen durable allowed approval");
+        assert_eq!(approval.len(), 1);
+        assert_eq!(
+            approval[0].decision,
+            xai_grok_science::ApprovalDecision::Allow
+        );
+        assert!(approval[0].decided_at.is_some());
+        assert_eq!(
+            store
+                .artifacts(&ticket.run_id)
+                .expect("reopen allowed restart artifacts")
+                .len(),
+            2
+        );
+        let events = store
+            .events_after(&ticket.run_id, 0, 10)
+            .expect("reopen recovered allowed events");
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[2].kind, "analysis.completed");
     })
     .await;
 }
@@ -2259,7 +2902,7 @@ async fn test_stdio_science_seq_analyze_boundaries_fail_closed() {
             .expect("start mock server");
         let workdir = git_workdir();
         let workspace = dunce::canonicalize(workdir.path()).expect("canonical sequence workspace");
-        let artifact_root = workspace.join("science-seq-store");
+        let store_root = workspace.join("science-store");
         let source = workspace.join("inside.fasta");
         std::fs::write(&source, b">inside\nACGT\n").expect("write inside fixture");
         let outside = tempfile::NamedTempFile::new().expect("outside fixture");
@@ -2269,7 +2912,7 @@ async fn test_stdio_science_seq_analyze_boundaries_fail_closed() {
         client.initialize_with_timeout().await;
         let session_id = client.create_session_with_timeout(&workspace).await;
         let project_id =
-            create_science_project(&artifact_root, "science-owner", "Sequence boundary proof");
+            create_science_project(&store_root, "science-owner", "Sequence boundary proof");
 
         for (label, params) in [
             (
@@ -2278,7 +2921,8 @@ async fn test_stdio_science_seq_analyze_boundaries_fail_closed() {
                     "sessionId": session_id.0.as_ref(),
                     "projectId": project_id.clone(),
                     "ownerId": "",
-                    "artifactRoot": artifact_root,
+                    "artifactRoot": "science-store",
+                    "operationId": "seq-boundary-empty-owner",
                     "sourcePath": source,
                 }),
             ),
@@ -2288,7 +2932,8 @@ async fn test_stdio_science_seq_analyze_boundaries_fail_closed() {
                     "sessionId": session_id.0.as_ref(),
                     "projectId": "missing-science-project",
                     "ownerId": "science-owner",
-                    "artifactRoot": artifact_root,
+                    "artifactRoot": "science-store",
+                    "operationId": "seq-boundary-missing-project",
                     "sourcePath": source,
                 }),
             ),
@@ -2298,7 +2943,8 @@ async fn test_stdio_science_seq_analyze_boundaries_fail_closed() {
                     "sessionId": session_id.0.as_ref(),
                     "projectId": project_id.clone(),
                     "ownerId": "mallory",
-                    "artifactRoot": artifact_root,
+                    "artifactRoot": "science-store",
+                    "operationId": "seq-boundary-wrong-owner",
                     "sourcePath": source,
                 }),
             ),
@@ -2308,7 +2954,8 @@ async fn test_stdio_science_seq_analyze_boundaries_fail_closed() {
                     "sessionId": "forged-session",
                     "projectId": project_id.clone(),
                     "ownerId": "science-owner",
-                    "artifactRoot": artifact_root,
+                    "artifactRoot": "science-store",
+                    "operationId": "seq-boundary-unknown-session",
                     "sourcePath": source,
                 }),
             ),
@@ -2318,7 +2965,8 @@ async fn test_stdio_science_seq_analyze_boundaries_fail_closed() {
                     "sessionId": session_id.0.as_ref(),
                     "projectId": project_id.clone(),
                     "ownerId": "science-owner",
-                    "artifactRoot": artifact_root,
+                    "artifactRoot": "science-store",
+                    "operationId": "seq-boundary-outside-source",
                     "sourcePath": outside.path(),
                 }),
             ),
@@ -2328,7 +2976,8 @@ async fn test_stdio_science_seq_analyze_boundaries_fail_closed() {
                     "sessionId": session_id.0.as_ref(),
                     "projectId": project_id.clone(),
                     "ownerId": "science-owner",
-                    "artifactRoot": artifact_root,
+                    "artifactRoot": "science-store",
+                    "operationId": "seq-boundary-translation-table",
                     "sourcePath": source,
                     "translationTableId": 27,
                 }),
@@ -2339,7 +2988,8 @@ async fn test_stdio_science_seq_analyze_boundaries_fail_closed() {
                     "sessionId": session_id.0.as_ref(),
                     "projectId": project_id.clone(),
                     "ownerId": "science-owner",
-                    "artifactRoot": artifact_root,
+                    "artifactRoot": "science-store",
+                    "operationId": "seq-boundary-topology",
                     "sourcePath": source,
                     "topology": "toroidal",
                 }),
@@ -2350,9 +3000,53 @@ async fn test_stdio_science_seq_analyze_boundaries_fail_closed() {
                     "sessionId": session_id.0.as_ref(),
                     "projectId": project_id.clone(),
                     "ownerId": "science-owner",
-                    "artifactRoot": artifact_root,
+                    "artifactRoot": "science-store",
+                    "operationId": "seq-boundary-digest-enzyme",
                     "sourcePath": source,
                     "restrictionDigestEnzymes": ["UnknownI"],
+                }),
+            ),
+            (
+                "missing operation id",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": project_id.clone(),
+                    "ownerId": "science-owner",
+                    "artifactRoot": "science-store",
+                    "sourcePath": source,
+                }),
+            ),
+            (
+                "invalid operation id",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": project_id.clone(),
+                    "ownerId": "science-owner",
+                    "artifactRoot": "science-store",
+                    "operationId": "invalid/id",
+                    "sourcePath": source,
+                }),
+            ),
+            (
+                "alternate absolute artifact root",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": project_id.clone(),
+                    "ownerId": "science-owner",
+                    "artifactRoot": store_root,
+                    "operationId": "seq-boundary-absolute-root",
+                    "sourcePath": source,
+                }),
+            ),
+            (
+                "dot-alias artifact root",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": project_id.clone(),
+                    "ownerId": "science-owner",
+                    "artifactRoot": "./science-store",
+                    "operationId": "seq-boundary-dot-root",
+                    "sourcePath": source,
                 }),
             ),
         ] {
@@ -2364,8 +3058,13 @@ async fn test_stdio_science_seq_analyze_boundaries_fail_closed() {
                 "{label} request was accepted"
             );
         }
+        assert_eq!(
+            client.permission_request_count(),
+            0,
+            "boundary rejections reached the permission seam"
+        );
         assert!(
-            !artifact_root.join("runs").exists(),
+            !store_root.join("runs").exists(),
             "rejected boundary requests opened durable runs"
         );
     })
@@ -2375,10 +3074,9 @@ async fn test_stdio_science_seq_analyze_boundaries_fail_closed() {
 /// A production permission refusal closes the durable run but must not create
 /// an artifact, evidence, provenance, or the legacy loose output.
 ///
-/// The stdio harness' `PermissionResponse::Reject` becomes
-/// `RequestPermissionOutcome::Cancelled` in the ACP bridge, so this product
-/// seam exercises the Cancelled terminal. The protocol tests separately prove
-/// the Denied terminal has the same no-output invariant.
+/// This uses the harness' explicit DenyOnce response, so the built product
+/// must prove the Denied seam itself rather than treating transport
+/// cancellation as equivalent.
 #[tokio::test]
 #[ignore] // requires pre-built binary
 async fn test_stdio_science_seq_analyze_denied_writes_nothing() {
@@ -2388,7 +3086,108 @@ async fn test_stdio_science_seq_analyze_denied_writes_nothing() {
             .expect("start mock server");
         let workdir = git_workdir();
         let workspace = dunce::canonicalize(workdir.path()).expect("canonical sequence workspace");
-        let artifact_root = workspace.join("science-seq-store");
+        let store_root = workspace.join("science-store");
+        let source = workspace.join("micro.fasta");
+        std::fs::copy(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../xai-grok-science/fixtures/micro.fasta"
+            ),
+            &source,
+        )
+        .expect("copy fixed sequence fixture");
+
+        let client = GrokStdioClient::spawn_with_permission_response(
+            &server,
+            &workspace,
+            PermissionResponse::DenyOnce,
+        )
+        .await;
+        client.initialize_with_timeout().await;
+        let session_id = client.create_session_with_timeout(&workspace).await;
+        let project_id =
+            create_science_project(&store_root, "science-owner", "Sequence cancel proof");
+        let denied = client
+            .ext_method(
+                "x.ai/science/seq_analyze",
+                serde_json::json!({
+                    "sessionId": session_id.0.as_ref(),
+                    "projectId": project_id.clone(),
+                    "ownerId": "science-owner",
+                    "artifactRoot": "science-store",
+                    "operationId": "seq-denied-product-0001",
+                    "sourcePath": source,
+                    "approvalTimeoutMs": 5_000,
+                }),
+            )
+            .await;
+        assert!(
+            denied.is_err(),
+            "denied analysis returned success: {denied:?}"
+        );
+
+        let runs = std::fs::read_dir(store_root.join("runs"))
+            .expect("denied request must leave a durable run")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("read durable runs");
+        assert_eq!(runs.len(), 1, "denied request opened multiple runs");
+        let run_id = xai_grok_science::RunId::new(
+            runs[0]
+                .file_name()
+                .to_str()
+                .expect("UTF-8 run id")
+                .to_owned(),
+        );
+        let store = xai_grok_science::ScienceStore::new(&store_root);
+        assert_eq!(
+            store.load_run(&run_id).expect("reopen denied run").state,
+            xai_grok_science::RunState::Denied
+        );
+        assert_eq!(
+            client.permission_request_count(),
+            1,
+            "Denied sequence request crossed the permission seam more than once"
+        );
+        assert!(store.artifacts(&run_id).expect("artifacts").is_empty());
+        assert!(store.evidence(&run_id).expect("evidence").is_empty());
+        assert!(store.provenance(&run_id).expect("provenance").is_empty());
+        assert!(
+            client
+                .ext_method(
+                    "x.ai/science/artifact_list",
+                    serde_json::json!({
+                        "sessionId": session_id.0.as_ref(),
+                        "ownerId": "science-owner",
+                        "projectId": project_id.clone(),
+                        "runId": run_id.0.as_str(),
+                        "storeRoot": store_root,
+                    }),
+                )
+                .await
+                .is_err(),
+            "a denied run exposed an artifact listing"
+        );
+        assert!(
+            !store_root.join(&project_id).join("seqbench").exists(),
+            "denied request wrote the legacy loose artifact directory"
+        );
+    })
+    .await;
+}
+
+/// Cancelling the real ACP permission request is not an explicit denial. The
+/// actor must preserve that distinction as Cancelled while keeping every
+/// scientific output registry, payload path, and legacy loose path empty.
+#[tokio::test]
+#[ignore] // requires pre-built binary
+async fn test_stdio_science_seq_analyze_cancelled_writes_nothing() {
+    with_local_set(|| async {
+        let server = MockInferenceServer::start()
+            .await
+            .expect("start mock server");
+        let workdir = git_workdir();
+        let workspace = dunce::canonicalize(workdir.path()).expect("canonical sequence workspace");
+        let store_root = workspace.join("science-store");
         let source = workspace.join("micro.fasta");
         std::fs::copy(
             concat!(
@@ -2408,30 +3207,31 @@ async fn test_stdio_science_seq_analyze_denied_writes_nothing() {
         client.initialize_with_timeout().await;
         let session_id = client.create_session_with_timeout(&workspace).await;
         let project_id =
-            create_science_project(&artifact_root, "science-owner", "Sequence cancel proof");
-        let denied = client
+            create_science_project(&store_root, "science-owner", "Sequence cancellation proof");
+        let cancelled = client
             .ext_method(
                 "x.ai/science/seq_analyze",
                 serde_json::json!({
                     "sessionId": session_id.0.as_ref(),
                     "projectId": project_id.clone(),
                     "ownerId": "science-owner",
-                    "artifactRoot": artifact_root,
+                    "artifactRoot": "science-store",
+                    "operationId": "seq-cancelled-product-0001",
                     "sourcePath": source,
                     "approvalTimeoutMs": 5_000,
                 }),
             )
             .await;
         assert!(
-            denied.is_err(),
-            "denied analysis returned success: {denied:?}"
+            cancelled.is_err(),
+            "cancelled analysis returned success: {cancelled:?}"
         );
 
-        let runs = std::fs::read_dir(artifact_root.join("runs"))
-            .expect("denied request must leave a durable run")
+        let runs = std::fs::read_dir(store_root.join("runs"))
+            .expect("cancelled request must leave a durable run")
             .collect::<Result<Vec<_>, _>>()
             .expect("read durable runs");
-        assert_eq!(runs.len(), 1, "denied request opened multiple runs");
+        assert_eq!(runs.len(), 1, "cancelled request opened multiple runs");
         let run_id = xai_grok_science::RunId::new(
             runs[0]
                 .file_name()
@@ -2439,33 +3239,34 @@ async fn test_stdio_science_seq_analyze_denied_writes_nothing() {
                 .expect("UTF-8 run id")
                 .to_owned(),
         );
-        let store = xai_grok_science::ScienceStore::new(&artifact_root);
+        let store = xai_grok_science::ScienceStore::new(&store_root);
         assert_eq!(
-            store.load_run(&run_id).expect("reopen denied run").state,
+            store
+                .load_run(&run_id)
+                .expect("reopen cancelled run")
+                .state,
             xai_grok_science::RunState::Cancelled
+        );
+        assert_eq!(
+            store.approvals(&run_id).expect("cancelled approval")[0].decision,
+            xai_grok_science::ApprovalDecision::Cancel
+        );
+        let events = store.events_after(&run_id, 0, 1_000).expect("events");
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[1].actor, "LumenApproval");
+        assert_eq!(events[1].kind, "approval.cancelled");
+        assert_eq!(
+            client.permission_request_count(),
+            1,
+            "Cancelled sequence request crossed the permission seam more than once"
         );
         assert!(store.artifacts(&run_id).expect("artifacts").is_empty());
         assert!(store.evidence(&run_id).expect("evidence").is_empty());
         assert!(store.provenance(&run_id).expect("provenance").is_empty());
+        assert!(store.previews(&run_id).expect("previews").is_empty());
         assert!(
-            client
-                .ext_method(
-                    "x.ai/science/artifact_list",
-                    serde_json::json!({
-                        "sessionId": session_id.0.as_ref(),
-                        "ownerId": "science-owner",
-                        "projectId": project_id.clone(),
-                        "runId": run_id.0.as_str(),
-                        "storeRoot": artifact_root,
-                    }),
-                )
-                .await
-                .is_err(),
-            "a denied run exposed an artifact listing"
-        );
-        assert!(
-            !artifact_root.join(&project_id).join("seqbench").exists(),
-            "denied request wrote the legacy loose artifact directory"
+            !store_root.join(&project_id).join("seqbench").exists(),
+            "cancelled request wrote the legacy loose artifact directory"
         );
     })
     .await;
@@ -2482,7 +3283,7 @@ async fn test_stdio_science_seq_analyze_permission_timeout_writes_nothing() {
             .expect("start mock server");
         let workdir = git_workdir();
         let workspace = dunce::canonicalize(workdir.path()).expect("canonical sequence workspace");
-        let artifact_root = workspace.join("science-seq-timeout-store");
+        let store_root = workspace.join("science-store");
         let source = workspace.join("micro.fasta");
         std::fs::copy(
             concat!(
@@ -2502,7 +3303,7 @@ async fn test_stdio_science_seq_analyze_permission_timeout_writes_nothing() {
         client.initialize_with_timeout().await;
         let session_id = client.create_session_with_timeout(&workspace).await;
         let project_id =
-            create_science_project(&artifact_root, "science-owner", "Sequence timeout proof");
+            create_science_project(&store_root, "science-owner", "Sequence timeout proof");
         let timed_out = client
             .ext_method(
                 "x.ai/science/seq_analyze",
@@ -2510,7 +3311,8 @@ async fn test_stdio_science_seq_analyze_permission_timeout_writes_nothing() {
                     "sessionId": session_id.0.as_ref(),
                     "projectId": project_id.clone(),
                     "ownerId": "science-owner",
-                    "artifactRoot": artifact_root,
+                    "artifactRoot": "science-store",
+                    "operationId": "seq-timeout-product-0001",
                     "sourcePath": source,
                     "approvalTimeoutMs": 100,
                 }),
@@ -2522,7 +3324,7 @@ async fn test_stdio_science_seq_analyze_permission_timeout_writes_nothing() {
         );
         assert_eq!(client.permission_request_count(), 1);
 
-        let runs = std::fs::read_dir(artifact_root.join("runs"))
+        let runs = std::fs::read_dir(store_root.join("runs"))
             .expect("timeout must leave a durable run")
             .collect::<Result<Vec<_>, _>>()
             .expect("read durable runs");
@@ -2534,7 +3336,7 @@ async fn test_stdio_science_seq_analyze_permission_timeout_writes_nothing() {
                 .expect("UTF-8 run id")
                 .to_owned(),
         );
-        let store = xai_grok_science::ScienceStore::new(&artifact_root);
+        let store = xai_grok_science::ScienceStore::new(&store_root);
         assert_eq!(
             store.load_run(&run_id).expect("reopen timed-out run").state,
             xai_grok_science::RunState::TimedOut
@@ -2543,7 +3345,7 @@ async fn test_stdio_science_seq_analyze_permission_timeout_writes_nothing() {
         assert!(store.evidence(&run_id).expect("evidence").is_empty());
         assert!(store.provenance(&run_id).expect("provenance").is_empty());
         assert!(
-            !artifact_root.join(&project_id).join("seqbench").exists(),
+            !store_root.join(&project_id).join("seqbench").exists(),
             "timed-out request wrote the legacy loose artifact directory"
         );
     })
@@ -2561,7 +3363,7 @@ async fn test_stdio_science_seq_analyze_malformed_input_fails_without_outputs() 
             .expect("start mock server");
         let workdir = git_workdir();
         let workspace = dunce::canonicalize(workdir.path()).expect("canonical sequence workspace");
-        let artifact_root = workspace.join("science-seq-malformed-store");
+        let store_root = workspace.join("science-store");
         let source = workspace.join("empty.fasta");
         std::fs::write(&source, b"").expect("write malformed sequence fixture");
 
@@ -2569,7 +3371,7 @@ async fn test_stdio_science_seq_analyze_malformed_input_fails_without_outputs() 
         client.initialize_with_timeout().await;
         let session_id = client.create_session_with_timeout(&workspace).await;
         let project_id =
-            create_science_project(&artifact_root, "science-owner", "Sequence failure proof");
+            create_science_project(&store_root, "science-owner", "Sequence failure proof");
         let failed = client
             .ext_method(
                 "x.ai/science/seq_analyze",
@@ -2577,7 +3379,8 @@ async fn test_stdio_science_seq_analyze_malformed_input_fails_without_outputs() 
                     "sessionId": session_id.0.as_ref(),
                     "projectId": project_id.clone(),
                     "ownerId": "science-owner",
-                    "artifactRoot": artifact_root,
+                    "artifactRoot": "science-store",
+                    "operationId": "seq-malformed-product-0001",
                     "sourcePath": source,
                     "approvalTimeoutMs": 5_000,
                 }),
@@ -2589,7 +3392,7 @@ async fn test_stdio_science_seq_analyze_malformed_input_fails_without_outputs() 
         );
         assert_eq!(client.permission_request_count(), 1);
 
-        let runs = std::fs::read_dir(artifact_root.join("runs"))
+        let runs = std::fs::read_dir(store_root.join("runs"))
             .expect("parse failure must leave a durable run")
             .collect::<Result<Vec<_>, _>>()
             .expect("read durable runs");
@@ -2601,7 +3404,7 @@ async fn test_stdio_science_seq_analyze_malformed_input_fails_without_outputs() 
                 .expect("UTF-8 run id")
                 .to_owned(),
         );
-        let store = xai_grok_science::ScienceStore::new(&artifact_root);
+        let store = xai_grok_science::ScienceStore::new(&store_root);
         assert_eq!(
             store.load_run(&run_id).expect("reopen failed run").state,
             xai_grok_science::RunState::Failed
@@ -2614,7 +3417,7 @@ async fn test_stdio_science_seq_analyze_malformed_input_fails_without_outputs() 
         assert!(store.evidence(&run_id).expect("evidence").is_empty());
         assert!(store.provenance(&run_id).expect("provenance").is_empty());
         assert!(
-            !artifact_root.join(&project_id).join("seqbench").exists(),
+            !store_root.join(&project_id).join("seqbench").exists(),
             "parse failure wrote the legacy loose artifact directory"
         );
     })
@@ -2634,12 +3437,12 @@ async fn test_stdio_science_seq_analyze_allow_rejects_project_revision_race() {
         let workdir = git_workdir();
         let workspace =
             std::fs::canonicalize(workdir.path()).expect("canonical sequence workspace");
-        let artifact_root = workspace.join("science-seq-project-race-store");
+        let store_root = workspace.join("science-store");
         let source = workspace.join("project-race.fasta");
         std::fs::write(&source, b">project-race\nACGTACGT\n").expect("write sequence race fixture");
         let project_id =
-            create_science_project(&artifact_root, "science-owner", "Sequence project race");
-        let project_store = xai_grok_science::project::ProjectStore::new(&artifact_root);
+            create_science_project(&store_root, "science-owner", "Sequence project race");
+        let project_store = xai_grok_science::project::ProjectStore::new(&store_root);
         let project_key = xai_grok_science::project::ProjectId(project_id.clone());
 
         let client = GrokStdioClient::spawn_with_permission_response(
@@ -2660,7 +3463,8 @@ async fn test_stdio_science_seq_analyze_allow_rejects_project_revision_race() {
                         "sessionId": session_id.0.as_ref(),
                         "projectId": project_id,
                         "ownerId": "science-owner",
-                        "artifactRoot": artifact_root,
+                        "artifactRoot": "science-store",
+                        "operationId": "seq-project-race-product-0001",
                         "sourcePath": source,
                         "approvalTimeoutMs": 5_000,
                     }),
@@ -2696,7 +3500,7 @@ async fn test_stdio_science_seq_analyze_allow_rejects_project_revision_race() {
             "Allow accepted a project revision changed after Begin: {result:?}"
         );
 
-        let runs = std::fs::read_dir(artifact_root.join("runs"))
+        let runs = std::fs::read_dir(store_root.join("runs"))
             .expect("project race must leave one durable run")
             .collect::<Result<Vec<_>, _>>()
             .expect("read project-race sequence runs");
@@ -2708,7 +3512,7 @@ async fn test_stdio_science_seq_analyze_allow_rejects_project_revision_race() {
                 .expect("UTF-8 project-race run id")
                 .to_owned(),
         );
-        let store = xai_grok_science::ScienceStore::new(&artifact_root);
+        let store = xai_grok_science::ScienceStore::new(&store_root);
         assert_eq!(
             store
                 .load_run(&run_id)
@@ -2730,7 +3534,7 @@ async fn test_stdio_science_seq_analyze_allow_rejects_project_revision_race() {
         assert!(store.provenance(&run_id).expect("provenance").is_empty());
         assert!(store.previews(&run_id).expect("previews").is_empty());
         assert!(
-            !artifact_root.join(&project_id).join("seqbench").exists(),
+            !store_root.join(&project_id).join("seqbench").exists(),
             "project-race request wrote the legacy loose artifact directory"
         );
     })

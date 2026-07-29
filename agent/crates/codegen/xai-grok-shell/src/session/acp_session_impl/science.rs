@@ -5,7 +5,7 @@ use crate::session::commands::{
     PreparedScienceCsv, PreparedScienceEvidenceDossier, PreparedScienceFetch,
     PreparedScienceImport, PreparedScienceKernelAdmission, PreparedScienceProjectMutation,
     PreparedScienceSeqAnalyze, PreparedScienceSkillQuarantine, PreparedScienceSshScpAdmission,
-    PreparedScienceWorkflowExecution,
+    PreparedScienceWorkflowExecution, ScienceSeqOperationLease,
 };
 use sha2::Digest as _;
 
@@ -30,6 +30,28 @@ target.write_bytes(source.read_bytes())
 
 const WORKFLOW_ADMISSION_SHA256_ENV: &str = "workflow_admission_sha256";
 const WORKFLOW_OPERATION_ID_ENV: &str = "workflow_operation_id";
+const SEQ_UNDELIVERED_BEGIN_REASON: &str =
+    "sequence analysis Begin response receiver closed before delivery";
+
+fn interrupt_undelivered_seq_authority(
+    store: &xai_grok_science::ScienceStore,
+    ticket: &xai_grok_science::csv::ScienceRunTicket,
+) -> xai_grok_science::Result<()> {
+    let terminal = xai_grok_science::seqbench::finish_without_execution_recoverable(
+        store,
+        ticket,
+        xai_grok_science::ApprovalDecision::Interrupted,
+        SEQ_UNDELIVERED_BEGIN_REASON,
+    )?;
+    if terminal.state != xai_grok_science::RunState::Interrupted
+        || terminal.terminal_reason.as_deref() != Some(SEQ_UNDELIVERED_BEGIN_REASON)
+    {
+        return Err(xai_grok_science::ScienceError::Invalid(
+            "undelivered sequence analysis Begin did not reach exact Interrupted terminal".into(),
+        ));
+    }
+    Ok(())
+}
 
 const CSV_TOOL_SCRIPT: &str = r#"import csv, html, sys
 from collections import defaultdict
@@ -358,7 +380,7 @@ impl SessionActor {
     pub(super) fn prepare_science_seq_analyze(
         &self,
         store: xai_grok_science::ScienceStore,
-        context: xai_grok_science::RunContext,
+        mut context: xai_grok_science::RunContext,
         options: xai_grok_science::seqbench::SeqAnalyzeOptions,
         source_path: std::path::PathBuf,
         source_bytes: Vec<u8>,
@@ -375,7 +397,7 @@ impl SessionActor {
             || canonical_source != source_path
             || !canonical_source.starts_with(&actor_workspace)
             || !canonical_source.is_file()
-            || !context.artifact_root.starts_with(&actor_workspace)
+            || context.artifact_root != actor_workspace.join("science-store")
             || dunce::canonicalize(store.root())? != context.artifact_root
         {
             return Err(xai_grok_science::ScienceError::Invalid(
@@ -394,11 +416,59 @@ impl SessionActor {
             ));
         }
         let project_id = xai_grok_science::project::ProjectId(context.project_id.0.clone());
-        let project_revision = project_store.with_owned_project_revision(
+        let current_project_revision = project_store.with_owned_project_revision(
             &project_id,
             &context.owner_id,
             |_project, revision| Ok(revision.to_owned()),
         )?;
+        let operation_id = context
+            .environment
+            .get(xai_grok_science::seqbench::OPERATION_ENV)
+            .cloned()
+            .ok_or_else(|| {
+                xai_grok_science::ScienceError::Invalid(
+                    "sequence analysis operationId binding is missing".into(),
+                )
+            })?;
+        xai_grok_science::seqbench::validate_operation_id(&operation_id)?;
+        let source_relative = xai_grok_science::seqbench::source_relative_binding(
+            &actor_workspace,
+            &canonical_source,
+        )?;
+        let source_sha256 = xai_grok_science::seqbench::hex_sha256(&source_bytes);
+        let request_sha256 =
+            xai_grok_science::seqbench::request_sha256(&source_relative, &source_bytes, &options)?;
+        if context.run_id != xai_grok_science::seqbench::operation_run_id(&operation_id)
+            || context.provider != "offline-deterministic"
+            || context.approval_policy != "production-session-permission"
+            || context.tool_profile != "science-seqbench-v4"
+            || context.environment.get("network").map(String::as_str) != Some("disabled")
+            || context.environment.get("locale").map(String::as_str) != Some("C")
+            || context
+                .environment
+                .get(xai_grok_science::seqbench::SOURCE_RELATIVE_PATH_ENV)
+                != Some(&source_relative)
+            || context
+                .environment
+                .get(xai_grok_science::seqbench::SOURCE_SHA256_ENV)
+                != Some(&source_sha256)
+            || context
+                .environment
+                .get(xai_grok_science::seqbench::SOURCE_BYTES_ENV)
+                != Some(&source_bytes.len().to_string())
+            || context
+                .environment
+                .get(xai_grok_science::seqbench::REQUEST_SHA256_ENV)
+                != Some(&request_sha256)
+        {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "sequence analysis request bindings were not derived by this SessionActor".into(),
+            ));
+        }
+        context.environment.insert(
+            xai_grok_science::seqbench::PROJECT_REVISION_ENV.into(),
+            current_project_revision.clone(),
+        );
         let mut expected_context = context.clone();
         expected_context.environment.insert(
             "translation_table_id".into(),
@@ -422,14 +492,187 @@ impl SessionActor {
             "restriction_digest_enzymes".into(),
             options.restriction_digest_enzymes.join(","),
         );
-        let ticket =
-            xai_grok_science::seqbench::begin_analysis_with_options(&store, context, &options)?;
-        if store.load_run(&ticket.run_id)?.context != expected_context {
-            let _ = store.recover_interrupted(&ticket.run_id);
-            return Err(xai_grok_science::ScienceError::Invalid(
-                "sequence analysis durable Begin context did not match actor admission".into(),
-            ));
-        }
+        let operation_lease = ScienceSeqOperationLease::claim(&store, &expected_context.run_id)
+            .map_err(|error| match error {
+                xai_grok_science::ScienceError::Invalid(message)
+                    if message.contains("already active") =>
+                {
+                    xai_grok_science::ScienceError::Invalid(format!(
+                        "sequence operation {operation_id} ({}) is already active: {message}",
+                        expected_context.run_id.0
+                    ))
+                }
+                error => error,
+            })?;
+        let admission = xai_grok_science::seqbench::replay_or_recover_existing(
+            &store,
+            &expected_context,
+            &source_path,
+            &source_bytes,
+            &options,
+        )?;
+        let (
+            ticket,
+            replayed,
+            recovery_grant,
+            allowed_witness,
+            project_revision,
+            expected_context,
+            created_event,
+            created_event_from_recovery,
+        ) = match admission {
+            xai_grok_science::seqbench::SeqAnalyzeAdmission::New => {
+                let (ticket, created_event) =
+                    xai_grok_science::seqbench::begin_analysis_with_options_witnessed(
+                        &store, context, &options,
+                    )?;
+                if store.load_run(&ticket.run_id)?.context != expected_context {
+                    let _ = store.recover_interrupted(&ticket.run_id);
+                    return Err(xai_grok_science::ScienceError::Invalid(
+                        "sequence analysis durable Begin context did not match actor admission"
+                            .into(),
+                    ));
+                }
+                (
+                    ticket,
+                    None,
+                    None,
+                    None,
+                    current_project_revision,
+                    expected_context,
+                    created_event,
+                    false,
+                )
+            }
+            xai_grok_science::seqbench::SeqAnalyzeAdmission::AwaitingApproval(ticket) => {
+                let durable = store.load_run(&ticket.run_id)?;
+                let durable_revision = durable
+                    .context
+                    .environment
+                    .get(xai_grok_science::seqbench::PROJECT_REVISION_ENV)
+                    .filter(|revision| !revision.is_empty())
+                    .cloned()
+                    .ok_or_else(|| {
+                        xai_grok_science::ScienceError::Invalid(
+                            "sequence analysis durable project revision is missing".into(),
+                        )
+                    })?;
+                if durable_revision != current_project_revision {
+                    let reason =
+                        "project changed before sequence approval could be resumed after restart";
+                    let terminal =
+                        xai_grok_science::seqbench::finish_without_execution_recoverable(
+                            &store,
+                            &ticket,
+                            xai_grok_science::ApprovalDecision::Interrupted,
+                            reason,
+                        )?;
+                    return Err(xai_grok_science::ScienceError::Invalid(format!(
+                        "science run {} finished {:?}: {reason}",
+                        ticket.run_id.0, terminal.state
+                    )));
+                }
+                let created_event = store
+                    .events_after(&ticket.run_id, 0, 1_000)?
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| {
+                        xai_grok_science::ScienceError::Invalid(
+                            "recovered sequence Begin lost its created event".into(),
+                        )
+                    })?;
+                (
+                    ticket,
+                    None,
+                    None,
+                    None,
+                    durable_revision,
+                    durable.context,
+                    created_event,
+                    true,
+                )
+            }
+            xai_grok_science::seqbench::SeqAnalyzeAdmission::ResumeAllowed(ticket) => {
+                let durable = store.load_run(&ticket.run_id)?;
+                let durable_revision = durable
+                    .context
+                    .environment
+                    .get(xai_grok_science::seqbench::PROJECT_REVISION_ENV)
+                    .filter(|revision| !revision.is_empty())
+                    .cloned()
+                    .ok_or_else(|| {
+                        xai_grok_science::ScienceError::Invalid(
+                            "sequence recovery durable project revision is missing".into(),
+                        )
+                    })?;
+                let grant = ScienceSeqAnalyzeRecoveryGrant::new(
+                    &ticket,
+                    &durable.context,
+                    &durable_revision,
+                    &source_path,
+                    &source_bytes,
+                    &options,
+                );
+                let allowed_witness =
+                    xai_grok_science::seqbench::recover_allowed_witness(&store, &ticket)?;
+                let created_event = store
+                    .events_after(&ticket.run_id, 0, 1_000)?
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| {
+                        xai_grok_science::ScienceError::Invalid(
+                            "recovered sequence Allow lost its created event".into(),
+                        )
+                    })?;
+                (
+                    ticket,
+                    None,
+                    Some(grant),
+                    Some(allowed_witness),
+                    durable_revision,
+                    durable.context,
+                    created_event,
+                    true,
+                )
+            }
+            xai_grok_science::seqbench::SeqAnalyzeAdmission::Replay(result) => {
+                let durable_context = result.run.context.clone();
+                let durable_revision = durable_context
+                    .environment
+                    .get(xai_grok_science::seqbench::PROJECT_REVISION_ENV)
+                    .filter(|revision| !revision.is_empty())
+                    .cloned()
+                    .ok_or_else(|| {
+                        xai_grok_science::ScienceError::Invalid(
+                            "sequence replay durable project revision is missing".into(),
+                        )
+                    })?;
+                let created_event = store
+                    .events_after(&durable_context.run_id, 0, 1_000)?
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| {
+                        xai_grok_science::ScienceError::Invalid(
+                            "replayed sequence authority lost its created event".into(),
+                        )
+                    })?;
+                (
+                    xai_grok_science::csv::ScienceRunTicket {
+                        project_id: durable_context.project_id.clone(),
+                        run_id: durable_context.run_id.clone(),
+                        owner_id: durable_context.owner_id.clone(),
+                        call_id: xai_grok_science::CallId::new("science_seq_analyze"),
+                    },
+                    Some(*result),
+                    None,
+                    None,
+                    durable_revision,
+                    durable_context,
+                    created_event,
+                    true,
+                )
+            }
+        };
         let target = expected_context
             .artifact_root
             .join("runs")
@@ -443,20 +686,31 @@ impl SessionActor {
             project_revision,
             expected_context,
             ticket,
+            created_event,
+            created_event_from_recovery,
+            allowed_witness,
             options,
             source_path,
             source_bytes,
             target,
+            replayed,
+            recovery_grant,
+            operation_lease,
         })
     }
 
     pub(super) fn finish_science_seq_analyze(
         &self,
-        prepared: PreparedScienceSeqAnalyze,
+        mut prepared: PreparedScienceSeqAnalyze,
         decision: xai_grok_science::ApprovalDecision,
         reason: String,
         permission_grant: Option<crate::session::handle::ScienceSeqAnalyzePermissionGrant>,
     ) -> xai_grok_science::Result<xai_grok_science::seqbench::SeqAnalyzeResult> {
+        if prepared.replayed.is_some() {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "replayed sequence analysis cannot enter a fresh Finish".into(),
+            ));
+        }
         let durable = prepared.store.load_run(&prepared.ticket.run_id)?;
         if durable.context != prepared.expected_context
             || prepared.expected_context.run_id != prepared.ticket.run_id
@@ -468,29 +722,43 @@ impl SessionActor {
         {
             return Err(xai_grok_science::ScienceError::Ownership);
         }
+        let fresh_authorized = permission_grant
+            .as_ref()
+            .is_some_and(|grant| grant.authorizes(&prepared));
+        let recovery_authorized = prepared
+            .recovery_grant
+            .as_ref()
+            .is_some_and(|grant| grant.authorizes(&prepared));
         if decision == xai_grok_science::ApprovalDecision::Allow
-            && permission_grant
-                .as_ref()
-                .is_none_or(|grant| !grant.authorizes(&prepared))
+            && (fresh_authorized == recovery_authorized)
         {
-            let terminal = xai_grok_science::csv::finish_without_execution(
-                &prepared.store,
-                &prepared.ticket,
-                xai_grok_science::ApprovalDecision::Deny,
-                "missing or mismatched actor permission grant",
-            )?;
-            return Err(xai_grok_science::ScienceError::Invalid(format!(
-                "science run {} finished {:?}: actor permission grant rejected",
-                prepared.ticket.run_id.0, terminal.state
-            )));
-        }
-        if decision != xai_grok_science::ApprovalDecision::Allow && permission_grant.is_some() {
+            if durable.state == xai_grok_science::RunState::AwaitingApproval
+                && prepared.recovery_grant.is_none()
+            {
+                let terminal = xai_grok_science::seqbench::finish_without_execution_recoverable(
+                    &prepared.store,
+                    &prepared.ticket,
+                    xai_grok_science::ApprovalDecision::Deny,
+                    "missing or mismatched actor permission grant",
+                )?;
+                return Err(xai_grok_science::ScienceError::Invalid(format!(
+                    "science run {} finished {:?}: actor permission grant rejected",
+                    prepared.ticket.run_id.0, terminal.state
+                )));
+            }
             return Err(xai_grok_science::ScienceError::Invalid(
-                "non-Allow sequence analysis carried an actor Allow grant".into(),
+                "sequence Allow requires exactly one fresh or recovery actor grant".into(),
+            ));
+        }
+        if decision != xai_grok_science::ApprovalDecision::Allow
+            && (permission_grant.is_some() || prepared.recovery_grant.is_some())
+        {
+            return Err(xai_grok_science::ScienceError::Invalid(
+                "non-Allow sequence analysis carried an actor authority grant".into(),
             ));
         }
         if decision != xai_grok_science::ApprovalDecision::Allow {
-            let terminal = xai_grok_science::csv::finish_without_execution(
+            let terminal = xai_grok_science::seqbench::finish_without_execution_recoverable(
                 &prepared.store,
                 &prepared.ticket,
                 decision,
@@ -501,39 +769,94 @@ impl SessionActor {
                 prepared.ticket.run_id.0, terminal.state
             )));
         }
-        xai_grok_science::csv::mark_allowed(&prepared.store, &prepared.ticket)?;
+        let mut recovery_witness = prepared.allowed_witness.take();
+        if recovery_authorized {
+            let approvals = prepared.store.approvals(&prepared.ticket.run_id)?;
+            let [approval] = approvals.as_slice() else {
+                return Err(xai_grok_science::ScienceError::Invalid(
+                    "sequence recovery requires exactly one durable approval".into(),
+                ));
+            };
+            if durable.state != xai_grok_science::RunState::Running
+                || durable.terminal_reason.is_some()
+                || approval.project_id != prepared.ticket.project_id
+                || approval.run_id != prepared.ticket.run_id
+                || approval.owner_id != prepared.ticket.owner_id
+                || approval.call_id != prepared.ticket.call_id
+                || approval.decision != xai_grok_science::ApprovalDecision::Allow
+                || approval.decided_at.is_none()
+            {
+                return Err(xai_grok_science::ScienceError::Invalid(
+                    "sequence recovery grant lost its durable Running Allow".into(),
+                ));
+            }
+        }
         let project_id = xai_grok_science::project::ProjectId(prepared.ticket.project_id.0.clone());
-        let result = prepared.project_store.with_owned_project_revision(
+        prepared.project_store.with_owned_project_revision(
             &project_id,
             &prepared.ticket.owner_id,
             |_project, revision| {
                 if revision != prepared.project_revision {
-                    return Err(xai_grok_science::ScienceError::Invalid(
-                        "project changed while sequence analysis approval was pending".into(),
-                    ));
+                    let reason = "project changed while sequence analysis approval was pending";
+                    if fresh_authorized {
+                        // The operator really granted Allow. Preserve that
+                        // audit fact, then fail the now-stale execution only
+                        // after the exact zero-output cleanup has succeeded.
+                        if prepared.created_event_from_recovery {
+                            xai_grok_science::seqbench::mark_allowed_recoverable_after_reprompt(
+                                &prepared.store,
+                                &prepared.ticket,
+                                &prepared.created_event,
+                            )?;
+                        } else {
+                            xai_grok_science::seqbench::mark_allowed_recoverable_fresh(
+                                &prepared.store,
+                                &prepared.ticket,
+                                &prepared.created_event,
+                            )?;
+                        }
+                    }
+                    let terminal = xai_grok_science::seqbench::fail_allowed_analysis_recoverably(
+                        &prepared.store,
+                        &prepared.ticket,
+                        reason,
+                    )?;
+                    return Err(xai_grok_science::ScienceError::Invalid(format!(
+                        "science run {} finished {:?}: {reason}",
+                        prepared.ticket.run_id.0, terminal.state
+                    )));
                 }
-                xai_grok_science::seqbench::finish_analysis_with_options(
+                let allowed_witness = if fresh_authorized {
+                    if prepared.created_event_from_recovery {
+                        xai_grok_science::seqbench::mark_allowed_recoverable_after_reprompt(
+                            &prepared.store,
+                            &prepared.ticket,
+                            &prepared.created_event,
+                        )?
+                    } else {
+                        xai_grok_science::seqbench::mark_allowed_recoverable_fresh(
+                            &prepared.store,
+                            &prepared.ticket,
+                            &prepared.created_event,
+                        )?
+                    }
+                } else {
+                    recovery_witness.take().ok_or_else(|| {
+                        xai_grok_science::ScienceError::Invalid(
+                            "sequence Running recovery lost its sealed authority witness".into(),
+                        )
+                    })?
+                };
+                xai_grok_science::seqbench::finish_analysis_authorized_with_options(
                     &prepared.store,
                     prepared.ticket.clone(),
                     &prepared.source_path,
                     &prepared.source_bytes,
                     &prepared.options,
+                    allowed_witness,
                 )
             },
-        );
-        if let Err(error) = &result
-            && prepared
-                .store
-                .load_run(&prepared.ticket.run_id)
-                .is_ok_and(|run| run.state == xai_grok_science::RunState::Running)
-        {
-            let _ = xai_grok_science::csv::fail_running(
-                &prepared.store,
-                &prepared.ticket,
-                error.to_string(),
-            );
-        }
-        result
+        )
     }
 
     /// Close a durable sequence-analysis Begin whose response receiver
@@ -546,15 +869,16 @@ impl SessionActor {
         &self,
         prepared: PreparedScienceSeqAnalyze,
     ) -> xai_grok_science::Result<()> {
-        let terminal = prepared
-            .store
-            .recover_interrupted(&prepared.ticket.run_id)?;
-        if terminal.state != xai_grok_science::RunState::Interrupted {
-            return Err(xai_grok_science::ScienceError::Invalid(
-                "undelivered sequence analysis Begin did not reach Interrupted".into(),
-            ));
+        if prepared.replayed.is_some() {
+            return Ok(());
         }
-        Ok(())
+        if prepared.recovery_grant.is_some() {
+            // The Allow was already durable before this Begin. Losing the
+            // response must not rewrite that decision; dropping `prepared`
+            // releases the process lease and the same operation can resume.
+            return Ok(());
+        }
+        interrupt_undelivered_seq_authority(&prepared.store, &prepared.ticket)
     }
 
     /// Inspect and durably admit an uploaded skill archive without writing its
@@ -4462,6 +4786,116 @@ fn fail_workflow_authority_run(
         Err(terminal_error) => xai_grok_science::ScienceError::Invalid(format!(
             "{error}; authority rollback completed but Failed terminal could not be persisted: {terminal_error}"
         )),
+    }
+}
+
+#[cfg(test)]
+mod seq_undelivered_begin_tests {
+    use super::*;
+
+    #[test]
+    fn undelivered_seq_begin_records_exact_interrupted_decision_without_outputs() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = dunce::canonicalize(temp.path()).unwrap();
+        let source_path = workspace.join("undelivered-seq.fasta");
+        let source_bytes = b">undelivered\nACGTACGT\n";
+        std::fs::write(&source_path, source_bytes).unwrap();
+        let store_root = workspace.join("science-store");
+        std::fs::create_dir(&store_root).unwrap();
+        let store = xai_grok_science::ScienceStore::new_confined(&store_root, &workspace).unwrap();
+        let options = xai_grok_science::seqbench::SeqAnalyzeOptions::default();
+        let operation_id = "seq-undelivered-begin-operation-0001";
+        let source_relative =
+            xai_grok_science::seqbench::source_relative_binding(&workspace, &source_path).unwrap();
+        let context = xai_grok_science::RunContext {
+            run_id: xai_grok_science::seqbench::operation_run_id(operation_id),
+            project_id: xai_grok_science::ProjectId::new("project-undelivered-seq"),
+            session_id: "session-undelivered-seq".into(),
+            owner_id: "owner-undelivered-seq".into(),
+            workspace_root: workspace.clone(),
+            provider: "offline-deterministic".into(),
+            approval_policy: "production-session-permission".into(),
+            tool_profile: "science-seqbench-v4".into(),
+            artifact_root: store_root,
+            environment: std::collections::BTreeMap::from([
+                ("network".into(), "disabled".into()),
+                ("locale".into(), "C".into()),
+                (
+                    xai_grok_science::seqbench::OPERATION_ENV.into(),
+                    operation_id.into(),
+                ),
+                (
+                    xai_grok_science::seqbench::REQUEST_SHA256_ENV.into(),
+                    xai_grok_science::seqbench::request_sha256(
+                        &source_relative,
+                        source_bytes,
+                        &options,
+                    )
+                    .unwrap(),
+                ),
+                (
+                    xai_grok_science::seqbench::SOURCE_SHA256_ENV.into(),
+                    xai_grok_science::seqbench::hex_sha256(source_bytes),
+                ),
+                (
+                    xai_grok_science::seqbench::SOURCE_BYTES_ENV.into(),
+                    source_bytes.len().to_string(),
+                ),
+                (
+                    xai_grok_science::seqbench::SOURCE_RELATIVE_PATH_ENV.into(),
+                    source_relative,
+                ),
+                (
+                    xai_grok_science::seqbench::PROJECT_REVISION_ENV.into(),
+                    "project-revision-undelivered".into(),
+                ),
+            ]),
+        };
+        let (ticket, _) = xai_grok_science::seqbench::begin_analysis_with_options_witnessed(
+            &store, context, &options,
+        )
+        .unwrap();
+
+        interrupt_undelivered_seq_authority(&store, &ticket).unwrap();
+
+        let terminal = store.load_run(&ticket.run_id).unwrap();
+        assert_eq!(terminal.state, xai_grok_science::RunState::Interrupted);
+        assert_eq!(
+            terminal.terminal_reason.as_deref(),
+            Some(SEQ_UNDELIVERED_BEGIN_REASON)
+        );
+        let approvals = store.approvals(&ticket.run_id).unwrap();
+        assert_eq!(approvals.len(), 1);
+        assert_eq!(
+            approvals[0].decision,
+            xai_grok_science::ApprovalDecision::Interrupted
+        );
+        let events = store.events_after(&ticket.run_id, 0, 1_000).unwrap();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].actor, "SessionActor");
+        assert_eq!(events[0].kind, "run.created");
+        assert_eq!(events[1].actor, "LumenApproval");
+        assert_eq!(events[1].kind, "approval.interrupted");
+        assert_eq!(
+            events[1].payload,
+            serde_json::json!({
+                "call_id": ticket.call_id.0,
+                "decided_at": approvals[0].decided_at,
+                "reason": SEQ_UNDELIVERED_BEGIN_REASON,
+            })
+        );
+        assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
+        assert!(store.evidence(&ticket.run_id).unwrap().is_empty());
+        assert!(store.provenance(&ticket.run_id).unwrap().is_empty());
+        assert!(store.previews(&ticket.run_id).unwrap().is_empty());
+        assert!(
+            !store
+                .root()
+                .join("runs")
+                .join(&ticket.run_id.0)
+                .join("seq-authority-prefix-seal.json")
+                .exists()
+        );
     }
 }
 

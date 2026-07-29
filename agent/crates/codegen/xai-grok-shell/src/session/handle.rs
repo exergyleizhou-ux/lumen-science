@@ -1012,9 +1012,34 @@ impl SessionHandle {
             .map_err(|_| {
                 xai_grok_science::ScienceError::Invalid("session actor unavailable".into())
             })?;
-        let prepared = begin_rx.await.map_err(|_| {
+        let mut prepared = begin_rx.await.map_err(|_| {
             xai_grok_science::ScienceError::Invalid("session actor stopped".into())
         })??;
+        if let Some(replayed) = prepared.replayed.take() {
+            return Ok(replayed);
+        }
+        if prepared.recovery_grant.is_some() {
+            // The actor reopened one exact durable Running+Allow operation.
+            // No second permission request is permitted; the opaque recovery
+            // grant is validated again by Finish inside the same actor.
+            let (respond_to, response) = oneshot::channel();
+            self.cmd_tx
+                .send(SessionCommand::FinishScienceSeqAnalyze(Box::new(
+                    crate::session::commands::FinishScienceSeqAnalyze {
+                        prepared,
+                        decision: xai_grok_science::ApprovalDecision::Allow,
+                        reason: "resuming exact durable sequence Allow".into(),
+                        permission_grant: None,
+                        respond_to,
+                    },
+                )))
+                .map_err(|_| {
+                    xai_grok_science::ScienceError::Invalid("session actor unavailable".into())
+                })?;
+            return response.await.map_err(|_| {
+                xai_grok_science::ScienceError::Invalid("session actor stopped".into())
+            })?;
+        }
         let pending = PendingScienceSeqAnalyzeApproval::new(self.cmd_tx.clone(), prepared);
         let call_id = acp::ToolCallId::new(std::sync::Arc::from(format!(
             "science-seq-analyze-{}",
@@ -2199,19 +2224,57 @@ mod seq_analyze_approval_cancellation_tests {
             )
             .unwrap();
         let project_revision = project_store.project_revision(&project.project_id).unwrap();
+        let source_path = workspace.join("input.fasta");
+        let source_bytes = b">seq\nATGC\n".to_vec();
+        std::fs::write(&source_path, &source_bytes).unwrap();
+        let options = xai_grok_science::seqbench::SeqAnalyzeOptions::default();
+        let operation_id = "seq-cancel-guard-operation-0001";
+        let source_relative =
+            xai_grok_science::seqbench::source_relative_binding(workspace, &source_path).unwrap();
         let context = xai_grok_science::RunContext {
-            run_id: xai_grok_science::RunId::new_v7(),
+            run_id: xai_grok_science::seqbench::operation_run_id(operation_id),
             project_id: xai_grok_science::ProjectId::new(project.project_id.0),
             session_id: "session-seq-cancel-guard".into(),
             owner_id: "owner-seq-cancel-guard".into(),
             workspace_root: workspace.to_path_buf(),
-            provider: "test".into(),
-            approval_policy: "test".into(),
-            tool_profile: "test".into(),
+            provider: "offline-deterministic".into(),
+            approval_policy: "production-session-permission".into(),
+            tool_profile: "science-seqbench-v4".into(),
             artifact_root: store_root.clone(),
-            environment: BTreeMap::new(),
+            environment: BTreeMap::from([
+                ("network".into(), "disabled".into()),
+                ("locale".into(), "C".into()),
+                (
+                    xai_grok_science::seqbench::OPERATION_ENV.into(),
+                    operation_id.into(),
+                ),
+                (
+                    xai_grok_science::seqbench::REQUEST_SHA256_ENV.into(),
+                    xai_grok_science::seqbench::request_sha256(
+                        &source_relative,
+                        &source_bytes,
+                        &options,
+                    )
+                    .unwrap(),
+                ),
+                (
+                    xai_grok_science::seqbench::SOURCE_SHA256_ENV.into(),
+                    xai_grok_science::seqbench::hex_sha256(&source_bytes),
+                ),
+                (
+                    xai_grok_science::seqbench::SOURCE_BYTES_ENV.into(),
+                    source_bytes.len().to_string(),
+                ),
+                (
+                    xai_grok_science::seqbench::SOURCE_RELATIVE_PATH_ENV.into(),
+                    source_relative,
+                ),
+                (
+                    xai_grok_science::seqbench::PROJECT_REVISION_ENV.into(),
+                    project_revision.clone(),
+                ),
+            ]),
         };
-        let options = xai_grok_science::seqbench::SeqAnalyzeOptions::default();
         let mut expected_context = context.clone();
         expected_context
             .environment
@@ -2225,8 +2288,13 @@ mod seq_analyze_approval_cancellation_tests {
         expected_context
             .environment
             .insert("restriction_digest_enzymes".into(), String::new());
-        let ticket =
-            xai_grok_science::seqbench::begin_analysis_with_options(&store, context, &options)
+        let (ticket, created_event) =
+            xai_grok_science::seqbench::begin_analysis_with_options_witnessed(
+                &store, context, &options,
+            )
+            .unwrap();
+        let operation_lease =
+            crate::session::commands::ScienceSeqOperationLease::claim(&store, &ticket.run_id)
                 .unwrap();
         crate::session::commands::PreparedScienceSeqAnalyze {
             store,
@@ -2234,10 +2302,16 @@ mod seq_analyze_approval_cancellation_tests {
             project_revision,
             expected_context,
             ticket,
+            created_event,
+            created_event_from_recovery: false,
+            allowed_witness: None,
             options,
-            source_path: workspace.join("input.fasta"),
-            source_bytes: b">seq\nATGC\n".to_vec(),
+            source_path,
+            source_bytes,
             target: "test sequence analysis cancellation guard".into(),
+            replayed: None,
+            recovery_grant: None,
+            operation_lease,
         }
     }
 
@@ -2273,6 +2347,15 @@ mod seq_analyze_approval_cancellation_tests {
             xai_grok_science::RunState::AwaitingApproval,
             "the handle must enqueue actor work, never mutate the store directly"
         );
+        let store = command.prepared.store.clone();
+        assert!(
+            crate::session::commands::ScienceSeqOperationLease::claim(&store, &run_id,).is_err(),
+            "an enqueued Finish must retain the operation single-flight lease"
+        );
+        drop(command);
+        let reclaimed = crate::session::commands::ScienceSeqOperationLease::claim(&store, &run_id)
+            .expect("dropping the final prepared capability must release its lease");
+        drop(reclaimed);
     }
 }
 
@@ -2585,9 +2668,7 @@ mod workflow_approval_cancellation_tests {
         use xai_grok_science::{
             Approval, ApprovalDecision, CallId, Evidence, ProjectId as ScienceProjectId,
             Provenance, RunContext, RunId, RunState,
-            project::{
-                MutationRequest, ProjectMutation, ReviewAdmission, ReviewVerdict,
-            },
+            project::{MutationRequest, ProjectMutation, ReviewAdmission, ReviewVerdict},
         };
 
         let workspace = dunce::canonicalize(workspace).unwrap();
@@ -2678,9 +2759,7 @@ mod workflow_approval_cancellation_tests {
                 environment: BTreeMap::from([("network".into(), "disabled".into())]),
             })
             .unwrap();
-        store
-            .transition_succeeded_verified(&source_run_id)
-            .unwrap();
+        store.transition_succeeded_verified(&source_run_id).unwrap();
 
         let mut request = MutationRequest {
             operation_id: "operation-review-grant".into(),
@@ -2698,8 +2777,10 @@ mod workflow_approval_cancellation_tests {
                 artifact_sha256s: vec![source_artifact.sha256],
             },
         };
-        let authority_run_id =
-            RunId::new(format!("review-authority-{}", request.replay_fingerprint().unwrap()));
+        let authority_run_id = RunId::new(format!(
+            "review-authority-{}",
+            request.replay_fingerprint().unwrap()
+        ));
         let ProjectMutation::ReviewRecord {
             authority_run_id: bound_run_id,
             ..
@@ -2737,11 +2818,7 @@ mod workflow_approval_cancellation_tests {
             project_root: store_root.clone(),
             review_admission: Some(admission),
             migration_admission: None,
-            target: format!(
-                "{}/projects/{}",
-                store_root.display(),
-                project.project_id.0
-            ),
+            target: format!("{}/projects/{}", store_root.display(), project.project_id.0),
             replayed: None,
             resume_allowed: false,
             permission_grant: None,
@@ -2769,14 +2846,20 @@ mod workflow_approval_cancellation_tests {
             &prepared.request,
         )
         .unwrap();
-        prepared.expected_context.environment.extend(replacement.authority_environment());
+        prepared
+            .expected_context
+            .environment
+            .extend(replacement.authority_environment());
         prepared.review_admission = Some(replacement);
         assert!(!grant.authorizes(&prepared).unwrap());
 
         prepared.request = original_request;
         prepared.review_admission = original_admission;
         prepared.expected_context.environment = original_environment;
-        prepared.expected_context.approval_policy.push_str("-changed");
+        prepared
+            .expected_context
+            .approval_policy
+            .push_str("-changed");
         assert!(!grant.authorizes(&prepared).unwrap());
 
         prepared.resume_allowed = true;

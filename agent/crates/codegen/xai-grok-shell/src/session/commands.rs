@@ -140,6 +140,26 @@ pub struct FinishScienceImport {
         oneshot::Sender<xai_grok_science::Result<xai_grok_science::import::ImportResult>>,
 }
 
+/// Cross-process single-flight ownership for one durable sequence operation.
+///
+/// The SessionActor remains the execution authority. The ScienceStore owns the
+/// descriptor-relative lock protocol; this shell wrapper only retains its
+/// opaque lease through `PreparedScienceSeqAnalyze` drop.
+pub(crate) struct ScienceSeqOperationLease {
+    _store_lease: xai_grok_science::ScienceOperationLease,
+}
+
+impl ScienceSeqOperationLease {
+    pub(crate) fn claim(
+        store: &xai_grok_science::ScienceStore,
+        run_id: &xai_grok_science::RunId,
+    ) -> xai_grok_science::Result<Self> {
+        Ok(Self {
+            _store_lease: store.claim_operation_lease(run_id)?,
+        })
+    }
+}
+
 /// A deterministic sequence analysis admitted by the owning SessionActor and
 /// waiting on the production permission decision. The source bytes are
 /// immutable request input; only the actor may compute and commit outputs.
@@ -151,11 +171,26 @@ pub struct PreparedScienceSeqAnalyze {
     pub(crate) project_revision: String,
     pub(crate) expected_context: xai_grok_science::RunContext,
     pub(crate) ticket: xai_grok_science::csv::ScienceRunTicket,
+    /// Exact `run.created` event retained by the actor. Fresh Begin keeps the
+    /// just-written value in memory; restart paths explicitly mark the reopened
+    /// durable value as recovery-origin.
+    pub(crate) created_event: xai_grok_science::Event,
+    pub(crate) created_event_from_recovery: bool,
+    /// Running restart receives this only after the durable authority-prefix
+    /// seal exactly matches context, approval, and both prefix events.
+    pub(crate) allowed_witness: Option<xai_grok_science::seqbench::SeqAllowedWitness>,
     pub(crate) options: xai_grok_science::seqbench::SeqAnalyzeOptions,
     pub(crate) source_path: std::path::PathBuf,
     pub(crate) source_bytes: Vec<u8>,
     /// Store-owned artifact target shown in the permission prompt.
     pub(crate) target: String,
+    /// A sealed exact-operation replay never crosses the permission bridge.
+    pub(crate) replayed: Option<xai_grok_science::seqbench::SeqAnalyzeResult>,
+    /// Opaque actor-only authority for resuming an already durable Allow.
+    pub(in crate::session) recovery_grant:
+        Option<crate::session::acp_session::ScienceSeqAnalyzeRecoveryGrant>,
+    /// Retains cross-process single-flight ownership until replay/finish/drop.
+    pub(crate) operation_lease: ScienceSeqOperationLease,
 }
 pub struct BeginScienceSeqAnalyze {
     pub(crate) store: xai_grok_science::ScienceStore,
@@ -1177,4 +1212,178 @@ pub enum SessionCommand {
         commit: Option<String>,
         branch: Option<String>,
     },
+}
+
+#[cfg(test)]
+mod science_seq_operation_lease_tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    const CHILD_ROOT: &str = "LUMEN_TEST_SEQ_LEASE_ROOT";
+    const CHILD_RUN_ID: &str = "LUMEN_TEST_SEQ_LEASE_RUN_ID";
+    const CHILD_READY: &str = "LUMEN_TEST_SEQ_LEASE_READY";
+
+    fn store_root() -> tempfile::TempDir {
+        tempfile::tempdir().expect("temp science store root")
+    }
+
+    #[test]
+    fn science_seq_operation_lease_is_single_flight_and_reusable_after_drop() {
+        let root = store_root();
+        let store = xai_grok_science::ScienceStore::new(root.path());
+        let run_id = xai_grok_science::RunId::new("seqa-local-single-flight");
+        let first = ScienceSeqOperationLease::claim(&store, &run_id).expect("first claim");
+
+        let duplicate = ScienceSeqOperationLease::claim(&store, &run_id)
+            .err()
+            .expect("same-process duplicate must fail closed");
+        assert!(
+            duplicate
+                .to_string()
+                .contains("already active in this Lumen process"),
+            "unexpected duplicate error: {duplicate}"
+        );
+
+        drop(first);
+        let reclaimed = ScienceSeqOperationLease::claim(&store, &run_id).expect("claim after drop");
+        drop(reclaimed);
+    }
+
+    #[test]
+    fn science_seq_operation_lease_rejects_path_shaped_run_id_before_writing() {
+        let root = store_root();
+        let store = xai_grok_science::ScienceStore::new(root.path());
+        let run_id = xai_grok_science::RunId::new("../seq-lease-escape");
+
+        let error = ScienceSeqOperationLease::claim(&store, &run_id)
+            .err()
+            .expect("path-shaped run id must fail closed");
+        assert!(
+            error.to_string().contains("[A-Za-z0-9_-]"),
+            "unexpected validation error: {error}"
+        );
+        assert!(
+            std::fs::read_dir(root.path())
+                .expect("store root")
+                .next()
+                .is_none(),
+            "invalid run id must not write inside or outside the store"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn science_seq_operation_lease_rejects_symlinked_or_writable_boundaries() {
+        use std::os::unix::fs::{PermissionsExt as _, symlink};
+
+        let root = store_root();
+        let outside = tempfile::tempdir().expect("outside directory");
+        symlink(outside.path(), root.path().join(".seq-analyze-leases"))
+            .expect("symlink lease boundary");
+        let store = xai_grok_science::ScienceStore::new(root.path());
+        let run_id = xai_grok_science::RunId::new("seqa-symlink-boundary");
+        ScienceSeqOperationLease::claim(&store, &run_id)
+            .err()
+            .expect("symlinked lease directory must fail closed");
+        assert!(
+            std::fs::read_dir(outside.path())
+                .expect("outside directory")
+                .next()
+                .is_none(),
+            "symlink target must remain untouched"
+        );
+
+        std::fs::remove_file(root.path().join(".seq-analyze-leases")).expect("remove test symlink");
+        let lease_directory = root.path().join(".seq-analyze-leases");
+        std::fs::create_dir(&lease_directory).expect("create writable lease directory");
+        std::fs::set_permissions(&lease_directory, std::fs::Permissions::from_mode(0o777))
+            .expect("make lease directory group/world writable");
+        let error = ScienceSeqOperationLease::claim(&store, &run_id)
+            .err()
+            .expect("writable lease boundary must fail closed");
+        assert!(
+            error.to_string().contains("group- or world-writable"),
+            "unexpected writable-boundary error: {error}"
+        );
+    }
+
+    /// Subprocess helper for the real cross-process test below.
+    #[cfg(unix)]
+    #[test]
+    #[ignore = "spawned by science_seq_operation_lease_is_cross_process_and_crash_released"]
+    fn science_seq_operation_lease_cross_process_holder() {
+        let Some(root) = std::env::var_os(CHILD_ROOT) else {
+            return;
+        };
+        let Some(run_id) = std::env::var_os(CHILD_RUN_ID) else {
+            return;
+        };
+        let Some(ready) = std::env::var_os(CHILD_READY) else {
+            return;
+        };
+        let store = xai_grok_science::ScienceStore::new(std::path::Path::new(&root));
+        let run_id = xai_grok_science::RunId::new(run_id.to_string_lossy());
+        let _lease =
+            ScienceSeqOperationLease::claim(&store, &run_id).expect("child cross-process claim");
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(ready)
+            .expect("publish child-ready marker");
+
+        // The parent kills this process to prove the kernel releases the
+        // descriptor-owned lock after an ungraceful exit.
+        std::thread::sleep(Duration::from_secs(30));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn science_seq_operation_lease_is_cross_process_and_crash_released() {
+        let root = store_root();
+        let store = xai_grok_science::ScienceStore::new(root.path());
+        let run_id = xai_grok_science::RunId::new("seqa-cross-process-crash-release");
+        let ready = root.path().join("child-ready");
+        let mut child = std::process::Command::new(
+            std::env::current_exe().expect("current unit-test executable"),
+        )
+        .arg("science_seq_operation_lease_cross_process_holder")
+        .arg("--ignored")
+        .arg("--nocapture")
+        .arg("--test-threads=1")
+        .env(CHILD_ROOT, root.path())
+        .env(CHILD_RUN_ID, &run_id.0)
+        .env(CHILD_READY, &ready)
+        .spawn()
+        .expect("spawn lease holder");
+
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !ready.exists() && Instant::now() < deadline {
+            if let Some(status) = child.try_wait().expect("poll child") {
+                panic!("lease holder exited before ready: {status}");
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        if !ready.exists() {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("lease holder did not become ready");
+        }
+
+        let contender = ScienceSeqOperationLease::claim(&store, &run_id)
+            .err()
+            .expect("second process must not claim the same operation");
+        let _ = child.kill();
+        let status = child.wait().expect("reap killed holder");
+        assert!(!status.success(), "holder was expected to be killed");
+        assert!(
+            contender
+                .to_string()
+                .contains("already active in another Lumen process"),
+            "unexpected cross-process contention error: {contender}"
+        );
+
+        let reclaimed = ScienceSeqOperationLease::claim(&store, &run_id)
+            .expect("process death must release the kernel lease");
+        drop(reclaimed);
+    }
 }

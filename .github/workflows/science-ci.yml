@@ -318,8 +318,12 @@ jobs:
           set -euo pipefail
           tests=(
             test_stdio_science_seq_analyze_is_actor_gated_and_store_owned
+            test_stdio_science_seq_analyze_same_operation_is_single_flight
+            test_stdio_science_seq_analyze_restart_reprompts_exact_pending_once
+            test_stdio_science_seq_analyze_restart_resumes_allow_without_reprompt
             test_stdio_science_seq_analyze_boundaries_fail_closed
             test_stdio_science_seq_analyze_denied_writes_nothing
+            test_stdio_science_seq_analyze_cancelled_writes_nothing
             test_stdio_science_seq_analyze_permission_timeout_writes_nothing
             test_stdio_science_seq_analyze_malformed_input_fails_without_outputs
             test_stdio_science_seq_analyze_allow_rejects_project_revision_race

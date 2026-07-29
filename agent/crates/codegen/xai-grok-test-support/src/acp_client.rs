@@ -214,6 +214,22 @@ impl GrokStdioClient {
         permission_response: PermissionResponse,
     ) -> Self {
         let home = TempDir::new().expect("create temp home");
+        Self::spawn_with_home_and_permission_response(server, cwd, home, permission_response).await
+    }
+
+    /// Spawn an ACP product process with both a caller-retained home directory
+    /// and an explicit client-side permission behavior.
+    ///
+    /// Restart/recovery product tests use this after taking the first
+    /// process's home and dropping that process. Keeping the home preserves
+    /// the real persisted session while changing the permission response lets
+    /// the second process prove whether recovery does or does not re-prompt.
+    pub async fn spawn_with_home_and_permission_response(
+        server: &MockInferenceServer,
+        cwd: &Path,
+        home: TempDir,
+        permission_response: PermissionResponse,
+    ) -> Self {
         Self::spawn_with_home_env_args_and_permission(
             server,
             cwd,
