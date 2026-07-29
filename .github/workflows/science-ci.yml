@@ -159,13 +159,85 @@ jobs:
 
   rust-science:
     name: Rust xai-grok-science (test + clippy)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     defaults:
       run:
         working-directory: agent
     steps:
       - uses: actions/checkout@v4
+
+      # The Linux sandbox deliberately trusts only a root-owned, non-writable
+      # /usr chain. GitHub runner images have occasionally shipped /usr owned
+      # by the unprivileged runner user even though the directory remains
+      # protected. Repair only that exact, auditable hosted-image condition;
+      # self-hosted/unknown runners, symlinks, writable modes, unexpected
+      # ownership, or an ineffective chown stay red.
+      - name: Establish Linux workflow trust root
+        env:
+          EXPECTED_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_RUNNER_ENVIRONMENT" == "github-hosted" \
+            && "${RUNNER_OS:-}" == "Linux" \
+            && "${GITHUB_ACTIONS:-}" == "true" ]] || {
+            echo "::error::trust-root repair is restricted to GitHub-hosted Linux runners"
+            exit 1
+          }
+
+          python_path="$(readlink -e /usr/bin/python3)"
+          [[ "$python_path" == /usr/* ]] || {
+            echo "::error::python3 canonicalized outside /usr: $python_path"
+            exit 1
+          }
+          runner_uid="$(id -u)"
+
+          id
+          stat -Lc '%n uid=%u gid=%g mode=%a type=%F dev=%d ino=%i' \
+            / /usr /usr/bin "$python_path"
+          namei -l /usr/bin/python3
+
+          [[ ! -L /usr && -d /usr ]] || {
+            echo "::error::/usr must be a real directory"
+            exit 1
+          }
+          usr_uid="$(stat -Lc '%u' /usr)"
+          usr_mode="$(stat -Lc '%a' /usr)"
+          (( (8#$usr_mode & 8#022) == 0 )) || {
+            echo "::error::/usr is group/other writable (mode=$usr_mode)"
+            exit 1
+          }
+
+          case "$usr_uid" in
+            0) ;;
+            "$runner_uid")
+              sudo chown --no-dereference root:root -- /usr
+              ;;
+            *)
+              echo "::error::/usr has unexpected owner uid=$usr_uid"
+              exit 1
+              ;;
+          esac
+
+          for protected_path in / /usr /usr/bin "$python_path"; do
+            [[ ! -L "$protected_path" ]] || {
+              echo "::error::$protected_path must not be a symlink"
+              exit 1
+            }
+            protected_uid="$(stat -Lc '%u' "$protected_path")"
+            protected_mode="$(stat -Lc '%a' "$protected_path")"
+            [[ "$protected_uid" == 0 ]] || {
+              echo "::error::$protected_path is not root-owned (uid=$protected_uid)"
+              exit 1
+            }
+            (( (8#$protected_mode & 8#022) == 0 )) || {
+              echo "::error::$protected_path is group/other writable (mode=$protected_mode)"
+              exit 1
+            }
+          done
+
+          stat -Lc '%n uid=%u gid=%g mode=%a type=%F dev=%d ino=%i' \
+            / /usr /usr/bin "$python_path"
 
       - name: Install protoc
         run: |

@@ -913,16 +913,18 @@ fn open_verified_linux_executable_capability(
                 path: component.to_path_buf(),
                 source,
             })?;
-        if metadata.file_type().is_symlink()
-            || metadata.uid() != 0
-            || metadata.permissions().mode() & 0o022 != 0
-        {
+        let is_symlink = metadata.file_type().is_symlink();
+        let uid = metadata.uid();
+        let mode = metadata.permissions().mode();
+        if is_symlink || uid != 0 || mode & 0o022 != 0 {
             return Err(PinExecutableError::CommandSetup {
                 source: io::Error::new(
                     io::ErrorKind::PermissionDenied,
                     format!(
-                        "Linux workflow executable is not root-owned and protected: {}",
-                        component.display()
+                        "Linux workflow executable is not root-owned and protected: {} \
+                         (uid={uid}, mode={:#o}, symlink={is_symlink})",
+                        component.display(),
+                        mode & 0o7777,
                     ),
                 ),
             });
@@ -1031,15 +1033,17 @@ fn verify_linux_protected_read_path(path: &Path) -> io::Result<()> {
         // not extend this exception to regular files or directories.
         let protected_device_leaf =
             component == path && metadata.file_type().is_char_device() && metadata.uid() == 0;
-        if metadata.file_type().is_symlink()
-            || metadata.uid() != 0
-            || (!protected_device_leaf && metadata.permissions().mode() & 0o022 != 0)
-        {
+        let is_symlink = metadata.file_type().is_symlink();
+        let uid = metadata.uid();
+        let mode = metadata.permissions().mode();
+        if is_symlink || uid != 0 || (!protected_device_leaf && mode & 0o022 != 0) {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
                 format!(
-                    "Linux runtime read capability is not root-owned and protected: {}",
-                    component.display()
+                    "Linux runtime read capability is not root-owned and protected: {} \
+                     (uid={uid}, mode={:#o}, symlink={is_symlink})",
+                    component.display(),
+                    mode & 0o7777,
                 ),
             ));
         }
@@ -1645,7 +1649,11 @@ pub(crate) fn parse_linux_elf_interp(path: &std::path::Path) -> Result<std::path
             return Err(format!("loader '{0}' writable", c.display()));
         }
         if md.uid() != 0 {
-            return Err(format!("loader '{0}' not root-owned", c.display()));
+            return Err(format!(
+                "loader '{0}' not root-owned (uid={1})",
+                c.display(),
+                md.uid()
+            ));
         }
         cur = c.parent().filter(|p| *p != c);
     }
