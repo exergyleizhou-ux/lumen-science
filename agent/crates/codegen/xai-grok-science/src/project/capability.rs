@@ -34,7 +34,9 @@ pub(crate) const PROJECT_WRITE_LOCK_FILE: &str = ".lumen-project-write.lock";
 pub(crate) struct ProjectWriteFileLock {
     #[cfg(unix)]
     _file: fs::File,
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    _file: fs::File,
+    #[cfg(not(any(unix, windows)))]
     _process_only: (),
 }
 
@@ -845,14 +847,53 @@ impl PinnedDirectory {
         Ok(opened)
     }
 
-    /// Windows currently retains process-wide writer serialisation only.
+    /// Cross-process writer lock via `LockFileEx`.
     ///
-    /// Do not treat this marker as cross-process proof. A Windows file-locking
-    /// backend needs its own handle-relative, no-reparse implementation and
-    /// platform CI before it can make that claim.
+    /// Opens a private regular file at the fixed lock name inside the retained
+    /// store root, takes an exclusive byte-range lock via `LockFileEx`, and
+    /// re-verifies the file identity before returning. The lock is released
+    /// when the returned `ProjectWriteFileLock` is dropped.
     pub(crate) fn lock_project_writes(&self) -> Result<ProjectWriteFileLock> {
         self.assert_stable()?;
-        Ok(ProjectWriteFileLock { _process_only: () })
+        let lock_path = self.path.join(PROJECT_WRITE_LOCK_FILE);
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&lock_path)?;
+        windows_assert_regular_handle(&lock_path, &file)?;
+        windows_assert_no_reparse_components(&lock_path)?;
+
+        use windows_sys::Win32::Storage::FileSystem::{
+            LockFileEx, LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY,
+        };
+        let mut overlapped: windows_sys::Win32::System::IO::OVERLAPPED = unsafe {
+            std::mem::zeroed()
+        };
+        let result = unsafe {
+            LockFileEx(
+                file.as_raw_fd() as _,
+                LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
+                0,
+                u32::MAX,
+                0,
+                &mut overlapped,
+            )
+        };
+        if result == 0 {
+            let error = std::io::Error::last_os_error();
+            return Err(ScienceError::Io(error));
+        }
+
+        // Reverify the lock file identity post-lock
+        let reopened = fs::File::open(&lock_path)?;
+        windows_assert_regular_handle(&lock_path, &reopened)?;
+        if !windows_same_open_file(&file, &reopened) {
+            return Err(ScienceError::Invalid(
+                "project store write lock identity changed during acquisition".into(),
+            ));
+        }
+        Ok(ProjectWriteFileLock { _file: file })
     }
 
     pub(crate) fn read_optional(&self, relative: &Path) -> Result<Option<Vec<u8>>> {

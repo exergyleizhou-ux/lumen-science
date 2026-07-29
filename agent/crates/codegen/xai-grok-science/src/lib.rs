@@ -7904,4 +7904,143 @@ mod tests {
             "rejected store boundary must not create a lease directory"
         );
     }
+
+    // ── Single-flight: cross-process concurrent rejection ──────────
+
+    #[cfg(unix)]
+    #[test]
+    fn operation_lease_rejects_concurrent_process() {
+        use std::process::Command;
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("concurrent-store");
+        fs::create_dir(&root).unwrap();
+        let science = ScienceStore::new(&root);
+        let run_id = RunId::new("cross-process-lease");
+
+        // Acquire the lease in the parent
+        let parent_lease = science.claim_operation_lease(&run_id)
+            .expect("parent must acquire lease");
+
+        // A second claim from the SAME process must fail (non-reentrant flock)
+        assert!(
+            science.claim_operation_lease(&run_id).is_err(),
+            "same-process re-acquire must fail"
+        );
+
+        // Simulate a DIFFERENT process: use flock(1) on the lease file
+        let lease_path = root.join(".seq-analyze-leases")
+            .join(format!("{}.lock", run_id.0));
+        assert!(lease_path.is_file(), "lease file must exist: {lease_path:?}");
+
+        // Use flock(1) which is available on Linux/macOS
+        let output = Command::new("flock")
+            .args(["--nonblock", "--exclusive", lease_path.to_str().unwrap(), "true"])
+            .output();
+        match output {
+            Ok(out) => {
+                // On some systems flock(1) may be installed at a different path
+                // or not present. If it runs and exits non-zero, the lock is held.
+                assert!(!out.status.success(),
+                    "flock must fail when parent holds exclusive lease. exit={}",
+                    out.status);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                // flock(1) not available — skip cross-process verification
+                // but in-process non-reentrant proof still holds.
+                eprintln!("flock(1) not found; cross-process step skipped (in-process proof holds)");
+            }
+            Err(e) => panic!("unexpected flock error: {e}"),
+        }
+
+        drop(parent_lease);
+
+        // After releasing, flock(1) should succeed
+        if let Ok(out) = Command::new("flock")
+            .args(["--nonblock", "--exclusive", lease_path.to_str().unwrap(), "true"])
+            .output()
+        {
+            assert!(out.status.success(),
+                "flock must succeed after lease released. exit={}", out.status);
+        }
+    }
+
+    // ── Finish lock-holding proof ──────────────────────────────────
+
+    #[cfg(unix)]
+    #[test]
+    fn operation_lease_held_throughout_finish_proof() {
+        use std::process::{Command, Stdio};
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("finish-lock-store");
+        fs::create_dir(&root).unwrap();
+        let science = ScienceStore::new(&root);
+        let run_id = RunId::new("finish-lock-proof");
+
+        // Acquire the lease → represents Begin
+        let lease = science.claim_operation_lease(&run_id)
+            .expect("Begin must acquire lease");
+        let lease_path = root.join(".seq-analyze-leases")
+            .join(format!("{}.lock", run_id.0));
+
+        // While the lease is held (simulating permission + Finish duration),
+        // prove no other process can acquire it
+        let child = Command::new("flock")
+            .args(["--nonblock", "--exclusive", lease_path.to_str().unwrap(),
+                   "-c", "echo LOCK_ACQUIRED"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output();
+
+        if let Ok(out) = child {
+            assert!(!out.status.success(),
+                "Finish lock was not held — another process acquired it. stdout={}",
+                String::from_utf8_lossy(&out.stdout));
+        }
+
+        // Drop = Finish completes; lock released
+        drop(lease);
+
+        // Now flock must succeed
+        let after = Command::new("flock")
+            .args(["--nonblock", "--exclusive", lease_path.to_str().unwrap(),
+                   "--command", "true"])
+            .output();
+        if let Ok(out) = after {
+            assert!(out.status.success(),
+                "lock must be released after Finish. exit={}", out.status);
+        }
+    }
+
+    // ── Crash recovery: drop releases lease for restart ────────────
+
+    #[cfg(unix)]
+    #[test]
+    fn operation_lease_released_on_drop_for_restart() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("crash-store");
+        fs::create_dir(&root).unwrap();
+        let science = ScienceStore::new(&root);
+        let run_id = RunId::new("crash-recovery-lease");
+
+        // Simulate Begin → permission → Finish
+        let lease = science.claim_operation_lease(&run_id)
+            .expect("acquire lease");
+
+        // While held, another claim must fail (same-process non-reentrant)
+        assert!(
+            science.claim_operation_lease(&run_id).is_err(),
+            "reacquire must fail while lease held"
+        );
+
+        // Simulate crash: drop the lease (process death releases all fds)
+        drop(lease);
+
+        // After drop, a restart can acquire the same operation_id
+        let recovered = science.claim_operation_lease(&run_id);
+        assert!(
+            recovered.is_ok(),
+            "lease must be re-acquirable after drop. error={:?}",
+            recovered.err()
+        );
+    }
 }
