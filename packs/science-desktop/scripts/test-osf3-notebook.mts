@@ -5,6 +5,8 @@
  */
 import { strictEqual, ok } from 'node:assert/strict'
 import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import {
   planNotebookCell,
   assertNotebookExecuteAccess,
@@ -40,6 +42,10 @@ const safeHandle: SafeHandleFn = (ipc, ch, h) => {
 }
 
 async function run() {
+  const OUTPUT_SHA = 'a'.repeat(64)
+  const FAILED_OUTPUT_SHA = 'b'.repeat(64)
+  const SOURCE_RUN_ID = 'notebook-source-run-1'
+
   // ── Pure plan ────────────────────────────────────────────────
   const bad = planNotebookCell({ language: 'python', code: '' })
   await test('plan rejects empty code', () => {
@@ -112,7 +118,34 @@ async function run() {
       acpCalls++
       strictEqual(tool, 'workflow_execute')
       seenArgs.push(args)
-      return { state: 'succeeded', operationId: args.operationId }
+      const source = (
+        args.workflowSpec as { steps?: { notebook_cell?: string }[] } | undefined
+      )?.steps?.[0]?.notebook_cell
+      if (source?.includes('failed-run')) {
+        return {
+          state: 'failed',
+          runId: 'failed-source-run',
+          commits: [
+            {
+              stepId: 'failed-step',
+              committedByAttempt: 'attempt-1',
+              outputManifest: { 'stdout.txt': FAILED_OUTPUT_SHA },
+            },
+          ],
+        }
+      }
+      return {
+        state: 'succeeded',
+        operationId: args.operationId,
+        runId: SOURCE_RUN_ID,
+        commits: [
+          {
+            stepId: 'cell-step',
+            committedByAttempt: 'attempt-1',
+            outputManifest: { 'stdout.txt': OUTPUT_SHA },
+          },
+        ],
+      }
     },
     resolveInterpreter: async () => ({ ok: true, interpreterPath: '/usr/bin/python3' }),
     defaultOwnerId: 'o1',
@@ -231,10 +264,13 @@ async function run() {
     },
   }
   const catalog = new LocalProjectCatalog()
+  const previewStore = new AcpPreviewStore()
+  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'notebook-ipc-'))
     registerScienceIpcHandlers(ipc, {
     safeHandle,
     getLumenBinaryHash: () => 'h',
-    previewStore: new AcpPreviewStore(),
+    previewStore,
+    workspaceRoot,
     assertMembership: createOfflineCatalogMembershipAsserter({ catalog }),
     projectCatalog: catalog,
     // Creation is an engine mutation now; this suite is about the notebook, so
@@ -270,6 +306,26 @@ async function run() {
   const exRes = await exH(senderEvt, { language: 'python', code: 'print(9)\n' })
   await test('ipc execute after project open', () => {
     ok(exRes.ok, JSON.stringify(exRes))
+    strictEqual(exRes.sourceRunId, SOURCE_RUN_ID)
+    strictEqual(exRes.artifactsSeeded, 1)
+  })
+
+  await test('ipc binds seeded notebook evidence to the succeeded source run', async () => {
+    const record = await previewStore.resolveById(OUTPUT_SHA)
+    ok(record)
+    strictEqual(record?.runId, SOURCE_RUN_ID)
+    strictEqual(record?.ownerId, 'local-user')
+    strictEqual(record?.projectId, created.project.id)
+  })
+
+  const failedRes = await exH(senderEvt, {
+    language: 'python',
+    code: 'print("failed-run")\n',
+  })
+  await test('ipc never exposes or seeds evidence from a failed source run', async () => {
+    strictEqual(failedRes.sourceRunId, undefined)
+    strictEqual(failedRes.artifactsSeeded, 0)
+    strictEqual(await previewStore.resolveById(FAILED_OUTPUT_SHA), null)
   })
 
   console.log(`\n${failures === 0 ? 'ALL TESTS PASSED' : `${failures} TESTS FAILED`}`)

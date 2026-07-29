@@ -627,9 +627,14 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     // verifies.
     const bound = trusted
     const result = (out as { ok?: boolean; result?: Record<string, unknown> })?.result
+    const sourceRunId =
+      result?.state === 'succeeded' &&
+      typeof result.runId === 'string' &&
+      /^[A-Za-z0-9_-]{1,128}$/.test(result.runId)
+        ? result.runId
+        : undefined
     let artifactsSeeded = 0
     if ((out as { ok?: boolean })?.ok && bound && deps.workspaceRoot && result && previewStore.put) {
-      const runId = typeof result.runId === 'string' ? result.runId : ''
       const commits = Array.isArray(result.commits)
         ? (result.commits as {
             stepId?: string
@@ -638,7 +643,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
           }[])
         : []
       for (const commit of commits) {
-        if (!runId || !commit.stepId || !commit.committedByAttempt) continue
+        if (!sourceRunId || !commit.stepId || !commit.committedByAttempt) continue
         for (const [rel, sha256] of Object.entries(commit.outputManifest ?? {})) {
           if (!/^[0-9a-f]{64}$/.test(sha256)) continue
           previewStore.put!(sha256, {
@@ -648,7 +653,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
               deps.workspaceRoot,
               SCIENCE_STORE_DIR,
               'workflow-outputs',
-              runId,
+              sourceRunId,
               commit.stepId,
               commit.committedByAttempt,
               rel,
@@ -656,12 +661,13 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
             sha256,
             ownerId: bound.ownerId,
             projectId: bound.projectId,
+            runId: sourceRunId,
           })
           artifactsSeeded += 1
         }
       }
     }
-    return { ...(out as Record<string, unknown>), artifactsSeeded }
+    return { ...(out as Record<string, unknown>), artifactsSeeded, sourceRunId }
   })
 
   safeHandle(ipcMain, 'notebook:history', async () => ({

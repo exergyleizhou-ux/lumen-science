@@ -275,7 +275,14 @@ test('the run\'s artifacts are previewable and reviewable — the evidence chain
   // (b) Review those bytes.
   await page.getByRole('tab', { name: 'Review', exact: true }).click()
   await page.locator('#panel-review').waitFor({ timeout: 10_000 })
-  await page.locator('#panel-review textarea').fill(`${sha}:${sha}`)
+  await expect(page.locator('#panel-review')).toContainText(/Source run:\s*[A-Za-z0-9_-]+/)
+  await page
+    .getByLabel('Artifacts to review, one per line as id:expected-sha256')
+    .fill(`${sha}:${sha}`)
+  await page.getByLabel('Review verdict').selectOption('pass')
+  await page
+    .getByLabel('Review rationale')
+    .fill('The recorded stdout bytes match the expected deterministic result.')
   await page.getByRole('button', { name: /submit review/i }).click()
   await expect
     .poll(async () => page.locator('#panel-review pre').textContent(), { timeout: 30_000 })

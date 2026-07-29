@@ -666,11 +666,16 @@ type OpenScienceAPI = {
     reviewPlan: (request: {
       artifacts: { artifactId: string; expectedSha256: string; label?: string }[]
       rubricVersion?: string
+      runId: string
+      verdict: 'pass' | 'warn' | 'fail' | 'needs_revision' | 'inconclusive'
+      summary: string
     }) => Promise<unknown>
     reviewSubmit: (request: {
       artifacts: { artifactId: string; expectedSha256: string; label?: string }[]
       rubricVersion?: string
-      runId?: string
+      runId: string
+      verdict: 'pass' | 'warn' | 'fail' | 'needs_revision' | 'inconclusive'
+      summary: string
     }) => Promise<unknown>
     reviewHistory: () => Promise<unknown>
     reviewLatest: () => Promise<unknown>

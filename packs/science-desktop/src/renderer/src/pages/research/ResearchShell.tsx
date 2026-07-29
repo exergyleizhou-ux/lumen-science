@@ -45,6 +45,8 @@ type TabId =
   | 'compute'
   | 'connectors'
 
+type ReviewVerdict = 'pass' | 'warn' | 'fail' | 'needs_revision' | 'inconclusive'
+
 const TABS: { id: TabId; label: string }[] = [
   { id: 'question', label: 'Question' },
   { id: 'plan', label: 'Plan' },
@@ -84,6 +86,11 @@ export const ResearchShell = (): React.JSX.Element => {
   const [previewMeta, setPreviewMeta] = useState<string>('')
   const [nbCode, setNbCode] = useState('print("hello from lumen notebook plan")\n')
   const [nbOut, setNbOut] = useState<string>('')
+  const [lastNotebookRunId, setLastNotebookRunId] = useState('')
+  const [reviewArtifacts, setReviewArtifacts] = useState('')
+  const [reviewOut, setReviewOut] = useState('')
+  const [reviewVerdict, setReviewVerdict] = useState<ReviewVerdict | ''>('')
+  const [reviewSummary, setReviewSummary] = useState('')
 
   const lumen = window.api?.lumen
 
@@ -132,6 +139,11 @@ export const ResearchShell = (): React.JSX.Element => {
     // that nothing opened — two contradictory claims, one of them stale.
     setOpened(null)
     setQuestionStatus('')
+    setLastNotebookRunId('')
+    setReviewArtifacts('')
+    setReviewOut('')
+    setReviewVerdict('')
+    setReviewSummary('')
     setStatus('Opening (bind + seed)…')
     const res = (await lumen.openUiProject({
       projectId: project.id,
@@ -184,6 +196,11 @@ export const ResearchShell = (): React.JSX.Element => {
       setOpened(null)
       setQuestion('')
       setSavedQuestion('')
+      setLastNotebookRunId('')
+      setReviewArtifacts('')
+      setReviewOut('')
+      setReviewVerdict('')
+      setReviewSummary('')
     }
     await refresh()
   }
@@ -248,7 +265,13 @@ export const ResearchShell = (): React.JSX.Element => {
       setNbOut('Open a project first (trusted session required for live execute).')
       return
     }
-    const res = await lumen.notebookExecuteCell({ language: 'python', code: nbCode })
+    const res = (await lumen.notebookExecuteCell({ language: 'python', code: nbCode })) as {
+      ok?: boolean
+      sourceRunId?: string
+    }
+    if (res.ok && res.sourceRunId && /^[A-Za-z0-9_-]{1,128}$/.test(res.sourceRunId)) {
+      setLastNotebookRunId(res.sourceRunId)
+    }
     setNbOut(JSON.stringify(res, null, 2))
   }
 
@@ -287,11 +310,8 @@ export const ResearchShell = (): React.JSX.Element => {
       setNbOut,
     )
 
-  const [reviewArtifacts, setReviewArtifacts] = useState('')
-  const [reviewOut, setReviewOut] = useState('')
-  const reviewPlan = async (): Promise<void> => {
-    if (!lumen) return
-    const artifacts = reviewArtifacts
+  const parseReviewArtifacts = (): { artifactId: string; expectedSha256: string }[] =>
+    reviewArtifacts
       .split('\n')
       .filter(Boolean)
       .map((line) => {
@@ -299,20 +319,47 @@ export const ResearchShell = (): React.JSX.Element => {
         return { artifactId: artifactId?.trim() ?? '', expectedSha256: expectedSha256?.trim() ?? '' }
       })
       .filter((a) => a.artifactId && a.expectedSha256)
-    const res = await lumen.reviewPlan({ artifacts })
+
+  const reviewRequest = ():
+    | {
+        artifacts: { artifactId: string; expectedSha256: string }[]
+        runId: string
+        verdict: ReviewVerdict
+        summary: string
+      }
+    | undefined => {
+    if (!lastNotebookRunId) {
+      setReviewOut('Run a notebook cell successfully before reviewing its evidence.')
+      return undefined
+    }
+    if (!reviewVerdict) {
+      setReviewOut('Choose an explicit verdict before planning or submitting the review.')
+      return undefined
+    }
+    if (!reviewSummary.trim()) {
+      setReviewOut('Explain the scientific basis for this verdict before planning or submitting.')
+      return undefined
+    }
+    return {
+      artifacts: parseReviewArtifacts(),
+      runId: lastNotebookRunId,
+      verdict: reviewVerdict,
+      summary: reviewSummary.trim(),
+    }
+  }
+
+  const reviewPlan = async (): Promise<void> => {
+    if (!lumen) return
+    const request = reviewRequest()
+    if (!request) return
+    const res = await lumen.reviewPlan(request)
     setReviewOut(JSON.stringify(res, null, 2))
   }
   const reviewSubmit = async (): Promise<void> => {
     if (!lumen) return
-    const artifacts = reviewArtifacts
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => {
-        const [artifactId, expectedSha256] = line.split(':')
-        return { artifactId: artifactId?.trim() ?? '', expectedSha256: expectedSha256?.trim() ?? '' }
-      })
-      .filter((a) => a.artifactId && a.expectedSha256)
-    const res = await lumen.reviewSubmit({ artifacts })
+    const request = reviewRequest()
+    if (!request) return
+    const res = await lumen.reviewSubmit(request)
     setReviewOut(JSON.stringify(res, null, 2))
   }
   const reviewExport = async (): Promise<void> =>
@@ -942,6 +989,9 @@ export const ResearchShell = (): React.JSX.Element => {
                   <p className={cx.muted}>
                     Evidence (one per line): <code>artifactId:expectedSha256</code>
                   </p>
+                  <p className={cx.muted}>
+                    Source run: <code>{lastNotebookRunId || 'no successful notebook run yet'}</code>
+                  </p>
                   <textarea
                     className={cx.textarea}
                     rows={4}
@@ -950,6 +1000,29 @@ export const ResearchShell = (): React.JSX.Element => {
                     spellCheck={false}
                     aria-label="Artifacts to review, one per line as id:expected-sha256"
                     placeholder={'artifact_id:expected_sha256 — one per line.\nRun a notebook cell, then use a hash from its report; the id IS the content hash.'}
+                  />
+                  <label>
+                    Verdict
+                    <select
+                      value={reviewVerdict}
+                      onChange={(e) => setReviewVerdict(e.target.value as ReviewVerdict | '')}
+                      aria-label="Review verdict"
+                    >
+                      <option value="">Choose a verdict…</option>
+                      <option value="pass">Pass</option>
+                      <option value="warn">Warn</option>
+                      <option value="fail">Fail</option>
+                      <option value="needs_revision">Needs revision</option>
+                      <option value="inconclusive">Inconclusive</option>
+                    </select>
+                  </label>
+                  <textarea
+                    className={cx.textarea}
+                    rows={3}
+                    value={reviewSummary}
+                    onChange={(e) => setReviewSummary(e.target.value)}
+                    aria-label="Review rationale"
+                    placeholder="Explain why this evidence supports the selected verdict."
                   />
                   <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                     <button type="button" className={cx.btn} onClick={() => void reviewPlan()}>
