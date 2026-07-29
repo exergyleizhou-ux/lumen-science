@@ -2377,7 +2377,7 @@ raise SystemExit('exec-should-have-failed')
         for inst in filter.instructions.iter() {
             // BPF_JMP | BPF_JEQ | BPF_K = jt/jf conditional jump with constant
             // code = 0x05 | 0x10 | 0x00 = 0x15
-            if inst.code == (0x05 | 0x10 | 0x00) {
+            if inst.code == (0x05 | 0x10) {
                 if inst.k == libc::SYS_execve as u32 { execve_count += 1; }
                 if inst.k == libc::SYS_execveat as u32 { execveat_count += 1; }
             }
@@ -2389,7 +2389,7 @@ raise SystemExit('exec-should-have-failed')
         {
             let mut x32_found = false;
             for inst in filter.instructions.iter() {
-                if inst.code == (0x05 | 0x40 | 0x00) // BPF_JMP | BPF_JSET | BPF_K
+                if inst.code == (0x05 | 0x40) // BPF_JMP | BPF_JSET | BPF_K
                     && inst.k == 0x4000_0000u32
                 {
                     x32_found = true;
