@@ -5,7 +5,11 @@
 
 set -euo pipefail
 
-VERSION="${1:-$(cat ../../VERSION 2>/dev/null || echo '0.1.0-dev')}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# This script releases the frozen Go CLI/MCP product line. Its version is
+# packs/science/VERSION even when invoked from another working directory; root
+# VERSION belongs exclusively to Rust Core.
+VERSION="${1:-$(tr -d '[:space:]' < "$SCRIPT_DIR/VERSION")}"
 RELEASE_DIR="dist/science-release-${VERSION}"
 BINARIES=(artifacts notebook reviewer http_bridge)
 

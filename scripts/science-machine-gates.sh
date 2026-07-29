@@ -90,12 +90,45 @@ test -f docs/science/LUMEN_SCIENCE_1_0_STATUS.md -o -f docs/science/LUMEN_SCIENC
   || fail "missing 1.0 status doc"
 ok "honesty docs"
 
-# Release checksum evidence for current VERSION
-VER=$(cat VERSION | tr -d '[:space:]')
+# Release checksum evidence for frozen Go Science CLI version (not Rust Core).
+VER=$(tr -d '[:space:]' < packs/science/VERSION)
 if [[ -f "outputs/release/${VER}/SHA256SUMS" ]]; then
-  ok "release checksums present for ${VER}"
+  ok "release checksums present for Science CLI ${VER}"
 else
   echo "WARN  outputs/release/${VER}/SHA256SUMS not present (run make release + copy sums)"
+fi
+
+# Go release/sign entry points must never fall back to root VERSION. Root is
+# the Rust Core line and intentionally differs from packs/science/VERSION.
+grep -Fq 'SCRIPT_DIR/VERSION' packs/science/release.sh \
+  || fail "packs/science/release.sh does not use its component VERSION"
+grep -Fq 'ROOT/packs/science/VERSION' scripts/sign-release.sh \
+  || fail "scripts/sign-release.sh does not use packs/science/VERSION"
+if grep -Eq '(\.\./\.\./VERSION|ROOT/VERSION)' \
+  packs/science/release.sh scripts/sign-release.sh; then
+  fail "Go release/sign entry point still reads root Rust Core VERSION"
+fi
+ok "Go release/sign version source boundary"
+
+# Rust Core version truth: root VERSION == agent/VERSION == eight Core crates.
+python3 scripts/release_version.py --root . check >/dev/null
+ok "Rust Core VERSION contract (root + agent + 8 crates)"
+
+# Offline Core-drift fixture gate (no upstream checkout required).
+python3 scripts/check-core-drift.py --self-test
+ok "Core drift fixture self-test"
+
+# Audited-head Core drift comparison when that exact Lumen checkout is provided.
+# Local: CORE_DRIFT_UPSTREAM_ROOT=/Users/lei/code/lumen
+# CI: checkout the lock pin into a temp dir and set the same env var.
+if [[ -n "${CORE_DRIFT_UPSTREAM_ROOT:-}" ]]; then
+  python3 scripts/check-core-drift.py \
+    --science-root . \
+    --upstream-root "$CORE_DRIFT_UPSTREAM_ROOT" \
+    --lock docs/science/5.0/core-v0.1.251-admission.lock.json
+  ok "Core drift audited-head manifest comparison against $CORE_DRIFT_UPSTREAM_ROOT"
+else
+  echo "WARN  CORE_DRIFT_UPSTREAM_ROOT unset — audited-head Core drift comparison NOT RUN"
 fi
 
 echo

@@ -16,7 +16,8 @@ echo "STEP 1/5 build + unit tests"
 (
   cd "$PACK"
   go test ./standalone/internal/seqbench/... ./standalone/internal/pipeline/... ./mcp/artifacts/... -count=1
-  go build -trimpath -ldflags="-s -w -X main.version=$(cat "$ROOT/VERSION")" \
+  # Go Science CLI is the frozen 1.x product line — not root Rust VERSION.
+  go build -trimpath -ldflags="-s -w -X main.version=$(cat "$ROOT/packs/science/VERSION")" \
     -o build/lumen-science ./standalone/cmd/science
 )
 

@@ -13,6 +13,9 @@ from pathlib import Path
 
 
 VERSION_FILE = Path("VERSION")
+# agent/VERSION mirrors root VERSION for the Rust product line. It is not the
+# frozen Go Science CLI version (packs/science/VERSION).
+AGENT_VERSION_FILE = Path("agent/VERSION")
 MANIFESTS = (
     Path("agent/crates/codegen/xai-grok-version/Cargo.toml"),
     Path("agent/crates/codegen/xai-grok-pager/Cargo.toml"),
@@ -160,8 +163,30 @@ def lock_versions(path: Path) -> dict[str, Version]:
     return versions
 
 
+def agent_version_from_file(root: Path) -> Version:
+    path = root / AGENT_VERSION_FILE
+    if not path.is_file():
+        raise VersionError(f"missing version source: {AGENT_VERSION_FILE}")
+    raw = path.read_text(encoding="utf-8")
+    if not raw.endswith("\n") or raw.count("\n") != 1:
+        raise VersionError(
+            "agent/VERSION must contain exactly one newline-terminated SemVer"
+        )
+    return Version.parse(raw.rstrip("\n"))
+
+
 def check(root: Path) -> Version:
+    """Rust product version truth: root VERSION + agent/VERSION + eight Core crates.
+
+    Does not consult packs/science/VERSION (frozen Go Science CLI line) or
+    Desktop package.json.
+    """
     expected = version_from_file(root)
+    agent = agent_version_from_file(root)
+    if agent != expected:
+        raise VersionError(
+            f"version mismatch: {AGENT_VERSION_FILE} has {agent}, VERSION has {expected}"
+        )
     seen_names: set[str] = set()
     for relative in MANIFESTS:
         path = root / relative
@@ -255,7 +280,10 @@ def set_version(root: Path, new: Version) -> None:
     old = check(root)
     if new.precedence_key() <= old.precedence_key():
         raise VersionError(f"new version {new} must have higher precedence than {old}")
-    pending: dict[Path, str] = {root / VERSION_FILE: f"{new}\n"}
+    pending: dict[Path, str] = {
+        root / VERSION_FILE: f"{new}\n",
+        root / AGENT_VERSION_FILE: f"{new}\n",
+    }
     for relative in MANIFESTS:
         path = root / relative
         pending[path] = replace_manifest_version(

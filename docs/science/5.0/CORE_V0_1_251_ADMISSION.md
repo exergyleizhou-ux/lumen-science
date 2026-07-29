@@ -26,10 +26,25 @@ This preserves three invariants:
 The machine-readable authority for this admission is
 `core-v0.1.251-admission.lock.json`.
 
-Verify the lock, both local Git histories, and the optional exact binary without
-network access:
+**Single Rust base is not complete.** Science still identifies the embedded
+Core line as `0.1.222`. The 134-file drift against audited Lumen main head
+`dc563b1e0db9eaca7e970d56d7816e1522511723` is expected and machine-visible; it
+must not grow or change identity silently, and it must not be erased by
+rewriting VERSION to `0.1.251`. The `v0.1.251` tag commit
+`88a204cfe468a325b53272dddf70afc8036d24ad` is the selective-admission target,
+not the checkout used for this drift count.
+
+Verify version honesty, offline drift fixtures (including an equal-count
+substitution counterexample), the audited-head drift manifest, the admission
+lock, and the optional exact binary without network access:
 
 ```bash
+python3 scripts/release_version.py --root . check
+python3 scripts/check-core-drift.py --self-test
+python3 scripts/check-core-drift.py \
+  --science-root . \
+  --upstream-root /path/to/lumen@dc563b1e \
+  --lock docs/science/5.0/core-v0.1.251-admission.lock.json
 python3 scripts/verify-core-admission.py \
   --lumen-repo /path/to/lumen \
   --binary agent/target/debug/lumen

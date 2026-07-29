@@ -141,13 +141,13 @@ def collect_versions() -> dict[str, Any]:
         "rootVersion": {
             "value": root_version,
             "path": "VERSION",
-            "role": "legacy; still read by scripts/install-science.sh",
-            "authoritative": False,
+            "role": "Rust Core product version; must match agent/VERSION and eight Core crates",
+            "authoritative": True,
         },
         "cliVersion": {
             "value": cli_version,
             "path": "packs/science/VERSION",
-            "role": "Lumen Science CLI/MCP release line",
+            "role": "Frozen Go Lumen Science CLI/MCP release line — not Rust Core",
             "authoritative": True,
         },
         "desktopVersion": {
@@ -159,7 +159,7 @@ def collect_versions() -> dict[str, Any]:
         "rustCoreVersion": {
             "value": pager,
             "path": "agent/crates/codegen/xai-grok-pager/Cargo.toml",
-            "role": "Lumen Core coding agent",
+            "role": "Lumen Core coding agent; single Rust base NOT complete (known drift vs v0.1.251 is machine-gated)",
             "authoritative": True,
         },
         "rustCoreBinVersion": {

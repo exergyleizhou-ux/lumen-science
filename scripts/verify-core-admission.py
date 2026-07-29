@@ -115,6 +115,15 @@ def verify_lock(
             )
 
     comparison = lock["comparison"]
+    source = lock["lumen_source"]
+    require(
+        comparison.get("basis") == "audited_lumen_main_head",
+        "comparison basis must be audited_lumen_main_head",
+    )
+    require(
+        comparison.get("lumen_head") == source.get("audited_main_head"),
+        "comparison lumen_head must equal lumen_source.audited_main_head",
+    )
     require(
         comparison["total_drift"]
         == comparison["diverged_rust_files"] + comparison["missing_in_science_rust_files"],
@@ -128,6 +137,19 @@ def verify_lock(
     require(
         comparison["strict_zero_drift_gate"] is False,
         "record cannot claim a zero-drift gate while drift remains",
+    )
+    require(
+        isinstance(comparison.get("science_only_rust_files"), int)
+        and comparison["science_only_rust_files"] >= 0,
+        "comparison science_only_rust_files must be a non-negative integer",
+    )
+    require(
+        comparison.get("drift_manifest_schema") == "lumen-core-drift-v1",
+        "comparison drift manifest schema is unsupported",
+    )
+    require(
+        SHA256_RE.fullmatch(comparison.get("drift_manifest_sha256", "")) is not None,
+        "comparison drift manifest SHA-256 is malformed",
     )
 
     verification = lock["verification"]
