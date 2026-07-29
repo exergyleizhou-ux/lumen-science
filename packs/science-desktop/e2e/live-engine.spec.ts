@@ -284,6 +284,14 @@ test('the run\'s artifacts are previewable and reviewable — the evidence chain
     .getByLabel('Review rationale')
     .fill('The recorded stdout bytes match the expected deterministic result.')
   await page.getByRole('button', { name: /submit review/i }).click()
+
+  // Recording a verdict is a new durable mutation, not a side effect of the
+  // notebook approval. It must ask independently; otherwise the UI either
+  // bypassed SessionActor or waits forever on a prompt this test never answers.
+  const allowReview = page.getByRole('button', { name: /allow/i }).first()
+  await allowReview.waitFor({ timeout: 30_000 })
+  await allowReview.click()
+
   await expect
     .poll(async () => page.locator('#panel-review pre').textContent(), { timeout: 30_000 })
     .toContain('"ok": true')
