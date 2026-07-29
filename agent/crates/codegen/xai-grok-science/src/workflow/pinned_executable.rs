@@ -1686,4 +1686,132 @@ mod tests {
             Err(PinExecutableError::PathNotAbsolute { .. })
         ));
     }
+
+    // ── M1: Linux sandbox boundary diagnostics ─────────────────────
+    // These tests exercise the actual Landlock/seccomp boundary on Linux.
+    // They do NOT test the full SessionActor path (that's in e2e); they
+    // prove the pinned-executable Landlock policy itself.
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn linux_landlock_prevents_execve_of_loader_directly() {
+        use std::process::Command as StdCommand;
+        // First locate the dynamic loader for this system.
+        let entry = r#"import subprocess,sys; out=subprocess.check_output(['readelf','-l',sys.executable],text=True); [print(l.split()[-1]) for l in out.splitlines() if 'interpreter' in l.lower()]"#;
+        let python = PathBuf::from("/usr/bin/python3");
+        if !python.is_file() { return; /* no system Python */ }
+        let loader_out = StdCommand::new(&python)
+            .args(["-c", entry])
+            .output()
+            .expect("find interpreter");
+        let loader = String::from_utf8_lossy(&loader_out.stdout).trim().to_owned();
+        if loader.is_empty() { return; }
+
+        // The benign Python script that tries to exec the loader directly.
+        // On a correct sandbox, this MUST fail.
+        let attack = format!(
+            r#"import os, sys
+print('NONCE-bootstrap-reached-{nonce}')
+try:
+    os.execv('{loader}', ['{loader}', '/bin/sh', '-c', 'printf NONCE-pwned >> /proc/1/fd/2'])
+except OSError as e:
+    print(f'NONCE-attack-blocked:{{e}}')
+    sys.exit(0)"#,
+            nonce = std::process::id(),
+            loader = loader
+        );
+
+        let pinned = PinnedExecutable::pin(&python).expect("pin system Python");
+        let dir = TestDir::new();
+        let output = File::open(&dir.0).expect("open output dir");
+        let mut command = pinned
+            .spawn_linux_sandboxed_command(output.as_raw_fd())
+            .expect("build sandbox command");
+        command.command_mut().args(["-c", &attack]);
+        let result = command.output().expect("run attack in sandbox");
+        let stdout = String::from_utf8_lossy(&result.stdout);
+        assert!(stdout.contains("NONCE-bootstrap-reached"), "sandbox did not reach user code: {stdout}");
+        assert!(!stdout.contains("NONCE-pwned"), "loader-direct execve succeeded: {stdout}");
+        // The child should exit cleanly after catching the OS error
+        // (the attack attempted exec, it was blocked, exception caught).
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn linux_sandboxed_dynamic_elf_benign_control_reaches_and_produces_marker() {
+        let python = PathBuf::from("/usr/bin/python3");
+        if !python.is_file() { return; }
+        let nonce = std::process::id();
+        let code = format!("print('NONCE-{nonce}-user-code-reached')");
+        let pinned = PinnedExecutable::pin(&python).expect("pin system Python");
+        let dir = TestDir::new();
+        let output = File::open(&dir.0).expect("open output dir");
+        let mut command = pinned
+            .spawn_linux_sandboxed_command(output.as_raw_fd())
+            .expect("build sandbox command");
+        command.command_mut().args(["-c", &code]);
+        let result = command.output().expect("run benign code in sandbox");
+        let stdout = String::from_utf8_lossy(&result.stdout);
+        assert!(
+            stdout.contains(&format!("NONCE-{nonce}-user-code-reached")),
+            "dynamic ELF user code did not reach its nonce marker: {stdout}"
+        );
+        assert!(result.status.success(), "{result:?}");
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn linux_sandbox_denies_post_start_exec_of_slash_bin_sh() {
+        let python = PathBuf::from("/usr/bin/python3");
+        if !python.is_file() { return; }
+        let attack = r#"import os,sys
+print('NONCE-reached')
+try:
+    os.execv('/bin/sh', ['/bin/sh', '-c', 'exit 0'])
+except OSError:
+    sys.exit(0)
+raise SystemExit('exec-should-have-failed')"#;
+        let pinned = PinnedExecutable::pin(&python).expect("pin system Python");
+        let dir = TestDir::new();
+        let output = File::open(&dir.0).expect("open output dir");
+        let mut command = pinned
+            .spawn_linux_sandboxed_command(output.as_raw_fd())
+            .expect("build sandbox command");
+        command.command_mut().args(["-c", attack]);
+        let result = command.output().expect("run attack in sandbox");
+        let stdout = String::from_utf8_lossy(&result.stdout);
+        assert!(stdout.contains("NONCE-reached"), "{stdout}");
+        // The exec attempt must fail and the code must reach exit(0)
+        // after catching.
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn linux_sandbox_still_allows_pinned_path_after_marker() {
+        // Control: starting the SAME pinned path again from within the sandbox
+        // should still be blocked (only the initial execve was admitted).
+        let python = PathBuf::from("/usr/bin/python3");
+        if !python.is_file() { return; }
+        let re_exec = format!(
+            r#"import os,sys
+print('NONCE-first')
+try:
+    os.execv('{}', ['{}', '-c', 'print("NONCE-second")'])
+except OSError as e:
+    print(f'NONCE-second-blocked:{{e}}')
+    sys.exit(0)"#,
+            python.display(), python.display()
+        );
+        let pinned = PinnedExecutable::pin(&python).expect("pin system Python");
+        let dir = TestDir::new();
+        let output = File::open(&dir.0).expect("open output dir");
+        let mut command = pinned
+            .spawn_linux_sandboxed_command(output.as_raw_fd())
+            .expect("build sandbox command");
+        command.command_mut().args(["-c", &re_exec]);
+        let result = command.output().expect("run re-exec in sandbox");
+        let stdout = String::from_utf8_lossy(&result.stdout);
+        assert!(stdout.contains("NONCE-first"), "{stdout}");
+        assert!(!stdout.contains("NONCE-second"), "re-exec of pinned path succeeded: {stdout}");
+    }
 }

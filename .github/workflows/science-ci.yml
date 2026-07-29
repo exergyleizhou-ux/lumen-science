@@ -250,6 +250,8 @@ jobs:
             test_stdio_science_workflow_execute_retains_store_and_interpreter_across_approval
             test_stdio_science_workflow_execute_fails_closed
             test_stdio_science_workflow_execute_denied_runs_nothing
+            test_stdio_science_connector_fetch_product_path
+            test_stdio_science_biomni_uniprot_capability_product_path
           )
 
           # libtest exits successfully when an exact filter matches zero tests.
@@ -344,6 +346,8 @@ jobs:
             test_stdio_science_workflow_execute_fails_closed
             test_stdio_science_workflow_execute_denied_runs_nothing
             test_stdio_science_workflow_execute_macos_rejects_unprotected_interpreter_before_permission
+            test_stdio_science_connector_fetch_product_path
+            test_stdio_science_biomni_uniprot_capability_product_path
           )
 
           listed_tests="$(
