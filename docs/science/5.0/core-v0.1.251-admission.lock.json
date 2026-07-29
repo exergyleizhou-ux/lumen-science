@@ -78,7 +78,7 @@
     "tool": "scripts/check-core-drift.py",
     "basis": "audited_lumen_main_head",
     "lumen_head": "dc563b1e0db9eaca7e970d56d7816e1522511723",
-    "science_code_head": "3169a06f92ba2e4872c6a1d4cd2d3a2e40a946a2",
+    "science_code_head": "703fff8320fbe9fa51ade7d4e2fc7ad2b4d93e71",
     "comparison_scope": "Science working-tree bytes based on science_code_head; CI rederives the manifest from exact committed bytes",
     "diverged_rust_files": 129,
     "missing_in_science_rust_files": 5,
