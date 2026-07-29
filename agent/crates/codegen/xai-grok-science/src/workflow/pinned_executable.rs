@@ -445,11 +445,18 @@ impl PinnedExecutable {
         let executable_capability =
             open_verified_linux_executable_capability(&self.canonical_path, &self.sha256)
                 .map_err(io::Error::other)?;
+        let (loader_capability, _loader_sha256) =
+            open_verified_linux_loader_capability(&self.canonical_path)
+                .map_err(io::Error::other)?;
         let mut command = Command::new(&self.canonical_path);
         // SAFETY: the closure captures parent-built BPF instructions and
         // parent-opened descriptor capabilities, then performs only syscalls.
         unsafe {
             command.pre_exec(move || {
+                // Keep the exact verified PT_INTERP inode alive until the
+                // kernel begins the first exec. It receives no Landlock
+                // EXECUTE grant, so user code cannot invoke it directly.
+                let _loader_fd = loader_capability.as_raw_fd();
                 apply_linux_landlock_and_seccomp(
                     output_capability.as_raw_fd(),
                     executable_capability.as_raw_fd(),
@@ -1458,7 +1465,7 @@ fn create_snapshot(
 
 /// Require `/usr/bin/python3` that is a canonical, native ELF.
 /// Panics with diagnostic if not found — no silent skip.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", test))]
 pub(crate) fn require_linux_system_python() -> std::path::PathBuf {
     use std::path::Path;
     let candidates = [
