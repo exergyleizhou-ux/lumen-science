@@ -185,6 +185,43 @@ const noTransport = async (): Promise<never> => {
   throw new Error('no science engine transport wired: callScienceTool was not provided')
 }
 
+export type NotebookInterpreterResolution =
+  | { ok: true; interpreterPath: string }
+  | { ok: false; reason: string }
+
+/**
+ * Select an observation-only, absolute candidate for the SessionActor.
+ *
+ * Discovery is deliberately not a readiness probe: executing `--version`
+ * before approval would move authority back into Desktop. The actor receives
+ * the pinned path and decides, after permission, whether it is a valid Python
+ * kernel. `runnable` must therefore not be used as a precondition here.
+ */
+export async function resolveNotebookInterpreter(
+  environment: Pick<EnvironmentService, 'discover'> | null | undefined,
+): Promise<NotebookInterpreterResolution> {
+  if (!environment) {
+    return {
+      ok: false,
+      reason:
+        'no runtime root configured for this process — cannot name the interpreter ' +
+        'this cell would run on, so nothing was executed',
+    }
+  }
+  const report = await environment.discover('python')
+  const candidate = report.interpreters[0]
+  if (!candidate) {
+    return {
+      ok: false,
+      reason:
+        `no absolute Python interpreter candidate was discovered on this machine ` +
+        `(pinned=0 unpinned=${report.unpinned.length}). ` +
+        'Add a Python interpreter in Settings, install python3, or check PATH.',
+    }
+  }
+  return { ok: true, interpreterPath: candidate.interpreterPath }
+}
+
 export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIpcDeps): void {
   const callTool = deps.callScienceTool ?? noTransport
   const listTools = deps.listScienceTools ?? noTransport
@@ -203,35 +240,10 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
       approvalTimeoutMs: ENGINE_APPROVAL_TIMEOUT_MS,
       // Resolves lazily at execute time (`environment` is declared further
       // down this function; by the time a cell runs, it is initialised). The
-      // first runnable Python is taken in DISCOVERY order, which is
-      // deterministic: manual settings entries, then PATH, then well-known
-      // install dirs — so a user's explicit choice wins over a system default.
-      resolveInterpreter: async () => {
-        if (!environment) {
-          return {
-            ok: false as const,
-            reason:
-              'no runtime root configured for this process — cannot name the interpreter ' +
-              'this cell would run on, so nothing was executed',
-          }
-        }
-        const report = await environment.discover('python')
-        const usable = report.interpreters.find((i) => i.runnable)
-        if (!usable) {
-          const pinned = report.interpreters.filter((i) => i.interpreterPath.startsWith('/'))
-          const unpinned = report.interpreters.length - pinned.length
-          const probed = pinned.filter((i) => i.version !== undefined || i.detail !== undefined)
-          return {
-            ok: false as const,
-            reason:
-              `no runnable Python interpreter was discovered on this machine ` +
-              `(total=${report.interpreters.length} pinned=${pinned.length} ` +
-              `unpinned=${unpinned} versionProbed=${probed.length}). ` +
-              'Add a Python 3 interpreter in Settings, install python3, or check PATH.',
-          }
-        }
-        return { ok: true as const, interpreterPath: usable.interpreterPath }
-      },
+      // Discovery order is deterministic: manual settings entries, PATH, then
+      // well-known install dirs. The selected absolute path is only a request;
+      // SessionActor probes and admits it after approval.
+      resolveInterpreter: () => resolveNotebookInterpreter(environment),
     })
 
   safeHandle(ipcMain, 'acp:call', async (_event, toolName: unknown, args: unknown) => {

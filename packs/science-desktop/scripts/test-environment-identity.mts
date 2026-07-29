@@ -51,6 +51,7 @@ import { buildKernelAdmissionRequest } from '../src/main/environment/admission-r
 import { createEnvironmentService } from '../src/main/environment/service.js'
 import {
   registerScienceIpcHandlers,
+  resolveNotebookInterpreter,
   type IpcMainLike,
   type SafeHandleFn,
 } from '../src/main/files/science-ipc.js'
@@ -631,6 +632,44 @@ async function run(): Promise<void> {
     )
     ok(!serviceSource.includes('identifyInterpreter'))
     ok(!serviceSource.includes('discoverInterpreters'))
+  })
+
+  await test('notebook execution forwards an observation-only candidate to SessionActor', async () => {
+    const resolved = await resolveNotebookInterpreter({
+      discover: async () => ({
+        language: 'python',
+        interpreters: [
+          {
+            envId: 'external:/usr/bin/python3',
+            language: 'python',
+            interpreterPath: '/usr/bin/python3',
+            provenance: 'system',
+            runnable: false,
+            detail: 'not probed before approval',
+          },
+        ],
+        unpinned: [],
+      }),
+    })
+    deepStrictEqual(resolved, {
+      ok: true,
+      interpreterPath: '/usr/bin/python3',
+    })
+  })
+
+  await test('notebook execution reports unpinned candidates without probing them', async () => {
+    const resolved = await resolveNotebookInterpreter({
+      discover: async () => ({
+        language: 'python',
+        interpreters: [],
+        unpinned: [{ candidate: 'python3', reason: 'not absolute' }],
+      }),
+    })
+    strictEqual(resolved.ok, false)
+    if (!resolved.ok) {
+      ok(resolved.reason.includes('pinned=0 unpinned=1'), resolved.reason)
+      ok(!resolved.reason.includes('versionProbed'), resolved.reason)
+    }
   })
 
   // ── 7. IPC surface ─────────────────────────────────────────────
