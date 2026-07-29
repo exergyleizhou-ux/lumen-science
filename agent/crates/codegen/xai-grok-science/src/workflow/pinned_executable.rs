@@ -2055,7 +2055,7 @@ raise SystemExit('exec-should-have-failed')
             MBL = MARKER_BLOCKED,
             ld = loader.display(),
         );
-        let (_result, stdout, _stderr) = run_linux_sandboxed(&python, &code);
+        let (_result, stdout, stderr) = run_linux_sandboxed(&python, &code);
         assert!(!stdout.is_empty(), "sandbox produced no stdout");
         let bs_marker = format!("{MARKER_BOOTSTRAP}_{nonce}");
         let bl_marker_prefix = format!("{MARKER_BLOCKED}_{nonce}");
@@ -2144,7 +2144,7 @@ raise SystemExit('exec-should-have-failed')
             MSS = MARKER_SUCCEEDED,
             py = python.display(),
         );
-        let (_result, stdout, stderr) = run_linux_sandboxed(&python, &code);
+        let (_result, stdout, _stderr) = run_linux_sandboxed(&python, &code);
         let bs = format!("{MARKER_BOOTSTRAP}_{nonce}");
         assert_marker_count(&stdout, &bs, 1, "bootstrap");
         // The BLOCKED marker must NOT contain the SUCCEEDED marker as a substring
