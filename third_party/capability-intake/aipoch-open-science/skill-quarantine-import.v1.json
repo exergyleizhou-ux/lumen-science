@@ -26,8 +26,8 @@
     "source_provenance": "third_party/provenance/open-science-fd2853-skill-quarantine.md",
     "legacy_product_tests": "agent/crates/codegen/xai-grok-shell/tests/test_built_binary_e2e.rs",
     "built_binary_proof": {
-      "source_commit": "5eb9ca5aff61495c2a44d240983a729f1c0a64d2",
-      "binary_sha256": "0caba57f0bf524bc6f703806e96a31092780c7fe2456a3656bdbbd5b7c991b64",
+      "source_commit": "7f0fce4b789e8d7883f09a59339e9e7747375393",
+      "binary_sha256": "9e2559a84012b3ad01a33c90e0a0d2c66fdffc9d6f3ee0bd9b0bb591bfdc3893",
       "tests": [
         "test_stdio_science_skill_quarantine_is_actor_gated_store_owned_and_replayable",
         "test_stdio_science_skill_quarantine_denied_and_cancelled_write_nothing",
