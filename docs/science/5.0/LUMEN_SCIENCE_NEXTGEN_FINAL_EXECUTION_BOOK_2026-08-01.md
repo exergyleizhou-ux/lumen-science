@@ -705,7 +705,7 @@ Draft → AwaitingScheduleApproval → Scheduled → Leased → Starting
 
 **前置：** `LUMEN_R0_SOURCE_GATE=PASS`；不等待 Kairos。source ownership 的只读 inventory 可与 R0 并行，但 enforcement/pin-lock 只能以通过该 gate 的 source 为准。交付 Core ownership map、禁止新增 copied-Core path 的 mechanical gate、one-source pin-lock schema 和 draft-only upgrade bot skeleton。先固定一种消费形态：版本化 `lumen-platform-api`/SDK crate **或**版本化 ACP extension protocol；不能一边依赖本机 `/Users/lei/code/lumen` path、一边宣称 single-base。
 
-M1-A verifier 必须检查 exact Git revision、manifest digest、`Cargo.lock`、`cargo metadata` 中没有未批准 path dependency，且 Core ownership map 没有重新扩张。机器人只开 draft PR，绝不自动 merge。
+M1-A verifier 必须检查 exact Git revision、manifest digest、`Cargo.lock`、`cargo metadata` 中没有未批准 path dependency，且 Core ownership map 没有重新扩张。active pin 必须满足 `source.commit == canonical_main_commit == platform_api.commit == verification.ci_commit`；rollback 的 source/API 也必须是同一个、不同于 active 的 commit。这样不能把“一个 source、另一个 API、第三个 CI”的拼接证据误当成 single-base。机器人只开 draft PR，绝不自动 merge。
 
 **当前 P0 约束：** 在 generic host 出现前，Desktop 不得以“本地 settings”名义重开 skill 内容/激活写入。已封住 GitHub URL 与 agent-home direct import；个人 skill 的 create/update/delete/enable 以及 runtime materializer 仍是待迁 legacy authority，具体 inventory、目标状态机和必须的负例见 [Skill Authority Migration Contract](SKILL_AUTHORITY_MIGRATION_CONTRACT_2026-08-01.md)。该合同不授权在 copied Core 中再新增专用命令；generic operation 必须等待 `PLATFORM_API_GATE=PASS`。
 

@@ -55,18 +55,34 @@ def validate(pin: dict[str, Any]) -> int:
     require(isinstance(verification, dict), "active platform pin needs exact CI evidence")
     require(isinstance(rollback, dict), "active platform pin needs rollback evidence")
     require(SHA.fullmatch(str(source.get("commit"))) is not None, "source.commit must be a full SHA")
+    require(
+        source.get("canonical_main_commit") == source["commit"],
+        "active source.commit must be the exact canonical main commit",
+    )
     require(SHA256.fullmatch(str(source.get("source_lock_sha256"))) is not None, "source.source_lock_sha256 must be SHA-256")
     require(SHA256.fullmatch(str(source.get("r0_manifest_sha256"))) is not None, "source.r0_manifest_sha256 must be SHA-256")
     require(SHA.fullmatch(str(api.get("commit"))) is not None, "platform_api.commit must be a full SHA")
+    require(
+        api["commit"] == source["commit"],
+        "platform API must be shipped by the exact Lumen source commit consumed by Science",
+    )
     require(SEMVER.fullmatch(str(api.get("semver"))) is not None, "platform_api.semver must be SemVer")
     require(SHA256.fullmatch(str(api.get("compatibility_manifest_sha256"))) is not None, "platform_api.compatibility_manifest_sha256 must be SHA-256")
     require(isinstance(api.get("public_adapter_compile_fixture"), str) and len(api["public_adapter_compile_fixture"]) >= 10, "platform API needs a named public adapter compile fixture")
     require(URL.fullmatch(str(verification.get("github_ci_run"))) is not None, "verification.github_ci_run must be an exact GitHub Actions run URL")
+    require(
+        verification.get("ci_commit") == source["commit"],
+        "exact GitHub CI must have tested the exact consumed source commit",
+    )
     require(SHA256.fullmatch(str(verification.get("binary_sha256"))) is not None, "verification.binary_sha256 must be SHA-256")
     require(SHA.fullmatch(str(rollback.get("source_commit"))) is not None, "rollback.source_commit must be a full SHA")
     require(SHA.fullmatch(str(rollback.get("platform_api_commit"))) is not None, "rollback.platform_api_commit must be a full SHA")
     require(rollback["source_commit"] != source["commit"], "rollback source cannot equal active source")
     require(rollback["platform_api_commit"] != api["commit"], "rollback API cannot equal active API")
+    require(
+        rollback["platform_api_commit"] == rollback["source_commit"],
+        "rollback API must be supplied by the same rollback source commit",
+    )
     print("PASS: canonical Lumen source/API pin has complete Science consumer evidence")
     return 0
 

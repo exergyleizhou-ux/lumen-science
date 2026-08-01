@@ -25,10 +25,15 @@ def active_pin() -> dict[str, object]:
         "status": "active",
         "repository": "https://github.com/exergyleizhou-ux/lumen.git",
         "consumer": "lumen-science",
-        "source": {"commit": "a" * 40, "source_lock_sha256": "b" * 64, "r0_manifest_sha256": "c" * 64},
-        "platform_api": {"commit": "d" * 40, "semver": "1.0.0", "compatibility_manifest_sha256": "e" * 64, "public_adapter_compile_fixture": "lumen-platform-extension-fixture"},
-        "verification": {"github_ci_run": "https://github.com/exergyleizhou-ux/lumen/actions/runs/123456", "binary_sha256": "f" * 64},
-        "rollback": {"source_commit": "1" * 40, "platform_api_commit": "2" * 40},
+        "source": {
+            "commit": "a" * 40,
+            "canonical_main_commit": "a" * 40,
+            "source_lock_sha256": "b" * 64,
+            "r0_manifest_sha256": "c" * 64,
+        },
+        "platform_api": {"commit": "a" * 40, "semver": "1.0.0", "compatibility_manifest_sha256": "e" * 64, "public_adapter_compile_fixture": "lumen-platform-extension-fixture"},
+        "verification": {"github_ci_run": "https://github.com/exergyleizhou-ux/lumen/actions/runs/123456", "ci_commit": "a" * 40, "binary_sha256": "f" * 64},
+        "rollback": {"source_commit": "1" * 40, "platform_api_commit": "1" * 40},
     }
 
 
@@ -39,11 +44,20 @@ def main() -> int:
     del incomplete["platform_api"]["compatibility_manifest_sha256"]
     same_rollback = copy.deepcopy(valid)
     same_rollback["rollback"]["source_commit"] = valid["source"]["commit"]
+    api_from_another_source = copy.deepcopy(valid)
+    api_from_another_source["platform_api"]["commit"] = "d" * 40
+    stale_ci = copy.deepcopy(valid)
+    stale_ci["verification"]["ci_commit"] = "d" * 40
+    split_rollback = copy.deepcopy(valid)
+    split_rollback["rollback"]["platform_api_commit"] = "2" * 40
     results = [
         ("checked-in draft is an explicit non-pass blocker", MODULE.validate(draft) == 2),
         ("complete active evidence is accepted", MODULE.validate(valid) == 0),
         ("active pin without compatibility evidence fails", _fails(incomplete)),
         ("active pin without distinct rollback fails", _fails(same_rollback)),
+        ("API from another source commit fails", _fails(api_from_another_source)),
+        ("CI for another source commit fails", _fails(stale_ci)),
+        ("split rollback source/API pair fails", _fails(split_rollback)),
     ]
     for name, passed in results:
         print(f"  {'ok' if passed else 'FAIL':<4}  {name}")
