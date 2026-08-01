@@ -177,7 +177,7 @@ def verify_component(
         require(reuse_mode == "none", f"{label} rejected component cannot have a reuse mode")
 
 
-def verify_evidence_record(source: dict[str, Any], record_path: str, label: str) -> None:
+def verify_evidence_record(source: dict[str, Any], record_path: str, label: str) -> set[str] | None:
     path = ROOT / record_path
     evidence = load_json(path, f"{label} evidence record")
     require(evidence.get("schema_version") == 1, f"{label} evidence record schema_version must be 1")
@@ -217,6 +217,45 @@ def verify_evidence_record(source: dict[str, Any], record_path: str, label: str)
             all(entry.get("disposition") == "quarantine" and entry.get("execution_authority") == "none" for entry in entries),
             f"{label} tree inventory contains a non-quarantined or executable entry",
         )
+        return {entry["path"] for entry in entries}
+    return None
+
+
+def tree_glob_matches(pattern: str, path: str) -> bool:
+    """Match a slash-aware, relative ``*``/``**`` source glob."""
+    expression = ""
+    index = 0
+    while index < len(pattern):
+        character = pattern[index]
+        if character == "*" and index + 1 < len(pattern) and pattern[index + 1] == "*":
+            expression += ".*"
+            index += 2
+        elif character == "*":
+            expression += "[^/]*"
+            index += 1
+        else:
+            expression += re.escape(character)
+            index += 1
+    return re.fullmatch(expression, path) is not None
+
+
+def verify_component_source_presence(
+    component: dict[str, Any], label: str, source_id: str, tree_paths: set[str] | None
+) -> None:
+    if tree_paths is None:
+        require(
+            source_id.startswith("exergyleizhou-ux-"),
+            f"{label} has no tree receipt and is not a Core-gated source",
+        )
+        require(component["disposition"] == "catalog-only", f"{label} cannot be admitted before the Core source gate")
+        return
+    if any(tree_glob_matches(component["path"], path) for path in tree_paths):
+        return
+    require(
+        component["asset_kind"] in {"data", "model", "binary", "service"}
+        and component["disposition"] in {"quarantine", "reject-data-model"},
+        f"{label} path is absent from its source tree and is not a constrained external asset reference",
+    )
 
 
 def verify_source_records(
@@ -278,9 +317,13 @@ def verify_source_records(
             key = (source_id, path)
             require(key not in seen_component_keys, f"lock repeats component path: {source_id}:{path}")
             seen_component_keys.add(key)
+        tree_paths: set[str] | None = None
         if verify_evidence_records:
             require(len(record_paths) == 1, f"{label} components must point to one canonical source evidence record")
-            verify_evidence_record(source, next(iter(record_paths)), label)
+            tree_paths = verify_evidence_record(source, next(iter(record_paths)), label)
+        if verify_evidence_records:
+            for component_index, component in enumerate(components):
+                verify_component_source_presence(component, f"{label}.components[{component_index}]", source_id, tree_paths)
     require(seen_sources == EXPECTED_SOURCE_IDS, "lock must contain exactly the nine expected source ids")
     for key in forbidden:
         require(key in seen_component_keys, f"lock is missing forbidden component inventory: {key[0]}:{key[1]}")

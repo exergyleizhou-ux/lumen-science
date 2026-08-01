@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import importlib.util
 import json
 import subprocess
 import sys
@@ -135,6 +136,11 @@ def main() -> int:
     pristine = active_lock()
     results: list[tuple[str, bool, str]] = []
 
+    spec = importlib.util.spec_from_file_location("upstream_lock_v2", VERIFIER)
+    assert spec is not None and spec.loader is not None
+    verifier_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(verifier_module)
+
     def check(
         name: str,
         mutate: Callable[[dict[str, Any]], None] | None,
@@ -186,6 +192,30 @@ def main() -> int:
         1,
         "violates forbidden-path disposition",
     )
+
+    try:
+        verifier_module.verify_component_source_presence(
+            {"path": "missing/code.rs", "asset_kind": "code", "disposition": "adapt"},
+            "missing-code",
+            "aipoch-open-science",
+            {"src/real.rs"},
+        )
+        source_presence_rejects_missing_code = False
+    except ValueError as error:
+        source_presence_rejects_missing_code = "absent from its source tree" in str(error)
+    results.append(("a source-code component cannot name a path absent from its exact tree", source_presence_rejects_missing_code, "" if source_presence_rejects_missing_code else "missing-tree code path was accepted"))
+
+    try:
+        verifier_module.verify_component_source_presence(
+            {"path": "weights/model.safetensors", "asset_kind": "model", "disposition": "reject-data-model"},
+            "external-model",
+            "aurekaresearch-opendde",
+            {"runner/inference.py"},
+        )
+        constrained_external_asset_allowed = True
+    except ValueError:
+        constrained_external_asset_allowed = False
+    results.append(("a missing external model remains a constrained reference rather than a fabricated source path", constrained_external_asset_allowed, "" if constrained_external_asset_allowed else "constrained external model was rejected"))
 
     draft = copy.deepcopy(pristine)
     draft["status"] = "draft"
