@@ -938,17 +938,38 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn take_over_acquires_cleanly_when_predecessor_releases() {
+        use std::sync::{Arc, Mutex};
+
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("ws.pid");
 
         let holder = PidFile::acquire(&path).unwrap().unwrap();
-        let mut child = spawn_predecessor();
-        fs::write(&path, child.id().to_string()).unwrap();
+        let child = Arc::new(Mutex::new(spawn_predecessor()));
+        fs::write(&path, child.lock().unwrap().id().to_string()).unwrap();
 
-        // Release the lock shortly after the takeover starts waiting,
-        // simulating the predecessor finishing its drain within grace.
+        // Release the lock only after the takeover has signaled the
+        // predecessor. A fixed sleep here races the takeover's first acquire
+        // attempt: when the CI scheduler delays this thread past the sleep,
+        // the takeover sees a free lock, returns without killing the stale
+        // pidfile owner, and the test fails spuriously ("predecessor must be
+        // terminated"). Gating the release on the predecessor's exit makes the
+        // ordering deterministic under any scheduling load.
+        let child_for_release = Arc::clone(&child);
         let release = thread::spawn(move || {
-            thread::sleep(Duration::from_millis(100));
+            let deadline = Instant::now() + Duration::from_secs(10);
+            loop {
+                let exited = child_for_release
+                    .lock()
+                    .unwrap()
+                    .try_wait()
+                    .ok()
+                    .flatten()
+                    .is_some();
+                if exited || Instant::now() >= deadline {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(5));
+            }
             drop(holder);
         });
 
@@ -956,6 +977,10 @@ mod tests {
             PidFile::acquire_or_take_over_matching(&path, Duration::from_secs(5), "sleep").unwrap();
         release.join().expect("release thread");
 
+        let mut child = Arc::try_unwrap(child)
+            .ok()
+            .expect("no other child refs")
+            .into_inner();
         assert!(
             wait_for_exit(&mut child, Duration::from_secs(2)),
             "the predecessor must be terminated"
