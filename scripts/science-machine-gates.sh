@@ -139,6 +139,12 @@ ok "Rust Core VERSION contract (root + agent + 8 crates)"
 python3 scripts/check-core-drift.py --self-test
 ok "Core drift fixture self-test"
 
+# Freeze the copied authority surface. This is an anti-growth gate, not a
+# single-base completion claim: only a public Lumen platform-port migration or
+# an explicitly reviewed exception may update its digest.
+python3 scripts/test-science-core-ownership.py
+ok "copied-Core ownership anti-growth contract"
+
 # Audited-head Core drift comparison when that exact Lumen checkout is provided.
 # Local: CORE_DRIFT_UPSTREAM_ROOT=/Users/lei/code/lumen
 # CI: checkout the lock pin into a temp dir and set the same env var.
