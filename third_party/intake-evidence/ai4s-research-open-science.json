@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "source_id": "ai4s-research-open-science",
+  "exact_commit": "f3928bda37acfdbe3dfe18792fc1eca38c2e884f",
+  "tree_sha": "057b2d7631f0fd63c90e4b9ceadd5c87015122d6",
+  "archive_sha256": "5cd37c71206a5b9c55f820a454884c01b4731d01e06250f9883ed45c485292b4",
+  "root_license": {"spdx": "MIT", "path": "LICENSE", "sha256": "8f844b63f71cc8acb08d844081425183bc28fbb7312e1576651d2cf4cc013738"},
+  "nested_license_inventory": [["LICENSE", "8f844b63f71cc8acb08d844081425183bc28fbb7312e1576651d2cf4cc013738"]],
+  "runtime_admission": "none",
+  "rights_status": "pending-github-metadata-reconciliation"
+}

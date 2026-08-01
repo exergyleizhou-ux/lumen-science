@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "source_id": "exergyleizhou-ux-lumen",
+  "exact_commit": "2f47a9ad84e94b20291a1ad3d6b005ccbd3885f4",
+  "tree_sha": "ec3184d7854d258e0c7f9a3bda463aef10f1ff5e",
+  "archive_sha256": "3dedbe240a5e9d67de9a620f9055975fb5cf718494ad8cb9963bc3243aa959c1",
+  "root_license": {"spdx": "Apache-2.0", "path": "agent/LICENSE", "sha256": "116f7778b9802e569b7fa3a532b17bd80eb13c67837def01eed093d4ea472f28"},
+  "nested_license_inventory": [["agent/LICENSE", "116f7778b9802e569b7fa3a532b17bd80eb13c67837def01eed093d4ea472f28"]],
+  "runtime_admission": "none",
+  "source_gate_status": "blocked-upstream-r0"
+}

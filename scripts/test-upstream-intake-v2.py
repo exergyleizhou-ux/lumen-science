@@ -64,6 +64,7 @@ def active_lock() -> dict[str, Any]:
                 "exact_commit": f"{index:040x}",
                 "archive_sha256": f"{index:064x}",
                 "rights_status": "verified",
+                "source_gate_status": "pass",
                 "root_license": {"spdx": "MIT", "path": "LICENSE", "sha256": f"{index + 100:064x}"},
                 "nested_license_scan": {"status": "complete", "sha256": f"{index + 200:064x}"},
                 "components": components,
@@ -91,7 +92,7 @@ def run(lock: dict[str, Any]) -> subprocess.CompletedProcess[str]:
         lock_path = Path(tmp) / "lock.json"
         lock_path.write_text(json.dumps(lock, indent=2) + "\n", encoding="utf-8")
         return subprocess.run(
-            [sys.executable, str(VERIFIER), "--lock", str(lock_path), "--forbidden-paths", str(FORBIDDEN)],
+            [sys.executable, str(VERIFIER), "--lock", str(lock_path), "--forbidden-paths", str(FORBIDDEN), "--skip-evidence-records"],
             check=False,
             capture_output=True,
             text=True,
@@ -144,11 +145,20 @@ def main() -> int:
 
     draft = copy.deepcopy(pristine)
     draft["status"] = "draft"
-    draft["sources"] = []
+    draft["sources"][7]["source_gate_status"] = "blocked-upstream-r0"
     draft["blocked_by"] = ["I1-02 must collect immutable source and rights evidence before activation."]
     proc = run(draft)
     output = proc.stdout + proc.stderr
     results.append(("a draft lock reports BLOCKED rather than PASS", proc.returncode == 2 and "BLOCKED:" in output, "" if proc.returncode == 2 and "BLOCKED:" in output else f"exit={proc.returncode}; output={output.strip()[:240]!r}"))
+
+    actual = subprocess.run(
+        [sys.executable, str(VERIFIER), "--lock", str(ROOT / "third_party/upstream-lock.v2.json"), "--forbidden-paths", str(FORBIDDEN)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    actual_output = actual.stdout + actual.stderr
+    results.append(("the checked-in draft has nine matching evidence records", actual.returncode == 2 and "nine-source evidence" in actual_output, "" if actual.returncode == 2 and "nine-source evidence" in actual_output else f"exit={actual.returncode}; output={actual_output.strip()[:240]!r}"))
 
     passed = sum(1 for _, good, _ in results if good)
     print("test-upstream-intake-v2")

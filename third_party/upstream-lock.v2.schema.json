@@ -61,6 +61,7 @@
         "exact_commit",
         "archive_sha256",
         "rights_status",
+        "source_gate_status",
         "root_license",
         "nested_license_scan",
         "components"
@@ -80,7 +81,17 @@
           "$ref": "#/$defs/sha256"
         },
         "rights_status": {
-          "const": "verified"
+          "enum": [
+            "verified",
+            "pending"
+          ]
+        },
+        "source_gate_status": {
+          "enum": [
+            "pass",
+            "blocked-upstream-r0",
+            "evidence-collected"
+          ]
         },
         "root_license": {
           "type": "object"

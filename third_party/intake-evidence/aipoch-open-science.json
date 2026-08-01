@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "source_id": "aipoch-open-science",
+  "exact_commit": "fd2853f0b9bdb6c063ccc1e741687584ab94bf9a",
+  "tree_sha": "5233258b841987515c9eee29f3a38b07eb66e64a",
+  "archive_sha256": "6cc352223fefe342151d971097a28008127980120eaad5dfe6f613274ef84e5a",
+  "root_license": {"spdx": "Apache-2.0", "path": "LICENSE", "sha256": "b038148f912bdd6e61e33e56214d02c4d8a9640f7a637e21dfcf939332816979"},
+  "nested_license_inventory": [["LICENSE", "b038148f912bdd6e61e33e56214d02c4d8a9640f7a637e21dfcf939332816979"], ["packages/open-science/LICENSE", "b038148f912bdd6e61e33e56214d02c4d8a9640f7a637e21dfcf939332816979"]],
+  "runtime_admission": "none"
+}

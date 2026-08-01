@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "source_id": "snap-stanford-biomni",
+  "exact_commit": "400c1f366b96a35ca253e13c9b06c5076af41d65",
+  "tree_sha": "6d8f12a3222c4d78e1ac205245c73cbc58f9920e",
+  "archive_sha256": "e63cc1b59c4b42f043390d99e5fd3bc0304c978e737167fa270e3431c501818e",
+  "root_license": {"spdx": "Apache-2.0", "path": "LICENSE", "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"},
+  "nested_license_inventory": [["LICENSE", "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"]],
+  "runtime_admission": "none"
+}

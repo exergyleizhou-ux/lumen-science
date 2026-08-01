@@ -10,6 +10,7 @@ passing admission gate.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -169,9 +170,35 @@ def verify_component(
         require(reuse_mode == "none", f"{label} rejected component cannot have a reuse mode")
 
 
-def verify_active_lock(lock: dict[str, Any], forbidden: dict[tuple[str, str], dict[str, Any]]) -> None:
+def verify_evidence_record(source: dict[str, Any], record_path: str, label: str) -> None:
+    path = ROOT / record_path
+    evidence = load_json(path, f"{label} evidence record")
+    require(evidence.get("schema_version") == 1, f"{label} evidence record schema_version must be 1")
+    for field in ("source_id", "exact_commit", "archive_sha256"):
+        expected = source["id"] if field == "source_id" else source[field]
+        require(evidence.get(field) == expected, f"{label} evidence record {field} disagrees with lock")
+    require(evidence.get("runtime_admission") == "none", f"{label} evidence record cannot admit a runtime")
+    root_license = evidence.get("root_license")
+    require(root_license == source["root_license"], f"{label} evidence record root license disagrees with lock")
+    inventory = evidence.get("nested_license_inventory")
+    require(isinstance(inventory, list) and inventory, f"{label} evidence record has no nested license inventory")
+    encoded = json.dumps(inventory, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    actual_digest = hashlib.sha256(encoded).hexdigest()
+    require(
+        actual_digest == source["nested_license_scan"]["sha256"],
+        f"{label} evidence record nested license inventory digest disagrees with lock",
+    )
+
+
+def verify_source_records(
+    lock: dict[str, Any],
+    forbidden: dict[tuple[str, str], dict[str, Any]],
+    *,
+    active: bool,
+    verify_evidence_records: bool,
+) -> None:
     sources = lock.get("sources")
-    require(isinstance(sources, list), "active lock.sources must be a list")
+    require(isinstance(sources, list), "lock.sources must be a list")
     seen_sources: set[str] = set()
     seen_component_keys: set[tuple[str, str]] = set()
     for source_index, source in enumerate(sources):
@@ -188,7 +215,16 @@ def verify_active_lock(lock: dict[str, Any], forbidden: dict[tuple[str, str], di
         )
         require_sha(source.get("exact_commit"), f"{label}.exact_commit", SHA_RE)
         require_sha(source.get("archive_sha256"), f"{label}.archive_sha256")
-        require(source.get("rights_status") == "verified", f"{label}.rights_status must be verified")
+        rights_status = source.get("rights_status")
+        require(rights_status in {"verified", "pending"}, f"{label}.rights_status is unsupported")
+        source_gate_status = source.get("source_gate_status")
+        require(
+            source_gate_status in {"pass", "blocked-upstream-r0", "evidence-collected"},
+            f"{label}.source_gate_status is unsupported",
+        )
+        if active:
+            require(rights_status == "verified", f"{label}.rights_status must be verified for an active lock")
+            require(source_gate_status == "pass", f"{label}.source_gate_status must pass for an active lock")
         root_license = source.get("root_license")
         require(isinstance(root_license, dict), f"{label}.root_license must be an object")
         require(isinstance(root_license.get("spdx"), str) and root_license["spdx"], f"{label}.root_license.spdx is missing")
@@ -201,22 +237,29 @@ def verify_active_lock(lock: dict[str, Any], forbidden: dict[tuple[str, str], di
         components = source.get("components")
         require(isinstance(components, list) and components, f"{label}.components is empty")
         component_ids: set[str] = set()
+        record_paths: set[str] = set()
         for component_index, component in enumerate(components):
             component_label = f"{label}.components[{component_index}]"
             verify_component(component, component_label, forbidden, source_id)
             component_id = component["id"]
             path = component["path"]
+            record_paths.add(component["evidence"]["record"])
             require(component_id not in component_ids, f"{label} repeats component id: {component_id}")
             component_ids.add(component_id)
             key = (source_id, path)
             require(key not in seen_component_keys, f"lock repeats component path: {source_id}:{path}")
             seen_component_keys.add(key)
-    require(seen_sources == EXPECTED_SOURCE_IDS, "active lock must contain exactly the nine expected source ids")
+        if verify_evidence_records:
+            require(len(record_paths) == 1, f"{label} components must point to one canonical source evidence record")
+            verify_evidence_record(source, next(iter(record_paths)), label)
+    require(seen_sources == EXPECTED_SOURCE_IDS, "lock must contain exactly the nine expected source ids")
     for key in forbidden:
-        require(key in seen_component_keys, f"active lock is missing forbidden component inventory: {key[0]}:{key[1]}")
+        require(key in seen_component_keys, f"lock is missing forbidden component inventory: {key[0]}:{key[1]}")
 
 
-def verify_lock(lock: dict[str, Any], forbidden: dict[tuple[str, str], dict[str, Any]]) -> int:
+def verify_lock(
+    lock: dict[str, Any], forbidden: dict[tuple[str, str], dict[str, Any]], *, verify_evidence_records: bool
+) -> int:
     require(lock.get("schema_version") == 2, "lock schema_version must be 2")
     require(isinstance(lock.get("recorded_at"), str) and lock["recorded_at"], "lock.recorded_at is missing")
     verify_policy(lock.get("policy"))
@@ -226,16 +269,15 @@ def verify_lock(lock: dict[str, Any], forbidden: dict[tuple[str, str], dict[str,
     require(set(expected) == EXPECTED_SOURCE_IDS, "lock.expected_source_ids must be the exact nine-source set")
     status = lock.get("status")
     require(status in {"draft", "active"}, "lock.status must be draft or active")
+    verify_source_records(lock, forbidden, active=status == "active", verify_evidence_records=verify_evidence_records)
     if status == "draft":
-        require(lock.get("sources") == [], "draft lock must not pretend to contain active source records")
         blocked_by = lock.get("blocked_by")
         require(
             isinstance(blocked_by, list) and blocked_by and all(isinstance(item, str) and len(item) >= 20 for item in blocked_by),
             "draft lock must list substantive blockers",
         )
-        print("BLOCKED: upstream lock v2 is draft; I1-02 per-source evidence is still required")
+        print("BLOCKED: upstream lock v2 has nine-source evidence but is not eligible for admission")
         return 2
-    verify_active_lock(lock, forbidden)
     print("PASS: upstream lock v2 validates nine-source E1/E2 intake only")
     return 0
 
@@ -244,10 +286,15 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--lock", type=Path, default=DEFAULT_LOCK)
     parser.add_argument("--forbidden-paths", type=Path, default=DEFAULT_FORBIDDEN)
+    parser.add_argument("--skip-evidence-records", action="store_true")
     args = parser.parse_args()
     try:
         forbidden = verify_forbidden_paths(load_json(args.forbidden_paths, "forbidden-paths"))
-        return verify_lock(load_json(args.lock, "upstream lock"), forbidden)
+        return verify_lock(
+            load_json(args.lock, "upstream lock"),
+            forbidden,
+            verify_evidence_records=not args.skip_evidence_records,
+        )
     except ValueError as error:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1
