@@ -39,6 +39,14 @@ EXPECTATIONS = {
         "operation": "x.ai/science/capability_run",
         "source_markers": ("BIOMNI_QUERY_UNIPROT_PROVENANCE", "BIOMNI_QUERY_UNIPROT_CAPABILITY_ID"),
     },
+    "aipoch-skill-archive-preview-v1": {
+        "source_id": "aipoch-open-science",
+        "spdx": "Apache-2.0",
+        "paths": {"src/main/skills/skill-archive-sniffer.ts"},
+        "implementation_path": "packs/science-desktop/src/main/skills/skill-archive-sniffer.ts",
+        "operation": "settings:preview-skill-zip",
+        "source_markers": ("Adapted from Open Science at fd2853f0b9bdb6c063ccc1e741687584ab94bf9a.", "inspectOuterArchive"),
+    },
 }
 
 
@@ -67,11 +75,17 @@ def validate(record: dict[str, Any], lock: dict[str, Any]) -> None:
     require(rights.get("reuse_mode") == "adapt", "capability must be an adaptation record")
     implementation = record.get("implementation")
     require(isinstance(implementation, dict), "capability implementation must be an object")
-    require(implementation.get("authority") == "Rust Lumen SessionActor", "capability cannot name a second execution authority")
+    kind = record.get("kind", "actor-operation")
+    require(kind in {"actor-operation", "read-only-preview"}, "capability record kind is unsupported")
+    if kind == "actor-operation":
+        require(implementation.get("authority") == "Rust Lumen SessionActor", "capability cannot name a second execution authority")
+        require(implementation.get("network") == "denied" and implementation.get("process_execution") == "denied", "offline capability must deny network and process execution")
+        require(implementation.get("artifact_commit") == "store-owned hashed artifacts only", "capability must use store-owned artifacts")
+    else:
+        require(implementation.get("execution_authority") == "none", "preview cannot have execution authority")
+        require(implementation.get("network") == "denied" and implementation.get("process_execution") == "denied" and implementation.get("store_mutation") == "denied", "preview must deny network, process, and store mutation")
     require(implementation.get("path") == expected["implementation_path"], "capability implementation path disagrees with its id")
     require(implementation.get("operation") == expected["operation"], "capability operation disagrees with its id")
-    require(implementation.get("network") == "denied" and implementation.get("process_execution") == "denied", "offline capability must deny network and process execution")
-    require(implementation.get("artifact_commit") == "store-owned hashed artifacts only", "capability must use store-owned artifacts")
     receipt_path = ROOT / source["components"][0]["evidence"]["record"]
     receipt = load(receipt_path)
     inventory_path = ROOT / receipt["tree_inventory"]["path"]
@@ -96,7 +110,7 @@ def validate(record: dict[str, Any], lock: dict[str, Any]) -> None:
     if record["id"] == "motif-seq-analyze-v1":
         require(f'pub const MOTIF_COMMIT: &str = "{record["source_commit"]}";' in source_text, "seqbench commit disagrees with capability intake")
         require(all(f'"{path}".into()' in source_text for path in paths), "seqbench provenance omits an intake source path")
-    else:
+    elif record["id"] == "biomni-query-uniprot-v1":
         require(record["source_commit"] in source_text and all(item["sha256"] in source_text for item in source_files), "Biomni mapping provenance disagrees with capability intake")
     evidence = record.get("evidence")
     require(isinstance(evidence, dict) and evidence.get("intake_level") == "E2", "intake record may only claim E2")

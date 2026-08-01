@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "id": "aipoch-skill-archive-preview-v1",
+  "kind": "read-only-preview",
+  "source_id": "aipoch-open-science",
+  "source_commit": "fd2853f0b9bdb6c063ccc1e741687584ab94bf9a",
+  "rights": {
+    "root_spdx": "Apache-2.0",
+    "reuse_mode": "adapt",
+    "attribution": "The archive classifier is a source-level Apache adaptation with upstream and Lumen-specific negative tests."
+  },
+  "source_files": [
+    {"path": "src/main/skills/skill-archive-sniffer.ts", "sha256": "0c9fecfc7e9b0af0e25f57244a8a60e5e127d790c739e8970f65b63712392386"}
+  ],
+  "implementation": {
+    "path": "packs/science-desktop/src/main/skills/skill-archive-sniffer.ts",
+    "execution_authority": "none",
+    "operation": "settings:preview-skill-zip",
+    "network": "denied",
+    "process_execution": "denied",
+    "store_mutation": "denied"
+  },
+  "evidence": {
+    "intake_level": "E2",
+    "why_not_higher": "The bounded classifier is source/test proof only; it is not wired as a product import, approval, execution, built-binary, or exact-head CI claim.",
+    "source_provenance": "third_party/provenance/open-science-fd2853-skill-preview.md",
+    "legacy_product_tests": "packs/science-desktop/src/main/skills/skill-archive-sniffer.test.ts"
+  },
+  "next_gates": [
+    "Preview must remain unable to select, import, approve, or execute a skill.",
+    "Any import must enter the Rust SessionActor quarantine operation with owner/project/session/workspace bindings.",
+    "A rebuilt exact-source desktop proof is required before any product E4 claim."
+  ]
+}
