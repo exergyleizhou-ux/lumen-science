@@ -4608,6 +4608,10 @@ mod protocol_tests {
                     "restriction_digest_enzymes".into(),
                     options.restriction_digest_enzymes.join(","),
                 ),
+                (
+                    PRIMER_CANDIDATES_ENV.into(),
+                    canonical_primers(options).unwrap().join(","),
+                ),
             ]),
         }
     }
@@ -4626,7 +4630,7 @@ mod protocol_tests {
         };
         assert_eq!(
             request_sha256("inputs/golden.fasta", FASTA, &options).unwrap(),
-            "8da3bdd51407a8fa3d2d63b98235a46311f1a36f8aaf2e50e423856aa861b177"
+            "0e93701814154104612172bc773067f583e584ba18b5953c4e86bdd68c17f01b"
         );
     }
 
