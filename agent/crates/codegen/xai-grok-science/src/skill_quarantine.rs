@@ -5,6 +5,16 @@
 //! production permission decision, and only then call [`finish_quarantine`].
 //! Success stores the original archive and a deterministic manifest as hashed
 //! Science artifacts; it never materializes or enables a live skill.
+//!
+//! The bounded ZIP admission rules are a Rust, fail-closed adaptation of the
+//! archive-reader concerns in AIPOCH Open Science's
+//! `src/main/skills/zip-extract.ts` at `fd2853f0b9bdb6c063ccc1e741687584ab94bf9a`
+//! (Apache-2.0; SHA-256
+//! `613b5ae735796472e477d041d0525c248799087ccb4aeaf1251a3dc17bed9bed`).
+//! Unlike that UI-oriented lenient extractor, this authority path rejects an
+//! ambiguous, unsafe, malformed, unsupported, or over-budget archive before a
+//! run is created. Open Science's materializer is deliberately not adopted:
+//! quarantine records immutable evidence and never writes an enabled skill.
 
 use crate::{
     Approval, ApprovalDecision, Artifact, CallId, Evidence, Provenance, Result, RunContext, RunId,
