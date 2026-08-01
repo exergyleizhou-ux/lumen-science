@@ -1,0 +1,2529 @@
+{
+  "entries": [
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": ".github/ISSUE_TEMPLATE/bug-report.yml",
+      "sha256": "a676bcd348396ac927129662c736e7b62952866a981604d148a262a0579cc3d3",
+      "size_bytes": 2037
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": ".github/ISSUE_TEMPLATE/config.yml",
+      "sha256": "350178f8f41dccc3e6519978c68f450b798efa612c2a0d09e6eff3e7ed4cb310",
+      "size_bytes": 474
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": ".github/assets/motif-banner.png",
+      "sha256": "eefafdb37bb9a65a43dc1bb6631decb83fc7337e18fed3733ea4758c71195dd4",
+      "size_bytes": 656129
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": ".github/dependabot.yml",
+      "sha256": "06c866a85cd0a1c3d033f0d3774ae43993506bca4984d095de7e6ab53cac95c6",
+      "size_bytes": 257
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": ".github/workflows/ci.yml",
+      "sha256": "8d22de53515995c5aa19b06f49b7dcbb5855ed573c6406120f3587ffacc15a98",
+      "size_bytes": 1611
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": ".gitignore",
+      "sha256": "e50cd47037aeb75e1bd039ac8e0f23dcc0db2e54bdd4067b00a8bf8d2915ed2b",
+      "size_bytes": 512
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": ".gitleaksignore",
+      "sha256": "7586005cf56d88557538d65a7ee899b0e9ae2717bad7317f680115eba57a61c5",
+      "size_bytes": 294
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": ".nvmrc",
+      "sha256": "ccb4022e91abb8575a29d306d7aff041f578bb86eb1180d69475bb86a5c4512c",
+      "size_bytes": 8
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "AGENTS.md",
+      "sha256": "1f26ab653822bdeaf9bc6337daeb247fdbd14a86a183a29a0a6c843e87ae5834",
+      "size_bytes": 3792
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "CHANGELOG.md",
+      "sha256": "506df8891408377d844ce3d08213051fc9550c3af38727849e692652533cc75b",
+      "size_bytes": 2938
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "LICENSE",
+      "sha256": "606f9372bf61b63b32725d69f312ead92010afdaeea35befc46dc4db1ed19d49",
+      "size_bytes": 1073
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "README.md",
+      "sha256": "9957b0a7027534b8875b6006a92ae15f91be329cf94b50f3033f4f3fe98f66be",
+      "size_bytes": 10533
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "SECURITY.md",
+      "sha256": "40ceaa99b356c40fd2320a5bd72bae0aa26d1a6df87b9d4b450291f57a55f079",
+      "size_bytes": 1073
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "SUPPORT.md",
+      "sha256": "475c78409bbe3d0aef2b389bdfdd9c5527771ef09a06f3fa5bfe1c8f7338ecb4",
+      "size_bytes": 1053
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "THIRD_PARTY_NOTICES.md",
+      "sha256": "bd232ce379f02d9dd12bd648be236966a739c5fc7d7f9698dfa533c11a350347",
+      "size_bytes": 1112
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "docs/CAPABILITIES.md",
+      "sha256": "a47ad80b3ac6ec332fbbde30659fefbaabcf33ca724150716a2d07283f981487",
+      "size_bytes": 5428
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "docs/CLAUDE_SCIENCE_INTEGRATION.md",
+      "sha256": "bba40cf969d69553309df1026b2c345f2508f193e3165d7d0de242f8ab0ec66c",
+      "size_bytes": 7870
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "docs/CLAUDE_SCIENCE_QUICKSTART.md",
+      "sha256": "af6189f2986687afea46e55cf2c8e6156e653f2af47567953cba63d74680190c",
+      "size_bytes": 6006
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "docs/CLAUDE_SCIENCE_TROUBLESHOOTING.md",
+      "sha256": "052f423ec6bfe960a0bbfe5b9cc2bfda0f02192184121e80cbfce2c7eb0489d4",
+      "size_bytes": 7959
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "docs/assets/claude-science-motif-viewer.webp",
+      "sha256": "56edd039416a8867beaf2379872e61c7aeb3fb675c2369e6695cce65e1dcf770",
+      "size_bytes": 121260
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "e2e/claude-science-analysis-results.spec.ts",
+      "sha256": "9bae4b80abcd69da3f46d2e758f4177af823f81fce5acf65de2dd30addbb290e",
+      "size_bytes": 8081
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "e2e/claude-science-artifact.spec.ts",
+      "sha256": "de80ed73f4654f6f1c062d26344b9be16f156b45d3d934ce680fd0089e0b9b8d",
+      "size_bytes": 345932
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "e2e/claude-science-construct-verification.spec.ts",
+      "sha256": "c462ddd26553c068022208a0bdb818b6f932fba98b4f4a226944ad7029e2a507",
+      "size_bytes": 14537
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "e2e/claude-science-feature-semantics.spec.ts",
+      "sha256": "6a045533531b093134f0694f78f112df9520ae9657e15c0341ffa5c847413bda",
+      "size_bytes": 16015
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "e2e/claude-science-msa-interactions.spec.ts",
+      "sha256": "61a097cc63868cd98b296ff4d5ee20f235c6fd03e3f5e73e16b7ae745887be87",
+      "size_bytes": 80051
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "e2e/claude-science-pane-placement.spec.ts",
+      "sha256": "48f968b48d950c931e6bf56d30c75a4e3487938777eed1bfefedf3eb7583e094",
+      "size_bytes": 16741
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "e2e/claude-science-pcr-materialization.spec.ts",
+      "sha256": "c303ee6b2e57bb18b4b08247b99e30f6d010d52c1bd5dbc39271162885b35d5d",
+      "size_bytes": 5483
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "e2e/claude-science-real-sanger.spec.ts",
+      "sha256": "326ba540e7b0c2beb2f4d80d7aa144cf388a65fa61666de650ea4c76f89cf619",
+      "size_bytes": 11261
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "e2e/claude-science-workspace-integrity.spec.ts",
+      "sha256": "4a8dfab9cc73946bafc7dcd52d7cf0f7777c4100b36d28f5a162c1900727e114",
+      "size_bytes": 19522
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "e2e/fidelity-fixtures.ts",
+      "sha256": "47afd64a25ea38c449a56e6722c60d8dd3563e4509be4b6643ed53b478e90fef",
+      "size_bytes": 3085
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "e2e/playwright.msa.config.ts",
+      "sha256": "811317f5cfbb8b814f76c0cce3c2e1876509a29c1488e7af363404b8bceae479",
+      "size_bytes": 1495
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "e2e/playwright.pane-placement.config.ts",
+      "sha256": "5fc459a43dad07ace5df7a70098c16a8f7b2b99d19fae1b54d2f2f7368d37e2d",
+      "size_bytes": 1023
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "eslint.config.js",
+      "sha256": "9de1c2b45c922edf866350d2eb8ac8ca9aa108feef628e11784d30747b098e44",
+      "size_bytes": 2120
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "examples/README.md",
+      "sha256": "7cf48ea9bd39391f138164d1f6f20f1a8d19eed365e9c5c1a5da6d592edd39c3",
+      "size_bytes": 2495
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "examples/motif-demo.gb",
+      "sha256": "34d05c512b904215125aaa0a6acc5a05e6a98db40b2cc1cd4afb747ed71c83dc",
+      "size_bytes": 929
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "examples/synthetic-alignment-workspace.json",
+      "sha256": "59b2e46c4c2b722179b53cfa78b83bc6144cff5f3b5a06ad02ada8592e846fb5",
+      "size_bytes": 3892
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "examples/synthetic-proteins.aln",
+      "sha256": "bb008c0d978d0c12663b2e3e579c2e8b51b2a0ccb4ac6f762611f09291b9d097",
+      "size_bytes": 285
+    },
+    {
+      "candidate_asset_kind": "data",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "examples/synthetic-proteins.fasta",
+      "sha256": "1c0d41a50a9f5d455ee5c7a35572fc2bae20291db30cf13a507364a6082e812f",
+      "size_bytes": 347
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "mcp/motif/artifact-export.ts",
+      "sha256": "42b6a1bc4f42ff41f7a2f23975df75d50b852a5ae3bd4062862a058b70444ee7",
+      "size_bytes": 2915
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "mcp/motif/contracts.ts",
+      "sha256": "2a787f02d67052084b60c2df396fbee96fdfd535b115b7355904b9ebe7718adf",
+      "size_bytes": 1840
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "mcp/motif/payload.ts",
+      "sha256": "023cd004ce8ee6dba6e58b4914a67e7e22250bd423f5999eae6b334eb04b004b",
+      "size_bytes": 36741
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "mcp/motif/server.ts",
+      "sha256": "0c11af32efeb54d4f481fc1fb2636b37cc0d31e10fae62b732068a515fed1a3e",
+      "size_bytes": 14669
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "mcp/motif/stdio-server.ts",
+      "sha256": "28cb953ad3aaacf23d68c751cc58448957232305fa1244957861e0f400d85cc4",
+      "size_bytes": 3463
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "motif.html",
+      "sha256": "f6d17450e5f60fd412cadfd6d250e6eea0ea6f40548bb8f71d47a1a7fb422e19",
+      "size_bytes": 781
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "package-lock.json",
+      "sha256": "7cdbfd2978c377cf5d99dd8de12f9cb7d1995065321aea53222961514757a426",
+      "size_bytes": 203875
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "package.json",
+      "sha256": "1e7f43c08791f57be9018693227cec3f1a9891e6f624ac9833fbdd2b97fd1565",
+      "size_bytes": 4276
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "public/data/vectors.json",
+      "sha256": "c810b59edae7e616726bcf437b660e90252e233488a0aeb0f7234c3571e44b14",
+      "size_bytes": 90497
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "scripts/__tests__/gate-parity.test.mjs",
+      "sha256": "1afbe4dc2adce2b5e4d6257595f1cee753a13348d14ca5f3b328ed0b7931bb0c",
+      "size_bytes": 3304
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "scripts/__tests__/motif-build-identity.test.mjs",
+      "sha256": "9d13fa87958bf0b2cbf99a2b266afddf650253d462f4236c0c236769a1f12626",
+      "size_bytes": 901
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "scripts/__tests__/motif-local-mcp-config.test.mjs",
+      "sha256": "d2cd3697f280333620194ebd7564cf067ba54c33b7d47038abd1272992145251",
+      "size_bytes": 8379
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "scripts/build-claude-science-artifact.mjs",
+      "sha256": "80afd5ed6d18cb5c51346d167d4607a137e9126ab9d9e073f0642d9ffe455994",
+      "size_bytes": 18708
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "scripts/build-motif-mcp-app.mjs",
+      "sha256": "1fa7d2c04609484db317a15e74897898113c4c32a180b4f19c26b41942f4139d",
+      "size_bytes": 2429
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "scripts/build-motif-mcp-server.mjs",
+      "sha256": "2c0c16cc9e6a4729adac6890e530638ed95cf4af6b4d31c4d6ba4ff4de2ab180",
+      "size_bytes": 1090
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "scripts/build-preview.mjs",
+      "sha256": "648001ce40e8b9324763dd6bd04ff99938f31532d55d7e756fc2acaa5ed20690",
+      "size_bytes": 3498
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "scripts/check-aria-controls.mjs",
+      "sha256": "3c8e9ccc0daf55cbb12e37b65f5c46e2539fe89b17ccfc1dcf499e01f4b25a6e",
+      "size_bytes": 8480
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "scripts/check-css-tokens.mjs",
+      "sha256": "202ab593d70919be2dd862252b4f9266a5d138e11cbcf6cb94e2472ccec746d5",
+      "size_bytes": 7618
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "scripts/configure-motif-claude-science-local.mjs",
+      "sha256": "aaf090c59b2482504dee54b245f6e1360739915ed8c6407ba6ab39280f31d0a0",
+      "size_bytes": 5301
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "scripts/doctor-motif-claude-science-local.mjs",
+      "sha256": "6a53786276da53a3b10fd1bdde5beefb4db80162cc9fd82375a628690546e53e",
+      "size_bytes": 14327
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "scripts/lib/motif-local-mcp-config.mjs",
+      "sha256": "910ef860bfdca341b725d51e3a56ce726a209397007bfdbe98b1c655212625de",
+      "size_bytes": 10495
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "scripts/motif-build-identity.mjs",
+      "sha256": "59cef05510195fe356d672144b4f4a02c8f0dea9df46e377281cb997570a8556",
+      "size_bytes": 646
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "scripts/playwright.claude-science.config.ts",
+      "sha256": "3dbcf92d5e8f946843dcf0feb2c1347370a1fb07912674958ba4477091ec1c42",
+      "size_bytes": 824
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "scripts/run-claude-science-e2e.mjs",
+      "sha256": "82f6da830479bd5515afb8dc647e5aa04b6765b6fd0ab2f151b8434887ab4685",
+      "size_bytes": 3518
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "scripts/run-motif-claude-science-mcp.sh",
+      "sha256": "17abff05b267d9104c567bef265980d5bca55c6d20e1f241ffbe19c7c4ce1f9f",
+      "size_bytes": 1834
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "scripts/test-claude-science-plugin-packaging.mjs",
+      "sha256": "0c3f44277e8d939fc83087019c71d0d6b9f3c6a5ee9a65907e7480c55e310650",
+      "size_bytes": 42680
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "skills/motif-for-claude-science/SKILL.md",
+      "sha256": "9b6682fcde32a3a8a56574774cc1c7c6879f02b4adc277f78468aedfc7732329",
+      "size_bytes": 2000
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/ClaudeScienceAgentResultsPanel.tsx",
+      "sha256": "37b2ad94bffdebca16323cda9176bd43684e3672ac9c7a210c5d4c27b850aac4",
+      "size_bytes": 38339
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/ClaudeScienceAssemblyWorkspace.tsx",
+      "sha256": "c2f2149c44425938f8a38b4271b4fe8474c384acf6a02ba416d4061385f11476",
+      "size_bytes": 30674
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/ClaudeScienceCloningDesignWorkspace.tsx",
+      "sha256": "05fe234b077330187fac624b3462d7be1e54ad45ab155288193cc6df6163ddd5",
+      "size_bytes": 64476
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/ClaudeScienceConstructVerificationPanel.tsx",
+      "sha256": "3c5c78bb0a979c24827d25e479215188c973bb1a16745114c10c74b20a2af2ff",
+      "size_bytes": 23891
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/ClaudeScienceConstructVerificationWorkspace.tsx",
+      "sha256": "4cecb4af77429a204078b38642487a87870b6c6fd31066295970571fec44b519",
+      "size_bytes": 26123
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/ClaudeScienceDataSettings.tsx",
+      "sha256": "13a945617c392a58ddfd766a3fe15eaa34d4d69d5babf55439b5933179ccc3fa",
+      "size_bytes": 11223
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/ClaudeScienceFreshnessBadge.tsx",
+      "sha256": "dc480df49ddb81aaac82aa8d616841f176eeb0346e454c597b8ad607efe7c676",
+      "size_bytes": 5194
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/ClaudeScienceGelWorkspace.tsx",
+      "sha256": "c705f1727c5c27c7f13d97ec6912466968c2f9202bf9bf752096db4ea4aaf52c",
+      "size_bytes": 26017
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/ClaudeScienceMsaViewer.tsx",
+      "sha256": "8be5dfe05e4935faf6455e15e732c78fd0342e9394786423c6024dc3fbfcd4d5",
+      "size_bytes": 262727
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/ClaudeScienceNotesPanel.tsx",
+      "sha256": "143f592295692f09f4533bf2ac8939c688aeb39fdedbaa049da24e6301eb85fa",
+      "size_bytes": 21474
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/ClaudeSciencePrimerWorkspace.tsx",
+      "sha256": "8b28ad57597ef168948baacb329ad409e468a81ec38b1de83ae41d98814bab5a",
+      "size_bytes": 38635
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/ClaudeScienceSangerTraceViewer.tsx",
+      "sha256": "b44687b8a62ff51307fa63cd763228506b7a5c4745e7742d57a2918b942dea59",
+      "size_bytes": 44228
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/ClaudeScienceWorkflowHistoryPanel.tsx",
+      "sha256": "fc6953933421764ac106b857e9cb87bc480fce33aedf4c1720a0b6211be34f54",
+      "size_bytes": 14124
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/LargeSequenceViewer.tsx",
+      "sha256": "cb9cf6375835bae51fa2ea73182d0322b374b9b62d5d13dfd60c208be825ecf9",
+      "size_bytes": 3216
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/ClaudeScienceAgentResultsPanel.jsdom.test.tsx",
+      "sha256": "64056f38a4e2d176b464499f28766a8e5cebcf6443fd7e56fec6f5ce08230199",
+      "size_bytes": 25187
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/ClaudeScienceAssemblyWorkspace.jsdom.test.tsx",
+      "sha256": "b6cf347e1fde830f713a256571aedc6578a9de41896bc74b877c4fc76d7d7427",
+      "size_bytes": 10352
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/ClaudeScienceCloningDesignWorkspace.jsdom.test.tsx",
+      "sha256": "0b8c3de3385ea15cdd92ccd10028c74c895d887900569494112e426091d0b039",
+      "size_bytes": 21662
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/ClaudeScienceConstructVerificationPanel.jsdom.test.tsx",
+      "sha256": "cf9e6f0d59c5a589e88778ffe18f082a38c6d764e6a0711fc08f309db35e2df2",
+      "size_bytes": 8391
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/ClaudeScienceConstructVerificationWorkspace.jsdom.test.tsx",
+      "sha256": "e12a3f0331135eebeee3b3d80b8a9e47db4e365d6b564e6fd4cec89373f3253f",
+      "size_bytes": 18429
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/ClaudeScienceDataSettings.jsdom.test.tsx",
+      "sha256": "a8ce30e8702a035aab3f5d895048e0f0071b5feb72e101de2b5a3e2cd4070e35",
+      "size_bytes": 5684
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/ClaudeScienceFreshnessBadge.jsdom.test.tsx",
+      "sha256": "c53295e4ee945f390390baca25f2d6c9bf4b9c1b41ec94392b4157f2407d1585",
+      "size_bytes": 1655
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/ClaudeScienceGelWorkspace.jsdom.test.tsx",
+      "sha256": "e6e8a47d4deb85ffa7e38429fac211c4852201baafbd652e2ba69547bb5daac9",
+      "size_bytes": 14825
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/ClaudeScienceMsaViewer.alphabet-warning.jsdom.test.tsx",
+      "sha256": "ba39ec629ac13c2509b1ebd0164e359d75ccaa77ff3e0864499bcd58d69f39f8",
+      "size_bytes": 2431
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/ClaudeScienceMsaViewer.color-legend.jsdom.test.tsx",
+      "sha256": "481de217f2e3a641e94d4f35cfd7dbdce582c49e7acb81b9aa2f0fa55edaffec",
+      "size_bytes": 4329
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/ClaudeScienceMsaViewer.correctness.jsdom.test.tsx",
+      "sha256": "a393ca0c01f2c4841b3be2c7f5d38aa4d1f4687a497afcacc095419fb59f55a0",
+      "size_bytes": 32597
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/ClaudeScienceMsaViewer.frame-structure.jsdom.test.tsx",
+      "sha256": "a2697d32aa8f04ef27f252f3fdc955c4c194408d4444979b4cd15867b8f77cc4",
+      "size_bytes": 18220
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/ClaudeScienceMsaViewer.import-selection.jsdom.test.tsx",
+      "sha256": "656d3e4bfc84d4936634486a2b478b0cf689a51891f102dac464b6aa0c863a97",
+      "size_bytes": 10421
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/ClaudeScienceMsaViewer.overlays.jsdom.test.tsx",
+      "sha256": "5700b53fef466c33946e8c7a755ba2cb26413a0689e9dd713186f8c80de46393",
+      "size_bytes": 9622
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/ClaudeScienceMsaViewer.row-stats-panel.jsdom.test.tsx",
+      "sha256": "b1dbb18d2338653f988d9d61caf1443a0bb944b4e030f1488b4f227d025518e8",
+      "size_bytes": 6616
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/ClaudeScienceNotesPanel.jsdom.test.tsx",
+      "sha256": "85c4ee02b2e157b98f5b150eec8a3056e30fb5b2e701b01acd3c611b0c1692d3",
+      "size_bytes": 8021
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/ClaudeSciencePrimerWorkspace.jsdom.test.tsx",
+      "sha256": "4283eaa4938a758304a09d93b0949229ea16ca5a8816183b099135e4ecd73a84",
+      "size_bytes": 15218
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/ClaudeScienceWorkflowHistoryPanel.jsdom.test.tsx",
+      "sha256": "a1ede97b39e348dee57cc3fb537047173d9329ba708303d1b8188c0b434f3e82",
+      "size_bytes": 7820
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-accessibility-interaction-guards.test.ts",
+      "sha256": "6e26740683c14d34f7d264a34e5473311f6cb57f388e4d71bfd0ba3bc919dbed",
+      "size_bytes": 13928
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-agent-results-guards.test.ts",
+      "sha256": "b1a7fb1a55e7d824f3fd78e5ab9e8778e7267f2b1097982e4179c2af9020cbbf",
+      "size_bytes": 1006
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-analysis-result-viewers.test.ts",
+      "sha256": "6273067a6a64966560c6c0f8a925135b6d068109195ee7b127082e7931aeab5d",
+      "size_bytes": 5960
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-analysis-results.test.ts",
+      "sha256": "8e7249b8de3e2f0d6003c7e257c01cdab21a4579ecd113200977bc653df4a1b7",
+      "size_bytes": 30557
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-assembly-workflows.test.ts",
+      "sha256": "bd261ee8b846084825b5f7b8a2350ddf291992ca64121fbdd31a20cac22e9698",
+      "size_bytes": 23738
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-cloning-design-workspace-guards.test.ts",
+      "sha256": "eac6be3d9aac0c7908738fdd3ff5a6443c662dc6bdcab8018ec7262c30013e45",
+      "size_bytes": 5013
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-cloning-design.test.ts",
+      "sha256": "d9a363d844f306b9e3e3cf94d63d539f06ecc308be51ad89bef82c546eefb21a",
+      "size_bytes": 29802
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-construct-verification-artifacts.test.ts",
+      "sha256": "e0ac6397f4097565e6a9528600dd20d5b95afb665cdbf55fb5712112e67afb2f",
+      "size_bytes": 33733
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-construct-verification.test.ts",
+      "sha256": "e098db58769954a8b266f24efccf2c1b9d7d29770afc95c30e490de133de9270",
+      "size_bytes": 27560
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-digest-recipe.test.ts",
+      "sha256": "5d82607319fbaec71f53999869c312d9e4327ddf8bc5505bee1e10fec3bf029a",
+      "size_bytes": 5377
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-digest-workflow.test.ts",
+      "sha256": "22c24c3675c53f60900cfefd4bb9e725738bd5408fa954fbae64e468be0fe419",
+      "size_bytes": 16623
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-download.jsdom.test.ts",
+      "sha256": "db4883774c20c3d4185f499e5ae9332e874e30ec53d75b95169a2a56a926bc24",
+      "size_bytes": 1880
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-error-boundary.jsdom.test.tsx",
+      "sha256": "5007a7cca523bbe84d28530d2dd92c37a1564f51a3ad9bb40dc69d9b6248be17",
+      "size_bytes": 2708
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-feature-location-export.test.ts",
+      "sha256": "ec041d1ab507bd56861b6836d9f62bcabfe8e40eadcea2eef33f3a4285d00d1b",
+      "size_bytes": 16585
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-freshness.test.ts",
+      "sha256": "7d94fac3344c1ec80163dda0ac09e8d7a6cb7a9ea0cbb18e68cfdb419e8b7fa2",
+      "size_bytes": 19714
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-gel-preview.test.ts",
+      "sha256": "2201e8269503f29505cfd35b038f17119b5c6bf9d91acd72db956a48ccf19964",
+      "size_bytes": 12051
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-inventory-guards.test.ts",
+      "sha256": "ce6ecbfe39dfe8591e9f61c8007c0b5b13f353d7a702054b64ad9d9b2a85cbad",
+      "size_bytes": 10213
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-map-workspace-guards.test.ts",
+      "sha256": "5a29c80bfd74abcbe5a7a44a7d96b51fbc421babf1fb7151891f45e89de0b6b6",
+      "size_bytes": 8312
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-msa-analytics.test.ts",
+      "sha256": "918f0dade1e3d79c5423705db56668012a64880dcf757c98b5dcfe037765b186",
+      "size_bytes": 20456
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-msa-colour-guards.test.ts",
+      "sha256": "8dd0ad8cf22eccfa4e47477cdda8abfc60297268006928f3c083931e87e40a3c",
+      "size_bytes": 12337
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-msa-guards.test.ts",
+      "sha256": "7266d8a6b00f8e1a6d70e9911c15e2ec08ed7a0e574d639bdba0f47cb32fa419",
+      "size_bytes": 36302
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-msa-image-export.test.ts",
+      "sha256": "faefc263ef6276d43e6931159fbc2b0cf20e795a41b176cd150376fc524da493",
+      "size_bytes": 8227
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-msa-keyboard.test.ts",
+      "sha256": "2f3bc4833257477371de6c85b60339bca2182f9fe451aa1369b78d6e3d0bcac4",
+      "size_bytes": 2648
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-msa-view-preferences.test.ts",
+      "sha256": "152404ed6a0c5f496c8525c1352c39787a73277baf4fb32899404f8e67342f8a",
+      "size_bytes": 5890
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-msa.test.ts",
+      "sha256": "8d2d48eeda481cde8b5e355efd34d1196024a66c445cdba806c8b8277f8937bf",
+      "size_bytes": 19829
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-pcr-materialization.test.ts",
+      "sha256": "3d8e5e4d268669b33bdc9a4d058b257c46a04b2c51f4d9435f43f6051e6e84b7",
+      "size_bytes": 13187
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-preload-integrity.jsdom.test.ts",
+      "sha256": "91305c8dfd3844b8e0e3ec815499e3716628202bb6d4f4102d81efe061097991",
+      "size_bytes": 6027
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-primer-workspace-guards.test.ts",
+      "sha256": "43fdb157ef825370d6d46f1f9f1d9d4d6dcfcd02539d2e3c145151bc389de44a",
+      "size_bytes": 4307
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-rail-popover-guards.test.ts",
+      "sha256": "9038be0907d33b1b982b1fe3faedcc09a0225ede5ec45a64ef3156ea9ab0a1fe",
+      "size_bytes": 22655
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-record-lifecycle-guards.test.ts",
+      "sha256": "ad64acb4b462d2f761ec15e59451908b0468f0663304e3b1751ee4824f228f6e",
+      "size_bytes": 6272
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-runtime-integrity.test.ts",
+      "sha256": "e2bd8e920956387c960842499ff819d298d11428dd1d2fce3cbcbd44871a9c8f",
+      "size_bytes": 40463
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-sanger-guards.test.ts",
+      "sha256": "d6f4e84c8c0ddb2f39505234ec57d901d57ffa2e9e80c0e19866c01e53fa30b9",
+      "size_bytes": 7036
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-sanger.test.ts",
+      "sha256": "2c049f998b5b114331b7b9ae4689d825a7e086ef23ec437abb99ec0e4a66f7df",
+      "size_bytes": 7967
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-sequence-edit.test.ts",
+      "sha256": "a23bc321f8aa8f1f3da61b055c3fa1f8565f6346ee979564e26dd8be17da9561",
+      "size_bytes": 11547
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-session.test.ts",
+      "sha256": "a8d226fdcd8610959ea339658c466519dd438a57d73985a36f9477e15e0122e8",
+      "size_bytes": 14727
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-sha256.test.ts",
+      "sha256": "30108b9991dcf2fe68325acdaf8f7748ce14f5809960f37fcfe096bdd7be51f8",
+      "size_bytes": 1869
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-translation-code.test.ts",
+      "sha256": "e1a51308b4f65ef1dbc3bad9b63e348339486337495d14fefa987af2e0d4efe5",
+      "size_bytes": 4231
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-translation-record.test.ts",
+      "sha256": "c5473df4b185cba6737e8cc0dfee1189024a1dc21e95e9c1318a971e3a6e1329",
+      "size_bytes": 1754
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-workspace-collections.test.ts",
+      "sha256": "6266e7a72b0124db4c8ed2de9a6e094ba610fed661793fb851bab0c9b8836828",
+      "size_bytes": 16417
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/claude-science-workspace-layout-guards.test.ts",
+      "sha256": "2adb439644b226468ad913a8ac705c71f79dc1f26303290028d380a4e16a9877",
+      "size_bytes": 58756
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/floating-surface-geometry.test.ts",
+      "sha256": "a33af8277496e93d3a2e93ae237ff00efa2cd50a5c62505144fba13b53e2c3b5",
+      "size_bytes": 2874
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/large-sequence-viewer.test.tsx",
+      "sha256": "1ec5b1b3633420b71c9a2dfe16fcea6efca656b06a7b6c0649f098018068b2b9",
+      "size_bytes": 1411
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/motif-brand-guards.test.ts",
+      "sha256": "6713c138269dd9f3929faaff5a330f2036b7016b426774d2a25d24af00e0c774",
+      "size_bytes": 2915
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/motif-public-demo.test.ts",
+      "sha256": "44b0a491aa47b3ab947b31a037f385989afab4229b03cc5c75c2d098471e29eb",
+      "size_bytes": 944
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/pane-placement-guards.test.ts",
+      "sha256": "54741556e4a9db98466451cdffebc5db4668326756e22cbc30607a65c91d26ff",
+      "size_bytes": 3090
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/__tests__/rail-popover-placement.test.ts",
+      "sha256": "301276e2c6dd444a9ad96f0a2d994bf75a71c05ec54e1dece9befc53dbfce42a",
+      "size_bytes": 11679
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-agent-results.css",
+      "sha256": "fa68e14c4469f215c7db008d7dd8fd42a146043e4e04388e0b900078da9b36a6",
+      "size_bytes": 10702
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-analysis-result-viewers.ts",
+      "sha256": "b00c7d0d7cd1fa3a6c61a58b9c11d31e5712bd91175bc3dce53abfdebcbecb3c",
+      "size_bytes": 7120
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-analysis-results.ts",
+      "sha256": "55e7d5b8ec6bc258090281de9a445ab08e712c0aac1583bdaa8f40bddccc4d94",
+      "size_bytes": 117699
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-assembly-workflows.ts",
+      "sha256": "6d882adf6b93fa067fa6c5a972f53b5df272fcc1ba578f310057084430c3fa8d",
+      "size_bytes": 42588
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-cloning-design-workspace.css",
+      "sha256": "b8e5546cf81bec7d235cf175375a50902c5f3cdabe6a04a3b92bcadef8a22382",
+      "size_bytes": 31948
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-cloning-design.ts",
+      "sha256": "2f507a1dba8149594f389f2fd103fc96f1c2cda7f7ababa086f2a0b359af4eed",
+      "size_bytes": 53633
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-construct-verification-artifacts.ts",
+      "sha256": "d730b8d8264a6231dacbecd6bda05e1b45e88509efcf566d7073b9578fcaf120",
+      "size_bytes": 25173
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-construct-verification-workspace.css",
+      "sha256": "e5ea1904590dc1af1e1d2027949491d3ae35b9ab4dc4a0b0bc66cca4f7d2db06",
+      "size_bytes": 13229
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-construct-verification.css",
+      "sha256": "e0e580dea999dc220dfde67a976f65768ef3c13ec816cac9056262ac883c2f39",
+      "size_bytes": 10700
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-construct-verification.ts",
+      "sha256": "371ad031a6bcd4d3884003060f512c35898a30d455ffc2476290ab8b7ea6833f",
+      "size_bytes": 94375
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-digest-recipe.ts",
+      "sha256": "1b73d10c5512cbfd1c6e58977198129006907fb27141fb571554a49805bc4bba",
+      "size_bytes": 6936
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-digest-workflow.ts",
+      "sha256": "516c37baa77954490345edb06d4479d71424720c032227948ce7259460953478",
+      "size_bytes": 27830
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-download.ts",
+      "sha256": "37c15a9650e1775855492fcb067398ff727eb20d57af2ac3a1f3a7382a45e4d2",
+      "size_bytes": 1872
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-freshness.css",
+      "sha256": "7d4e035c6a1f3bbd340dddd43928134db20be7659fcb91210d749918bfab2c8a",
+      "size_bytes": 1258
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-freshness.ts",
+      "sha256": "ab1261d8ecef2b4ca6abded2bad40e66fabd524020719802d2fe24c50e883c67",
+      "size_bytes": 19624
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-gel-preview.ts",
+      "sha256": "434b81aae3cfaaf3c6f318b0f944ea94ff375c6f583233403bba0d7d3ed64e9f",
+      "size_bytes": 18319
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-msa-view-preferences.ts",
+      "sha256": "7f370f1e4601142175bd9db59a8c5568b54700a0eff611131790aa6f5957b13e",
+      "size_bytes": 7066
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-msa.css",
+      "sha256": "e6065fb51d13c4c42bbcb8d93d20289bcd3b78643c8245647257c9f7531cedfd",
+      "size_bytes": 50084
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-msa.ts",
+      "sha256": "f9d09bf27ca7986e899d767fa00e04509ebb06c7382d4e7267b77533407dc0d1",
+      "size_bytes": 71192
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-pcr-materialization.ts",
+      "sha256": "85a616c3619f47821e21b8864707ae98aab354dcf301d4036646badfe78716ef",
+      "size_bytes": 13699
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-primer-workspace.css",
+      "sha256": "ddbd7d0493c59a0fd2e2fb20cad06b56a38fa175da666066d9655fc9de329ff6",
+      "size_bytes": 19873
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-sanger.ts",
+      "sha256": "a19c7298debafbc2ca8e5bd2b99f0fe65fc9fed8168bc7700b2df06fa180c7d0",
+      "size_bytes": 11600
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-sequence-edit.ts",
+      "sha256": "e96fe93176a79ae5a776d78fa4f142e7e6567ac0f2f2663c73e48d533a1bcd9e",
+      "size_bytes": 14512
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-session.ts",
+      "sha256": "4c994d9ba2245e3510441f9d40801f699943f42665f272ac8e3e761e032d2cfb",
+      "size_bytes": 15981
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-sha256.ts",
+      "sha256": "9da3b619b4fea138ac75f4b0713cff27d21b2f4b0ad7424c5ce6f6567859d37a",
+      "size_bytes": 4271
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-translation-code.ts",
+      "sha256": "eac3e55ee12db10b5100dd4000313ad46a7979030211039d75dfaeac21d76499",
+      "size_bytes": 5319
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-workspace-collections.ts",
+      "sha256": "81282f2cf4daeb6abe90ab14fe94a1da22d92c511247cfa49b77acb5490fd723",
+      "size_bytes": 26302
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/claude-science-workspace-envelope.ts",
+      "sha256": "877f8f7ee9317e5b3d6cce6cd84011aafaf85baf37ccb00ea35a3863bb8ff4ef",
+      "size_bytes": 4013
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/floating-surface-geometry.ts",
+      "sha256": "0078268ba7b104c93a7d4e7cf821e3bcffe455d557f4cf33375e548fca61ad0f",
+      "size_bytes": 6544
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/motif-artifact.css",
+      "sha256": "5f1bf24e6ea86e0f3047ffc6f3822d4db45798b6ae1c7d86b4ee53178a8aad67",
+      "size_bytes": 287107
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/motif-artifact.tsx",
+      "sha256": "e2222fc187f636e2dc99ab429be5da8ac8a0d4d76d2c323aa795f95a12f60543",
+      "size_bytes": 831435
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/motif-for-claude-science-plugin/.claude-plugin/plugin.json",
+      "sha256": "4c38bf3964d3ab6d287ffb5a7977585611eecb45ac5257536385f44a038f70ed",
+      "size_bytes": 616
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/motif-for-claude-science-plugin/.mcp.json",
+      "sha256": "5c47a8c8121cf9ef419ee4b91937b78d3b741ab3bc62d8473d706448ec2db5af",
+      "size_bytes": 122
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/motif-for-claude-science-plugin/CHANGELOG.md",
+      "sha256": "cb89ea8c8cd9181390f5f1770f663799769d790c888294b320eac2aed40575a8",
+      "size_bytes": 1837
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/motif-for-claude-science-plugin/LICENSE",
+      "sha256": "606f9372bf61b63b32725d69f312ead92010afdaeea35befc46dc4db1ed19d49",
+      "size_bytes": 1073
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/motif-for-claude-science-plugin/README.md",
+      "sha256": "9e53b4cf74047aaee5d5db265689e28e180a657c0a25725eb4ca4575d94ad053",
+      "size_bytes": 8093
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/motif-for-claude-science-plugin/THIRD_PARTY_NOTICES.md",
+      "sha256": "3cf6666e7434aa556b1ce1fab342f37e01dffefecd471e9814eff924bff8c90a",
+      "size_bytes": 5000
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/motif-for-claude-science-plugin/skills/motif-for-claude-science/SKILL.md",
+      "sha256": "e48439c0c5f5676c577bbcad006191c230074a0332b9f9a50a8a84813d0905f5",
+      "size_bytes": 18700
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/motif-for-claude-science-plugin/skills/motif-for-claude-science/scripts/analysis-validator.mjs",
+      "sha256": "41ba18fc915af01522c7de19026b65567c05fd1d3d3bcd17c3ce1f5d6968ced6",
+      "size_bytes": 107162
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/motif-for-claude-science-plugin/skills/motif-for-claude-science/scripts/create-artifact.mjs",
+      "sha256": "6107c05e1fef6fc97714f66215c726c43e148706ef09861a2b4bcadf929e394e",
+      "size_bytes": 46669
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/motif-for-claude-science-plugin/skills/motif-for-claude-science/scripts/run-msa.mjs",
+      "sha256": "d1547fe384f1cd22bd5e854627964ae86f9e8d8af85a05fdf747b9d89559bc6a",
+      "size_bytes": 26481
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/motif-for-claude-science-plugin/skills/motif-for-claude-science/scripts/workspace-validator.mjs",
+      "sha256": "159315f01e9606d505e4d596c2ec6d35b27bf81cf8f4b0b3284fcc20eace0a38",
+      "size_bytes": 35787
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/motif-for-claude-science-skill/SKILL.md",
+      "sha256": "a9afb83d61653db548ecca469610686d9f60695fc77fe32de2133665b7735b6d",
+      "size_bytes": 6347
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/artifacts/rail-popover-placement.ts",
+      "sha256": "ba328047f317d855840f7bda693b078149c655fa11b170ae80c30698eaca3bf9",
+      "size_bytes": 14423
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/__tests__/codon-tables.test.ts",
+      "sha256": "5b883571ee9e9028b9d10a97267356f930e33625930cf1b9654d76ceccad5a9f",
+      "size_bytes": 3097
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/__tests__/feature-location.test.ts",
+      "sha256": "0c6d5923fb5c46eafa1f80ffdaff078f1f30d8e4dee34d9a48135bcfe9f1ba64",
+      "size_bytes": 8071
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/__tests__/genbank-feature-colors.test.ts",
+      "sha256": "0fab42320fb669e575dccbdf90002685878c607c0289a3c19c744cba30bea0ed",
+      "size_bytes": 1496
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/__tests__/gibson-assembly-features.test.ts",
+      "sha256": "bcda8d31d2a75a87877cda6ab21db310932c8cfe3d2c59ae0133054da55ee7b5",
+      "size_bytes": 3536
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/__tests__/golden-gate-features.test.ts",
+      "sha256": "e935d292acfb06b0cd9a2a2c76a146a76ea1047854afb3781e70b55246d0038d",
+      "size_bytes": 4133
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/__tests__/mutate-feature-locations.test.ts",
+      "sha256": "a39e05e8420e26a2e0e7e29dda79537a345278b3283cf4abf39777824ca1f71b",
+      "size_bytes": 2838
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/__tests__/orf-detection-translation-tables.test.ts",
+      "sha256": "5f50054f47244f0d71bc41df3f6cbb40b8c6dc59d05fdfec278d1a8b9eddb5a4",
+      "size_bytes": 2274
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/__tests__/restriction-digest-features.test.ts",
+      "sha256": "54bc363a1c28b71520e3f2d077735e88b1059c9dbd5dc1323ac754daf16e29fd",
+      "size_bytes": 1159
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/__tests__/restriction-sites.test.ts",
+      "sha256": "00ec96b09e74ddffaa427b15f84503d9ffd63c4a0831991d1bf18a594d2d48be",
+      "size_bytes": 3896
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/__tests__/translate.test.ts",
+      "sha256": "5dc4feb06e05a1843b64c3f9270b100cee69b06adbaeb01cc7f369e241aa31b7",
+      "size_bytes": 1741
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/abi-import.ts",
+      "sha256": "5ae7cdcbcb507a860089f05f2b738f8d27e763383b365c0c4f5fde4462f3549f",
+      "size_bytes": 20585
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/codon-tables.ts",
+      "sha256": "87a683dcd4d3152f71c1d9e3c5efa6af32c7df3ff6d695bd4077f68d570e0304",
+      "size_bytes": 26801
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/color-values.ts",
+      "sha256": "8af4d06a29b535ae2185531062030fcca462b19f83cd7915e0a4f89e3844efff",
+      "size_bytes": 405
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/enzyme-data.ts",
+      "sha256": "3047c0c4bf6c66a9c13088bf15f747b59838fc225f35aca80a643d14bdc99d50",
+      "size_bytes": 33249
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/fasta-parser.ts",
+      "sha256": "a762b07d0ca099912fe929482dc5054b51ce697abd78f8491472fd9b02b47d3d",
+      "size_bytes": 9845
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/feature-location.ts",
+      "sha256": "b621ec5caa9ececff7adf9b5ed81be7c1f7150c1d278c5b1bd32dc3986dac764",
+      "size_bytes": 7677
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/gc-content.ts",
+      "sha256": "a26ee1474e69db5f9c1846b68746c7cc62ca5bd82f52ab7d212851747592e379",
+      "size_bytes": 8123
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/gel-simulation.ts",
+      "sha256": "de4892ffe833444715061a9571b526b04eb774aaf900f1c70bc6de140f49a266",
+      "size_bytes": 8174
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/genbank-parser.ts",
+      "sha256": "f16517769fb3e48db1aa7cde6bd52013afcbdfa155ae36f305f3a36c8582edf8",
+      "size_bytes": 32697
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/gibson-assembly.ts",
+      "sha256": "9098358f5d2f9dfcfcd236a8a9766d2673042196399968bd8c9d7132820ba5d7",
+      "size_bytes": 12367
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/golden-braid.ts",
+      "sha256": "1aea8310154a4f3e8661e7ae56a0521edeb6411e3f252fc0de33d19e3db7ecad",
+      "size_bytes": 8064
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/golden-gate-kits.ts",
+      "sha256": "6ca845e788337868994456c5df5a5150bb8c2a62486144d98251f1b36f88c50f",
+      "size_bytes": 10961
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/golden-gate.ts",
+      "sha256": "2af7025f465b37f9a6a3d75d94460031c13639d698b3532057ce2e138c45da64",
+      "size_bytes": 47516
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/msa.ts",
+      "sha256": "b77f0969551593a587cd6bf3415b042f055f8e0c4e29af354ef4b8d0d407537f",
+      "size_bytes": 13653
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/mutate.ts",
+      "sha256": "5cd63418fa3ae6c8488ef51ee618f7b5a7d74383f6cde7f4d5e4274cecc35434",
+      "size_bytes": 9747
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/orf-detection.ts",
+      "sha256": "e163ddbb40ca051bdd723f1918588b1c341fec1171fe2572359990e8e1b44c1c",
+      "size_bytes": 7889
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/pcr.ts",
+      "sha256": "d4c0dba4ece099d0a703734ee2ce66739901bfb3ae74e6e9f4fd857c51c9d7fa",
+      "size_bytes": 12315
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/primer-design.ts",
+      "sha256": "7e3d3bb58b2f3eca52c126d14a83e2d4dc3bd6e9676254e78e355acb5a32d6b7",
+      "size_bytes": 31257
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/primer-thermodynamics.ts",
+      "sha256": "464f85110fc071e5e30b95a7ff7c4b8e066a35d5e97f4fb003005554ad5ed72e",
+      "size_bytes": 7429
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/prosite.ts",
+      "sha256": "ab0b2c886603dcf67c998d4100143de2d35c3992a6fe01604edfbb82166538d4",
+      "size_bytes": 12999
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/restriction-digest.ts",
+      "sha256": "3adb69105f22921b604f20ee49d2ded4fa68cb7ede71869cf312fe0aac34c2b7",
+      "size_bytes": 11053
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/restriction-presets.ts",
+      "sha256": "26ff4f7979836abe7141f5ebf6ee76427c2b71c9410a94bcf6600d7d81646364",
+      "size_bytes": 9125
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/restriction-sites.ts",
+      "sha256": "1ffe08381227a498db2ccfd96862e33f0090cf77d35e64e019419d1cfc182fec",
+      "size_bytes": 13682
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/reverse-complement.ts",
+      "sha256": "d095df3c7a8d6be3b86fa718b8aaf47ded8608752c34ebaa451eda489d4cb30d",
+      "size_bytes": 2516
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/sequence-diff.ts",
+      "sha256": "be84d91a373f3cfe679fc5467f8fb479f499a610291432d8b52d18a8d9287a93",
+      "size_bytes": 4927
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/sequence-formatting.ts",
+      "sha256": "02c68296f45e66ebcb7430e9a2e3b3dfbf6890ff5d2519db780481486dfa2f8a",
+      "size_bytes": 33034
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/sequence-highlights.ts",
+      "sha256": "0b291fc962f926d3396097477ed61a170325744a371c5a451ea77dd02c1cb979",
+      "size_bytes": 13613
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/sequence-variants.ts",
+      "sha256": "b0dd25d91e86f3c9bd385608d8f8555d7e79977e38d7ec4140c4434aa3c464e0",
+      "size_bytes": 4434
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/tm-calculator.ts",
+      "sha256": "b6f5fc408a01d6dff5aef85adc7706466bfb22f478e5278aa6c087e5eb8eb0d2",
+      "size_bytes": 15595
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/translate.ts",
+      "sha256": "91c480612f998383baa7b858a5ca39c9437621576710c829a86dd649aba57fc6",
+      "size_bytes": 2433
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/bio/types.ts",
+      "sha256": "7a019f9c258ddb99beeb9d5023af917698e115814bd2ec0080e3d4efe1244950",
+      "size_bytes": 9423
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/components/plasmid-map/SequenceMapView.tsx",
+      "sha256": "28ee8968b7c08c4eec651ee38300ac9f6be241a69f236834b4b55de660e92d1a",
+      "size_bytes": 33269
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/components/plasmid-map/__tests__/background-affordance.test.tsx",
+      "sha256": "fa557188087dfd0d7a401650e61ac7fb0a437b24b5d7aed9bcc515d468c95fb2",
+      "size_bytes": 6343
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/components/plasmid-map/__tests__/overflow-chip-reachability.test.tsx",
+      "sha256": "0e62705f08f7064328f3f73249fd787458e35d795d13f25e5b82421b1227c84d",
+      "size_bytes": 10192
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/components/plasmid-map/plasmid-map.css",
+      "sha256": "4c8a7b443956b28f1ac7269f89b2a98b7d3bd68754260656b8a9ab4df72ed457",
+      "size_bytes": 27130
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/components/sequence-stack/feature-display-colors.ts",
+      "sha256": "7e756f93aa9fb24040e71d557c510a3d07e748ac6c9b4359a3329e380739f2d7",
+      "size_bytes": 9999
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/lib/css-tokens.ts",
+      "sha256": "0d483eea3541ac4d75f9f770ff755dd964efe57ab5d3accdf241aeb96c8d411b",
+      "size_bytes": 8021
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/mcp-app/__tests__/motif-connector.test.ts",
+      "sha256": "353fa39223d6b4ccbcfc436d0f2ec1f1479dbc9363bea38535803173193a3e51",
+      "size_bytes": 22381
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/mcp-app/__tests__/motif-workbench-bridge.jsdom.test.ts",
+      "sha256": "0d8b085a5ca274825f99073f6ee8d8b6e3afc495cb542b3d1d08aefab8dd6463",
+      "size_bytes": 2831
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/mcp-app/motif-workbench-bridge.ts",
+      "sha256": "0e9623b706da560985e600cdfed5a735e151303381571282513f3ff78bcedab0",
+      "size_bytes": 3164
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/__tests__/export-layout-svg.test.ts",
+      "sha256": "eb50cf65e9cf45e6391689bcf24294c9188e24b1b0ee09b8d70afdfd41d82dda",
+      "size_bytes": 8242
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/__tests__/geometry-core.test.ts",
+      "sha256": "51c6fd96a8da00083bc4f2a6d21ebcfdcdd298b71c76236f500e1718791b3cac",
+      "size_bytes": 9836
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/__tests__/label-collision.probe.test.ts",
+      "sha256": "6833c3971197b7b65cd8beb33f60a173f87d3e9142c00ea0a05ffaf65c1308e7",
+      "size_bytes": 18792
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/__tests__/label-density.test.ts",
+      "sha256": "729dcbf9952dee777623e48838210cdb03703137922980f5f88b3d093dba5003",
+      "size_bytes": 1316
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/__tests__/lanes-restrictions.test.ts",
+      "sha256": "9efb67bcbecdeb8c0638360cc0dd12d51140ffa3c646b9760b27a52a0feea11d",
+      "size_bytes": 8067
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/__tests__/layout.test.ts",
+      "sha256": "9ad43fae548426691d27c8d74feeb8cf674e4de9edf99b717defc56ba2a67c5e",
+      "size_bytes": 98414
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/__tests__/linear-cluster-count.test.ts",
+      "sha256": "1622702288b50e4771a658bd119e65ced7aac6ecc071bab1de0fb31a6fc9b966",
+      "size_bytes": 7053
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/__tests__/linear-feature-leaders.test.ts",
+      "sha256": "0ddbb5852d1002d6e273c5c5650d9814410ef808aeac1ea1468a6b8b9c0d3c17",
+      "size_bytes": 8634
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/__tests__/linear-restriction-leaders.test.ts",
+      "sha256": "de7b13b7e22fd2c80f9e11fa81780a1efcd22a7a71415bb226aac1273d35bd9f",
+      "size_bytes": 13096
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/__tests__/overflow-chip-hit.test.ts",
+      "sha256": "1cdd2e235d3e0430db2ddc53f87ce2335e7088b674c2bf636fcf19f7134c4dfe",
+      "size_bytes": 18648
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/__tests__/point-spaces.test.ts",
+      "sha256": "ef6d29a7ce41c2ef198bd7aae29d2e816286d3e885a2e132c5d4d32be7672194",
+      "size_bytes": 3806
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/__tests__/range-overlays.test.ts",
+      "sha256": "41a10ff93c6a9fd1fe9b722af4660548c8acbeaf0975ca4d83e28876a86afe9c",
+      "size_bytes": 9228
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/__tests__/render-mode-independence.test.ts",
+      "sha256": "73e17584e72044ff51ba3802ec2967423f26ddb793c48aa2e784e3f62c945474",
+      "size_bytes": 5195
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/__tests__/restriction-display.test.ts",
+      "sha256": "b4edd503f70cb78ce22655389f8ebf625c86bfdb96405d227bcb2281443a3c94",
+      "size_bytes": 1906
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/__tests__/restriction-label-units.test.ts",
+      "sha256": "9e5e04cb17d79315341c47a3a78522695ba8652d4c73a2e05ad62db924868d4c",
+      "size_bytes": 9107
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/__tests__/selection-overlay.test.ts",
+      "sha256": "ec29faabef52e9dee13145f6628bb5f43c311f4c80ac04663d44a868cfc595e2",
+      "size_bytes": 2394
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/__tests__/viewport.test.ts",
+      "sha256": "74c9e56d4bb8cc908428abb30a163ad397a3d5a28049464f1c1859762a9d7f5e",
+      "size_bytes": 9699
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/__tests__/w1-correctness.test.ts",
+      "sha256": "cf97bd5bf5a840f270b84398bf0341254a72e82d7af6c48875bc7638cc0f0888",
+      "size_bytes": 3569
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/__tests__/w2-lane-sizing.test.ts",
+      "sha256": "8fc32d567afd06829514b9f9b907622f2b3ca9c27a198e6ee71ace21056d5298",
+      "size_bytes": 6949
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/__tests__/workbench.test.ts",
+      "sha256": "8c39b1087d0c1399b4a848c8bd2e74bf5dd46449a84db19d161ad90fe09f2b4b",
+      "size_bytes": 5364
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/__tests__/workflow-overlays.test.ts",
+      "sha256": "e3117ad71072392375593efb5a2f7e8946a9abd9b0bb38c4302bf61b9a542a91",
+      "size_bytes": 10612
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/export-layout-svg.ts",
+      "sha256": "91e6088103782c7fe22ddabac7ca595e25981d9872acd186e5014d9189aa36a0",
+      "size_bytes": 9447
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/geometry/__tests__/radial-labels.test.ts",
+      "sha256": "b75a3dfaf56f9dcc66aff33feb7847779a32c93ffad0dc5a34d8197dfde04c46",
+      "size_bytes": 13260
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/geometry/coordinates.ts",
+      "sha256": "e7601e3e981a44d46451ffe05f52f11332933fb30ef59232f8064cb6944d2847",
+      "size_bytes": 8511
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/geometry/labels.ts",
+      "sha256": "5ad18396bd53093d44f762be63db163cea2e42842c6857c5544040226f294dbe",
+      "size_bytes": 7426
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/geometry/lanes.ts",
+      "sha256": "66cf01babfa8b83daf69d871596eba38cea8eda55f584d103f9bb5f4a2ab8ebf",
+      "size_bytes": 2884
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/geometry/radial-labels.ts",
+      "sha256": "ca7e601129d2632d475deade1e582bbc1b80dd9b895eb4e56ab0c312df9b2056",
+      "size_bytes": 40082
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/geometry/ranges.ts",
+      "sha256": "f1e202aaf0e11385ad8b5fb3116ba2d83fe6fbbb93e745d040d5c877e77513ba",
+      "size_bytes": 5324
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/geometry/restrictions.ts",
+      "sha256": "b7abb5edff389083c18901c9597904fe7c01b01176d9953204be15dd784c7f90",
+      "size_bytes": 8057
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/layout.ts",
+      "sha256": "19fd2f80894a83635061297586df8ed0c2e7bf0b294f6b2b6bef4025a44f846c",
+      "size_bytes": 150069
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/point-spaces.ts",
+      "sha256": "800c1d4e51d783a8b4ddc773728fa35f01c84090d5e268c5487e5d588fd1832f",
+      "size_bytes": 3470
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/range-overlays.ts",
+      "sha256": "6530c0429862a66a52bc1b02550b5825338445da2d96a4431114d9baa019b48a",
+      "size_bytes": 12132
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/restriction-display.ts",
+      "sha256": "4b8d1e226fb3280cbfa80a30c925d65f608aec48210aade388a4a239610d8dbc",
+      "size_bytes": 3094
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/selection-overlay.ts",
+      "sha256": "d7c071f90d27ea3dd4f84af3321e2a3a04cc981521cddc753d865a25c3fffdab",
+      "size_bytes": 3355
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/types.ts",
+      "sha256": "e6efcb826aa05d95d4e7deab75354f9fc23f341916467fdf9472bb6235bd70ef",
+      "size_bytes": 14446
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/viewport.ts",
+      "sha256": "ece6b148b59223f9d131fe5f6149ea9af5e4ec5005e92bd71d367af87bbfaced",
+      "size_bytes": 10471
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/workbench.ts",
+      "sha256": "288bc1a67941e1c42085ccf74ecb16b807dc54df8ae534ffe96e5fd30e4ddb9d",
+      "size_bytes": 13082
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "src/plasmid-map/workflow-overlays.ts",
+      "sha256": "9c6ea609de2c241f24b74b1855ab1bd8b7c3d1e93b2ae859df028d48db279328",
+      "size_bytes": 14947
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "tsconfig.app.json",
+      "sha256": "ecbe8fdb781c7388f46babef3948ffd97a9396f1b5eba4602446a1a4898a7489",
+      "size_bytes": 740
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "tsconfig.json",
+      "sha256": "770b4140bbb581e2dfd9ea9946ffc9c75a1d86ba7d2db5f77c83e37cbdf9d808",
+      "size_bytes": 119
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "tsconfig.node.json",
+      "sha256": "62c1cc33001f2af4e8da28546bbe5860164fe73871f51b70f3df3dc626f1e7ac",
+      "size_bytes": 723
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "vite.claude-science.config.ts",
+      "sha256": "2e127dca7c46b9fa6f7d77a328045df3b4984b28a5140f750050327eb663e8b6",
+      "size_bytes": 582
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "kind": "file",
+      "path": "vitest.config.ts",
+      "sha256": "c410bea86099778cc713f82f8f23738b0bc5d3741953dd25bfd5110668774445",
+      "size_bytes": 355
+    }
+  ],
+  "exact_commit": "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0",
+  "recorded_at": "2026-08-01T17:40:00+08:00",
+  "schema_version": 1,
+  "scope": "read-only tree inventory; every entry remains quarantined until separate rights and asset review",
+  "source_id": "jvogan-motif"
+}
