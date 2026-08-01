@@ -57,6 +57,22 @@ def active_lock() -> dict[str, Any]:
                     start=1,
                 )
             )
+        if source_id == "ai4s-research-open-science":
+            components.append(
+                {
+                    "id": f"{source_id}-external-skills",
+                    "path": "runtime/skills/external/**",
+                    "asset_kind": "skill",
+                    "disposition": "reject-authority",
+                    "reuse_mode": "none",
+                    "rights_status": "restricted",
+                    "execution_authority": "none",
+                    "evidence": {
+                        "source_sha256": f"{index + 300:064x}",
+                        "record": f"third_party/capability-intake/{source_id}/external-skills.json",
+                    },
+                }
+            )
         sources.append(
             {
                 "id": source_id,
@@ -139,6 +155,12 @@ def main() -> int:
     check(
         "a proprietary path cannot be relabelled as adaptable",
         lambda lock: lock["sources"][3]["components"][1].update({"disposition": "adapt", "reuse_mode": "adapt", "rights_status": "verified"}),
+        1,
+        "violates forbidden-path disposition",
+    )
+    check(
+        "an AI4S external skill cannot be relabelled as adaptable",
+        lambda lock: lock["sources"][6]["components"][1].update({"disposition": "adapt", "reuse_mode": "adapt", "rights_status": "verified"}),
         1,
         "violates forbidden-path disposition",
     )

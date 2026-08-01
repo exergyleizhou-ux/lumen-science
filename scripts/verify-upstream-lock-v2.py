@@ -116,10 +116,10 @@ def verify_forbidden_paths(value: dict[str, Any]) -> dict[tuple[str, str], dict[
         key = (source_id, path)
         require(key not in found, f"forbidden-paths repeats rule: {source_id}:{path}")
         require(rule.get("copy_forbidden") is True, f"{label} must forbid copying")
-        require(rule.get("clean_room_only") is True, f"{label} must require clean room")
+        require(isinstance(rule.get("clean_room_only"), bool), f"{label}.clean_room_only must be a bool")
         require(
-            rule.get("required_disposition") == "reject-license",
-            f"{label} must require reject-license",
+            rule.get("required_disposition") in {"reject-license", "reject-authority"},
+            f"{label}.required_disposition must reject license or authority",
         )
         require(isinstance(rule.get("reason"), str) and len(rule["reason"]) >= 20, f"{label}.reason is not substantive")
         found[key] = rule
@@ -130,6 +130,10 @@ def verify_forbidden_paths(value: dict[str, Any]) -> dict[tuple[str, str], dict[
         ("qzzqzzb-openclaudescience", "skills/xlsx/**"),
     }
     require(required.issubset(found), "forbidden-paths is missing a required proprietary OpenClaudeScience rule")
+    require(
+        ("ai4s-research-open-science", "runtime/skills/external/**") in found,
+        "forbidden-paths is missing the required AI4S external-skill rule",
+    )
     return found
 
 
@@ -159,8 +163,11 @@ def verify_component(
     rule = forbidden.get((source_id, path))
     if rule is not None:
         require(disposition == rule["required_disposition"], f"{label} violates forbidden-path disposition")
-        require(reuse_mode == "clean-room", f"{label} violates clean-room-only restriction")
-        require(rights_status == "restricted", f"{label} must remain rights-restricted")
+        if rule["clean_room_only"]:
+            require(reuse_mode == "clean-room", f"{label} violates clean-room-only restriction")
+            require(rights_status == "restricted", f"{label} must remain rights-restricted")
+        else:
+            require(reuse_mode == "none", f"{label} violates no-copy restriction")
     if disposition in {"vendor", "adapt"}:
         require(rights_status == "verified", f"{label} cannot {disposition} without verified rights")
         require(reuse_mode == disposition, f"{label} reuse_mode must match disposition")

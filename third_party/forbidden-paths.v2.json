@@ -33,6 +33,14 @@
       "copy_forbidden": true,
       "clean_room_only": true,
       "reason": "Nested Anthropic proprietary license; root MIT does not grant reuse."
+    },
+    {
+      "source_id": "ai4s-research-open-science",
+      "path": "runtime/skills/external/**",
+      "copy_forbidden": true,
+      "clean_room_only": false,
+      "required_disposition": "reject-authority",
+      "reason": "Build-fetched external skill packs and their runtime/service rights cannot become Lumen execution authority."
     }
   ]
 }
