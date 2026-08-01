@@ -23,13 +23,13 @@
   },
   "evidence": {
     "intake_level": "E2",
-    "why_not_higher": "The module is a pure deterministic helper only. It has no ACP request, durable Begin/Finish, approval, artifact, rebuilt-binary, CI, or release proof.",
+    "why_not_higher": "This record describes the pure helper itself, not a second executable capability. Its current consumer is the E4 seq_analyze operation; the helper still owns no ACP route, durable authority, artifact commit, CI or release claim.",
     "source_provenance": "agent/crates/codegen/xai-grok-science/src/primer_thermo.rs",
     "legacy_product_tests": "agent/crates/codegen/xai-grok-science/src/primer_thermo.rs"
   },
   "next_gates": [
     "Add cross-language reference vectors before changing user-visible analysis output.",
-    "Bind any request options into existing seq_analyze durable request hashes and replay context.",
-    "Require SessionActor approval, store-owned artifacts, rebuilt binary and exact-head CI before product E4/E5 claims."
+    "Keep any future consumer bound into its durable request hash and replay context.",
+    "Do not create a separate execution authority; preserve SessionActor-only product admission."
   ]
 }

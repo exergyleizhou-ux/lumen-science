@@ -26,6 +26,7 @@ EXPECTATIONS = {
         "paths": {
             "src/bio/fasta-parser.ts", "src/bio/gc-content.ts", "src/bio/reverse-complement.ts", "src/bio/translate.ts",
             "src/bio/codon-tables.ts", "src/bio/orf-detection.ts", "src/bio/restriction-sites.ts", "src/bio/restriction-digest.ts",
+            "src/bio/primer-thermodynamics.ts", "src/bio/tm-calculator.ts",
         },
         "implementation_path": "agent/crates/codegen/xai-grok-science/src/seqbench.rs",
         "operation": "x.ai/science/seq_analyze",
@@ -121,8 +122,20 @@ def validate(record: dict[str, Any], lock: dict[str, Any]) -> None:
     elif record["id"] == "biomni-query-uniprot-v1":
         require(record["source_commit"] in source_text and all(item["sha256"] in source_text for item in source_files), "Biomni mapping provenance disagrees with capability intake")
     evidence = record.get("evidence")
-    require(isinstance(evidence, dict) and evidence.get("intake_level") == "E2", "intake record may only claim E2")
-    require(isinstance(evidence.get("why_not_higher"), str) and len(evidence["why_not_higher"]) >= 50, "E2 record must state its non-claim")
+    require(isinstance(evidence, dict), "capability record needs evidence")
+    level = evidence.get("intake_level")
+    require(level in {"E2", "E4"}, "capability record evidence level is unsupported")
+    require(isinstance(evidence.get("why_not_higher"), str) and len(evidence["why_not_higher"]) >= 50, "evidence record must state its non-claim")
+    if level == "E4":
+        require(record["id"] == "motif-seq-analyze-v1", "only the exact tested actor operation may claim E4")
+        proof = evidence.get("built_binary_proof")
+        require(isinstance(proof, dict), "E4 record needs a built-binary proof")
+        require(SHA256.fullmatch(str(proof.get("binary_sha256"))) is not None, "E4 binary SHA-256 is invalid")
+        require(isinstance(proof.get("source_commit"), str) and len(proof["source_commit"]) == 40, "E4 proof needs an exact source commit")
+        tests = proof.get("tests")
+        require(isinstance(tests, list) and len(tests) >= 2 and all(isinstance(item, str) and item for item in tests), "E4 proof needs its exact product tests")
+    elif record["id"] == "motif-seq-analyze-v1":
+        require(False, "the currently actor-gated seq_analyze record must not regress below E4")
     require(isinstance(record.get("next_gates"), list) and len(record["next_gates"]) >= 3, "capability record must list future admission gates")
 
 
@@ -134,7 +147,7 @@ def main() -> int:
     try:
         record = load(args.record)
         validate(record, load(args.lock))
-        print(f"PASS: {record['id']} capability intake is exact-source E2 only")
+        print(f"PASS: {record['id']} capability intake is exact-source {record['evidence']['intake_level']}")
     except (OSError, ValueError, json.JSONDecodeError, StopIteration) as error:
         print(f"FAIL: {error}")
         return 1

@@ -41,16 +41,16 @@ def main() -> int:
     wrong_hash["source_files"][0]["sha256"] = "0" * 64
     bad_authority = copy.deepcopy(record)
     bad_authority["implementation"]["authority"] = "upstream runtime"
-    inflated = copy.deepcopy(record)
+    inflated = copy.deepcopy(primer)
     inflated["evidence"]["intake_level"] = "E4"
     results = [
-        ("checked-in Motif record is exact-source E2", not fails(record, lock)),
+        ("checked-in Motif record is exact-source E4 with a local built-binary proof", not fails(record, lock)),
         ("checked-in Biomni UniProt record is exact-source E2", not fails(biomni, lock)),
         ("checked-in AIPOCH archive preview is exact-source E2 with no execution authority", not fails(aipoch, lock)),
         ("checked-in Motif primer helper is exact-source E2 with no execution authority", not fails(primer, lock)),
         ("tampered upstream source hash fails", fails(wrong_hash, lock)),
         ("second execution authority fails", fails(bad_authority, lock)),
-        ("unsupported E4 self-claim fails", fails(inflated, lock)),
+        ("unproven E4 self-claim fails", fails(inflated, lock)),
     ]
     for name, passed in results:
         print(f"  {'ok' if passed else 'FAIL':<4}  {name}")

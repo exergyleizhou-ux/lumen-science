@@ -16,7 +16,9 @@
     {"path": "src/bio/codon-tables.ts", "sha256": "87a683dcd4d3152f71c1d9e3c5efa6af32c7df3ff6d695bd4077f68d570e0304"},
     {"path": "src/bio/orf-detection.ts", "sha256": "e163ddbb40ca051bdd723f1918588b1c341fec1171fe2572359990e8e1b44c1c"},
     {"path": "src/bio/restriction-sites.ts", "sha256": "1ffe08381227a498db2ccfd96862e33f0090cf77d35e64e019419d1cfc182fec"},
-    {"path": "src/bio/restriction-digest.ts", "sha256": "3adb69105f22921b604f20ee49d2ded4fa68cb7ede71869cf312fe0aac34c2b7"}
+    {"path": "src/bio/restriction-digest.ts", "sha256": "3adb69105f22921b604f20ee49d2ded4fa68cb7ede71869cf312fe0aac34c2b7"},
+    {"path": "src/bio/primer-thermodynamics.ts", "sha256": "464f85110fc071e5e30b95a7ff7c4b8e066a35d5e97f4fb003005554ad5ed72e"},
+    {"path": "src/bio/tm-calculator.ts", "sha256": "b6f5fc408a01d6dff5aef85adc7706466bfb22f478e5278aa6c087e5eb8eb0d2"}
   ],
   "implementation": {
     "path": "agent/crates/codegen/xai-grok-science/src/seqbench.rs",
@@ -27,14 +29,22 @@
     "artifact_commit": "store-owned hashed artifacts only"
   },
   "evidence": {
-    "intake_level": "E2",
-    "why_not_higher": "This intake record does not itself claim an exact-current rebuilt binary or exact-head CI; those remain separate gates.",
+    "intake_level": "E4",
+    "why_not_higher": "The listed local rebuilt-binary tests prove only this exact offline ACP operation at the recorded source commit. Exact-head GitHub CI, release, installation, live provider and wet-lab proof remain separate gates.",
     "source_provenance": "third_party/provenance/motif-876a-seqbench.md",
-    "legacy_product_tests": "agent/crates/codegen/xai-grok-shell/tests/test_built_binary_e2e.rs"
+    "legacy_product_tests": "agent/crates/codegen/xai-grok-shell/tests/test_built_binary_e2e.rs",
+    "built_binary_proof": {
+      "source_commit": "afed01d8a99e603ad8c172ce88a7d51487df9bf1",
+      "binary_sha256": "0caba57f0bf524bc6f703806e96a31092780c7fe2456a3656bdbbd5b7c991b64",
+      "tests": [
+        "test_stdio_science_seq_analyze_is_actor_gated_and_store_owned",
+        "test_stdio_science_seq_analyze_denied_writes_nothing"
+      ]
+    }
   },
   "next_gates": [
     "PLATFORM_API_GATE=PASS before a new generic extension host consumes this operation.",
-    "Rebuilt exact-source binary proof must be recorded before this record can claim E4.",
-    "Exact-head GitHub CI must pass before this record can claim E5."
+    "Exact-head GitHub CI must pass before this record can claim E5.",
+    "Any source change to the listed actor operation requires a new rebuilt-binary SHA and repeat product proof."
   ]
 }
