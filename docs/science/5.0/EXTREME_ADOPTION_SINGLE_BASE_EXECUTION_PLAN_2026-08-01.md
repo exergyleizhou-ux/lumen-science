@@ -208,9 +208,11 @@ canonical Lumen release candidate / immutable commit
 
 这不是可有可无的 UI 功能，而是科研生产力的关键执行面：root 负责问题、证据门和最后结论；下层把检索、方法设计、数据核查、代码/分析和怀疑者复核拆开并行。它也不能成为第二套执行权威。
 
-**术语必须消除 off-by-one：** Lumen 的 top-level session 是 `depth = 0`；`max_depth = 3` 表示允许三代被委派 session：depth 1（子 agent）→ depth 2（孙 agent）→ depth 3（末端 agent），并禁止 depth 3 再创建孩子。若产品文案想表达“root 加两层”，则配置应为 `2`，不能含糊地写“三层”。
+**术语必须消除 off-by-one：** Lumen 的 top-level session 是 `depth = 0`；`max_depth = 3` 表示允许三代被委派 session：depth 1（子 agent）→ depth 2（孙 agent）→ depth 3（末端 agent），并禁止 depth 3 再创建孩子。若产品文案想表达“root 加两层”，则配置应为 `2`，不能含糊地写“三层”。这与 Claude Code 当前公开文档的“main 以下最多三层”语义一致，但只是可参考的行为规格，不复制其专有 runtime；产品 policy 必须有自己的版本化配置，不能假设上游默认永远不变。
 
 当前 canonical Lumen 已有可验证的低层基础，而不是需要另造 runtime：`xai-grok-tools/.../task/mod.rs` 的 `SubagentDepthCounter` / `MaxSubagentDepth`，以及 `xai-grok-shell/src/config/mod.rs` 的 `[subagents].max_depth`、`GROK_SUBAGENTS_MAX_DEPTH` 解析。默认仍为 1；Science 复制 Core 的旧实现仍硬编码一层。因此**不能**先在 Science copy 里把常量改成 3；必须让 canonical Lumen 的可配置实现成为唯一底座后，Science 才只声明政策。
+
+**明确禁止的假接缝：** Science 的 `xai-grok-workspace::WorkspaceHandle::fork_session` 当前不等于产品化 nested-agent authority；它不在 Shell/Science 的当前 spawn path 上，且其 top-level 默认 `fork_budget = u32::MAX` / `max_depth = u32::MAX`。不得把它接到 Desktop/ACP 来“快速实现三层”；它必须先被 canonical SessionActor 的受限 grant/ledger contract 替代或封装。
 
 目标树固定为：
 
@@ -227,13 +229,14 @@ depth 0  Research Director / human-facing root
 
 1. effective permissions and capabilities are monotonic intersections: `child ≤ parent ≤ root policy`；任何 shell、network、SSH、kernel、model 或 device plan 都回到 root-bound actor approval，而不是 child 自己批准；
 2. 所有 child artifacts 是 store-owned、内容寻址并带完整 ancestor chain；siblings 只能交换已准入 artifact references，不能共享裸工作目录、secret、未经审阅的聊天上下文或可变路径；
-3. root budget 是总预算：子孙 token、turn、wall time、并发和可执行 operation 数之和不得超过它；启动失败、超限、parent cancel、root disconnect、restart 都必须向下 cascade，并写出可恢复终态；
+3. root budget 是总预算：子孙 token、turn、wall time、每 parent fanout、每 session 总 spawn、并发和可执行 operation 数之和不得超过它；启动失败、超限、parent cancel、root disconnect、restart 都必须向下 cascade，并写出可恢复终态；
 4. depth 3 必须移除 `task` / background-spawn 类工具；其产出只能是 typed evidence/result proposal，不能 terminal success、不能直接执行生产 side effect；
-5. parent 对 child 的选择、summary 和采纳决定本身也是 provenance。一个 child 的“完成”只代表该委派完成，不代表 ResearchProject 或 root run 成功。
+5. child 的完整 trace 与 final report 都是 untrusted input：完整内容单独 hash-addressed 保存；送给 parent 的只是一份 schema/size-capped、instruction-shaped-output neutralized summary，且过滤不是 permission/sandbox 的替代；
+6. parent 对 child 的选择、summary 和采纳决定本身也是 provenance。一个 child 的“完成”只代表该委派完成，不代表 ResearchProject 或 root run 成功。
 
 **第一轮准入策略：** 先允许 depth 1–3 做 read-only planning、fixture analysis、evidence comparison、review/skeptic；当且仅当树的 identity、budget、cancel、recovery、artifact lineage 对抗测试通过后，才允许 child 提交由 root actor 审批的 declarative operation plan。绝不把 `max_depth=3` 当作自动开放三层 shell/MCP/remote execution。
 
-必须新增的反例：深度 3 再 spawn、伪造 `spawn_depth`、跨 root/owner/project/session/workspace 复用 child、budget split overrun、child escalation、sibling raw-path read、parent completion while grandchild running、root cancel cascade、crash/restart orphan recovery、child artifact tamper、child deny/timeout 后仍有 success artifact。
+必须新增的反例：深度 3 再 spawn、伪造 `spawn_depth`（actor 忽略 caller supplied depth、只从 signed ancestor chain 推导）、跨 root/owner/project/session/workspace 复用 child、budget split overrun、total/concurrent/fanout limit overrun、child escalation、sibling raw-path read、instruction-shaped child output、parent completion while grandchild running、root cancel cascade、crash/restart orphan recovery、child artifact tamper、child deny/timeout 后仍有 success artifact。
 
 ---
 
@@ -298,6 +301,24 @@ depth 0  Research Director / human-facing root
 **Exit Gate：** generic host 与现有 Begin/Finish path 保持相同 terminal semantics；没有让 extension 获得 raw path/process/network access；canonical Lumen exact-head CI + Science contract fixture E5。
 
 **不得做：** dynamic dylib plugin、arbitrary closure callback、JSON RPC 逃生口、让 extension 自己存 terminal state、将所有旧 Science 命令一次性删掉。
+
+### P2A — Delegation Tree Contract：三代 child，不是三套 authority
+
+**目的：** 在 generic platform seam 上定义可审计的 `root → child → grandchild → leaf` 研究树。该阶段采用“main 以下最多三层 child”的版本化 product policy；它参考 Claude Code 的隔离上下文、末端移除 Agent 工具、聚合 summary 和独立 session/concurrency limits，但不复制 Claude Code runtime 或把其默认值写死进 Lumen。
+
+**实施（仅 canonical Lumen；Science 只消费 public contract）：**
+
+1. 将现有 `SubagentDepthCounter`、`MaxSubagentDepth`、single-writer coordinator、nested reparent-to-root、late-orphan rejection 和 child-session persistence 作为 source patterns，不在 Science 副本重新实现 coordinator；
+2. 引入 actor-owned `DelegationRecord` / `DelegationGrant`：root/parent/session identity、ancestor digest、depth、role / allowed child roles、capability and model ceilings、immutable input manifest、budget/deadline、idempotency key、state、terminal reason、summary/trace artifact refs；
+3. state machine 固定为 `Requested → AwaitingSpawnApproval|Queued → Running → Summarizing → Succeeded|Failed|Denied|TimedOut|Cancelled`。spawn depth 只能从 actor-held parent lineage 推导；任何 caller/request `spawn_depth` 仅能被忽略或用于 trusted scheduler root bootstrap，绝不能影响 child 权限；
+4. actor 同时执行 `max depth`、session-total、concurrent、per-parent fanout、token/turn/wall-time/artifact budgets、cycle detection 和 expiry。现有 per-child max-turn/output cap 是素材，不等于 whole-tree budget；
+5. 子节点只能持有 opaque lease 和已批准 input artifact refs。它们对 shell/MCP/SSH/browser/kernel/model/device/store write 的每项副作用仍须提交 root-bound prepared operation；最终 ResearchProject artifact 只由 root actor commit；
+6. child 回传采用 bounded typed schema + size cap + content hash；完整 trace/evidence 是 store-owned artifact，parent 只接 neutralized summary/reference。所有 text report 都视为 untrusted input，不能用它直接触发 parent tool call；
+7. `WorkspaceHandle::fork_session` 默认无限 budget/depth 的路径明确保持非产品 authority，直到其能证明由同一 grant/ledger contract 包裹。
+
+**必须验收：** canonical focused tests 覆盖 `max_depth=3` 的三代 child 允许、depth-3 task tool stripped、root reparent、late orphan refusal；新增 tree test 覆盖 parent/child scope contraction、budget fanout/total/concurrency、stale finish、idempotency、deny/timeout/cancel cascade、restart quota recovery、artifact tamper 和 instruction-shaped child report。first product proof 只允许 read-only evidence tree；effectful child operation 另需 root actor approval。
+
+**不得做：** 只把 Science `MAX_SUBAGENT_DEPTH` 改为 3、给 child 共享 parent permission 当作 blanket approval、让 child 直写 `ScienceStore`、使用无上限 `fork_session`、允许 sibling 读可变 raw path、把 child summary 当 root conclusion 或把第三层作无人审批的执行器。
 
 ### P3 — Science strangler pilot：先迁 `seq_analyze`
 
