@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-08-01T16:19:11+08:00",
+  "status": "historical_snapshot",
+  "purpose": "Machine-readable F0 snapshot for the NextGen plan. It records an auditable starting point; it does not claim a runnable extension, a green CI, or a consumable Lumen Core.",
+  "science": {
+    "repository": "https://github.com/exergyleizhou-ux/lumen-science.git",
+    "branch": "ls5-core-v0.1.251-sync",
+    "source_commit": "7fe25c9d868e9097b166136ba32de3e55e9df086",
+    "upstream": "origin/ls5-core-v0.1.251-sync",
+    "divergence": {
+      "behind": 0,
+      "ahead": 0
+    }
+  },
+  "plan_inputs": [
+    {
+      "path": "docs/science/5.0/LUMEN_SCIENCE_NEXTGEN_FINAL_EXECUTION_BOOK_2026-08-01.md",
+      "sha256": "70fee630d6925e7abac631fe7134bd1cdd71eeda1d45fbdc7451c16ce60c46a9"
+    },
+    {
+      "path": "docs/science/5.0/EXTREME_ADOPTION_SINGLE_BASE_EXECUTION_PLAN_2026-08-01.md",
+      "sha256": "2d8b4f05fb6651f12bcd212c37fbb5f5d732dc70c40e75eb47a3e912c53debe2"
+    },
+    {
+      "path": "docs/science/5.0/NEXT_GENERATION_AUTONOMY_CONTROL_PLANE_EXECUTION_PLAN_2026-08-01.md",
+      "sha256": "02f24d9484f405e5fadf4fca3433925f9cc8c0f9fdf5c823d2551f245103c373"
+    },
+    {
+      "path": "docs/science/5.0/ecosystem-admission.lock.json",
+      "sha256": "6969f927a6805c84f805b258572ff8cfc11f2cb013e924e6652923fd30f4a5b1"
+    },
+    {
+      "path": "docs/science/5.0/core-v0.1.251-admission.lock.json",
+      "sha256": "c9b47e861cdbfe0d5a0fa636a7dced45317299f593e02526f527c493b088f60d"
+    }
+  ],
+  "canonical_lumen_observation": {
+    "observation_only": true,
+    "repository": "https://github.com/exergyleizhou-ux/lumen.git",
+    "local_branch": "sync/absorb-upstream-20260731",
+    "local_head": "e7afd15b1656108598c6f78966e69fea36ea7bde",
+    "origin_main": "2f47a9ad84e94b20291a1ad3d6b005ccbd3885f4",
+    "divergence_from_origin_main": {
+      "behind": 2,
+      "ahead": 21
+    },
+    "tracked_or_untracked_file_count": 40,
+    "nextgen_execution_book_tracked": false,
+    "pin_eligible": false,
+    "reason": "The observed Lumen worktree is owned by another session, is dirty, and its NextGen execution book is untracked. Science must wait for LUMEN_R0_SOURCE_GATE and PLATFORM_API_GATE evidence."
+  }
+}

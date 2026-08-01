@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-08-01T16:19:11+08:00",
+  "purpose": "F0 machine-readable gate registry. A non-PASS status is an explicit truth, not a failure to report.",
+  "gates": [
+    {
+      "id": "LUMEN_R0_SOURCE_GATE",
+      "owner": "canonical-lumen",
+      "status": "BLOCKED_UPSTREAM",
+      "requires": [
+        "R0-00 path manifest",
+        "R0-01 grouped verification",
+        "R0-02 clean candidate",
+        "R0-03 exact GitHub integration CI",
+        "R0-04 same-source binary/lock/evidence",
+        "R0-05a canonical main merge review"
+      ]
+    },
+    {
+      "id": "PLATFORM_API_GATE",
+      "owner": "canonical-lumen",
+      "status": "BLOCKED_CONTRACT",
+      "requires": [
+        "LUMEN_R0_SOURCE_GATE=PASS",
+        "versioned public extension contract",
+        "compatibility manifest",
+        "public adapter compile fixture",
+        "exact GitHub CI"
+      ]
+    },
+    {
+      "id": "TASKTREE_GATE",
+      "owner": "canonical-lumen",
+      "status": "BLOCKED_UPSTREAM",
+      "requires": [
+        "TaskTreeLineageV1",
+        "CapabilityGrantV1",
+        "TreeBudgetV1",
+        "recursive revoke/cancel proof"
+      ]
+    },
+    {
+      "id": "SOURCE_INTAKE_GATE",
+      "owner": "lumen-science",
+      "status": "IMPLEMENTING",
+      "requires": [
+        "upstream-lock.v2 active with all nine sources",
+        "exact-one disposition per component",
+        "forbidden-path negative tests",
+        "rights and asset evidence"
+      ]
+    },
+    {
+      "id": "PRODUCT_PROOF_GATE",
+      "owner": "lumen-science",
+      "status": "BLOCKED_UPSTREAM",
+      "requires": [
+        "PLATFORM_API_GATE=PASS",
+        "newly rebuilt exact-source binary",
+        "actor/product negative proof",
+        "exact-head CI"
+      ]
+    }
+  ]
+}
