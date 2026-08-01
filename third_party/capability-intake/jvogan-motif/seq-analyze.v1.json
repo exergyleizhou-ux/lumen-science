@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "id": "motif-seq-analyze-v1",
+  "source_id": "jvogan-motif",
+  "source_commit": "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0",
+  "rights": {
+    "root_spdx": "MIT",
+    "reuse_mode": "adapt",
+    "attribution": "Motif source paths and exact file hashes are preserved in third_party/provenance/motif-876a-seqbench.md."
+  },
+  "source_files": [
+    {"path": "src/bio/fasta-parser.ts", "sha256": "a762b07d0ca099912fe929482dc5054b51ce697abd78f8491472fd9b02b47d3d"},
+    {"path": "src/bio/gc-content.ts", "sha256": "a26ee1474e69db5f9c1846b68746c7cc62ca5bd82f52ab7d212851747592e379"},
+    {"path": "src/bio/reverse-complement.ts", "sha256": "d095df3c7a8d6be3b86fa718b8aaf47ded8608752c34ebaa451eda489d4cb30d"},
+    {"path": "src/bio/translate.ts", "sha256": "91c480612f998383baa7b858a5ca39c9437621576710c829a86dd649aba57fc6"},
+    {"path": "src/bio/codon-tables.ts", "sha256": "87a683dcd4d3152f71c1d9e3c5efa6af32c7df3ff6d695bd4077f68d570e0304"},
+    {"path": "src/bio/orf-detection.ts", "sha256": "e163ddbb40ca051bdd723f1918588b1c341fec1171fe2572359990e8e1b44c1c"},
+    {"path": "src/bio/restriction-sites.ts", "sha256": "1ffe08381227a498db2ccfd96862e33f0090cf77d35e64e019419d1cfc182fec"},
+    {"path": "src/bio/restriction-digest.ts", "sha256": "3adb69105f22921b604f20ee49d2ded4fa68cb7ede71869cf312fe0aac34c2b7"}
+  ],
+  "implementation": {
+    "path": "agent/crates/codegen/xai-grok-science/src/seqbench.rs",
+    "authority": "Rust Lumen SessionActor",
+    "operation": "x.ai/science/seq_analyze",
+    "network": "denied",
+    "process_execution": "denied",
+    "artifact_commit": "store-owned hashed artifacts only"
+  },
+  "evidence": {
+    "intake_level": "E2",
+    "why_not_higher": "This intake record does not itself claim an exact-current rebuilt binary or exact-head CI; those remain separate gates.",
+    "source_provenance": "third_party/provenance/motif-876a-seqbench.md",
+    "legacy_product_tests": "agent/crates/codegen/xai-grok-shell/tests/test_built_binary_e2e.rs"
+  },
+  "next_gates": [
+    "PLATFORM_API_GATE=PASS before a new generic extension host consumes this operation.",
+    "Rebuilt exact-source binary proof must be recorded before this record can claim E4.",
+    "Exact-head GitHub CI must pass before this record can claim E5."
+  ]
+}
