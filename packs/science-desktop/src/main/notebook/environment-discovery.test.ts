@@ -24,6 +24,10 @@ const fixtureHost = (
   overrides: Partial<HostPathEnumeration> = {}
 ): HostPathEnumeration =>
   createProductionHostEnumeration({
+    // Keep this fixture hermetic across developer machines. Platform-specific
+    // tests declare their platform explicitly; inheriting macOS here caused
+    // the supposedly empty fixture to scan the host Command Line Tools.
+    platform: 'linux',
     whichAll: async () => [],
     listCondaPrefixes: async () => [],
     pyLauncherPaths: async () => [],
@@ -358,6 +362,28 @@ describe('defaultCandidatePaths (targeted enumeration)', () => {
       fixtureHost()
     )('python')
     expect(paths).toEqual([])
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  it('discovers the real Command Line Tools Python.app executable on macOS', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'os-clt-python-'))
+    const versions =
+      '/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions'
+    const python =
+      '/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/Resources/Python.app/Contents/MacOS/Python'
+    const paths = await defaultCandidatePaths(
+      root,
+      () => [],
+      undefined,
+      fixtureHost({
+        platform: 'darwin',
+        readdirSync: (path) => (path === versions ? ['3.9'] : []),
+        exists: (path) => path === python,
+      }),
+    )('python')
+
+    expect(paths).toContain(python)
+    expect(paths).not.toContain(`${versions}/3.9/bin/python3`)
     rmSync(root, { recursive: true, force: true })
   })
 
