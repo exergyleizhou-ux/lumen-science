@@ -9,6 +9,8 @@ on:
       - 'scripts/science-machine-gates.sh'
       - 'scripts/verify-science-core-ownership.py'
       - 'scripts/test-science-core-ownership.py'
+      - 'scripts/report-science-crate-drift.py'
+      - 'scripts/verify-science-crate-drift.py'
       - 'third_party/science-core-ownership.v1.json'
       - 'scripts/science-go-module-boundary.sh'
       - 'scripts/verify-release-assets.sh'
@@ -16,6 +18,7 @@ on:
       - 'scripts/verify-science-status.py'
       - 'scripts/test-science-status.py'
       - 'docs/science/status/current.json'
+      - 'docs/science/5.0/science-crate-drift-audit-2026-08-01.json'
       - 'docs/science/fusion-sources.lock.json'
       # agent/**: same reasoning as the pull_request trigger below — core
       # changes reach main through merges, and the record on main should carry
