@@ -9,6 +9,7 @@ until it separately passes SessionActor, rebuilt-binary, CI, and release gates.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from collections import Counter
 from pathlib import Path
@@ -38,6 +39,33 @@ def dashboard(lock: dict[str, Any]) -> dict[str, Any]:
     source_rights = Counter(source.get("rights_status", "missing") for source in sources)
     exact_one = sum(1 for component in components if isinstance(component.get("disposition"), str))
     runnable = sum(1 for component in components if component.get("execution_authority") != "none")
+    tree_inventories: list[dict[str, Any]] = []
+    for source in sources:
+        records = {component.get("evidence", {}).get("record") for component in source.get("components", [])}
+        if len(records) != 1 or not isinstance(next(iter(records)), str):
+            continue
+        evidence_path = ROOT / next(iter(records))
+        if not evidence_path.is_file():
+            continue
+        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+        tree = evidence.get("tree_inventory")
+        if not isinstance(tree, dict):
+            continue
+        inventory_path = ROOT / str(tree.get("path", ""))
+        if not inventory_path.is_file():
+            continue
+        raw = inventory_path.read_bytes()
+        inventory = json.loads(raw)
+        entries = inventory.get("entries", [])
+        tree_inventories.append(
+            {
+                "source_id": source.get("id"),
+                "entry_count": len(entries) if isinstance(entries, list) else None,
+                "digest_matches_receipt": hashlib.sha256(raw).hexdigest() == tree.get("sha256"),
+                "all_entries_quarantined": isinstance(entries, list)
+                and all(isinstance(entry, dict) and entry.get("disposition") == "quarantine" and entry.get("execution_authority") == "none" for entry in entries),
+            }
+        )
     return {
         "schema_version": 1,
         "lock_status": lock.get("status"),
@@ -49,6 +77,12 @@ def dashboard(lock: dict[str, Any]) -> dict[str, Any]:
             "dispositions": dict(sorted(dispositions.items())),
             "asset_kinds": dict(sorted(asset_kinds.items())),
             "runnable_from_intake": runnable,
+        },
+        "tree_inventory": {
+            "sources_scanned": len(tree_inventories),
+            "entries_scanned": sum(item["entry_count"] or 0 for item in tree_inventories),
+            "records": tree_inventories,
+            "scope": "Tree inventory is discovery evidence, not an admitted capability inventory.",
         },
         "evidence_level": {
             "admitted_E2": 0,
