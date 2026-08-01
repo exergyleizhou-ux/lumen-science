@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "id": "aipoch-skill-quarantine-import-v1",
+  "kind": "actor-operation",
+  "source_id": "aipoch-open-science",
+  "source_commit": "fd2853f0b9bdb6c063ccc1e741687584ab94bf9a",
+  "rights": {
+    "root_spdx": "Apache-2.0",
+    "reuse_mode": "adapt",
+    "attribution": "The AIPOCH ZIP reader's bounded archive-admission concerns are adapted in Rust; its materializer is explicitly excluded because it enables live skills."
+  },
+  "source_files": [
+    {"path": "src/main/skills/zip-extract.ts", "sha256": "613b5ae735796472e477d041d0525c248799087ccb4aeaf1251a3dc17bed9bed"}
+  ],
+  "implementation": {
+    "path": "agent/crates/codegen/xai-grok-science/src/skill_quarantine.rs",
+    "authority": "Rust Lumen SessionActor",
+    "operation": "x.ai/science/skill_quarantine_import",
+    "network": "denied",
+    "process_execution": "denied",
+    "artifact_commit": "store-owned hashed artifacts only"
+  },
+  "evidence": {
+    "intake_level": "E4",
+    "why_not_higher": "The listed local rebuilt-binary tests prove only this exact offline ACP quarantine operation at the recorded source commit. Exact-head GitHub CI, release, installation, any live skill enablement, provider access, and device or wet-lab proof remain separate gates.",
+    "source_provenance": "third_party/provenance/open-science-fd2853-skill-quarantine.md",
+    "legacy_product_tests": "agent/crates/codegen/xai-grok-shell/tests/test_built_binary_e2e.rs",
+    "built_binary_proof": {
+      "source_commit": "5eb9ca5aff61495c2a44d240983a729f1c0a64d2",
+      "binary_sha256": "0caba57f0bf524bc6f703806e96a31092780c7fe2456a3656bdbbd5b7c991b64",
+      "tests": [
+        "test_stdio_science_skill_quarantine_is_actor_gated_store_owned_and_replayable",
+        "test_stdio_science_skill_quarantine_denied_and_cancelled_write_nothing",
+        "test_stdio_science_skill_quarantine_permission_timeout_writes_nothing",
+        "test_stdio_science_skill_quarantine_boundaries_fail_closed"
+      ]
+    }
+  },
+  "next_gates": [
+    "PLATFORM_API_GATE=PASS before a new generic extension host consumes this operation.",
+    "Exact-head GitHub CI must pass before this record can claim E5.",
+    "Any source change to the listed actor operation requires a new rebuilt-binary SHA and repeat product proof.",
+    "A later enable/materialize operation must be a separately approved SessionActor mutation, never an implication of quarantine success."
+  ]
+}

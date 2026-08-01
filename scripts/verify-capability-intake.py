@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +49,14 @@ EXPECTATIONS = {
         "operation": "settings:preview-skill-zip",
         "source_markers": ("Adapted from Open Science at fd2853f0b9bdb6c063ccc1e741687584ab94bf9a.", "inspectOuterArchive"),
     },
+    "aipoch-skill-quarantine-import-v1": {
+        "source_id": "aipoch-open-science",
+        "spdx": "Apache-2.0",
+        "paths": {"src/main/skills/zip-extract.ts"},
+        "implementation_path": "agent/crates/codegen/xai-grok-science/src/skill_quarantine.rs",
+        "operation": "x.ai/science/skill_quarantine_import",
+        "source_markers": ("AIPOCH Open Science", "613b5ae735796472e477d041d0525c248799087ccb4aeaf1251a3dc17bed9bed"),
+    },
     "motif-primer-thermodynamics-domain-v1": {
         "source_id": "jvogan-motif",
         "spdx": "MIT",
@@ -68,6 +77,18 @@ def load(path: Path) -> dict[str, Any]:
     value = json.loads(path.read_text(encoding="utf-8"))
     require(isinstance(value, dict), f"{path} root must be an object")
     return value
+
+
+def source_commit_is_current_ancestor(commit: str) -> bool:
+    """An E4 proof cannot name a local source revision that is not in this tree."""
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", commit, "HEAD"],
+        cwd=ROOT,
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return result.returncode == 0
 
 
 def validate(record: dict[str, Any], lock: dict[str, Any]) -> None:
@@ -127,13 +148,18 @@ def validate(record: dict[str, Any], lock: dict[str, Any]) -> None:
     require(level in {"E2", "E4"}, "capability record evidence level is unsupported")
     require(isinstance(evidence.get("why_not_higher"), str) and len(evidence["why_not_higher"]) >= 50, "evidence record must state its non-claim")
     if level == "E4":
-        require(record["id"] == "motif-seq-analyze-v1", "only the exact tested actor operation may claim E4")
+        require(record["id"] in {"motif-seq-analyze-v1", "aipoch-skill-quarantine-import-v1"}, "only exact tested actor operations may claim E4")
         proof = evidence.get("built_binary_proof")
         require(isinstance(proof, dict), "E4 record needs a built-binary proof")
         require(SHA256.fullmatch(str(proof.get("binary_sha256"))) is not None, "E4 binary SHA-256 is invalid")
         require(isinstance(proof.get("source_commit"), str) and len(proof["source_commit"]) == 40, "E4 proof needs an exact source commit")
+        require(source_commit_is_current_ancestor(proof["source_commit"]), "E4 source commit is not an ancestor of current HEAD")
         tests = proof.get("tests")
         require(isinstance(tests, list) and len(tests) >= 2 and all(isinstance(item, str) and item for item in tests), "E4 proof needs its exact product tests")
+        test_path = ROOT / str(evidence.get("legacy_product_tests", ""))
+        require(test_path.is_file(), "E4 proof must name an existing product-test source")
+        test_source = test_path.read_text(encoding="utf-8")
+        require(all(test in test_source for test in tests), "E4 proof names a product test absent from its source")
     elif record["id"] == "motif-seq-analyze-v1":
         require(False, "the currently actor-gated seq_analyze record must not regress below E4")
     require(isinstance(record.get("next_gates"), list) and len(record["next_gates"]) >= 3, "capability record must list future admission gates")
