@@ -10,6 +10,12 @@ ok() { echo "GATE OK: $*"; }
 python3 scripts/verify-ecosystem-admission.py || fail "ecosystem admission"
 ok "ecosystem admission"
 
+# F0 records a current, auditable input set.  Verify both the real snapshot
+# and its negative corpus before treating later migration gates as meaningful.
+python3 scripts/verify-nextgen-baseline.py || fail "NextGen F0 baseline"
+python3 scripts/test-nextgen-baseline.py || fail "NextGen F0 baseline tamper corpus"
+ok "NextGen F0 baseline and gate registry"
+
 # v2 is deliberately a draft intake lock, so the verifier itself returns 2.
 # Its focused tests prove that draft status cannot be mistaken for a product
 # admission and that every selected source path is present in its exact tree.

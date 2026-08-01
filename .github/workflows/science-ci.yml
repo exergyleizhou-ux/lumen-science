@@ -11,6 +11,8 @@ on:
       - 'scripts/test-science-core-ownership.py'
       - 'scripts/report-science-crate-drift.py'
       - 'scripts/verify-science-crate-drift.py'
+      - 'scripts/verify-nextgen-baseline.py'
+      - 'scripts/test-nextgen-baseline.py'
       - 'third_party/science-core-ownership.v1.json'
       - 'scripts/science-go-module-boundary.sh'
       - 'scripts/verify-release-assets.sh'
@@ -19,6 +21,8 @@ on:
       - 'scripts/test-science-status.py'
       - 'docs/science/status/current.json'
       - 'docs/science/5.0/science-crate-drift-audit-2026-08-01.json'
+      - 'docs/science/5.0/NEXTGEN_BASELINE.json'
+      - 'docs/science/5.0/NEXTGEN_GATE_REGISTRY.json'
       - 'docs/science/fusion-sources.lock.json'
       # agent/**: same reasoning as the pull_request trigger below — core
       # changes reach main through merges, and the record on main should carry
@@ -102,6 +106,14 @@ jobs:
 
       - name: Science machine gates
         run: bash scripts/science-machine-gates.sh
+
+      # The F0 snapshot is a contract, not a status claim.  Run both the
+      # checked-in verification and its tamper corpus so a plan input, dirty
+      # Lumen observation, or mandatory gate cannot silently drift on main.
+      - name: NextGen baseline and gate registry
+        run: |
+          python3 scripts/verify-nextgen-baseline.py
+          python3 scripts/test-nextgen-baseline.py
 
       - name: Rust Core VERSION honesty
         run: python3 scripts/release_version.py --root . check
