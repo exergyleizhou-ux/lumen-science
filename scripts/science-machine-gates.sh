@@ -151,6 +151,11 @@ ok "Core drift fixture self-test"
 python3 scripts/test-science-core-ownership.py
 ok "copied-Core ownership anti-growth contract"
 
+# Never allow a future migration to replace a versioned canonical source pin
+# with a machine-local path to another Lumen checkout.
+python3 scripts/test-no-external-cargo-path-deps.py
+ok "external Cargo path dependency anti-regression contract"
+
 # Audited-head Core drift comparison when that exact Lumen checkout is provided.
 # Local: CORE_DRIFT_UPSTREAM_ROOT=/Users/lei/code/lumen
 # CI: checkout the lock pin into a temp dir and set the same env var.
