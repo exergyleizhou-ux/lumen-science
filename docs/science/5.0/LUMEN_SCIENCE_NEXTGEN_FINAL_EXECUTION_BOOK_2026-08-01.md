@@ -707,6 +707,8 @@ Draft → AwaitingScheduleApproval → Scheduled → Leased → Starting
 
 M1-A verifier 必须检查 exact Git revision、manifest digest、`Cargo.lock`、`cargo metadata` 中没有未批准 path dependency，且 Core ownership map 没有重新扩张。机器人只开 draft PR，绝不自动 merge。
 
+**当前 P0 约束：** 在 generic host 出现前，Desktop 不得以“本地 settings”名义重开 skill 内容/激活写入。已封住 GitHub URL 与 agent-home direct import；个人 skill 的 create/update/delete/enable 以及 runtime materializer 仍是待迁 legacy authority，具体 inventory、目标状态机和必须的负例见 [Skill Authority Migration Contract](SKILL_AUTHORITY_MIGRATION_CONTRACT_2026-08-01.md)。该合同不授权在 copied Core 中再新增专用命令；generic operation 必须等待 `PLATFORM_API_GATE=PASS`。
+
 ### M1-B — 迁出短运行 Core family
 
 **前置：** `PLATFORM_API_GATE=PASS` + S1。按风险从低到高迁：
