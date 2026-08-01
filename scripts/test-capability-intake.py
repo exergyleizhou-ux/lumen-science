@@ -49,7 +49,7 @@ def main() -> int:
     fake_quarantine_proof["evidence"]["built_binary_proof"]["source_commit"] = "0" * 40
     results = [
         ("checked-in Motif record is exact-source E4 with a local built-binary proof", not fails(record, lock)),
-        ("checked-in Biomni UniProt record is exact-source E2", not fails(biomni, lock)),
+        ("checked-in Biomni UniProt record is exact-source E4 with a local built-binary proof", not fails(biomni, lock)),
         ("checked-in AIPOCH archive preview is exact-source E2 with no execution authority", not fails(aipoch, lock)),
         ("checked-in AIPOCH quarantine import is exact-source E4 with a local built-binary proof", not fails(aipoch_quarantine, lock)),
         ("checked-in Motif primer helper is exact-source E2 with no execution authority", not fails(primer, lock)),

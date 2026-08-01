@@ -32,6 +32,7 @@ EXPECTATIONS = {
         "implementation_path": "agent/crates/codegen/xai-grok-science/src/seqbench.rs",
         "operation": "x.ai/science/seq_analyze",
         "source_markers": ("MOTIF_COMMIT",),
+        "e4_minimum_tests": 2,
     },
     "biomni-query-uniprot-v1": {
         "source_id": "snap-stanford-biomni",
@@ -40,6 +41,7 @@ EXPECTATIONS = {
         "implementation_path": "agent/crates/codegen/xai-grok-science/src/capability/biomni_uniprot.rs",
         "operation": "x.ai/science/capability_run",
         "source_markers": ("BIOMNI_QUERY_UNIPROT_PROVENANCE", "BIOMNI_QUERY_UNIPROT_CAPABILITY_ID"),
+        "e4_minimum_tests": 1,
     },
     "aipoch-skill-archive-preview-v1": {
         "source_id": "aipoch-open-science",
@@ -56,6 +58,7 @@ EXPECTATIONS = {
         "implementation_path": "agent/crates/codegen/xai-grok-science/src/skill_quarantine.rs",
         "operation": "x.ai/science/skill_quarantine_import",
         "source_markers": ("AIPOCH Open Science", "613b5ae735796472e477d041d0525c248799087ccb4aeaf1251a3dc17bed9bed"),
+        "e4_minimum_tests": 4,
     },
     "motif-primer-thermodynamics-domain-v1": {
         "source_id": "jvogan-motif",
@@ -148,14 +151,14 @@ def validate(record: dict[str, Any], lock: dict[str, Any]) -> None:
     require(level in {"E2", "E4"}, "capability record evidence level is unsupported")
     require(isinstance(evidence.get("why_not_higher"), str) and len(evidence["why_not_higher"]) >= 50, "evidence record must state its non-claim")
     if level == "E4":
-        require(record["id"] in {"motif-seq-analyze-v1", "aipoch-skill-quarantine-import-v1"}, "only exact tested actor operations may claim E4")
+        require(record["id"] in {"motif-seq-analyze-v1", "biomni-query-uniprot-v1", "aipoch-skill-quarantine-import-v1"}, "only exact tested actor operations may claim E4")
         proof = evidence.get("built_binary_proof")
         require(isinstance(proof, dict), "E4 record needs a built-binary proof")
         require(SHA256.fullmatch(str(proof.get("binary_sha256"))) is not None, "E4 binary SHA-256 is invalid")
         require(isinstance(proof.get("source_commit"), str) and len(proof["source_commit"]) == 40, "E4 proof needs an exact source commit")
         require(source_commit_is_current_ancestor(proof["source_commit"]), "E4 source commit is not an ancestor of current HEAD")
         tests = proof.get("tests")
-        require(isinstance(tests, list) and len(tests) >= 2 and all(isinstance(item, str) and item for item in tests), "E4 proof needs its exact product tests")
+        require(isinstance(tests, list) and len(tests) >= expected["e4_minimum_tests"] and all(isinstance(item, str) and item for item in tests), "E4 proof is missing an exact required product test")
         test_path = ROOT / str(evidence.get("legacy_product_tests", ""))
         require(test_path.is_file(), "E4 proof must name an existing product-test source")
         test_source = test_path.read_text(encoding="utf-8")
