@@ -59,7 +59,7 @@
 | 当前 nested agent | 有低层 depth/config/coordinator 积木；Science copy 仍单层，且当前权力继承不够科学级安全 | 在 `TaskTree + Capability Ceiling + TreeBudget` 前不开放 Science 多层执行 |
 | 当前 memory | 有 session/global/workspace 搜索、summary、dream | 不是项目/树级共享事实账本；不能充当双模研究记忆 |
 | 当前 daemon/scheduler | 有 PID lock、workflow、occurrence journal、background task 等积木 | 不等于 24h 科研 scheduler；`Kairos` 仍需新 contract |
-| 既有外部 intake lock | `ecosystem-admission.lock.json` 当前锁住 Biomni、Motif、AIPOCH、OpenClaudeScience 与 transitive SCP | BGC-Prophet、OpenDDE、AI4S 及 canonical Lumen/Science 还没有统一 v2 nine-source lock，不能假称“九源已审完” |
+| 既有外部 intake lock | `third_party/upstream-lock.v2.json` 已有九源 immutable receipt、tree inventory 与 exact-one disposition（BGC-Prophet、OpenDDE、AI4S、canonical Lumen/Science 均为 evidence-collected） | 这只是 source/rights/execution-boundary 覆盖；多数组件仍 quarantine，不能假称“九源都已产品化”或可执行 |
 | 既有成果 | actor-gated `seq_analyze`、Motif 多个 deterministic slice、Open Science preview/classifier、Biomni/SCP catalog、Desktop/ACP hardening | 全部保留为 migration oracle、fixture、provenance 和产品基础，不推倒重来 |
 
 ### 1.1 跨仓必须分开的两个 gate
