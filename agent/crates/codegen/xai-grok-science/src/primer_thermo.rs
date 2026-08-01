@@ -243,4 +243,51 @@ mod tests {
         assert_eq!(first.delta_g, second.delta_g);
         assert_eq!(predict_self_dimer("AAAA").delta_g, 0.0);
     }
+
+    #[test]
+    fn cross_language_reference_vectors_match_fixed_motif_outputs() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../fixtures/motif_primer_thermo_reference.json"
+        ))
+        .expect("Motif primer reference fixture parses");
+        assert_eq!(
+            fixture["upstream"]["commit"],
+            "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0"
+        );
+        for expected in fixture["hairpins"].as_array().expect("hairpins array") {
+            let result = predict_hairpin(expected["primer"].as_str().expect("primer"));
+            assert_eq!(result.delta_g, expected["deltaG"].as_f64().expect("deltaG"));
+            assert_eq!(
+                result.stem_length,
+                expected["stemLength"].as_u64().expect("stem") as usize
+            );
+            assert_eq!(
+                result.loop_size,
+                expected["loopSize"].as_u64().expect("loop") as usize
+            );
+            assert_eq!(
+                result.structure,
+                expected["structure"].as_str().expect("structure")
+            );
+        }
+        for expected in fixture["dimers"].as_array().expect("dimers array") {
+            let result = predict_primer_dimer(
+                expected["first"].as_str().expect("first"),
+                expected["second"].as_str().expect("second"),
+            );
+            assert_eq!(result.delta_g, expected["deltaG"].as_f64().expect("deltaG"));
+            assert_eq!(
+                result.pair_length,
+                expected["pairLength"].as_u64().expect("pair length") as usize
+            );
+            assert_eq!(
+                result.offset,
+                expected["offset"].as_i64().expect("offset") as isize
+            );
+            assert_eq!(
+                result.structure,
+                expected["structure"].as_str().expect("structure")
+            );
+        }
+    }
 }

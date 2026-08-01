@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "upstream": {
+    "repository": "https://github.com/jvogan/motif.git",
+    "commit": "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0",
+    "primer_thermodynamics_sha256": "464f85110fc071e5e30b95a7ff7c4b8e066a35d5e97f4fb003005554ad5ed72e",
+    "tm_calculator_sha256": "b6f5fc408a01d6dff5aef85adc7706466bfb22f478e5278aa6c087e5eb8eb0d2"
+  },
+  "hairpins": [
+    {"primer":"ATGAAACAT","deltaG":-0.4,"stemLength":3,"loopSize":3,"structure":"5'-ATG-...-CAT-3'"},
+    {"primer":"CGCTCGGTACG","deltaG":0.0,"stemLength":0,"loopSize":0,"structure":""},
+    {"primer":"AUGC-N","deltaG":0.0,"stemLength":0,"loopSize":0,"structure":""},
+    {"primer":"TTTAAACCCGGGTTT","deltaG":-1.55,"stemLength":4,"loopSize":4,"structure":"5'-AAAC-....-GTTT-3'"}
+  ],
+  "dimers": [
+    {"first":"CGCTCGGTACG","second":"CGTACCGAGCG","deltaG":-14.72,"pairLength":11,"offset":0,"structure":"5'-CGCTCGGTACG-3' (11 bp duplex, offset 0)"},
+    {"first":"AAAA","second":"AAAA","deltaG":0.0,"pairLength":0,"offset":0,"structure":""},
+    {"first":"ATGAAACAT","second":"ATGAAACAT","deltaG":-0.4,"pairLength":3,"offset":0,"structure":"5'-ATG-3' (3 bp duplex, offset 0)"}
+  ]
+}
