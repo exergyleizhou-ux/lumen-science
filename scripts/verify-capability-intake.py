@@ -47,6 +47,14 @@ EXPECTATIONS = {
         "operation": "settings:preview-skill-zip",
         "source_markers": ("Adapted from Open Science at fd2853f0b9bdb6c063ccc1e741687584ab94bf9a.", "inspectOuterArchive"),
     },
+    "motif-primer-thermodynamics-domain-v1": {
+        "source_id": "jvogan-motif",
+        "spdx": "MIT",
+        "paths": {"src/bio/primer-thermodynamics.ts", "src/bio/tm-calculator.ts"},
+        "implementation_path": "agent/crates/codegen/xai-grok-science/src/primer_thermo.rs",
+        "operation": "none",
+        "source_markers": ("predict_hairpin", "predict_primer_dimer", "464f85110fc071e5e30b95a7ff7c4b8e066a35d5e97f4fb003005554ad5ed72e", "b6f5fc408a01d6dff5aef85adc7706466bfb22f478e5278aa6c087e5eb8eb0d2"),
+    },
 }
 
 
@@ -76,7 +84,7 @@ def validate(record: dict[str, Any], lock: dict[str, Any]) -> None:
     implementation = record.get("implementation")
     require(isinstance(implementation, dict), "capability implementation must be an object")
     kind = record.get("kind", "actor-operation")
-    require(kind in {"actor-operation", "read-only-preview"}, "capability record kind is unsupported")
+    require(kind in {"actor-operation", "read-only-preview", "pure-domain-extraction"}, "capability record kind is unsupported")
     if kind == "actor-operation":
         require(implementation.get("authority") == "Rust Lumen SessionActor", "capability cannot name a second execution authority")
         require(implementation.get("network") == "denied" and implementation.get("process_execution") == "denied", "offline capability must deny network and process execution")
