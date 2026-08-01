@@ -73,6 +73,22 @@ def active_lock() -> dict[str, Any]:
                     },
                 }
             )
+        if source_id == "aipoch-open-science":
+            components.append(
+                {
+                    "id": f"{source_id}-mcp-client",
+                    "path": "src/main/connectors/mcp-client-manager.ts",
+                    "asset_kind": "code",
+                    "disposition": "reject-authority",
+                    "reuse_mode": "none",
+                    "rights_status": "verified",
+                    "execution_authority": "none",
+                    "evidence": {
+                        "source_sha256": f"{index + 400:064x}",
+                        "record": f"third_party/capability-intake/{source_id}/mcp-client.json",
+                    },
+                }
+            )
         sources.append(
             {
                 "id": source_id,
@@ -161,6 +177,12 @@ def main() -> int:
     check(
         "an AI4S external skill cannot be relabelled as adaptable",
         lambda lock: lock["sources"][6]["components"][1].update({"disposition": "adapt", "reuse_mode": "adapt", "rights_status": "verified"}),
+        1,
+        "violates forbidden-path disposition",
+    )
+    check(
+        "an AIPOCH Node MCP client cannot be relabelled as adaptable",
+        lambda lock: lock["sources"][2]["components"][1].update({"disposition": "adapt", "reuse_mode": "adapt"}),
         1,
         "violates forbidden-path disposition",
     )

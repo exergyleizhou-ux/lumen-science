@@ -41,6 +41,14 @@
       "clean_room_only": false,
       "required_disposition": "reject-authority",
       "reason": "Build-fetched external skill packs and their runtime/service rights cannot become Lumen execution authority."
+    },
+    {
+      "source_id": "aipoch-open-science",
+      "path": "src/main/connectors/mcp-client-manager.ts",
+      "copy_forbidden": true,
+      "clean_room_only": false,
+      "required_disposition": "reject-authority",
+      "reason": "Node stdio, SSE, and HTTP MCP client management cannot become a parallel Lumen capability authority."
     }
   ]
 }
