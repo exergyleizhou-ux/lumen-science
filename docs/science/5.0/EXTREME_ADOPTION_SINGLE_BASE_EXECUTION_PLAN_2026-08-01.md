@@ -204,6 +204,37 @@ canonical Lumen release candidate / immutable commit
 - `tests/platform_contract/`：compile fixtures plus allow/deny/cancel/replay compatibility corpus；
 - GitHub scheduled **draft-only** update workflow：绝不自动 merge、绝不覆盖 protected Science files。
 
+### 3.5 三代委派树：把“大 agent 生小 agent”变成可审计科研协作
+
+这不是可有可无的 UI 功能，而是科研生产力的关键执行面：root 负责问题、证据门和最后结论；下层把检索、方法设计、数据核查、代码/分析和怀疑者复核拆开并行。它也不能成为第二套执行权威。
+
+**术语必须消除 off-by-one：** Lumen 的 top-level session 是 `depth = 0`；`max_depth = 3` 表示允许三代被委派 session：depth 1（子 agent）→ depth 2（孙 agent）→ depth 3（末端 agent），并禁止 depth 3 再创建孩子。若产品文案想表达“root 加两层”，则配置应为 `2`，不能含糊地写“三层”。
+
+当前 canonical Lumen 已有可验证的低层基础，而不是需要另造 runtime：`xai-grok-tools/.../task/mod.rs` 的 `SubagentDepthCounter` / `MaxSubagentDepth`，以及 `xai-grok-shell/src/config/mod.rs` 的 `[subagents].max_depth`、`GROK_SUBAGENTS_MAX_DEPTH` 解析。默认仍为 1；Science 复制 Core 的旧实现仍硬编码一层。因此**不能**先在 Science copy 里把常量改成 3；必须让 canonical Lumen 的可配置实现成为唯一底座后，Science 才只声明政策。
+
+目标树固定为：
+
+```text
+depth 0  Research Director / human-facing root
+  └─ depth 1  Workstream lead（把问题拆成有边界的研究子任务）
+       └─ depth 2  Specialist（检索、方法、数据、代码或实验设计）
+            └─ depth 3  Terminal worker / skeptic（只交结构化证据；无 task tool）
+```
+
+每一个 spawn 必须由 canonical SessionActor 持久化为 `DelegationEnvelope v1`，至少含：`root_run_id`、parent/child operation 与 session IDs、ancestor chain digest、depth、role、immutable task/request digest、input artifact refs、declared output manifest、effective capability ceiling、model/runtime identity、token/turn/wall-time/fanout budget、approval lineage、workspace binding、cancel lease 与 replay policy。父节点只拥有“提出下一层任务”的权利；它不能伪造深度、扩大 tool/capability 集、转交未批准的 permission，或把子节点结果直接写成项目成功结论。
+
+**单一权威规则：**
+
+1. effective permissions and capabilities are monotonic intersections: `child ≤ parent ≤ root policy`；任何 shell、network、SSH、kernel、model 或 device plan 都回到 root-bound actor approval，而不是 child 自己批准；
+2. 所有 child artifacts 是 store-owned、内容寻址并带完整 ancestor chain；siblings 只能交换已准入 artifact references，不能共享裸工作目录、secret、未经审阅的聊天上下文或可变路径；
+3. root budget 是总预算：子孙 token、turn、wall time、并发和可执行 operation 数之和不得超过它；启动失败、超限、parent cancel、root disconnect、restart 都必须向下 cascade，并写出可恢复终态；
+4. depth 3 必须移除 `task` / background-spawn 类工具；其产出只能是 typed evidence/result proposal，不能 terminal success、不能直接执行生产 side effect；
+5. parent 对 child 的选择、summary 和采纳决定本身也是 provenance。一个 child 的“完成”只代表该委派完成，不代表 ResearchProject 或 root run 成功。
+
+**第一轮准入策略：** 先允许 depth 1–3 做 read-only planning、fixture analysis、evidence comparison、review/skeptic；当且仅当树的 identity、budget、cancel、recovery、artifact lineage 对抗测试通过后，才允许 child 提交由 root actor 审批的 declarative operation plan。绝不把 `max_depth=3` 当作自动开放三层 shell/MCP/remote execution。
+
+必须新增的反例：深度 3 再 spawn、伪造 `spawn_depth`、跨 root/owner/project/session/workspace 复用 child、budget split overrun、child escalation、sibling raw-path read、parent completion while grandchild running、root cancel cascade、crash/restart orphan recovery、child artifact tamper、child deny/timeout 后仍有 success artifact。
+
 ---
 
 ## 4. 分阶段实施程序
@@ -262,6 +293,7 @@ canonical Lumen release candidate / immutable commit
 3. 在 `SessionActor` 添加**一个** generic host route；在不改变现有 CSV/import/fetch/SSH 行为的前提下，将其作为 parallel opt-in。
 4. 写 adversarial contract tests：unknown domain、schema downgrade、payload hash swap、wrong owner/project/session/workspace/call、deny/timeout/cancel、duplicate operation、crash/restart、attempted raw spawn。
 5. 发布 platform API prerelease / exact commit compatibility manifest；Science 仅通过该 manifest pin，不直接引用 Lumen private session modules。
+6. 以 canonical Lumen 已有的 `MaxSubagentDepth` / coordinator / child-session persistence 为源码参照，新增 `DelegationEnvelope v1`、root budget ledger 和 actor-side depth derivation；默认仍为单层，三代树只在明确 policy + adversarial corpus 下 opt-in。
 
 **Exit Gate：** generic host 与现有 Begin/Finish path 保持相同 terminal semantics；没有让 extension 获得 raw path/process/network access；canonical Lumen exact-head CI + Science contract fixture E5。
 
@@ -457,7 +489,7 @@ Codex 验收：独立重跑、检查 license/provenance、决定是否接 actor�
 
 ---
 
-## 6. 第一批可立即排队的 20 张工作卡
+## 6. 第一批可立即排队的 22 张工作卡
 
 | # | 卡片 | 负责人 | 前置 | 完成定义 |
 |---:|---|---|---|---|
@@ -481,6 +513,8 @@ Codex 验收：独立重跑、检查 license/provenance、决定是否接 actor�
 | 18 | OpenDDE offline config contract | Codex | #17 | default rejects MSA/network |
 | 19 | macOS source-lock engine launcher check | Grok→Codex | #7 | SHA/API manifest mismatch fails |
 | 20 | platform-update draft PR bot design | DeepSeek→Codex | #6 | draft only, no auto merge |
+| 21 | `DelegationEnvelope v1` RFC + ancestor/budget schema | Codex + Lumen session | #6 | root-owned durable lineage, no child authority |
+| 22 | three-generation delegation adversarial corpus | Grok→Codex | #21 | depth/budget/escalation/cancel/recovery tests fail closed |
 
 ---
 
