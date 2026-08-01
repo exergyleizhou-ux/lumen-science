@@ -63,6 +63,8 @@ type FakeSettingsService = Record<
   | 'createSkill'
   | 'updateSkill'
   | 'deleteSkill'
+  | 'importSkill'
+  | 'importAgentHomeSkill'
   | 'importSkillZipBatch'
   | 'previewGitHubSkill'
   | 'setConnectorEnabled',
@@ -141,11 +143,14 @@ const createFakeService = (): FakeSettingsService => ({
   createSkill: vi.fn().mockResolvedValue([]),
   updateSkill: vi.fn().mockResolvedValue([]),
   deleteSkill: vi.fn().mockResolvedValue([]),
+  importSkill: vi.fn().mockResolvedValue({ status: 'imported', id: 'imported-demo', skills: [] }),
+  importAgentHomeSkill: vi
+    .fn()
+    .mockResolvedValue({ status: 'imported', id: 'imported-demo', skills: [] }),
   importSkillZipBatch: vi.fn().mockResolvedValue({ results: [], skills: [] }),
   previewGitHubSkill: vi.fn().mockResolvedValue({ name: 'GitHub preview' }),
   setConnectorEnabled: vi.fn().mockResolvedValue({ connectors: [] })
 })
-
 // Adapts the spy bag into the SettingsService shape the registration function expects.
 const asService = (fake: FakeSettingsService): SettingsService => fake as unknown as SettingsService
 
@@ -558,6 +563,24 @@ describe('settings IPC handlers', () => {
 
     expect(handlers.has('settings:import-skill-zip')).toBe(false)
     expect(handlers.has('settings:import-skill-zip-batch')).toBe(false)
+    expect(onSkillsChanged).not.toHaveBeenCalled()
+  })
+
+  it('fails GitHub and agent-home mutations closed without writing or reloading skills', async () => {
+    handlers.clear()
+    const service = createFakeService()
+    const onSkillsChanged = vi.fn()
+    registerSettingsIpcHandlers({ service: asService(service), onSkillsChanged })
+
+    await expect(
+      invoke('settings:import-skill', { url: 'https://github.com/acme/skills/tree/main/demo' })
+    ).rejects.toThrow(/actor-gated bundle quarantine/i)
+    await expect(invoke('settings:import-agent-home-skill', { slug: 'demo' })).rejects.toThrow(
+      /actor-gated quarantine/i
+    )
+
+    expect(service.importSkill).not.toHaveBeenCalled()
+    expect(service.importAgentHomeSkill).not.toHaveBeenCalled()
     expect(onSkillsChanged).not.toHaveBeenCalled()
   })
 

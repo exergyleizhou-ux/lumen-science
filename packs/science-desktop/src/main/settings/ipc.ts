@@ -15,8 +15,6 @@ import {
   type CreateSkillRequest,
   type DeleteProviderRequest,
   type DeleteSkillRequest,
-  type ImportAgentHomeSkillRequest,
-  type ImportSkillRequest,
   type PreviewSkillZipRequest,
   type PreviewGitHubSkillRequest,
   type ScanRepoRequest,
@@ -448,10 +446,15 @@ const registerSettingsIpcHandlers = ({
     onSkillsChanged?.()
     return skills
   })
-  ipcMain.handle('settings:import-skill', async (_event, request: ImportSkillRequest) => {
-    const result = await service.importSkill(request)
-    onSkillsChanged?.()
-    return result
+  // A GitHub URL is untrusted executable instruction content, not a UI preference.
+  // Do not delegate it to SettingsService: that legacy method writes directly into
+  // the imported-skill store and requests a runtime reload, bypassing the durable
+  // SessionActor approval/artifact/provenance path. Preview and scan remain
+  // read-only; a user can submit a bundle to the actor-gated quarantine route.
+  ipcMain.handle('settings:import-skill', async () => {
+    throw new Error(
+      'Direct GitHub skill import is disabled: preview it, then use the actor-gated bundle quarantine import.'
+    )
   })
   ipcMain.handle('settings:preview-skill-zip', (_event, request: PreviewSkillZipRequest) =>
     service.previewSkillZip(request)
@@ -466,15 +469,15 @@ const registerSettingsIpcHandlers = ({
   // Lists the user's machine-level Claude skills (~/.claude/skills/) for the "From your agent home"
   // import source. Read-only — the renderer calls importAgentHomeSkill to actually copy one in.
   ipcMain.handle('settings:list-agent-home-skills', () => service.listAgentHomeSkills())
-  ipcMain.handle(
-    'settings:import-agent-home-skill',
-    async (_event, request: ImportAgentHomeSkillRequest) => {
-      const result = await service.importAgentHomeSkill(request)
-      onSkillsChanged?.()
-
-      return result
-    }
-  )
+  // Agent-home content has the same execution effect as a GitHub import once it
+  // is copied into the active runtime. Containment validation is useful but not
+  // sufficient authority: it cannot substitute for SessionActor approval and
+  // store-owned evidence. Keep listing read-only and fail this mutation closed.
+  ipcMain.handle('settings:import-agent-home-skill', async () => {
+    throw new Error(
+      'Direct agent-home skill import is disabled: submit a reviewed bundle through actor-gated quarantine.'
+    )
+  })
 
   ipcMain.handle('settings:list-connectors', () => service.listConnectors())
   ipcMain.handle('settings:get-connector-detail', (_event, id: string) =>
