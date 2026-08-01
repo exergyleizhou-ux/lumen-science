@@ -16,6 +16,8 @@ const MIN_STEM_OR_DIMER_BASES: usize = 3;
 const MIN_HAIRPIN_LOOP_BASES: usize = 3;
 /// At most 16 candidates gives at most 120 unordered hetero-dimer screens.
 pub const MAX_PRIMER_CANDIDATES: usize = 16;
+/// Bound the durable request surface as well as the screening cost.
+pub const MAX_PRIMER_LENGTH: usize = 120;
 
 /// Approximate first-order screening cutoff compatible with the source slice.
 pub const DEFAULT_MAX_HAIRPIN_DELTA_G_KCAL_PER_MOL: f64 = -3.0;
@@ -83,6 +85,41 @@ fn normalized_dna(value: &str) -> String {
             _ => None,
         })
         .collect()
+}
+
+/// Canonical, lossless admission form for caller-supplied primer candidates.
+///
+/// Motif's UI helper intentionally strips non-base characters. That is useful
+/// for interactive display, but it is unsafe at a durable authority boundary:
+/// two distinct requests must not silently become the same approved request.
+/// The product path therefore accepts only A/C/G/T/U (case-insensitive),
+/// normalizes RNA U to DNA T, and rejects duplicates before hashing or writing.
+pub fn canonical_primer_candidates(candidates: &[String]) -> Result<Vec<String>, String> {
+    if candidates.len() > MAX_PRIMER_CANDIDATES {
+        return Err(format!(
+            "primer screening accepts at most {MAX_PRIMER_CANDIDATES} candidates"
+        ));
+    }
+    let mut canonical = Vec::with_capacity(candidates.len());
+    for candidate in candidates {
+        if candidate.is_empty() || candidate.len() > MAX_PRIMER_LENGTH {
+            return Err(format!(
+                "each primer candidate must be 1..={MAX_PRIMER_LENGTH} nucleotide bases"
+            ));
+        }
+        if !candidate
+            .bytes()
+            .all(|byte| matches!(byte.to_ascii_uppercase(), b'A' | b'C' | b'G' | b'T' | b'U'))
+        {
+            return Err("primer candidates may contain only A, C, G, T, or U".into());
+        }
+        let normalized = normalized_dna(candidate);
+        if canonical.contains(&normalized) {
+            return Err("primer candidates must be unique after DNA normalization".into());
+        }
+        canonical.push(normalized);
+    }
+    Ok(canonical)
 }
 
 fn reverse_complement_dna(value: &str) -> String {
@@ -384,5 +421,15 @@ mod tests {
         let candidates = vec!["ATGC".to_owned(); MAX_PRIMER_CANDIDATES + 1];
         let error = screen_primer_candidates(&candidates).expect_err("candidate cap");
         assert!(error.contains("exceeds maximum"));
+    }
+
+    #[test]
+    fn durable_admission_is_lossless_and_canonical() {
+        assert_eq!(
+            canonical_primer_candidates(&["auGc".to_owned()]).unwrap(),
+            vec!["ATGC"]
+        );
+        assert!(canonical_primer_candidates(&["ATGC-N".to_owned()]).is_err());
+        assert!(canonical_primer_candidates(&["ATGC".to_owned(), "AUGC".to_owned()]).is_err());
     }
 }

@@ -27,6 +27,8 @@ ALGORITHMS = {
     "src/bio/orf-detection.ts",
     "src/bio/restriction-sites.ts",
     "src/bio/restriction-digest.ts",
+    "src/bio/primer-thermodynamics.ts",
+    "src/bio/tm-calculator.ts",
 }
 
 
@@ -58,11 +60,11 @@ def main() -> int:
         ("seqbench constants agree with the exact v2 Motif receipt", constants_match),
         ("vendor manifest agrees with the exact v2 Motif receipt", vendor_match),
         (
-            "all eight adapted algorithm sources exist in the quarantined exact tree inventory",
+            "all ten adapted algorithm sources exist in the quarantined exact tree inventory",
             ALGORITHMS.issubset(tree_paths),
         ),
         (
-            "seqbench declares exactly the eight provenance algorithm sources",
+            "seqbench declares exactly the ten provenance algorithm sources",
             selected_paths == ALGORITHMS,
         ),
         (

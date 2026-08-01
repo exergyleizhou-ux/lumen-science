@@ -187,9 +187,9 @@
           {
             "path": "agent/crates/codegen/xai-grok-science/src/seqbench.rs",
             "contains": [
-              "pub const TOOL_VERSION: &str = \"1.5.0\"",
+              "pub const TOOL_VERSION: &str = \"1.6.0\"",
               "pub const MOTIF_COMMIT: &str = \"876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0\"",
-              "schema_version: 6",
+              "schema_version: 7",
               "\"algorithm_source_commit\".into(), MOTIF_COMMIT.into()",
               "motif_nucleotide_metrics_match_the_cross_language_reference_values",
               "motif_iupac_reverse_complement_and_rna_translation_match",
@@ -206,7 +206,9 @@
               "src/bio/restriction-digest.ts",
               "motif_restriction_digest_preserves_linear_and_circular_fragment_ends",
               "restriction_digest_selection_and_incomplete_cuts_fail_closed",
-              "approved_restriction_digest_enzymes_cannot_be_swapped_before_finish"
+              "approved_restriction_digest_enzymes_cannot_be_swapped_before_finish",
+              "approved_primer_candidates_cannot_be_swapped_before_finish",
+              "primer_request_is_durable_in_analysis_report_and_provenance"
             ]
           },
           {
@@ -216,7 +218,8 @@
               "SeqAnalyzeOptions",
               "science-seqbench-v4",
               "restriction_topology",
-              "restriction_digest_enzymes"
+              "restriction_digest_enzymes",
+              "primer_candidates"
             ]
           },
           {
@@ -225,7 +228,9 @@
               "\"translationTableId\": 2",
               "\"topology\": \"circular\"",
               "\"restrictionDigestEnzymes\": [\"EcoRI\"]",
+              "\"primerCandidates\": [\"ATGCGCAT\", \"GCGTATGC\"]",
               "analysis[\"translation_table\"][\"id\"], 2",
+              "analysis\"][\"primer_thermodynamics\"]",
               "analysis[\"restriction_topology\"], \"circular\"",
               "circular_eco_ri[\"cut_position\"], 0",
               "circular_digest[0][\"overhang5\"], \"AATT\"",

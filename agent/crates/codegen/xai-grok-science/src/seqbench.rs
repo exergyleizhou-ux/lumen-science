@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const TOOL: &str = "lumen-seqbench";
-pub const TOOL_VERSION: &str = "1.5.0";
+pub const TOOL_VERSION: &str = "1.6.0";
 pub const MOTIF_REPOSITORY: &str = "https://github.com/jvogan/motif.git";
 pub const MOTIF_COMMIT: &str = "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0";
 pub const MOTIF_LICENSE: &str = "MIT";
@@ -62,6 +62,10 @@ pub struct SeqAnalyzeOptions {
     pub topology: SequenceTopology,
     #[serde(default)]
     pub restriction_digest_enzymes: Vec<String>,
+    /// Losslessly canonicalized, caller-owned primer candidates.  These are
+    /// screened only after the durable request has been allowed.
+    #[serde(default)]
+    pub primer_candidates: Vec<String>,
 }
 
 impl Default for SeqAnalyzeOptions {
@@ -70,6 +74,7 @@ impl Default for SeqAnalyzeOptions {
             translation_table_id: 1,
             topology: SequenceTopology::Linear,
             restriction_digest_enzymes: Vec::new(),
+            primer_candidates: Vec::new(),
         }
     }
 }
@@ -399,6 +404,8 @@ pub struct Analysis {
     pub restriction_topology: SequenceTopology,
     pub restriction_enzyme_count: usize,
     pub restriction_digest_enzymes: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub primer_thermodynamics: Option<crate::primer_thermo::PrimerThermodynamicsReport>,
     pub records: Vec<RecordSummary>,
     pub notes: Vec<String>,
 }
@@ -520,13 +527,41 @@ pub fn analyze_with_options(
     if digest_enzymes != options.restriction_digest_enzymes {
         return Err("restriction digest enzymes must use canonical names and catalog order".into());
     }
+    let primer_candidates =
+        crate::primer_thermo::canonical_primer_candidates(&options.primer_candidates)?;
+    if primer_candidates != options.primer_candidates {
+        return Err("primer candidates must use canonical DNA form".into());
+    }
+    let primer_thermodynamics = if primer_candidates.is_empty() {
+        None
+    } else {
+        Some(crate::primer_thermo::screen_primer_candidates(
+            &primer_candidates,
+        )?)
+    };
     let source_sha256 = hex_sha256(source_bytes);
     let mut summaries = Vec::with_capacity(records.len());
     for r in records {
         summaries.push(summarize(r, table, options.topology, &digest_enzymes)?);
     }
+    let mut algorithm_components = vec![
+        "src/bio/fasta-parser.ts".into(),
+        "src/bio/gc-content.ts".into(),
+        "src/bio/reverse-complement.ts".into(),
+        "src/bio/translate.ts".into(),
+        "src/bio/codon-tables.ts".into(),
+        "src/bio/orf-detection.ts".into(),
+        "src/bio/restriction-sites.ts".into(),
+        "src/bio/restriction-digest.ts".into(),
+    ];
+    if primer_thermodynamics.is_some() {
+        algorithm_components.extend([
+            "src/bio/primer-thermodynamics.ts".into(),
+            "src/bio/tm-calculator.ts".into(),
+        ]);
+    }
     Ok(Analysis {
-        schema_version: 6,
+        schema_version: 7,
         tool: TOOL.into(),
         tool_version: TOOL_VERSION.into(),
         source_sha256,
@@ -534,16 +569,7 @@ pub fn analyze_with_options(
             repository: MOTIF_REPOSITORY.into(),
             commit: MOTIF_COMMIT.into(),
             license: MOTIF_LICENSE.into(),
-            components: vec![
-                "src/bio/fasta-parser.ts".into(),
-                "src/bio/gc-content.ts".into(),
-                "src/bio/reverse-complement.ts".into(),
-                "src/bio/translate.ts".into(),
-                "src/bio/codon-tables.ts".into(),
-                "src/bio/orf-detection.ts".into(),
-                "src/bio/restriction-sites.ts".into(),
-                "src/bio/restriction-digest.ts".into(),
-            ],
+            components: algorithm_components,
         }],
         translation_table: TranslationTableSummary {
             id: table.id,
@@ -552,6 +578,7 @@ pub fn analyze_with_options(
         restriction_topology: options.topology,
         restriction_enzyme_count: RESTRICTION_ENZYMES.len(),
         restriction_digest_enzymes: digest_enzymes.clone(),
+        primer_thermodynamics,
         records: summaries,
         notes: vec![
             "Deterministic offline analysis. Not a substitute for wet-lab validation.".into(),
@@ -566,6 +593,14 @@ pub fn analyze_with_options(
                     "Restriction digest uses {} selected enzyme(s): {}.",
                     digest_enzymes.len(),
                     digest_enzymes.join(", ")
+                )
+            },
+            if primer_candidates.is_empty() {
+                "Primer thermodynamics screening was not requested.".into()
+            } else {
+                format!(
+                    "Primer thermodynamics screened {} canonical candidate(s); this is a deterministic first-order prediction, not wet-lab validation.",
+                    primer_candidates.len()
                 )
             },
             format!(
@@ -598,6 +633,13 @@ pub fn markdown_report(a: &Analysis, source_label: &str) -> String {
         b.push_str(&format!(
             "- restriction digest enzymes: {}\n",
             a.restriction_digest_enzymes.join(", ")
+        ));
+    }
+    if let Some(primers) = &a.primer_thermodynamics {
+        b.push_str(&format!(
+            "- primer thermodynamics: {} candidates; {} hetero-dimer pairs\n",
+            primers.primers.len(),
+            primers.hetero_dimers.len()
         ));
     }
     b.push_str(&format!("- records: {}\n\n", a.records.len()));
@@ -1833,8 +1875,8 @@ mod tests {
         let summary = &analysis.records[0];
         let composition = summary.nucleotide_composition.as_ref().unwrap();
 
-        assert_eq!(analysis.schema_version, 6);
-        assert_eq!(analysis.tool_version, "1.5.0");
+        assert_eq!(analysis.schema_version, 7);
+        assert_eq!(analysis.tool_version, "1.6.0");
         assert_eq!(analysis.algorithm_sources[0].commit, MOTIF_COMMIT);
         assert_eq!(analysis.translation_table.id, 1);
         assert_eq!(analysis.translation_table.name, "Standard");
@@ -2165,6 +2207,7 @@ mod tests {
                 translation_table_id: 27,
                 topology: SequenceTopology::Linear,
                 restriction_digest_enzymes: Vec::new(),
+                primer_candidates: Vec::new(),
             },
         )
         .unwrap_err();
@@ -2210,6 +2253,18 @@ pub const SOURCE_SHA256_ENV: &str = "seq_source_sha256";
 pub const SOURCE_BYTES_ENV: &str = "seq_source_bytes";
 pub const SOURCE_RELATIVE_PATH_ENV: &str = "seq_source_relative_path";
 pub const PROJECT_REVISION_ENV: &str = "seq_project_revision";
+pub const PRIMER_CANDIDATES_ENV: &str = "seq_primer_candidates";
+
+fn canonical_primers(options: &SeqAnalyzeOptions) -> crate::Result<Vec<String>> {
+    let primers = crate::primer_thermo::canonical_primer_candidates(&options.primer_candidates)
+        .map_err(ScienceError::Invalid)?;
+    if primers != options.primer_candidates {
+        return Err(ScienceError::Invalid(
+            "primer candidates must use canonical DNA form".into(),
+        ));
+    }
+    Ok(primers)
+}
 
 /// Keep operation ids portable because they become stable durable addresses.
 pub fn validate_operation_id(operation_id: &str) -> crate::Result<()> {
@@ -2300,6 +2355,7 @@ pub fn request_sha256(
             "restriction digest enzymes must use canonical names and catalog order".into(),
         ));
     }
+    let primer_candidates = canonical_primers(options)?;
     let source_digest = Sha256::digest(source_bytes);
     let mut hasher = Sha256::new();
     update_canonical_field(
@@ -2335,6 +2391,16 @@ pub fn request_sha256(
     );
     for enzyme in &digest_enzymes {
         update_canonical_field(&mut hasher, b"restriction_digest_enzyme", enzyme.as_bytes());
+    }
+    update_canonical_field(
+        &mut hasher,
+        b"primer_candidate_count",
+        &u64::try_from(primer_candidates.len())
+            .map_err(|_| ScienceError::Invalid("too many primer candidates".into()))?
+            .to_be_bytes(),
+    );
+    for primer in &primer_candidates {
+        update_canonical_field(&mut hasher, b"primer_candidate", primer.as_bytes());
     }
     Ok(format!("{:x}", hasher.finalize()))
 }
@@ -2419,6 +2485,7 @@ pub fn begin_analysis_with_options_witnessed(
             "restriction digest enzymes must use canonical names and catalog order".into(),
         ));
     }
+    let primer_candidates = canonical_primers(options)?;
     context.environment.insert(
         "translation_table_id".into(),
         options.translation_table_id.to_string(),
@@ -2434,6 +2501,9 @@ pub fn begin_analysis_with_options_witnessed(
         "restriction_digest_enzymes".into(),
         digest_enzymes.join(","),
     );
+    context
+        .environment
+        .insert(PRIMER_CANDIDATES_ENV.into(), primer_candidates.join(","));
     let ticket = ScienceRunTicket {
         project_id: context.project_id.clone(),
         run_id: context.run_id.clone(),
@@ -2484,6 +2554,7 @@ fn created_event_payload(
             "restriction digest enzymes must use canonical names and catalog order".into(),
         ));
     }
+    let primer_candidates = canonical_primers(options)?;
     Ok(serde_json::json!({
         "kind": "seq_analyze",
         "operation_id": context.environment.get(OPERATION_ENV),
@@ -2496,6 +2567,7 @@ fn created_event_payload(
         "translation_table_name": table.name,
         "restriction_topology": options.topology,
         "restriction_digest_enzymes": digest_enzymes,
+        "primer_candidates": primer_candidates,
     }))
 }
 
@@ -2642,15 +2714,28 @@ fn options_from_durable_context(context: &RunContext) -> crate::Result<SeqAnalyz
     } else {
         digest_enzymes.split(',').map(str::to_owned).collect()
     };
+    let durable_primers = context
+        .environment
+        .get(PRIMER_CANDIDATES_ENV)
+        .ok_or_else(|| {
+            ScienceError::Invalid("sequence authority primer candidate binding is missing".into())
+        })?;
+    let primer_candidates = if durable_primers.is_empty() {
+        Vec::new()
+    } else {
+        durable_primers.split(',').map(str::to_owned).collect()
+    };
     let options = SeqAnalyzeOptions {
         translation_table_id,
         topology,
         restriction_digest_enzymes,
+        primer_candidates,
     };
     let canonical = canonical_restriction_digest_enzymes(&options.restriction_digest_enzymes)
         .map_err(ScienceError::Invalid)?;
     if translation_table(translation_table_id).is_none()
         || canonical != options.restriction_digest_enzymes
+        || canonical_primers(&options)? != options.primer_candidates
     {
         return Err(ScienceError::Invalid(
             "sequence authority options are unsupported or non-canonical".into(),
@@ -3001,6 +3086,7 @@ fn finish_allowed_analysis(
             "restriction digest enzymes must use canonical names and catalog order".into(),
         ));
     }
+    let primer_candidates = canonical_primers(options)?;
     let run = store.load_run(&ticket.run_id)?;
     if run.context.environment.get("translation_table_id")
         != Some(&options.translation_table_id.to_string())
@@ -3009,6 +3095,7 @@ fn finish_allowed_analysis(
             != Some(&options.topology.as_str().to_string())
         || run.context.environment.get("restriction_digest_enzymes")
             != Some(&digest_enzymes.join(","))
+        || run.context.environment.get(PRIMER_CANDIDATES_ENV) != Some(&primer_candidates.join(","))
     {
         return Err(ScienceError::Invalid(
             "seq analysis options do not match the durably approved run".into(),
@@ -3099,7 +3186,7 @@ fn finish_allowed_analysis(
         input_sha256: hex_sha256(source_bytes),
         tool: tool_identity.clone(),
         environment: BTreeMap::from([
-            ("algorithm".into(), "seqbench-v6".into()),
+            ("algorithm".into(), "seqbench-v7".into()),
             (
                 "algorithm_source_repository".into(),
                 MOTIF_REPOSITORY.into(),
@@ -3121,6 +3208,7 @@ fn finish_allowed_analysis(
                 "restriction_digest_enzymes".into(),
                 digest_enzymes.join(","),
             ),
+            ("primer_candidates".into(), primer_candidates.join(",")),
         ]),
     };
     store.add_provenance(provenance_record.clone())?;
@@ -3167,6 +3255,7 @@ fn finish_allowed_analysis(
             "translation_table_name": table.name,
             "restriction_topology": options.topology,
             "restriction_digest_enzymes": digest_enzymes,
+            "primer_candidates": primer_candidates,
             "artifacts": [
                 {
                     "path": ANALYSIS_ARTIFACT_PATH,
@@ -3470,6 +3559,7 @@ fn exact_unsealed_completed_event(
             "restriction digest enzymes must use canonical names and catalog order".into(),
         ));
     }
+    let primer_candidates = canonical_primers(options)?;
     let records = parse_analysis_input(source_path, source_bytes).map_err(ScienceError::Invalid)?;
     let analysis =
         analyze_with_options(&records, source_bytes, options).map_err(ScienceError::Invalid)?;
@@ -3506,6 +3596,7 @@ fn exact_unsealed_completed_event(
                 "translation_table_name": table.name,
                 "restriction_topology": options.topology,
                 "restriction_digest_enzymes": digest_enzymes,
+                "primer_candidates": primer_candidates,
                 "artifacts": [
                     {
                         "path": ANALYSIS_ARTIFACT_PATH,
@@ -4015,6 +4106,7 @@ fn aggregate_inner(
     })?;
     let digest_enzymes = canonical_restriction_digest_enzymes(&options.restriction_digest_enzymes)
         .map_err(ScienceError::Invalid)?;
+    let primer_candidates = canonical_primers(options)?;
     if digest_enzymes != options.restriction_digest_enzymes
         || run.context.environment.get("translation_table_id")
             != Some(&options.translation_table_id.to_string())
@@ -4023,6 +4115,7 @@ fn aggregate_inner(
             != Some(&options.topology.as_str().to_string())
         || run.context.environment.get("restriction_digest_enzymes")
             != Some(&digest_enzymes.join(","))
+        || run.context.environment.get(PRIMER_CANDIDATES_ENV) != Some(&primer_candidates.join(","))
     {
         return Err(ScienceError::Invalid(
             "sequence replay options do not match durable admission".into(),
@@ -4179,7 +4272,7 @@ fn aggregate_inner(
         input_sha256: source_sha256,
         tool: format!("{TOOL} {TOOL_VERSION} inside SessionActor"),
         environment: BTreeMap::from([
-            ("algorithm".into(), "seqbench-v6".into()),
+            ("algorithm".into(), "seqbench-v7".into()),
             (
                 "algorithm_source_repository".into(),
                 MOTIF_REPOSITORY.into(),
@@ -4201,6 +4294,7 @@ fn aggregate_inner(
                 "restriction_digest_enzymes".into(),
                 digest_enzymes.join(","),
             ),
+            ("primer_candidates".into(), primer_candidates.join(",")),
         ]),
     };
     let previews = store.previews(&run.context.run_id)?;
@@ -4242,6 +4336,7 @@ fn aggregate_inner(
                 "translation_table_name": table.name,
                 "restriction_topology": options.topology,
                 "restriction_digest_enzymes": digest_enzymes,
+                "primer_candidates": primer_candidates,
             })
         || allowed.actor != "LumenApproval"
         || allowed.kind != "approval.allowed"
@@ -4269,6 +4364,7 @@ fn aggregate_inner(
                 "translation_table_name": table.name,
                 "restriction_topology": options.topology,
                 "restriction_digest_enzymes": digest_enzymes,
+                "primer_candidates": primer_candidates,
                 "artifacts": [
                     {
                         "path": ANALYSIS_ARTIFACT_PATH,
@@ -4526,6 +4622,7 @@ mod protocol_tests {
             translation_table_id: 2,
             topology: SequenceTopology::Circular,
             restriction_digest_enzymes: vec!["EcoRI".into(), "BamHI".into()],
+            primer_candidates: Vec::new(),
         };
         assert_eq!(
             request_sha256("inputs/golden.fasta", FASTA, &options).unwrap(),
@@ -5272,6 +5369,7 @@ mod protocol_tests {
             translation_table_id: 2,
             topology: SequenceTopology::Linear,
             restriction_digest_enzymes: Vec::new(),
+            primer_candidates: Vec::new(),
         };
         let ticket = begin_analysis_with_options(
             &store,
@@ -5285,6 +5383,7 @@ mod protocol_tests {
             translation_table_id: 1,
             topology: SequenceTopology::Linear,
             restriction_digest_enzymes: Vec::new(),
+            primer_candidates: Vec::new(),
         };
         let error = finish_analysis_with_options(
             &store,
@@ -5316,6 +5415,7 @@ mod protocol_tests {
             translation_table_id: 1,
             topology: SequenceTopology::Circular,
             restriction_digest_enzymes: Vec::new(),
+            primer_candidates: Vec::new(),
         };
         let ticket = begin_analysis_with_options(
             &store,
@@ -5329,6 +5429,7 @@ mod protocol_tests {
             translation_table_id: 1,
             topology: SequenceTopology::Linear,
             restriction_digest_enzymes: Vec::new(),
+            primer_candidates: Vec::new(),
         };
         let error = finish_analysis_with_options(
             &store,
@@ -5360,6 +5461,7 @@ mod protocol_tests {
             translation_table_id: 1,
             topology: SequenceTopology::Linear,
             restriction_digest_enzymes: vec!["EcoRI".into()],
+            primer_candidates: Vec::new(),
         };
         let ticket = begin_analysis_with_options(
             &store,
@@ -5373,6 +5475,7 @@ mod protocol_tests {
             translation_table_id: 1,
             topology: SequenceTopology::Linear,
             restriction_digest_enzymes: vec!["BamHI".into()],
+            primer_candidates: Vec::new(),
         };
         let error = finish_analysis_with_options(
             &store,
@@ -5397,6 +5500,111 @@ mod protocol_tests {
     }
 
     #[test]
+    fn approved_primer_candidates_cannot_be_swapped_before_finish() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ScienceStore::new(temp.path().join("science-store"));
+        let approved = SeqAnalyzeOptions {
+            translation_table_id: 1,
+            topology: SequenceTopology::Linear,
+            restriction_digest_enzymes: Vec::new(),
+            primer_candidates: vec!["ATGCGCAT".into(), "GCGTATGC".into()],
+        };
+        let ticket = begin_analysis_with_options(
+            &store,
+            context(temp.path(), "project-a", "alice"),
+            &approved,
+        )
+        .unwrap();
+        mark_allowed_recoverable(&store, &ticket).unwrap();
+
+        let swapped = SeqAnalyzeOptions {
+            primer_candidates: vec!["ATGCGCAT".into(), "GCGTATGA".into()],
+            ..approved
+        };
+        let error = finish_analysis_with_options(
+            &store,
+            ticket.clone(),
+            Path::new("input.fa"),
+            FASTA,
+            &swapped,
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("options do not match the durably approved run")
+        );
+        assert_eq!(
+            store.load_run(&ticket.run_id).unwrap().state,
+            RunState::Failed
+        );
+        assert!(store.artifacts(&ticket.run_id).unwrap().is_empty());
+        assert!(store.evidence(&ticket.run_id).unwrap().is_empty());
+        assert!(store.provenance(&ticket.run_id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn primer_request_is_durable_in_analysis_report_and_provenance() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = dunce::canonicalize(temp.path()).unwrap();
+        let options = SeqAnalyzeOptions {
+            primer_candidates: vec!["ATGCGCAT".into(), "GCGTATGC".into()],
+            ..SeqAnalyzeOptions::default()
+        };
+        let source_path = workspace.join("input.fa");
+        let context = operation_context(
+            &workspace,
+            "project-primer",
+            "alice",
+            "session-primer",
+            "seq-primer-operation-0001",
+            &source_path,
+            FASTA,
+            &options,
+        );
+        let store = ScienceStore::new(&context.artifact_root);
+        let ticket = begin_analysis_with_options(&store, context, &options).unwrap();
+        mark_allowed_recoverable(&store, &ticket).unwrap();
+        let result =
+            finish_analysis_with_options(&store, ticket.clone(), &source_path, FASTA, &options)
+                .unwrap();
+        let primers = result.analysis.primer_thermodynamics.as_ref().unwrap();
+        assert_eq!(primers.primers[0].sequence, "ATGCGCAT");
+        assert_eq!(primers.hetero_dimers.len(), 1);
+        assert_eq!(
+            result.provenance[0]
+                .environment
+                .get("primer_candidates")
+                .map(String::as_str),
+            Some("ATGCGCAT,GCGTATGC")
+        );
+        let report = store
+            .artifact_bytes_bounded(
+                &ticket.project_id,
+                &ticket.run_id,
+                &ticket.owner_id,
+                Path::new(REPORT_ARTIFACT_PATH),
+                REPORT_REPLAY_MAX_BYTES,
+            )
+            .unwrap();
+        assert!(
+            String::from_utf8(report)
+                .unwrap()
+                .contains("primer thermodynamics: 2 candidates")
+        );
+        assert!(
+            aggregate(
+                &store,
+                store.load_run(&ticket.run_id).unwrap(),
+                &source_path,
+                FASTA,
+                &options
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
     fn allowed_translation_table_is_durable_in_output_and_provenance() {
         let temp = tempfile::tempdir().unwrap();
         let workspace = dunce::canonicalize(temp.path()).unwrap();
@@ -5404,6 +5612,7 @@ mod protocol_tests {
             translation_table_id: 2,
             topology: SequenceTopology::Circular,
             restriction_digest_enzymes: vec!["EcoRI".into()],
+            primer_candidates: Vec::new(),
         };
         let source_path = workspace.join("input.fa");
         let sequence = format!(">mitochondrial\nATG{}AGA\n", "AAA".repeat(29));
@@ -5473,6 +5682,7 @@ mod protocol_tests {
             translation_table_id: 2,
             topology: SequenceTopology::Circular,
             restriction_digest_enzymes: vec!["EcoRI".into()],
+            primer_candidates: Vec::new(),
         };
         let context = operation_context(
             &workspace,

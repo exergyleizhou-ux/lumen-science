@@ -1480,6 +1480,8 @@ struct SeqAnalyzeParams {
     topology: xai_grok_science::seqbench::SequenceTopology,
     #[serde(default)]
     restriction_digest_enzymes: Vec<String>,
+    #[serde(default)]
+    primer_candidates: Vec<String>,
     #[serde(default = "default_approval_timeout_ms")]
     approval_timeout_ms: u64,
 }
@@ -1535,6 +1537,9 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
             &params.restriction_digest_enzymes,
         )
         .map_err(|error| acp::Error::invalid_params().data(error))?;
+    let primer_candidates =
+        xai_grok_science::primer_thermo::canonical_primer_candidates(&params.primer_candidates)
+            .map_err(|error| acp::Error::invalid_params().data(error))?;
     let session_id = acp::SessionId::new(params.session_id);
     let handle = agent
         .get_session_handle(&session_id)
@@ -1556,6 +1561,7 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
         translation_table_id: params.translation_table_id,
         topology: params.topology,
         restriction_digest_enzymes,
+        primer_candidates,
     };
     let request_sha256 =
         xai_grok_science::seqbench::request_sha256(&source_relative, &bytes, &options)
@@ -1605,6 +1611,10 @@ async fn handle_seq_analyze(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResu
             (
                 "restriction_digest_enzymes".into(),
                 options.restriction_digest_enzymes.join(","),
+            ),
+            (
+                xai_grok_science::seqbench::PRIMER_CANDIDATES_ENV.into(),
+                options.primer_candidates.join(","),
             ),
         ]),
     };

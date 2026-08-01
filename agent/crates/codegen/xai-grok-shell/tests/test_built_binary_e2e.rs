@@ -1470,6 +1470,7 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             "translationTableId": 2,
             "topology": "circular",
             "restrictionDigestEnzymes": ["EcoRI"],
+            "primerCandidates": ["ATGCGCAT", "GCGTATGC"],
             "approvalTimeoutMs": 5_000,
         });
         let response = tokio::time::timeout(
@@ -1492,6 +1493,17 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
         assert_eq!(result["replayed"], false, "fresh result: {result}");
         assert_eq!(result["run"]["state"], "succeeded", "result: {result}");
         assert_eq!(result["recordCount"], 2, "result: {result}");
+        assert_eq!(
+            result["analysis"]["primer_thermodynamics"]["primers"]
+                .as_array()
+                .map(Vec::len),
+            Some(2),
+            "primer results missing: {result}"
+        );
+        assert_eq!(
+            result["provenance"][0]["environment"]["primer_candidates"], "ATGCGCAT,GCGTATGC",
+            "primer admission was not durable: {result}"
+        );
         let artifacts = result["artifacts"].as_array().expect("artifacts array");
         assert_eq!(artifacts.len(), 2, "result: {result}");
         assert_eq!(
@@ -1608,8 +1620,8 @@ async fn test_stdio_science_seq_analyze_is_actor_gated_and_store_owned() {
             .expect("read durable analysis.json");
         let analysis: serde_json::Value =
             serde_json::from_slice(&analysis_bytes).expect("parse durable analysis.json");
-        assert_eq!(analysis["schema_version"], 6, "analysis: {analysis}");
-        assert_eq!(analysis["tool_version"], "1.5.0", "analysis: {analysis}");
+        assert_eq!(analysis["schema_version"], 7, "analysis: {analysis}");
+        assert_eq!(analysis["tool_version"], "1.6.0", "analysis: {analysis}");
         assert_eq!(
             analysis["algorithm_sources"][0]["commit"],
             xai_grok_science::seqbench::MOTIF_COMMIT,
@@ -2239,12 +2251,8 @@ async fn test_stdio_science_seq_analyze_restart_resumes_allow_without_reprompt()
                 &store, context, &options,
             )
             .expect("pre-publish exact Running+Allow restart cut");
-        xai_grok_science::seqbench::mark_allowed_recoverable_fresh(
-            &store,
-            &ticket,
-            &created_event,
-        )
-        .expect("persist exact Running+Allow restart cut");
+        xai_grok_science::seqbench::mark_allowed_recoverable_fresh(&store, &ticket, &created_event)
+            .expect("persist exact Running+Allow restart cut");
         assert_eq!(
             store
                 .load_run(&ticket.run_id)
@@ -3117,6 +3125,7 @@ async fn test_stdio_science_seq_analyze_denied_writes_nothing() {
                     "artifactRoot": "science-store",
                     "operationId": "seq-denied-product-0001",
                     "sourcePath": source,
+                    "primerCandidates": ["ATGCGCAT", "GCGTATGC"],
                     "approvalTimeoutMs": 5_000,
                 }),
             )
@@ -3241,10 +3250,7 @@ async fn test_stdio_science_seq_analyze_cancelled_writes_nothing() {
         );
         let store = xai_grok_science::ScienceStore::new(&store_root);
         assert_eq!(
-            store
-                .load_run(&run_id)
-                .expect("reopen cancelled run")
-                .state,
+            store.load_run(&run_id).expect("reopen cancelled run").state,
             xai_grok_science::RunState::Cancelled
         );
         assert_eq!(
