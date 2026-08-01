@@ -6,6 +6,7 @@
 **Science 分支 / 本计划锁定的证据 baseline：** `ls5-core-v0.1.251-sync` / `1fa748a5f6da1979af8a6707e42078ce398876d4`
 **当前 Rust source baseline：** `979e2848076ee88b381eb71b3bac42c530701e70`（`1fa748a` 只刷新了与该源码一致的漂移锁）
 **Canonical Lumen：** 独立会话维护；本计划只读取、精确 pin、通过兼容契约协作，绝不覆盖该会话的工作树  
+**自治控制平面补充：** [`NEXT_GENERATION_AUTONOMY_CONTROL_PLANE_EXECUTION_PLAN_2026-08-01.md`](NEXT_GENERATION_AUTONOMY_CONTROL_PLANE_EXECUTION_PLAN_2026-08-01.md) 定义 Advisor/模型选择、三代委派、双模研究记忆、Kairos/daemon 的权威边界与实施顺序；其中 Lumen 另一会话的建议在合入可复现 commit 前均视为候选合同。
 
 ---
 
@@ -210,7 +211,7 @@ canonical Lumen release candidate / immutable commit
 
 **术语必须消除 off-by-one：** Lumen 的 top-level session 是 `depth = 0`；`max_depth = 3` 表示允许三代被委派 session：depth 1（子 agent）→ depth 2（孙 agent）→ depth 3（末端 agent），并禁止 depth 3 再创建孩子。若产品文案想表达“root 加两层”，则配置应为 `2`，不能含糊地写“三层”。这与 Claude Code 当前公开文档的“main 以下最多三层”语义一致，但只是可参考的行为规格，不复制其专有 runtime；产品 policy 必须有自己的版本化配置，不能假设上游默认永远不变。
 
-当前 canonical Lumen 已有可验证的低层基础，而不是需要另造 runtime：`xai-grok-tools/.../task/mod.rs` 的 `SubagentDepthCounter` / `MaxSubagentDepth`，以及 `xai-grok-shell/src/config/mod.rs` 的 `[subagents].max_depth`、`GROK_SUBAGENTS_MAX_DEPTH` 解析。默认仍为 1；Science 复制 Core 的旧实现仍硬编码一层。因此**不能**先在 Science copy 里把常量改成 3；必须让 canonical Lumen 的可配置实现成为唯一底座后，Science 才只声明政策。
+一份本地、未提交且**不可作为 source pin**的 canonical Lumen 源码快照观察到 `xai-grok-tools/.../task/mod.rs` 的 `SubagentDepthCounter` / `MaxSubagentDepth`，以及 `xai-grok-shell/src/config/mod.rs` 的 `[subagents].max_depth`、`GROK_SUBAGENTS_MAX_DEPTH` 解析。它只能作为 P2A 的设计素材；每个候选 canonical HEAD 都必须在合入前重新审计、写入 public contract 并经 CI 证明。默认仍观察为 1；Science 复制 Core 的旧实现仍硬编码一层。因此**不能**先在 Science copy 里把常量改成 3；必须让 canonical Lumen 的可配置实现成为唯一底座后，Science 才只声明政策。
 
 **明确禁止的假接缝：** Science 的 `xai-grok-workspace::WorkspaceHandle::fork_session` 当前不等于产品化 nested-agent authority；它不在 Shell/Science 的当前 spawn path 上，且其 top-level 默认 `fork_budget = u32::MAX` / `max_depth = u32::MAX`。不得把它接到 Desktop/ACP 来“快速实现三层”；它必须先被 canonical SessionActor 的受限 grant/ledger contract 替代或封装。
 
