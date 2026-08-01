@@ -6,5 +6,6 @@
   "archive_sha256": "7ef8c818d950a3abb9a238a713d8fa818288f02800f54e46b7b0075276b79a61",
   "root_license": {"spdx": "MIT", "path": "LICENSE", "sha256": "f756cca8fc2a4ce8ab225636f3df3eae7f2f638f4df82447f01224d6a24a97cb"},
   "nested_license_inventory": [["LICENSE", "f756cca8fc2a4ce8ab225636f3df3eae7f2f638f4df82447f01224d6a24a97cb"], ["skills/docx/LICENSE.txt", "79f6d8f5b427252fa3b1c11ecdbdb6bf610b944f7530b4de78f770f38741cfaa"], ["skills/patent-disclosure-skill/LICENSE", "d9329ae3b2de58aebaa015d8d1570513d48f1702318e6423896a4620845ab798"], ["skills/pdf/LICENSE.txt", "79f6d8f5b427252fa3b1c11ecdbdb6bf610b944f7530b4de78f770f38741cfaa"], ["skills/pptx/LICENSE.txt", "79f6d8f5b427252fa3b1c11ecdbdb6bf610b944f7530b4de78f770f38741cfaa"], ["skills/xlsx/LICENSE.txt", "79f6d8f5b427252fa3b1c11ecdbdb6bf610b944f7530b4de78f770f38741cfaa"], ["ui/LICENSE", "98af1351ea856e008c835bc89a312905960a318072f950732bf346c741027c7d"]],
+  "tree_inventory": {"path": "third_party/intake-inventories/qzzqzzb-openclaudescience-4a5f-tree-metadata.json", "sha256": "8d87da59c0aecfaebb5e1330bc1ad332237e65ce649b4c56165dd483929d2095", "entry_count": 553},
   "runtime_admission": "none"
 }
