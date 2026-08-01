@@ -120,9 +120,31 @@ ok "honesty docs"
 # Release checksum evidence for frozen Go Science CLI version (not Rust Core).
 VER=$(tr -d '[:space:]' < packs/science/VERSION)
 if [[ -f "outputs/release/${VER}/SHA256SUMS" ]]; then
-  ok "release checksums present for Science CLI ${VER}"
+  python3 - "${VER}" <<'PY' || fail "release checksum evidence"
+import hashlib
+import re
+import sys
+from pathlib import Path
+
+version = sys.argv[1]
+path = Path("outputs/release") / version / "SHA256SUMS"
+expected = {"1.0.1": "aba8906a4973564ae5cddc7d81fff5a285727325363046c5213bf73254b30635"}
+if version not in expected:
+    raise SystemExit(f"no pinned SHA256SUMS asset digest for Science CLI {version}")
+actual = hashlib.sha256(path.read_bytes()).hexdigest()
+if actual != expected[version]:
+    raise SystemExit(f"SHA256SUMS asset digest mismatch: {actual}")
+lines = path.read_text(encoding="utf-8").splitlines()
+if len(lines) < 1 or any(re.fullmatch(r"[0-9a-f]{64}  [^/][^\\]*", line) is None for line in lines):
+    raise SystemExit("SHA256SUMS has malformed checksum entries")
+for required in (f"lumen-science-{version}-darwin-arm64.tar.gz", "lumen-science-darwin-arm64"):
+    if not any(line.endswith(f"  {required}") for line in lines):
+        raise SystemExit(f"SHA256SUMS is missing {required}")
+print(f"release checksums: {version} entries={len(lines)} asset_sha256={actual}")
+PY
+  ok "release checksums verified for Science CLI ${VER}"
 else
-  echo "WARN  outputs/release/${VER}/SHA256SUMS not present (run make release + copy sums)"
+  echo "WARN  outputs/release/${VER}/SHA256SUMS not present"
 fi
 
 # Go release/sign entry points must never fall back to root VERSION. Root is
