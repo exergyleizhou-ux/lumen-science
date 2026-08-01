@@ -3,7 +3,8 @@
 **日期：** 2026-08-01（北京时间）  
 **性质：** 重新基线后的长期实施程序；不是完成声明，也不是把上游仓库整体搬进来  
 **当前 Science 工作树：** `/Users/lei/code/lumen-science`  
-**当前 Science 分支 / HEAD：** `ls5-core-v0.1.251-sync` / `979e2848076ee88b381eb71b3bac42c530701e70`  
+**Science 分支 / 本计划锁定的证据 baseline：** `ls5-core-v0.1.251-sync` / `1fa748a5f6da1979af8a6707e42078ce398876d4`
+**当前 Rust source baseline：** `979e2848076ee88b381eb71b3bac42c530701e70`（`1fa748a` 只刷新了与该源码一致的漂移锁）
 **Canonical Lumen：** 独立会话维护；本计划只读取、精确 pin、通过兼容契约协作，绝不覆盖该会话的工作树  
 
 ---
@@ -34,7 +35,7 @@
 
 ### 当前事实与非结论
 
-- `979e284` 已修复上一轮 GitHub 暴露的 Linux-only 测试编译缺陷，并将 `event-listener` 从存在 RustSec 告警的 `5.4.1` 精确升至 `5.4.2`；Supply chain 对该 HEAD 已成功。其他 exact-head CI 仍须以 GitHub 最终结果为准。
+- `979e284` 已修复上一轮 GitHub 暴露的 Linux-only 测试编译缺陷，并将 `event-listener` 从存在 RustSec 告警的 `5.4.1` 精确升至 `5.4.2`；`1fa748a` 已将 drift manifest 更新为该源码的真实哈希。Supply chain 对 `979e284` 已成功；`1fa748a` 的全量 exact-head CI 仍须以 GitHub 最终结果为准。
 - Science 内嵌 Core 仍诚实报告 `0.1.222`。目前受锁约束的比较为 **131 个 shared Rust 文件分叉 + 5 个缺失 = 136**，不是 `v0.1.251` 全量同源。
 - 当前 Lumen 和 Science 的 object history 不可直接合并；不可通过 `rebase`、整目录覆盖或“把新 Lumen 复制回来”解决。
 - 已有生态目录、Motif algorithms、actor 闭环和 Desktop product proof 都是可保留资产；它们不是废工。但继续在复制的 `SessionCommand` 中加变体，会让后续 Lumen 更新越来越昂贵，必须立即停止这种扩张。
@@ -211,11 +212,11 @@ canonical Lumen release candidate / immutable commit
 
 ### P0 — 关当前门、冻结复制式扩张
 
-**目的：** 把当前 `979e284` 变为 CI 事实，停止继续把 Science 专用变体加进复制 Core。
+**目的：** 把当前 `1fa748a`（其 Rust source baseline 为 `979e284`）变为 CI 事实，停止继续把 Science 专用变体加进复制 Core。
 
 **实施：**
 
-1. 对 `979e284` 记录 exact-head CI：Desktop CI、CI、Lumen Science CI、Supply chain；Linux workspace test 以 GitHub Ubuntu 为唯一有效证据。
+1. 对 `1fa748a` 记录 exact-head CI：Desktop CI、CI、Lumen Science CI、Supply chain；Linux workspace test 以 GitHub Ubuntu 为唯一有效证据。
 2. 若失败，只修失败日志指向的最小路径；不能借本机 macOS `#[cfg(target_os = "linux")]` 缺失的测试来报绿。
 3. 在 Science repo 加入 machine-readable `CORE_EXPANSION_FREEZE` policy：禁止新增 `BeginScience[A-Z]` / `FinishScience[A-Z]` 到复制 Core，除非有已批准的 emergency exception。
 4. 清点现有 12 个 Science-only actor variants：`SeqAnalyze`、`SkillQuarantine`、`EvidenceDossier`、`ProjectMutation`、`KernelAdmission`、`WorkflowExecution` 的 Begin/Finish 成对变体。
@@ -460,7 +461,7 @@ Codex 验收：独立重跑、检查 license/provenance、决定是否接 actor�
 
 | # | 卡片 | 负责人 | 前置 | 完成定义 |
 |---:|---|---|---|---|
-| 1 | 记录 `979e284` exact-head CI 结果并分类 | Codex | P0 | CI evidence log，不假绿 |
+| 1 | 记录 `1fa748a` exact-head CI 结果并分类 | Codex | P0 | CI evidence log，不假绿 |
 | 2 | upstream-lock schema + validator | DeepSeek→Codex | P0 | 9 source pins, raw license hashes |
 | 3 | forbidden paths / nested license deny tests | Grok→Codex | #2 | restricted path injection fails |
 | 4 | capabilities candidate normalization | DeepSeek | #2 | all candidates exact-one disposition |
@@ -569,7 +570,7 @@ authority、runtime、model or adapter changes additionally require supply-chain
 
 ## 10. 下一次开工的精确顺序
 
-1. 等待并记录 `979e284` 的 remaining exact-head CI；若 Linux failure，先以日志修最小 patch。
+1. 等待并记录 `1fa748a` 的 remaining exact-head CI；若 Linux failure，先以日志修最小 patch。
 2. 提交 P1 的 `upstream-lock` / forbidden-paths schema，不改运行时能力。
 3. 在 canonical Lumen 的独立会话提出 P2 `DomainOperation` RFC；不要向 Science copy 继续加命令。
 4. 只在 RFC 被接受、contract fixture 建立后，启动 `seq_analyze` strangler pilot。
