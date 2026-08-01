@@ -1,0 +1,2016 @@
+{
+  "entries": [
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "64de39aa5688b55ab0529a8c06ab22c21c611115",
+      "kind": "git-blob-metadata-only",
+      "path": ".dockerignore",
+      "size_bytes": 284
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "60ee0b3f95d93668c4f701e93121da6fec24f426",
+      "kind": "git-blob-metadata-only",
+      "path": ".github/workflows/ci.yml",
+      "size_bytes": 1909
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f1f468207d1299f7364a5faea1bd98c883fff52a",
+      "kind": "git-blob-metadata-only",
+      "path": ".github/workflows/release.yml",
+      "size_bytes": 5186
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0703329911bd6643b20951d026f95df0150a9a5c",
+      "kind": "git-blob-metadata-only",
+      "path": ".gitignore",
+      "size_bytes": 4638
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2ef48390bfd9ab8ee04053bf25b10ea9bd5709d5",
+      "kind": "git-blob-metadata-only",
+      "path": ".pre-commit-config.yaml",
+      "size_bytes": 209
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "06618d0959df646a8de751d11e5009122dcb197d",
+      "kind": "git-blob-metadata-only",
+      "path": "AGENTS.md",
+      "size_bytes": 4999
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "81f7a66a69fb4f95961853105b9fe1926430e98d",
+      "kind": "git-blob-metadata-only",
+      "path": "CHANGELOG.md",
+      "size_bytes": 1624
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a09ebb44dfded1ced3fb434c8c603678e1f1978d",
+      "kind": "git-blob-metadata-only",
+      "path": "Dockerfile",
+      "size_bytes": 1528
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f29b0c0b24ab21d855b502af5e7e4899416a90eb",
+      "kind": "git-blob-metadata-only",
+      "path": "LICENSE",
+      "size_bytes": 11358
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c785d8a78f382981525b428be220f3314ea1f51c",
+      "kind": "git-blob-metadata-only",
+      "path": "MANIFEST.in",
+      "size_bytes": 116
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1645f0c07ea8f16835823927179e10a396411f4a",
+      "kind": "git-blob-metadata-only",
+      "path": "README.md",
+      "size_bytes": 11134
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1e0f6f78e135592aa9a5e153e9ba435b1da0a16e",
+      "kind": "git-blob-metadata-only",
+      "path": "assets/OpenDDE.png",
+      "size_bytes": 1656530
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "832f5435470eefee715dc20c8509ec7ef595a322",
+      "kind": "git-blob-metadata-only",
+      "path": "assets/OpenDDE_Technical_Reports.pdf",
+      "size_bytes": 8977767
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c8a7097acd165d926c91d97f993b2cb8a8013252",
+      "kind": "git-blob-metadata-only",
+      "path": "assets/hiring.png",
+      "size_bytes": 451608
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "08ad63803c32f0d0ea52f88690f797bdd6c3e5ac",
+      "kind": "git-blob-metadata-only",
+      "path": "assets/results.png",
+      "size_bytes": 2627180
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "282a94fd7e82d0ed440a91129f4516de951541a4",
+      "kind": "git-blob-metadata-only",
+      "path": "assets/scaling_law.png",
+      "size_bytes": 1111443
+    },
+    {
+      "candidate_asset_kind": "data",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9408b205e9b038d37aa0195f10cb1d4e26caec69",
+      "kind": "git-blob-metadata-only",
+      "path": "benchmarks/2026ARK_AB/common_interface_clusters.csv",
+      "size_bytes": 8403
+    },
+    {
+      "candidate_asset_kind": "data",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "62f3136f39e55a4088f2903d5b4b5b63c54e4f64",
+      "kind": "git-blob-metadata-only",
+      "path": "benchmarks/2026ARK_AB/common_interfaces.csv",
+      "size_bytes": 64534
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b4ecf7fa757dbf5787ea9d45a04e32f41c593617",
+      "kind": "git-blob-metadata-only",
+      "path": "benchmarks/2026ARK_AB/common_targets.txt",
+      "size_bytes": 820
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "59a7ffe8dc38b01f6a8b32215d1bfc30a0173b5f",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/docker_installation.md",
+      "size_bytes": 4222
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9ed8403686cdaf4ee593841c7919593259dfe236",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/foldcp_e2e_baseline.md",
+      "size_bytes": 4447
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5db4e04ac4dbc6547e51240610156ddbab5ce1ac",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/infer_json_format.md",
+      "size_bytes": 4194
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5685ab63bb64f2f74fe1f290a047b041ec413a4c",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/inference_instructions.md",
+      "size_bytes": 9863
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "147cc9fb396a8a4a017f2be431df5732d8a1bced",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/kernels.md",
+      "size_bytes": 1378
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "aa695709fb8e8631d43879ee4c4d6cdc000fb36d",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/msa_template_pipeline.md",
+      "size_bytes": 3631
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "562103661c6aeb5c3357bfe108778666531036d0",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/releases/1.0.1.md",
+      "size_bytes": 1642
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6867149e3304e1f8149116997c16a1774ad245eb",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/supported_models.md",
+      "size_bytes": 2008
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2dcc5104954852fdbec20faeeea202fb6bb793a3",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/tutorial.md",
+      "size_bytes": 3837
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "87fcc8da6de0c6e31976e18a6479789b68eb995c",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/2lwu.cif",
+      "size_bytes": 383380
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4b211e27446f74763bde970196725a415c7fde20",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/5sak/1/non_pairing.a3m",
+      "size_bytes": 2209671
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5e5e71a7db3c585bba4c121fc3da6c20245f8e63",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/5sak/1/pairing.a3m",
+      "size_bytes": 2705761
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7872c671d59296a34bc520c4fe3fdff7ed02d71c",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/7pzb.pdb",
+      "size_bytes": 435294
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "049c620c11fa683d00f64da8521f8922153da8ab",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/7pzb/msa/1/non_pairing.a3m",
+      "size_bytes": 2030771
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d4993a6ddafd30272751693318de8adbbc80a0bf",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/7pzb/msa/1/pairing.a3m",
+      "size_bytes": 1916088
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e3b407df8efce279e541977a351733170592a583",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/7r6r/msa/1/non_pairing.a3m",
+      "size_bytes": 100203
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "37b815b6007d3b657999b08da3a7f094f59b4c31",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/7r6r/msa/1/pairing.a3m",
+      "size_bytes": 110839
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1b0662da098934350824a877ef049b2b5b1cd05f",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/7st3/msa/1/non_pairing.a3m",
+      "size_bytes": 826573
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f65530b3da29dec6864fed6ab8d332be65f885fa",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/7st3/msa/1/pairing.a3m",
+      "size_bytes": 4628671
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2c226a744e55a414eaeb1d41bbe00f74526ea69e",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/7st3/msa/2/non_pairing.a3m",
+      "size_bytes": 303340
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8dc44eb04c8d6744e0d5cb6a88557aea605e9a5f",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/7st3/msa/2/pairing.a3m",
+      "size_bytes": 2108051
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c5d565e7b5b4987a34aa70b712f39edee5d9ee01",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/7wux/msa/1/non_pairing.a3m",
+      "size_bytes": 261924
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ec184c966c8eef880df5bdea48edcc6f08c7e55c",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/7wux/msa/1/pairing.a3m",
+      "size_bytes": 85471
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f892fa8e975a6e1c86c3c0b94ff205e20165be31",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/7wux/msa/2/non_pairing.a3m",
+      "size_bytes": 91563
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "987a9a4eb97ff6e5c453b55896f63d6008c27dee",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/7wux/msa/2/pairing.a3m",
+      "size_bytes": 127076
+    },
+    {
+      "candidate_asset_kind": "data",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d7120e5fdab8e22b15af69e7baa93012f11d5008",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/dimer.fasta",
+      "size_bytes": 437
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ae84cf6cd43ed29416af7748bc145b5d3c7905c9",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/example.json",
+      "size_bytes": 3590
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5c386cada3c4c69159d18990270ea18255823eac",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/example_without_msa.json",
+      "size_bytes": 836
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3c22c2cf4501fc0718a428d033eebe63dba4184c",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/examples_with_rna_msa/9gmw/9gmw_2_all.a3m",
+      "size_bytes": 319284
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e5616d68849e62736f8f766517ed6702b4941d5c",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/examples_with_rna_msa/example_9gmw_2.json",
+      "size_bytes": 455
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ad406906dfeed8c3c7414789b952958041e9b361",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/examples_with_template/9fm7/hmmsearch.a3m",
+      "size_bytes": 852590
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "65e0b4ea6b90682face24473be99f354fbd89478",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/examples_with_template/9fm7/non_pairing.a3m",
+      "size_bytes": 2036783
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b3f99f35c78bb4885f4ae8d5df65ff386dc0b63f",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/examples_with_template/9fm7/pairing.a3m",
+      "size_bytes": 1173374
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "26df7c7353dfdf8debb73f8031c7b20d28926133",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/examples_with_template/MGYP004658859411/concat.hhr",
+      "size_bytes": 1404711
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5ac9cf1ea52c0058317391087fdb4e02ac5269a1",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/examples_with_template/MGYP004658859411/non_pairing.a3m",
+      "size_bytes": 1538027
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7f9282e9e88b92935d17f01d8dbada7c1f2ecca7",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/examples_with_template/MGYP004658859411/pairing.a3m",
+      "size_bytes": 236682
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f4af580182b4aa266f6547d928f2ad2ecb97ab5b",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/examples_with_template/example_9fm7.json",
+      "size_bytes": 992
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d0d2fe371c21a3387bf70c402fbadc4d23ef64b1",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/examples_with_template/example_mgyp004658859411.json",
+      "size_bytes": 997
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f1586f0142c5f056c91a32e89e433627dc18e45d",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/foldcp_demo_placeholder.json",
+      "size_bytes": 263
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3480a7f7e13bbb6d9eb8d33ba88c78d48093df89",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/input.json",
+      "size_bytes": 988
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "90b8b6effde80c0b7cf88502f9560ea38f223c74",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/ligands/7wux_smiles.smi",
+      "size_bytes": 81
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "95c4fae9507ef68fdfe479ab437c8447797e7a0b",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/ligands/compounds-3d-R.sdf",
+      "size_bytes": 5366
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5487bbcaaf243e43d66efbb2c1ea75bbb1ab3521",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/ligands/compounds-3d-RS.sdf",
+      "size_bytes": 10732
+    },
+    {
+      "candidate_asset_kind": "data",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b0e67717b74b0690a75ad77bf8fde2b146c156f1",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/prot.fasta",
+      "size_bytes": 608
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7b03cc5174a92bfe8803a85e3c0aa0b1a8030680",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/protein_200.json",
+      "size_bytes": 398
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "db9adf151c9be08358bb98712dec219e99383b0c",
+      "kind": "git-blob-metadata-only",
+      "path": "inference_demo.sh",
+      "size_bytes": 5805
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2a98bc867d3279f7abc83df02c6cd7eb80137009",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/__init__.py",
+      "size_bytes": 111
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "387f51f7f73480abba79d3cbd3e932c6c8537f18",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/config/__init__.py",
+      "size_bytes": 128
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1c1991c7d0b4cdd0a14b7e28bf4df0d160b4e01c",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/config/config.py",
+      "size_bytes": 9907
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b49e068c84105b3133d531b837419e7d422a0e98",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/config/data.py",
+      "size_bytes": 2082
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0b9ceb961e7a5446a87a7332a9c98c7db954dfd0",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/config/dependency_url.py",
+      "size_bytes": 4681
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "737f559b00438b9b10199867fdc64abd7dee445c",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/config/extend_types.py",
+      "size_bytes": 1347
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "28f70dabf358e5fab31c3f1e89a7cc3184a8692b",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/config/inference.py",
+      "size_bytes": 6054
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f162d3408a9b97207fa5d930f559f3de3cbcb7c7",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/config/inference_defaults.py",
+      "size_bytes": 1372
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "63a92474213c03fa3249e0aad08fec52a5821e1c",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/config/model_base.py",
+      "size_bytes": 9286
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c07f26fffa02957f538e4aff079e19804d99a508",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/config/model_manifest.json",
+      "size_bytes": 1035
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7fc8d269345f3103ebe22c6ade5a657dc873582f",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/config/model_manifest.py",
+      "size_bytes": 7746
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5d97550ea0dd797a4a9e86576def5c62653e7b5d",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/config/model_registry.py",
+      "size_bytes": 800
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2a35467da53984b0ad20ee5245aa71995a901adc",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/config/schema.py",
+      "size_bytes": 9717
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1e18231eb1641278d3b8d0ca8948e97a33742f62",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/__init__.py",
+      "size_bytes": 78
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6a5133b77d9b22f868a5f789bb07f2f9c852c8fe",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/constants.py",
+      "size_bytes": 43543
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1e18231eb1641278d3b8d0ca8948e97a33742f62",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/core/__init__.py",
+      "size_bytes": 78
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c2dca0968324550296728fee14fe854cbfb673dd",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/core/ccd.py",
+      "size_bytes": 17025
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "df57e4891384c7a9f68e1ea6f872b0b4b3f484b9",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/core/featurizer.py",
+      "size_bytes": 38995
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "cb641a50e967bb4111ccf1287dc9e58903b73cbf",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/core/filter.py",
+      "size_bytes": 43481
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d928d6883faf1364960d75a29f7514bc02dc07f6",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/core/geometry_featurizer.py",
+      "size_bytes": 30390
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "160fc348152411da442c33d3f9a45aafa17136b3",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/core/parser.py",
+      "size_bytes": 76363
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "443137d9aa35cfbcd89e0254bacc3ec7a4fce94b",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/core/substructure_perms.py",
+      "size_bytes": 9303
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3dafa7319b354f569f42006655e350e6f3983c58",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/inference/__init__.py",
+      "size_bytes": 570
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a064b4bd8c8758c152338ec58d54a2e48f808aaf",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/inference/infer_dataloader.py",
+      "size_bytes": 9724
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "07ee8be97e8d7eedd09398e57e5a8678c2906dde",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/inference/json_maker.py",
+      "size_bytes": 12606
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "63567c0d68c1503249c02e59195369eab450f0f8",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/inference/json_parser.py",
+      "size_bytes": 22176
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "16b0dac3abe8d8f729a643650dce9eb26f3b6d20",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/inference/json_to_feature.py",
+      "size_bytes": 16218
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1e18231eb1641278d3b8d0ca8948e97a33742f62",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/msa/__init__.py",
+      "size_bytes": 78
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ab623467d9ec8632f331d9fd4f08b7e54ab768de",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/msa/msa_featurizer.py",
+      "size_bytes": 14722
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3b4601a820bf740fa78e0f25734a6d17a87b99aa",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/msa/msa_service_client.py",
+      "size_bytes": 15054
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "64c1d60bf9bfd9d8a98d7a5b93bcd63a2d551785",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/msa/msa_utils.py",
+      "size_bytes": 16783
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1e18231eb1641278d3b8d0ca8948e97a33742f62",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/template/__init__.py",
+      "size_bytes": 78
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "200efed7b7989950dff53401c222fa4a6ee747e1",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/template/template_featurizer.py",
+      "size_bytes": 12659
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4b5d4d088110aac9d4da682695b50c8d72a8b367",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/template/template_parser.py",
+      "size_bytes": 21332
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "cdd0df916a70f77810866d7e24afd6aa3bc04955",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/template/template_utils.py",
+      "size_bytes": 35352
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "de7fd93324e036611ade7eff7cd4a0272d65c35f",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/tokenizer.py",
+      "size_bytes": 16868
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1e18231eb1641278d3b8d0ca8948e97a33742f62",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/tools/__init__.py",
+      "size_bytes": 78
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f5c0982042c54bd412a8889730bc7292334d6a42",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/tools/common.py",
+      "size_bytes": 6511
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d104746ae78bb2d18d5b029f520878e7102d62d5",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/tools/kalign.py",
+      "size_bytes": 4546
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e4f9a893f053b1e9be5b747bdba3eeee9eb9816d",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/tools/logger.py",
+      "size_bytes": 11720
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0b427f0ad9a4bbaf58922fa94ad7186067178880",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/tools/rewrite_biotite.py",
+      "size_bytes": 16597
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9242f18850b1d0c8546d492a9dc0bf136607c779",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/tools/search.py",
+      "size_bytes": 15491
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "63d0142b1517015958ba29226e64c67c899dbeef",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/data/utils.py",
+      "size_bytes": 43277
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ca9e0983061dd3e3e58abeeb8acac8c0549b4093",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/distributed/__init__.py",
+      "size_bytes": 115
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c34d3abd524dca6e5ab062cac27c7e46663b2bb8",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/distributed/foldcp/__init__.py",
+      "size_bytes": 4456
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "bf5f7a36036765a2037500dbef631d0c12a9fc45",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/distributed/foldcp/atom_window.py",
+      "size_bytes": 14311
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b664a3d6f7a4c1f701f32589b2213a5cfd1c5057",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/distributed/foldcp/comm.py",
+      "size_bytes": 7118
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7ea4d63c7aa03fa158304b88ca023edcd45bd26a",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/distributed/foldcp/confidence.py",
+      "size_bytes": 13964
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b2adc5982359856d649a3be2cb6c10fcd7902132",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/distributed/foldcp/config.py",
+      "size_bytes": 4544
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8799fab478a6e25584e02bf7e292cf61fa6c171f",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/distributed/foldcp/distogram.py",
+      "size_bytes": 10872
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ef591f91a79a30ab2535a9cdb70de6e5920511bc",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/distributed/foldcp/launch.py",
+      "size_bytes": 10348
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d72a66c9af1b924e284f3f333ae95e67df37ea09",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/distributed/foldcp/layout.py",
+      "size_bytes": 1869
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f41e2c89a3b99f78fb2d9e5033210e4bb08ab8c7",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/distributed/foldcp/mesh.py",
+      "size_bytes": 3666
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "241cc8b93fb9b5ee33914e5b638b7c781aafd819",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/distributed/foldcp/metrics.py",
+      "size_bytes": 7562
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5487f96cb57a657e3b7b58ea5ad5a579d4fb45fa",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/distributed/foldcp/msa_pair_weighted.py",
+      "size_bytes": 9090
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b1d5365a41c068feae41666ead8e1e0372be1b77",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/distributed/foldcp/online_softmax.py",
+      "size_bytes": 2314
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "be794c901655719ffb0835fd46ea6875d4221d7c",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/distributed/foldcp/opm.py",
+      "size_bytes": 7494
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fc5c700c217006a1cb2c1380286d2176bce872b7",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/distributed/foldcp/pair_sharding.py",
+      "size_bytes": 12303
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ba2677db6024ace30df1bc43e636139e792ffc7c",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/distributed/foldcp/real_pairformer.py",
+      "size_bytes": 106577
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6ac4b57b47d44d04045582b4786e539c45fd3af9",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/distributed/foldcp/structural_pair.py",
+      "size_bytes": 2865
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4f9ffdf4bef8d6cf51a010a92406664be7b8a099",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/distributed/foldcp/triangle_attention.py",
+      "size_bytes": 4049
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0d84b0db022e830b33460a4e9dd20d124448f365",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/distributed/foldcp/triangular_mult.py",
+      "size_bytes": 9553
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1e4f40b128614959ee6c55d66d394dea661068d2",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/distributed/foldcp/trunk_init.py",
+      "size_bytes": 6432
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1e18231eb1641278d3b8d0ca8948e97a33742f62",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/metrics/__init__.py",
+      "size_bytes": 78
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "15310bb0fc772d8fe790c3774dd5a66402476bbe",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/metrics/clash.py",
+      "size_bytes": 11142
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1e18231eb1641278d3b8d0ca8948e97a33742f62",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/__init__.py",
+      "size_bytes": 78
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "97a8b471ffe0549432651c0956eebec806dc34ff",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/generator.py",
+      "size_bytes": 9751
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2b7af4de806b0d7d3502f5e7038f8bde08be3ad9",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/layer_norm/__init__.py",
+      "size_bytes": 756
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9a0e4e2209a31467bc8e7a333ca81c7779ce670a",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/layer_norm/kernel/compat.h",
+      "size_bytes": 816
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "16fcfc4b2519910fcc769ec82476a636c611e7ed",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/layer_norm/kernel/layer_norm_cuda.cpp",
+      "size_bytes": 8097
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c960505de4b1e7fb7cde7b8219946814998b82d3",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/layer_norm/kernel/layer_norm_cuda_kernel.cu",
+      "size_bytes": 44614
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e9a9bc99c72ded0c38308d4fbe762dec890d9803",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/layer_norm/kernel/type_shim.h",
+      "size_bytes": 13237
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a5d795f2180d47127421ad26b2d4f70cafaedb35",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/layer_norm/layer_norm.py",
+      "size_bytes": 9677
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "648b42ce5c9ef63468c760f86654d3acbecb1985",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/layer_norm/torch_ext_compile.py",
+      "size_bytes": 1037
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1e18231eb1641278d3b8d0ca8948e97a33742f62",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/modules/__init__.py",
+      "size_bytes": 78
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1acc61f52e829ead3ec4dce3265a6ab7a72a805c",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/modules/confidence.py",
+      "size_bytes": 26600
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4c2d65dbf04bba86e494964bde6f480beff7d73a",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/modules/diffusion.py",
+      "size_bytes": 63053
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "cf2d8ef81bf41dddcfec0b5158da2d1e5faf3537",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/modules/embedders.py",
+      "size_bytes": 12056
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "58a6c1a222338d52c7509e759b3276cc5e30a6b2",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/modules/head.py",
+      "size_bytes": 3044
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "49becbce4c6f75800b01d091e344ca354cf1f9da",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/modules/pairformer.py",
+      "size_bytes": 77249
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "cbc866b2a61d5f60f23d7c70c8ce5e881ae1cbb7",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/modules/primitives.py",
+      "size_bytes": 31167
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "65c843cb22059e06dd33b08291ae1f158d94dc5e",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/modules/structural_tokens.py",
+      "size_bytes": 44789
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "792f4e96f29f876ebf6f68432da31eaf813270c8",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/modules/transformer.py",
+      "size_bytes": 86451
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "cff7d6fd977f4f5c04334b26e69b38e6803e08aa",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/msa_sampling.py",
+      "size_bytes": 2733
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "126e28bd16f14bd7bec4879385efff8cff7d67ea",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/opendde.py",
+      "size_bytes": 68303
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "700c1558253ae6c53bfa6cdcf4e9ea4df03640b8",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/sample_confidence.py",
+      "size_bytes": 31744
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8e54774a17cfcafef2594b074fdf0f847817f404",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/shape_complementarity.py",
+      "size_bytes": 29683
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1e18231eb1641278d3b8d0ca8948e97a33742f62",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/triangular/__init__.py",
+      "size_bytes": 78
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9e365458d1e387c8e70db720cc69afc68d26c889",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/triangular/layers.py",
+      "size_bytes": 18681
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ec8847a6d823819b02335bf4ed0faf026b752c01",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/triangular/triangular.py",
+      "size_bytes": 26676
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c04e3a7b3465e9e497ba2a9f16f1fca0ef1dc40f",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/model/utils.py",
+      "size_bytes": 20427
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8f05f28e6bcc2ede67e39821f06b73da47f7462a",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/tfg/__init__.py",
+      "size_bytes": 308
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0b8c7beae9e3d08d4dbe07725cf8811d6c267a82",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/tfg/config.py",
+      "size_bytes": 16119
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8d8a866ad391aa2b97757525e4b5a85f5e425d25",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/tfg/engine.py",
+      "size_bytes": 19315
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8d0010bf59b22e1f0703e28767aaef236d5c25a3",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/tfg/potentials.py",
+      "size_bytes": 51879
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1e18231eb1641278d3b8d0ca8948e97a33742f62",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/utils/__init__.py",
+      "size_bytes": 78
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1d168ff173ddafadbd6045013c9554208f502886",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/utils/distributed.py",
+      "size_bytes": 2194
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a7e906820e83db3325eaba538cabf6c2bddba612",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/utils/download.py",
+      "size_bytes": 10488
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4c853c325d7e36d6f75df7b26cc506716f074c89",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/utils/environment.py",
+      "size_bytes": 15438
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "61f3830901d4c2f35011af313c4d6f690447a626",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/utils/file_io.py",
+      "size_bytes": 6792
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7ba79a6f2fae62c67c71b2b427459e34eb1823a2",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/utils/geometry.py",
+      "size_bytes": 1862
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c8e94bd6decb623670f78e256afd199d9dfcbe2b",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/utils/logger.py",
+      "size_bytes": 2426
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f5552028f443c27a1612abb31081fd77516d2693",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/utils/logging_config.py",
+      "size_bytes": 606
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "52d0e4af2c725e642da2b1f6c9aa7248a0c960d1",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/utils/scatter_utils.py",
+      "size_bytes": 6447
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ab0bb9518d227c1ce3533ce0e4d38876a45b78f8",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/utils/seed.py",
+      "size_bytes": 976
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a07511234dac885124423d7c0a1233bd0a0361dd",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/utils/torch_utils.py",
+      "size_bytes": 4251
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "12e0fda400ceeffad6f83fa9f55c56765a7b9722",
+      "kind": "git-blob-metadata-only",
+      "path": "opendde/version.py",
+      "size_bytes": 100
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "05707e348e92e0fd771302837c6ee3686aa02ddc",
+      "kind": "git-blob-metadata-only",
+      "path": "pyproject.toml",
+      "size_bytes": 3185
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1e18231eb1641278d3b8d0ca8948e97a33742f62",
+      "kind": "git-blob-metadata-only",
+      "path": "runner/__init__.py",
+      "size_bytes": 78
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1bf753faea68fa306767199ef6fd74cc2c22e0ca",
+      "kind": "git-blob-metadata-only",
+      "path": "runner/batch_inference.py",
+      "size_bytes": 48349
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "cb4a8675a291f6a6f8229cb282797d5125f2b76e",
+      "kind": "git-blob-metadata-only",
+      "path": "runner/cli.py",
+      "size_bytes": 3912
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0fcda6bba37f4edf6873858b824e85b3ad058994",
+      "kind": "git-blob-metadata-only",
+      "path": "runner/dumper.py",
+      "size_bytes": 9626
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6a25f499ddb3c77e85e5297eb82c976b6945552d",
+      "kind": "git-blob-metadata-only",
+      "path": "runner/inference.py",
+      "size_bytes": 21370
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "daad71a214d3781897979b2f35d7dd26961ee3b8",
+      "kind": "git-blob-metadata-only",
+      "path": "runner/msa_search.py",
+      "size_bytes": 9313
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "07a33e51f9bcbe9454235363fa2c953e784c8502",
+      "kind": "git-blob-metadata-only",
+      "path": "runner/rna_msa_search.py",
+      "size_bytes": 15224
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d29b9c8a585f0540b7b8725d2d5dad60525e5e31",
+      "kind": "git-blob-metadata-only",
+      "path": "runner/template_search.py",
+      "size_bytes": 8978
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "baf030a51f20e1ade0f269c6b18f746b68ceb254",
+      "kind": "git-blob-metadata-only",
+      "path": "scripts/build_docker_image.sh",
+      "size_bytes": 2311
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a415a6fed394413237fe0cfef8619b7ab84bb3d6",
+      "kind": "git-blob-metadata-only",
+      "path": "scripts/check_release.py",
+      "size_bytes": 9168
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6460f9f94d3cd760f3df71a4c0a3c1b54340786f",
+      "kind": "git-blob-metadata-only",
+      "path": "scripts/download_opendde_data.sh",
+      "size_bytes": 18286
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "aa9597b2d249eb859c9f99546e4ff0920a3d8cab",
+      "kind": "git-blob-metadata-only",
+      "path": "scripts/render_release_notes.py",
+      "size_bytes": 4862
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1e18231eb1641278d3b8d0ca8948e97a33742f62",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/__init__.py",
+      "size_bytes": 78
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "17b2f0ed1ab284a8d7205dc44e88cba8671ac80a",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/smoke/test_cueq_runtime.py",
+      "size_bytes": 19025
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "35e7059858411c52abf255ba40e673c632545618",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_atom_array_annotations.py",
+      "size_bytes": 2452
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "57a92b8c26fc9c342868efc76d6281774552bdbe",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_atom_attention_decoder.py",
+      "size_bytes": 3196
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6906ae3f7b718ffaa4d07709385ac97ceb222234",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_attention_pair_bias.py",
+      "size_bytes": 3826
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "957353c1a129457f67797eca11d73162d0050720",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_condition_transition.py",
+      "size_bytes": 1332
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4bddb49c9010421747857dac0c36b1f7ffdbc1ba",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_config.py",
+      "size_bytes": 1507
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a32f9f4461aab9caf9e3f6d5482d926a769bb096",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_config_schema.py",
+      "size_bytes": 4235
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6d3bd9033c416188dc02fdd9a4b2436521d7d6fb",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_data_config_roots.py",
+      "size_bytes": 1994
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "09e7a5e2c691173c74c6ef0349c0d88beb34b804",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_dependency_url.py",
+      "size_bytes": 15780
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "93691c5fcc8e6654d2c7ed3369692e73aa0c42b8",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_diffusion_transformer.py",
+      "size_bytes": 2184
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "bde2ca99a1add08fed584e1e429996bd33a9d6ff",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_distogram_bins.py",
+      "size_bytes": 2071
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e767d2f7073f47f19932522a7bff7f5c740f2f07",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_environment.py",
+      "size_bytes": 7708
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fedab1e7b4b21d3c66554e25493938675d3741f7",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_featurizer_optimizations.py",
+      "size_bytes": 9384
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9c667b7b62c55e5e70cdc0ba604b9dba19f3d6f7",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_fetch_remote_cif.py",
+      "size_bytes": 3964
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5e7d01c26bcc615edeb3839e3262ad7a12646920",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_file_io.py",
+      "size_bytes": 674
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4b690bfcc5162c62a1d91468a446ad3e9f12d9f0",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_foldcp_confidence_launch_policy.py",
+      "size_bytes": 2852
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "98ad9d74ad1cd6e790dca58e4f10296d7eb54b9b",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_generator_tfg.py",
+      "size_bytes": 4689
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "95419f1e8f153ad5f0086ea3bb5bd976580c489c",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_inference_config.py",
+      "size_bytes": 24749
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6d92b3dae2011c10f93dc2eb18864a54e53fc7a4",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_input_validation.py",
+      "size_bytes": 1391
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9513550bf9b452978e5a17cd2d57b9fe46bc0db7",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_installation.py",
+      "size_bytes": 10682
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "71fe7b9844de20e292a2dc47edd4bcc2eaf8aa49",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_kalign.py",
+      "size_bytes": 2430
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "aeceb7383f9a7babbda472fc913f8f29919f8d73",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_local_rearrange.py",
+      "size_bytes": 1548
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8622b933ae8a659013012d1910551b5d36848205",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_model_manifest.py",
+      "size_bytes": 13724
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "69917db58631cde1d1f5c0caef5775a29c1cde8c",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_msa_config.py",
+      "size_bytes": 1578
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8d4282f845aebce587d607a7e6ad1f52863a7bf2",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_msa_encoding.py",
+      "size_bytes": 7054
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e089d3c28d68cd6840ae23a21e2bfe93e9f64c41",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_msa_service_client.py",
+      "size_bytes": 4135
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1edcc38ca0853158bea6af064be44863345b20e4",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_preprocess_helpers.py",
+      "size_bytes": 1292
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5c83df222c7cd561815f849675e15687b8ee002e",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_release_metadata.py",
+      "size_bytes": 8657
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e0cb33944034db2cef81391b6515987f6bc84dc4",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_runtime_fallbacks.py",
+      "size_bytes": 9304
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6b0a74aeac5528cbed53766fd4c6f16aca90983e",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_search_database_downloads.py",
+      "size_bytes": 2864
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f3dbaeb51123156668da3656aa45ef4e723a5536",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_shape_complementarity.py",
+      "size_bytes": 15724
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "84e3724fb54214596ffb40a5bca85426281084d5",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_structural_frame_inheritance.py",
+      "size_bytes": 2935
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "573255636bf124061b332f567a263127f30b6bb8",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_structural_token_expander.py",
+      "size_bytes": 4175
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "06239d7616fb99bb13425742b7fd0162783ae6b1",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_structural_tokenizer.py",
+      "size_bytes": 5710
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "75b0d81ee03a7782f3b4ee42c8adfdd36ac13e20",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_structure_output.py",
+      "size_bytes": 1766
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b3522c838df1255e825e55fbc09465eb8e174241",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_triton_compatibility.py",
+      "size_bytes": 1801
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a6d8df0f7f65017be38d758f15126b33dcc3e5f7",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_utils.py",
+      "size_bytes": 7336
+    }
+  ],
+  "exact_commit": "f607bb3c9ff299c0627ac20f5ef8e25d716ed46f",
+  "recorded_at": "2026-08-01T18:18:00+08:00",
+  "schema_version": 1,
+  "scope": "Git tree metadata only; no source blob content was fetched or retained; every entry remains quarantined.",
+  "source_id": "aurekaresearch-opendde"
+}

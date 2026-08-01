@@ -31,7 +31,7 @@ def main() -> int:
     bad = run(bad_lock)
     results = [
         ("checked-in dashboard reports draft evidence without product proof", good.returncode == 0 and '"runnable_from_intake": 0' in good.stdout),
-        ("checked-in dashboard separates five source-tree scans from component admission", good.returncode == 0 and '"sources_scanned": 5' in good.stdout and '"entries_scanned": 2875' in good.stdout),
+        ("checked-in dashboard separates seven source-tree scans from component admission", good.returncode == 0 and '"sources_scanned": 7' in good.stdout and '"entries_scanned": 3139' in good.stdout),
         ("draft dashboard rejects a component that claims runtime authority", bad.returncode == 1 and "cannot contain a runnable component" in bad.stdout),
     ]
     for name, passed in results:

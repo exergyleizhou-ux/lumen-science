@@ -1,0 +1,378 @@
+{
+  "entries": [
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0cdb4e22eaaa07425d8bb57e5b4f43aef89bbaf5",
+      "kind": "git-blob-metadata-only",
+      "path": ".gitignore",
+      "size_bytes": 555
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "708e371e2f2877876bcf70c472c592cf20aa3172",
+      "kind": "git-blob-metadata-only",
+      "path": "LICENSE",
+      "size_bytes": 1064
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "39b8c053da99c731b71685787eb98d7cb2173411",
+      "kind": "git-blob-metadata-only",
+      "path": "README.md",
+      "size_bytes": 6443
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4f574d12f7d9e84df72ad6aebba0234844a0230d",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/__init__.py",
+      "size_bytes": 41
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ce78655fe1bb4c53a26eb6f39978a6ae0fc418c1",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/command/__init__.py",
+      "size_bytes": 387
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c6c68b75d61d4f1992a21886809e045676aa1474",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/command/baseCommand.py",
+      "size_bytes": 325
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "eb9dfbb0bf86acefd914283a48ec6a7459dc0f78",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/command/classify.py",
+      "size_bytes": 6321
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8722460c1fa1bbb399b10514ca98f48eff9a2a55",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/command/extract.py",
+      "size_bytes": 8088
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "116ca0495cbb42b0006676620d06a30ac0afa3d3",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/command/organize.py",
+      "size_bytes": 2678
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b18f2f48f0a56d9bde8b6fc5088c09e26f1c98a4",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/command/output.py",
+      "size_bytes": 5772
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "df82bd25751e5b7b7e466bb9e933031302663251",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/command/pipline.py",
+      "size_bytes": 10573
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c3857477a29508d62b25c5e145bae70074d704df",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/command/predict.py",
+      "size_bytes": 4809
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "230c1727b88fa9248997ee7060f37b77e97107c7",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/command/split.py",
+      "size_bytes": 3343
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4bfa4570a9d3e4059b931f7f0b8d637e3074effd",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/main.py",
+      "size_bytes": 2228
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "255356fee7ad4634f2d0445e51701d04757b1f0e",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/train/__init__.py",
+      "size_bytes": 236
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "783c66f130fef0d5a63417a66b0c57d32c585406",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/train/batch3Linear.py",
+      "size_bytes": 2196
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8c1e2168a8c992ace445247352ebc188cd1f3440",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/train/classifier.py",
+      "size_bytes": 2515
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c13f326068c453f3fdbebf0bb6f94f41723a54a8",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/train/classifyEval.py",
+      "size_bytes": 4944
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e6b4b41eb1696d285100e5527e9055bbbfb8057a",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/train/classifyTrainer.py",
+      "size_bytes": 9129
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "166b3a8417e69ed4a68501fdc2babbfecc9e5810",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/train/data.py",
+      "size_bytes": 4120
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2eba06f9653851e6e6adc9254cfb59ff345d39c4",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/train/eval.py",
+      "size_bytes": 6091
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3edc9ce7d8c6b3b897cf520d6da8fefbed1667e1",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/train/eval_all.py",
+      "size_bytes": 5433
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "942db621d88636c2562152d907d4a3ebec038afc",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/train/final_val.py",
+      "size_bytes": 6155
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ae1a84d85c3c8d3b701c0d7ed1c213cefbb3fe5c",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/train/focal_loss.py",
+      "size_bytes": 584
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9050c75de67fd04e81bbdee684349a526bbcf214",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/train/loss.py",
+      "size_bytes": 375
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "333ba346b625838a041d0b62413ff6b19ecc92cf",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/train/lstm_model.py",
+      "size_bytes": 1886
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2e98feb25d936c447a6f0d07ff86fb669080f5c9",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/train/model.py",
+      "size_bytes": 4024
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d8df453b7dea69be99cb990bbbf859cf8f176945",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/train/pipline.sh",
+      "size_bytes": 522
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0aa5aa83e0a36f7e99febebe174f6245f092cff6",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/train/predict.sh",
+      "size_bytes": 338
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1ae32e48715c8a5893af39de296636cdb2b33915",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/train/split.sh",
+      "size_bytes": 133
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "91265fcede5807f7aa9f1d031c392ca7dd27569e",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/train/trainer.py",
+      "size_bytes": 11026
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5ac8f21099d615c1ddc897e0257c2433bcc1f386",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/train/trainer_focal_loss.py",
+      "size_bytes": 11132
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a9221bc601d66ceffc8b1647434065508ce00c47",
+      "kind": "git-blob-metadata-only",
+      "path": "bgc_prophet/train/utils.py",
+      "size_bytes": 714
+    },
+    {
+      "candidate_asset_kind": "data",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b645c29ed7ab24ab20b7bce6dc02cbd3c3ca0f97",
+      "kind": "git-blob-metadata-only",
+      "path": "data/BGC_train_dataset.csv",
+      "size_bytes": 42080270
+    },
+    {
+      "candidate_asset_kind": "data",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "48f4eaf87501bf97bc10d8b9a108fa8a1ec04a67",
+      "kind": "git-blob-metadata-only",
+      "path": "data/BGC_train_dataset_classify.csv",
+      "size_bytes": 31875113
+    },
+    {
+      "candidate_asset_kind": "data",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "db99f96ac96de72904991250b6f21fd26caafd0e",
+      "kind": "git-blob-metadata-only",
+      "path": "data/Nine_genomes_test_dataset.csv",
+      "size_bytes": 1626342
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "98c337ce2ee0afc28b880e90b6660af9ee0b8d59",
+      "kind": "git-blob-metadata-only",
+      "path": "images/Figure1.svg",
+      "size_bytes": 1776851
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ee3a6ba2124253ec1122916cf5a07ee7228b6e24",
+      "kind": "git-blob-metadata-only",
+      "path": "setup.py",
+      "size_bytes": 4269
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "783c66f130fef0d5a63417a66b0c57d32c585406",
+      "kind": "git-blob-metadata-only",
+      "path": "src/batch3Linear.py",
+      "size_bytes": 2196
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e5afbb5f7231f4cac2a9fe41dd25718ef16ffbd4",
+      "kind": "git-blob-metadata-only",
+      "path": "src/classifier.py",
+      "size_bytes": 2514
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "be26e3397fc9417c9f03c1c17e033b78a3554eff",
+      "kind": "git-blob-metadata-only",
+      "path": "src/model.py",
+      "size_bytes": 4023
+    }
+  ],
+  "exact_commit": "de5068695a381d117ae3829d9c2698d954b85efc",
+  "recorded_at": "2026-08-01T18:18:00+08:00",
+  "schema_version": 1,
+  "scope": "Git tree metadata only; no source blob content was fetched or retained; every entry remains quarantined.",
+  "source_id": "hust-ningkang-lab-bgc-prophet"
+}
