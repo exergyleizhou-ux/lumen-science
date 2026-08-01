@@ -980,7 +980,8 @@ mod tests {
         let mut child = Arc::try_unwrap(child)
             .ok()
             .expect("no other child refs")
-            .into_inner();
+            .into_inner()
+            .expect("child mutex not poisoned");
         assert!(
             wait_for_exit(&mut child, Duration::from_secs(2)),
             "the predecessor must be terminated"
