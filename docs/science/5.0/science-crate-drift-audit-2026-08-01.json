@@ -2,7 +2,7 @@
   "schema": "lumen-science-crate-drift-v1",
   "status": "inventory_only_not_admission_lock",
   "generated_from": "scripts/report-science-crate-drift.py",
-  "science_commit": "e01d040e985d93b90c12a76109cd1fb0f0fc46ab",
+  "science_commit": "a161ad5100af0f941a2477007ca4fde44a895c0e",
   "upstream_commit": "dc563b1e0db9eaca7e970d56d7816e1522511723",
   "crate": "agent/crates/codegen/xai-grok-science",
   "science_files": 94,
@@ -12,7 +12,7 @@
   "science_only": 22,
   "upstream_only": 0,
   "duplicate_delta": 53,
-  "manifest_sha256": "575e23f0c5a6f5453e488500c0fd4abc4219621b5ba3da1b5f91160e61b01317",
+  "manifest_sha256": "560dee76fc579ee5bad8bc38dcec3a82a2960d9b3dbc4ff391219933fdf03d28",
   "non_claims": [
     "This inventory does not change the Core admission-lock total of 136.",
     "This inventory does not make either copy canonical or safe.",
