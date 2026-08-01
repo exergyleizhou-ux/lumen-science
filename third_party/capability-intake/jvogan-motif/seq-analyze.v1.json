@@ -34,11 +34,19 @@
     "source_provenance": "third_party/provenance/motif-876a-seqbench.md",
     "legacy_product_tests": "agent/crates/codegen/xai-grok-shell/tests/test_built_binary_e2e.rs",
     "built_binary_proof": {
-      "source_commit": "afed01d8a99e603ad8c172ce88a7d51487df9bf1",
-      "binary_sha256": "0caba57f0bf524bc6f703806e96a31092780c7fe2456a3656bdbbd5b7c991b64",
+      "source_commit": "0319682c7742cf5a9d9d6af40d5ce6eaf84e4676",
+      "binary_sha256": "4d3d40f8058ee3e3f402a2012d480ea57568c2d0b1f2407577ebe8741e124d79",
       "tests": [
         "test_stdio_science_seq_analyze_is_actor_gated_and_store_owned",
-        "test_stdio_science_seq_analyze_denied_writes_nothing"
+        "test_stdio_science_seq_analyze_same_operation_is_single_flight",
+        "test_stdio_science_seq_analyze_restart_reprompts_exact_pending_once",
+        "test_stdio_science_seq_analyze_restart_resumes_allow_without_reprompt",
+        "test_stdio_science_seq_analyze_boundaries_fail_closed",
+        "test_stdio_science_seq_analyze_denied_writes_nothing",
+        "test_stdio_science_seq_analyze_cancelled_writes_nothing",
+        "test_stdio_science_seq_analyze_permission_timeout_writes_nothing",
+        "test_stdio_science_seq_analyze_malformed_input_fails_without_outputs",
+        "test_stdio_science_seq_analyze_allow_rejects_project_revision_race"
       ]
     }
   },
