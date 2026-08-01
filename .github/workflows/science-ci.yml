@@ -160,7 +160,7 @@ jobs:
   rust-science:
     name: Rust xai-grok-science (test + clippy)
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     defaults:
       run:
         working-directory: agent
@@ -311,6 +311,44 @@ jobs:
       - name: Build Lumen composition-root binary
         run: cargo build -p xai-grok-pager-bin --bin lumen --locked
 
+      # Each `cargo test` invocation re-evaluates the workspace fingerprint and
+      # relinks the composition-root test harness on this runner (observed
+      # 11–18 min per invocation, independent of the test's own 6–10 s runtime),
+      # so 38 sequential invocations blew the 60 min job timeout after only
+      # ~3 tests. Build the harness once and drive libtest directly for each
+      # per-test proof, keeping the exact-one-passing-test semantics.
+      - name: Build built-binary test harness once
+        run: |
+          set -euo pipefail
+          TEST_BIN="$(
+            cargo test -p xai-grok-shell --test test_built_binary_e2e --locked --no-run \
+              --message-format=json 2>/dev/null |
+              python3 -c '
+          import json, sys
+          for line in sys.stdin:
+              line = line.strip()
+              if not line:
+                  continue
+              try:
+                  m = json.loads(line)
+              except Exception:
+                  continue
+              if (
+                  m.get("reason") == "compiler-artifact"
+                  and m.get("target", {}).get("name") == "test_built_binary_e2e"
+                  and m.get("profile", {}).get("test")
+                  and m.get("executable")
+              ):
+                  print(m["executable"])
+                  break
+          '
+          )"
+          test -n "$TEST_BIN" || {
+            echo "::error::could not locate test_built_binary_e2e executable"
+            exit 1
+          }
+          echo "TEST_BIN=$TEST_BIN" >> "$GITHUB_ENV"
+
       - name: Required offline Science built-binary authority proofs
         env:
           GROK_BINARY: ${{ github.workspace }}/agent/target/debug/lumen
@@ -360,8 +398,7 @@ jobs:
           # Prove every required product test exists exactly once in the ignored
           # inventory before relying on the individual exit codes below.
           listed_tests="$(
-            cargo test -p xai-grok-shell --test test_built_binary_e2e --locked \
-              -- --list --ignored
+            "$TEST_BIN" --list --ignored
           )"
           printf '%s\n' "$listed_tests"
           for test_name in "${tests[@]}"; do
@@ -379,9 +416,7 @@ jobs:
           for test_name in "${tests[@]}"; do
             set +e
             test_output="$(
-              CARGO_TERM_COLOR=never \
-                cargo test -p xai-grok-shell --test test_built_binary_e2e --locked \
-                  "$test_name" -- --ignored --exact --test-threads=1 2>&1
+              "$TEST_BIN" "$test_name" --ignored --exact --test-threads=1 2>&1
             )"
             test_status=$?
             set -e
@@ -409,7 +444,7 @@ jobs:
   rust-science-macos-product:
     name: Rust Science macOS built-binary sandbox proof
     runs-on: macos-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     defaults:
       run:
         working-directory: agent
@@ -437,6 +472,42 @@ jobs:
       - name: Build Lumen composition-root binary
         run: cargo build -p xai-grok-pager-bin --bin lumen --locked
 
+      # Same harness-once pattern as the Linux job: per-invocation fingerprint
+      # re-evaluation + relink cost 11–18 min per `cargo test` call here, so 8
+      # sequential invocations exceeded the 60 min job timeout. Drive libtest
+      # directly against the one built harness instead.
+      - name: Build built-binary test harness once
+        run: |
+          set -euo pipefail
+          TEST_BIN="$(
+            cargo test -p xai-grok-shell --test test_built_binary_e2e --locked --no-run \
+              --message-format=json 2>/dev/null |
+              python3 -c '
+          import json, sys
+          for line in sys.stdin:
+              line = line.strip()
+              if not line:
+                  continue
+              try:
+                  m = json.loads(line)
+              except Exception:
+                  continue
+              if (
+                  m.get("reason") == "compiler-artifact"
+                  and m.get("target", {}).get("name") == "test_built_binary_e2e"
+                  and m.get("profile", {}).get("test")
+                  and m.get("executable")
+              ):
+                  print(m["executable"])
+                  break
+          '
+          )"
+          test -n "$TEST_BIN" || {
+            echo "::error::could not locate test_built_binary_e2e executable"
+            exit 1
+          }
+          echo "TEST_BIN=$TEST_BIN" >> "$GITHUB_ENV"
+
       - name: Required macOS workflow sandbox product proofs
         env:
           GROK_BINARY: ${{ github.workspace }}/agent/target/debug/lumen
@@ -454,8 +525,7 @@ jobs:
           )
 
           listed_tests="$(
-            cargo test -p xai-grok-shell --test test_built_binary_e2e --locked \
-              -- --list --ignored
+            "$TEST_BIN" --list --ignored
           )"
           printf '%s\n' "$listed_tests"
           for test_name in "${tests[@]}"; do
@@ -473,9 +543,7 @@ jobs:
           for test_name in "${tests[@]}"; do
             set +e
             test_output="$(
-              CARGO_TERM_COLOR=never \
-                cargo test -p xai-grok-shell --test test_built_binary_e2e --locked \
-                  "$test_name" -- --ignored --exact --test-threads=1 2>&1
+              "$TEST_BIN" "$test_name" --ignored --exact --test-threads=1 2>&1
             )"
             test_status=$?
             set -e
