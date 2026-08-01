@@ -380,6 +380,36 @@ export const defaultCandidatePaths =
       } catch {
         // no framework dir
       }
+
+      // Apple's Command Line Tools ship a root-owned Python framework, but
+      // `/usr/bin/python3` is only a launcher and does not identify that
+      // framework runtime to the engine sandbox. Discover the framework binary
+      // itself so the SessionActor can pin and verify the real executable after
+      // permission. This remains a path observation only; discovery never
+      // executes or admits it.
+      if (language === 'python') {
+        const cltVersions =
+          '/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions'
+        try {
+          for (const ver of host.readdirSync(cltVersions)) {
+            // `bin/python3` is a launcher which posix_spawns Python.app. Name
+            // the real protected Mach-O instead, so the actor pins the same
+            // executable that the macOS sandbox will execute.
+            const p = join(
+              cltVersions,
+              ver,
+              'Resources',
+              'Python.app',
+              'Contents',
+              'MacOS',
+              'Python',
+            )
+            if (host.exists(p)) found.add(p)
+          }
+        } catch {
+          // Command Line Tools are optional on a fresh macOS installation.
+        }
+      }
     }
 
     // pyenv versions (python only): pyenv shims are rarely on a GUI app's PATH.

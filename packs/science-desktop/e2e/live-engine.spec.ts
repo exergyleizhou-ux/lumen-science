@@ -353,17 +353,22 @@ test('the Skills and Connectors catalogs actually load', async () => {
   // a packaged app at all.
   await page.getByRole('tab', { name: 'Skills', exact: true }).click()
   await page.locator('#panel-skills').waitFor({ timeout: 10_000 })
-  await page.getByRole('button', { name: 'List inventory', exact: true }).click()
+  // The isolation-first Skills panel loads the inventory with the local
+  // capability catalog button (not the former "List inventory" label).
+  await page.getByRole('button', { name: '加载本地科研能力', exact: true }).click()
   await expect
     .poll(async () => page.locator('#panel-skills pre').textContent(), { timeout: 15_000 })
-    .toContain('"ok": true')
+    .toContain('"total":')
 
   const skills = (await page.locator('#panel-skills pre').textContent()) ?? ''
-  // Non-empty: a green "ok" over a zero inventory is the exact failure this
+  // Non-empty: a green inventory over a zero registry is the exact failure this
   // replaced, so assert the registry actually had contents.
   const total = /"total":\s*(\d+)/.exec(skills)?.[1]
   expect(Number(total ?? 0)).toBeGreaterThan(0)
   expect(skills).not.toContain('unreadable')
+  // The isolation contract is part of the loaded inventory, not just prose:
+  // exactly the admitted capability may run, everything else stays quarantined.
+  expect(skills).toContain('"admittedExecutable": 1')
 
   await page.getByRole('tab', { name: 'Connectors', exact: true }).click()
   await page.locator('#panel-connectors').waitFor({ timeout: 10_000 })

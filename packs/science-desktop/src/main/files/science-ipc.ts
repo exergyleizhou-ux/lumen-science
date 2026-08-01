@@ -190,6 +190,45 @@ export type NotebookInterpreterResolution =
   | { ok: false; reason: string }
 
 /**
+ * Pick the least-surprising request from an observation-only discovery report.
+ *
+ * A Desktop candidate is not an admission verdict: the SessionActor remains
+ * the only component that opens, pins, hashes, probes, and executes it after
+ * permission.  On macOS and Linux, though, a PATH-preferred Homebrew/venv
+ * Python is predictably rejected by the actor's immutable-executable policy.
+ * Prefer the OS-owned system Python when discovery found it, so an ordinary
+ * notebook has a usable, still actor-gated baseline instead of unnecessarily
+ * selecting a user-writable binary first.  This is deliberately a narrow
+ * preference, not a recreation of the Rust protection check in TypeScript.
+ *
+ * A signed app-managed runtime remains a separate product capability.  Until
+ * it exists, this function must not describe a user-owned runtime as trusted
+ * or try a rejected candidate behind the user's back.
+ */
+export function selectNotebookInterpreter(
+  interpreters: readonly { interpreterPath: string }[],
+  platform: NodeJS.Platform = process.platform,
+): { interpreterPath: string } | undefined {
+  if (platform === 'darwin') {
+    const commandLineToolsRuntime = interpreters.find((interpreter) =>
+      /^\/Library\/Developer\/CommandLineTools\/Library\/Frameworks\/Python3\.framework\/Versions\/[^/]+\/Resources\/Python\.app\/Contents\/MacOS\/Python$/.test(
+        interpreter.interpreterPath,
+      ),
+    )
+    if (commandLineToolsRuntime) return commandLineToolsRuntime
+  }
+  const protectedSystemPaths =
+    platform === 'darwin' || platform === 'linux'
+      ? ['/usr/bin/python3', '/usr/bin/python']
+      : []
+  for (const path of protectedSystemPaths) {
+    const candidate = interpreters.find((interpreter) => interpreter.interpreterPath === path)
+    if (candidate) return candidate
+  }
+  return interpreters[0]
+}
+
+/**
  * Select an observation-only, absolute candidate for the SessionActor.
  *
  * Discovery is deliberately not a readiness probe: executing `--version`
@@ -209,7 +248,7 @@ export async function resolveNotebookInterpreter(
     }
   }
   const report = await environment.discover('python')
-  const candidate = report.interpreters[0]
+  const candidate = selectNotebookInterpreter(report.interpreters)
   if (!candidate) {
     return {
       ok: false,
