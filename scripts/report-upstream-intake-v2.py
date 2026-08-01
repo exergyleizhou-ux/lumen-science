@@ -40,6 +40,11 @@ def dashboard(lock: dict[str, Any]) -> dict[str, Any]:
     exact_one = sum(1 for component in components if isinstance(component.get("disposition"), str))
     runnable = sum(1 for component in components if component.get("execution_authority") != "none")
     tree_inventories: list[dict[str, Any]] = []
+    external_source_ids = {
+        source_id
+        for source_id in expected
+        if isinstance(source_id, str) and not source_id.startswith("exergyleizhou-ux-")
+    }
     for source in sources:
         records = {component.get("evidence", {}).get("record") for component in source.get("components", [])}
         if len(records) != 1 or not isinstance(next(iter(records)), str):
@@ -81,6 +86,10 @@ def dashboard(lock: dict[str, Any]) -> dict[str, Any]:
         "tree_inventory": {
             "sources_scanned": len(tree_inventories),
             "entries_scanned": sum(item["entry_count"] or 0 for item in tree_inventories),
+            "external_sources_expected": len(external_source_ids),
+            "external_sources_scanned": sum(1 for item in tree_inventories if item["source_id"] in external_source_ids),
+            "core_sources_expected": len(expected) - len(external_source_ids),
+            "core_sources_scanned": sum(1 for item in tree_inventories if item["source_id"] not in external_source_ids),
             "records": tree_inventories,
             "scope": "Tree inventory is discovery evidence, not an admitted capability inventory.",
         },
