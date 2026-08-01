@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "recorded_at": "2026-08-01T14:39:21+08:00",
+  "recorded_at": "2026-08-01T18:46:59+08:00",
   "purpose": "Record selective Lumen core v0.1.251 admission into Lumen Science without claiming full source or release parity.",
   "policy": {
     "source_of_truth": "lumen",
@@ -111,20 +111,35 @@
         "drift 135 -> 136 is this single explicit, reviewed file; not silent growth"
       ],
       "status": "admitted"
+    },
+    {
+      "name": "Motif primer candidate actor-gating (existing divergent shell paths)",
+      "science_commit": "afed01d8a99e603ad8c172ce88a7d51487df9bf1",
+      "supporting_commits": [
+        "a5a9f26c8ac7f29ddffac987d6e4eaafde2f5c66",
+        "cbb7d78d553fb6a1ab29bcd339c98e2aa38ffd99"
+      ],
+      "coverage": [
+        "bounded Motif primer thermodynamics stays inside the durable seq_analyze request, approval, analysis, report, provenance, recovery, and replay contract",
+        "candidate normalization rejects ambiguous or lossy UI input before a durable request hash is created",
+        "the existing shared-diverged extensions/science.rs and test_built_binary_e2e.rs paths change bytes without growing, shrinking, or reclassifying the 131 + 5 Core drift set"
+      ],
+      "adaptation": "This is a Science product authority admission, not a Lumen version sync. The exact rederived drift manifest binds the changed shared-path bytes against audited Lumen dc563b1e.",
+      "status": "admitted"
     }
   ],
   "comparison": {
     "tool": "scripts/check-core-drift.py",
     "basis": "audited_lumen_main_head",
     "lumen_head": "dc563b1e0db9eaca7e970d56d7816e1522511723",
-    "science_code_head": "979e2848076ee88b381eb71b3bac42c530701e70",
+    "science_code_head": "090bdf031ff6a29feb6540410071b7ada86e1008",
     "comparison_scope": "Exact committed Science source bytes at science_code_head; CI rederives the manifest from the checked-out bytes",
     "diverged_rust_files": 131,
     "missing_in_science_rust_files": 5,
     "science_only_rust_files": 0,
     "total_drift": 136,
     "drift_manifest_schema": "lumen-core-drift-v1",
-    "drift_manifest_sha256": "0d5a8d9c15955c2a7173760e1056dc09cda2d73261018924648a6e4f3ff49d27",
+    "drift_manifest_sha256": "47d9887e0dc9be581192ef16e4adb82e47f52031f1ffcaf4df6a7be3249df78e",
     "tracked_security_markers_present": 8,
     "tracked_security_markers_total": 8,
     "strict_zero_drift_gate": false

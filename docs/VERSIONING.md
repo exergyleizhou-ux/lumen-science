@@ -17,8 +17,8 @@ assume any two of them must be equal.
 4. Root `VERSION` is the **Rust Core** product version (`0.1.222` today). It must match
    `agent/VERSION` and the eight Core crate manifests. It is **not** the Go CLI version.
 5. Do **not** bump Core metadata to `0.1.251` until source parity is actually achieved.
-   Known Core drift against audited Lumen main head `dc563b1e…` is machine-gated at **135** files
-   (`130` diverged + `5` missing) by `scripts/check-core-drift.py` +
+   Known Core drift against audited Lumen main head `dc563b1e…` is machine-gated at **136** files
+   (`131` diverged + `5` missing) by `scripts/check-core-drift.py` +
    `docs/science/5.0/core-v0.1.251-admission.lock.json`. The target tag
    `v0.1.251` (`88a204cf…`) remains separate and is not the comparison checkout.
 

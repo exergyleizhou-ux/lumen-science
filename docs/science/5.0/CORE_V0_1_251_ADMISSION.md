@@ -27,7 +27,7 @@ The machine-readable authority for this admission is
 `core-v0.1.251-admission.lock.json`.
 
 **Single Rust base is not complete.** Science still identifies the embedded
-Core line as `0.1.222`. The 135-file drift against audited Lumen main head
+Core line as `0.1.222`. The 136-file drift against audited Lumen main head
 `dc563b1e0db9eaca7e970d56d7816e1522511723` is expected and machine-visible; it
 must not grow or change identity silently, and it must not be erased by
 rewriting VERSION to `0.1.251`. The `v0.1.251` tag commit
@@ -80,6 +80,12 @@ The sealed `seq_analyze` follow-up commits are:
 - `c54bb88ada7fbbc55a5a3a0e9c47ca8f29b07f20`
 - `63f27da0d74ed050a7691c349805c69f26f2623d`
 
+The Motif primer candidate hardening follow-up commits are:
+
+- `a5a9f26c8ac7f29ddffac987d6e4eaafde2f5c66`
+- `cbb7d78d553fb6a1ab29bcd339c98e2aa38ffd99`
+- `afed01d8a99e603ad8c172ce88a7d51487df9bf1`
+
 These commits are not Lumen version admissions. They close durable Science
 SessionActor paths and intentionally make
 `xai-grok-shell/src/session/science_goal.rs` one newly diverged shared path,
@@ -91,7 +97,7 @@ harmless.
 
 ## Current evidence
 
-At Science code head `63f27da`:
+At Science code head `090bdf0`:
 
 - `cargo check -p xai-grok-science --all-targets --locked`: exit 0.
 - `cargo test -p xai-grok-science --locked`: 589 passed, 0 failed, 8 explicit
@@ -114,9 +120,9 @@ The current comparison against Lumen `dc563b1e` still reports:
 
 | Kind | Count |
 |---|---:|
-| Diverged shared-core Rust files | 130 |
+| Diverged shared-core Rust files | 131 |
 | Missing in Science | 5 |
-| Total drift | 135 |
+| Total drift | 136 |
 
 Therefore the Science product still identifies its embedded Lumen line as
 `0.1.222`. Changing package versions, the SBOM, or release ledgers to
