@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "recorded_at": "2026-07-30T05:03:00+08:00",
+  "recorded_at": "2026-08-01T12:55:36+08:00",
   "purpose": "Record selective Lumen core v0.1.251 admission into Lumen Science without claiming full source or release parity.",
   "policy": {
     "source_of_truth": "lumen",
@@ -101,20 +101,30 @@
       ],
       "adaptation": "Seven shared Rust paths that were already classified shared_diverged changed bytes without growing, shrinking, or reclassifying the 130 + 5 drift set. The complete manifest digest is rederived below; xai-grok-science remains outside the current copied-Core drift scope and is tracked as a single-base architecture gap.",
       "status": "admitted"
+    },
+    {
+      "name": "daemonize takeover test determinism (test-only, upstream race)",
+      "science_commit": "01ef6462531ce3f94a073f668da36086b884a9b9",
+      "coverage": [
+        "take_over_acquires_cleanly_when_predecessor_releases: release the pidfile lock only after the takeover has signaled the predecessor, removing the 100 ms fixed-sleep race that failed spuriously under CI scheduling load",
+        "test-only change to agent/crates/codegen/xai-grok-workspace/src/daemonize.rs; no production behavior touched; moves one upstream-identical file into the diverged set (130 -> 131)",
+        "drift 135 -> 136 is this single explicit, reviewed file; not silent growth"
+      ],
+      "status": "admitted"
     }
   ],
   "comparison": {
     "tool": "scripts/check-core-drift.py",
     "basis": "audited_lumen_main_head",
     "lumen_head": "dc563b1e0db9eaca7e970d56d7816e1522511723",
-    "science_code_head": "63f27da0d74ed050a7691c349805c69f26f2623d",
+    "science_code_head": "01ef6462531ce3f94a073f668da36086b884a9b9",
     "comparison_scope": "Exact committed Science source bytes at science_code_head; CI rederives the manifest from the checked-out bytes",
-    "diverged_rust_files": 130,
+    "diverged_rust_files": 131,
     "missing_in_science_rust_files": 5,
     "science_only_rust_files": 0,
-    "total_drift": 135,
+    "total_drift": 136,
     "drift_manifest_schema": "lumen-core-drift-v1",
-    "drift_manifest_sha256": "c2b3d3af382a280bded1b923776d36e3cb960e7ce751adc08e399eed5450f36c",
+    "drift_manifest_sha256": "4e30818df0ba78dfa80bf4ef68efea3ce607dd35a6f166d56d57ee067ffaa207",
     "tracked_security_markers_present": 8,
     "tracked_security_markers_total": 8,
     "strict_zero_drift_gate": false
