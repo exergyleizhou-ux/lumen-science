@@ -675,6 +675,7 @@ def collect_desktop(evidence: dict[str, Any]) -> dict[str, Any]:
     pkg = read_json("packs/science-desktop/package.json") or {}
     scripts = pkg.get("scripts", {})
     desktop_evidence = evidence.get("desktop", {})
+    desktop_ci = read_text(".github/workflows/desktop-ci.yml") or ""
 
     def gate(name: str) -> dict[str, Any]:
         record = desktop_evidence.get(name)
@@ -684,6 +685,11 @@ def collect_desktop(evidence: dict[str, Any]) -> dict[str, Any]:
         return emit_gate(state, record.get("evidence"))
 
     dist_script = scripts.get("dist", "")
+    full_build_ci_configured = (
+        "npm run dist:full" in desktop_ci
+        and "Desktop macOS full package (unsigned)" in desktop_ci
+        and "codesign --verify --deep --strict" in desktop_ci
+    )
     return {
         "version": pkg.get("version"),
         "typecheck": gate("typecheck"),
@@ -692,11 +698,14 @@ def collect_desktop(evidence: dict[str, Any]) -> dict[str, Any]:
         "distTargetIsBrandingShell": "pack-dir" in dist_script,
         "distScript": dist_script,
         "fullBuildScript": scripts.get("dist:full"),
+        "fullBuildCiConfigured": full_build_ci_configured,
         "bundlesEngineBinary": False,
         "notes": (
             "`npm run dist` builds src/main/pack-main.ts + pack-index.html — a "
             "packaging smoke shell, not the product. The product entry is "
-            "src/main/index.ts, built only by dist:full, which nothing calls."
+            "src/main/index.ts, built by dist:full. The configured macOS CI "
+            "job validates an unsigned full bundle; until its exact-SHA result "
+            "is recorded as evidence, fullBuild remains not_run."
         ),
     }
 

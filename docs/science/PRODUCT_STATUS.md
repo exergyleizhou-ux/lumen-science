@@ -21,7 +21,7 @@ See [docs/VERSIONING.md](../VERSIONING.md).
 |-----------|---------|--------|
 | Lumen Core (pager crate) | `0.1.222` | Shipping agent line |
 | Science CLI/MCP | `1.0.1` (`packs/science/VERSION`) | **Shipped** — GitHub Release [`v1.0.1`](https://github.com/exergyleizhou-ux/lumen-science/releases/tag/v1.0.1); `MANIFEST.json` `git_commit=4f75d7a…`, `builder_run_id=30192164855`, `independentFromCore=true` |
-| Science Desktop | `1.1.0-dev` | Authority suite + **unsigned pack-dir** (`Lumen Science Desktop.app`); not installable GA / no notarization |
+| Science Desktop | `1.1.0-dev` | Authority suite + **unsigned local full package proof** (`Lumen Science Desktop.app`); not installable GA / no notarization |
 
 ## Quantified maturity (audit-aligned)
 
@@ -56,9 +56,9 @@ See [docs/VERSIONING.md](../VERSIONING.md).
 
 ### P0 (still open — Desktop path)
 
-1. **Desktop installable package**: signed DMG/AppImage/Setup + auto-update feed (unsigned pack-dir proof exists via `npm run dist` / `scripts/pack-dir.mts`).
+1. **Desktop installable package**: signed DMG/AppImage/Setup + auto-update feed (an unsigned local full-package proof exists; the matching macOS CI gate is configured but has no exact-SHA result yet).
 2. **OSF-9 headed Electron E2E**: full GUI drive-through (live binaryHash probe is in authority suite; headed app E2E still open).
-3. **Full electron-vite product build**: pack-dir uses a minimal main/preload/renderer shell; full `src/main/index.ts` graph still has OS-absorb dep/type debt.
+3. **Full electron-vite product build in CI**: the full graph now builds and packages locally at `0731081` ([evidence](../../outputs/evidence/desktop-full-package-2026-08-01.md)), but that is not yet an exact-head CI package artifact or a headed Electron proof.
 
 ### P1
 
