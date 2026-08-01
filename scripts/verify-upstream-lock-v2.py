@@ -1,0 +1,257 @@
+#!/usr/bin/env python3
+"""Validate the v2 nine-source intake lock without fetching or executing sources.
+
+An active lock is only an E1/E2 source-intake result.  It cannot assert a
+runnable capability, a rebuilt binary, CI, release, or live-provider proof.
+Draft locks deliberately return exit code 2 so they cannot be mistaken for a
+passing admission gate.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+from typing import Any
+
+
+ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_LOCK = ROOT / "third_party/upstream-lock.v2.json"
+DEFAULT_FORBIDDEN = ROOT / "third_party/forbidden-paths.v2.json"
+EXPECTED_SOURCE_IDS = {
+    "snap-stanford-biomni",
+    "jvogan-motif",
+    "aipoch-open-science",
+    "qzzqzzb-openclaudescience",
+    "hust-ningkang-lab-bgc-prophet",
+    "aurekaresearch-opendde",
+    "ai4s-research-open-science",
+    "exergyleizhou-ux-lumen",
+    "exergyleizhou-ux-lumen-science",
+}
+SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+ALLOWED_ASSET_KINDS = {
+    "code",
+    "skill",
+    "data",
+    "model",
+    "binary",
+    "service",
+    "document",
+}
+ALLOWED_DISPOSITIONS = {
+    "vendor",
+    "adapt",
+    "clean-room",
+    "catalog-only",
+    "quarantine",
+    "reject-authority",
+    "reject-license",
+    "reject-data-model",
+}
+ALLOWED_REUSE_MODES = {"none", "vendor", "adapt", "clean-room", "catalog-only"}
+
+
+def fail(message: str) -> None:
+    raise ValueError(message)
+
+
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        fail(message)
+
+
+def load_json(path: Path, label: str) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as error:
+        fail(f"cannot read {label}: {error}")
+    except json.JSONDecodeError as error:
+        fail(f"cannot parse {label}: {error}")
+    require(isinstance(value, dict), f"{label} root must be an object")
+    return value
+
+
+def require_relative_glob(value: Any, label: str) -> str:
+    require(isinstance(value, str) and value, f"{label} is missing")
+    path = Path(value)
+    require(not path.is_absolute(), f"{label} must be relative")
+    require(".." not in path.parts, f"{label} escapes its source root")
+    return value
+
+
+def require_sha(value: Any, label: str, pattern: re.Pattern[str] = SHA256_RE) -> str:
+    require(isinstance(value, str) and pattern.fullmatch(value) is not None, f"{label} is malformed")
+    return value
+
+
+def verify_policy(policy: Any) -> None:
+    require(isinstance(policy, dict), "lock.policy must be an object")
+    require(
+        policy.get("canonical_execution_authority") == "Rust Lumen SessionActor",
+        "lock must keep Rust Lumen SessionActor as canonical execution authority",
+    )
+    require(policy.get("external_runtime_authority") == "denied", "external runtime authority is not denied")
+    require(policy.get("root_license_overrides_nested_license") is False, "root license must not override nested licenses")
+    require(policy.get("unreviewed_asset_is_executable") is False, "unreviewed asset cannot be executable")
+    require(policy.get("unreviewed_data_or_model_is_scientific_truth") is False, "unreviewed data/model cannot be scientific truth")
+    require(policy.get("provider_or_billable_calls_during_intake") is False, "intake must not make provider or billable calls")
+
+
+def verify_forbidden_paths(value: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
+    require(value.get("schema_version") == 2, "forbidden-paths schema_version must be 2")
+    rules = value.get("rules")
+    require(isinstance(rules, list) and rules, "forbidden-paths rules are empty")
+    found: dict[tuple[str, str], dict[str, Any]] = {}
+    for index, rule in enumerate(rules):
+        label = f"forbidden-paths.rules[{index}]"
+        require(isinstance(rule, dict), f"{label} must be an object")
+        source_id = rule.get("source_id")
+        require(isinstance(source_id, str) and source_id, f"{label}.source_id is missing")
+        path = require_relative_glob(rule.get("path"), f"{label}.path")
+        key = (source_id, path)
+        require(key not in found, f"forbidden-paths repeats rule: {source_id}:{path}")
+        require(rule.get("copy_forbidden") is True, f"{label} must forbid copying")
+        require(rule.get("clean_room_only") is True, f"{label} must require clean room")
+        require(
+            rule.get("required_disposition") == "reject-license",
+            f"{label} must require reject-license",
+        )
+        require(isinstance(rule.get("reason"), str) and len(rule["reason"]) >= 20, f"{label}.reason is not substantive")
+        found[key] = rule
+    required = {
+        ("qzzqzzb-openclaudescience", "skills/docx/**"),
+        ("qzzqzzb-openclaudescience", "skills/pdf/**"),
+        ("qzzqzzb-openclaudescience", "skills/pptx/**"),
+        ("qzzqzzb-openclaudescience", "skills/xlsx/**"),
+    }
+    require(required.issubset(found), "forbidden-paths is missing a required proprietary OpenClaudeScience rule")
+    return found
+
+
+def verify_component(
+    component: Any,
+    label: str,
+    forbidden: dict[tuple[str, str], dict[str, Any]],
+    source_id: str,
+) -> None:
+    require(isinstance(component, dict), f"{label} must be an object")
+    component_id = component.get("id")
+    require(isinstance(component_id, str) and component_id, f"{label}.id is missing")
+    path = require_relative_glob(component.get("path"), f"{label}.path")
+    asset_kind = component.get("asset_kind")
+    require(asset_kind in ALLOWED_ASSET_KINDS, f"{label}.asset_kind is unsupported")
+    disposition = component.get("disposition")
+    require(disposition in ALLOWED_DISPOSITIONS, f"{label}.disposition is unsupported")
+    reuse_mode = component.get("reuse_mode")
+    require(reuse_mode in ALLOWED_REUSE_MODES, f"{label}.reuse_mode is unsupported")
+    rights_status = component.get("rights_status")
+    require(rights_status in {"verified", "restricted"}, f"{label}.rights_status is unsupported")
+    require(component.get("execution_authority") == "none", f"{label} attempts to become an execution authority")
+    evidence = component.get("evidence")
+    require(isinstance(evidence, dict), f"{label}.evidence must be an object")
+    require_sha(evidence.get("source_sha256"), f"{label}.evidence.source_sha256")
+    require_relative_glob(evidence.get("record"), f"{label}.evidence.record")
+    rule = forbidden.get((source_id, path))
+    if rule is not None:
+        require(disposition == rule["required_disposition"], f"{label} violates forbidden-path disposition")
+        require(reuse_mode == "clean-room", f"{label} violates clean-room-only restriction")
+        require(rights_status == "restricted", f"{label} must remain rights-restricted")
+    if disposition in {"vendor", "adapt"}:
+        require(rights_status == "verified", f"{label} cannot {disposition} without verified rights")
+        require(reuse_mode == disposition, f"{label} reuse_mode must match disposition")
+    if disposition == "clean-room":
+        require(reuse_mode == "clean-room", f"{label} clean-room disposition requires clean-room reuse mode")
+    if disposition.startswith("reject-") and rule is None:
+        require(reuse_mode == "none", f"{label} rejected component cannot have a reuse mode")
+
+
+def verify_active_lock(lock: dict[str, Any], forbidden: dict[tuple[str, str], dict[str, Any]]) -> None:
+    sources = lock.get("sources")
+    require(isinstance(sources, list), "active lock.sources must be a list")
+    seen_sources: set[str] = set()
+    seen_component_keys: set[tuple[str, str]] = set()
+    for source_index, source in enumerate(sources):
+        label = f"sources[{source_index}]"
+        require(isinstance(source, dict), f"{label} must be an object")
+        source_id = source.get("id")
+        require(isinstance(source_id, str) and source_id, f"{label}.id is missing")
+        require(source_id not in seen_sources, f"lock repeats source id: {source_id}")
+        seen_sources.add(source_id)
+        repository = source.get("repository")
+        require(
+            isinstance(repository, str) and repository.startswith("https://github.com/") and repository.endswith(".git"),
+            f"{label}.repository must be an exact GitHub clone URL",
+        )
+        require_sha(source.get("exact_commit"), f"{label}.exact_commit", SHA_RE)
+        require_sha(source.get("archive_sha256"), f"{label}.archive_sha256")
+        require(source.get("rights_status") == "verified", f"{label}.rights_status must be verified")
+        root_license = source.get("root_license")
+        require(isinstance(root_license, dict), f"{label}.root_license must be an object")
+        require(isinstance(root_license.get("spdx"), str) and root_license["spdx"], f"{label}.root_license.spdx is missing")
+        require_relative_glob(root_license.get("path"), f"{label}.root_license.path")
+        require_sha(root_license.get("sha256"), f"{label}.root_license.sha256")
+        nested = source.get("nested_license_scan")
+        require(isinstance(nested, dict), f"{label}.nested_license_scan must be an object")
+        require(nested.get("status") == "complete", f"{label}.nested_license_scan must be complete")
+        require_sha(nested.get("sha256"), f"{label}.nested_license_scan.sha256")
+        components = source.get("components")
+        require(isinstance(components, list) and components, f"{label}.components is empty")
+        component_ids: set[str] = set()
+        for component_index, component in enumerate(components):
+            component_label = f"{label}.components[{component_index}]"
+            verify_component(component, component_label, forbidden, source_id)
+            component_id = component["id"]
+            path = component["path"]
+            require(component_id not in component_ids, f"{label} repeats component id: {component_id}")
+            component_ids.add(component_id)
+            key = (source_id, path)
+            require(key not in seen_component_keys, f"lock repeats component path: {source_id}:{path}")
+            seen_component_keys.add(key)
+    require(seen_sources == EXPECTED_SOURCE_IDS, "active lock must contain exactly the nine expected source ids")
+    for key in forbidden:
+        require(key in seen_component_keys, f"active lock is missing forbidden component inventory: {key[0]}:{key[1]}")
+
+
+def verify_lock(lock: dict[str, Any], forbidden: dict[tuple[str, str], dict[str, Any]]) -> int:
+    require(lock.get("schema_version") == 2, "lock schema_version must be 2")
+    require(isinstance(lock.get("recorded_at"), str) and lock["recorded_at"], "lock.recorded_at is missing")
+    verify_policy(lock.get("policy"))
+    expected = lock.get("expected_source_ids")
+    require(isinstance(expected, list), "lock.expected_source_ids must be a list")
+    require(len(expected) == len(set(expected)), "lock.expected_source_ids repeats an id")
+    require(set(expected) == EXPECTED_SOURCE_IDS, "lock.expected_source_ids must be the exact nine-source set")
+    status = lock.get("status")
+    require(status in {"draft", "active"}, "lock.status must be draft or active")
+    if status == "draft":
+        require(lock.get("sources") == [], "draft lock must not pretend to contain active source records")
+        blocked_by = lock.get("blocked_by")
+        require(
+            isinstance(blocked_by, list) and blocked_by and all(isinstance(item, str) and len(item) >= 20 for item in blocked_by),
+            "draft lock must list substantive blockers",
+        )
+        print("BLOCKED: upstream lock v2 is draft; I1-02 per-source evidence is still required")
+        return 2
+    verify_active_lock(lock, forbidden)
+    print("PASS: upstream lock v2 validates nine-source E1/E2 intake only")
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--lock", type=Path, default=DEFAULT_LOCK)
+    parser.add_argument("--forbidden-paths", type=Path, default=DEFAULT_FORBIDDEN)
+    args = parser.parse_args()
+    try:
+        forbidden = verify_forbidden_paths(load_json(args.forbidden_paths, "forbidden-paths"))
+        return verify_lock(load_json(args.lock, "upstream lock"), forbidden)
+    except ValueError as error:
+        print(f"FAIL: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

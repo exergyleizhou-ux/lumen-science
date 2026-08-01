@@ -1,0 +1,32 @@
+{
+  "schema_version": 2,
+  "status": "draft",
+  "recorded_at": "2026-08-01T16:19:11+08:00",
+  "purpose": "Nine-source immutable intake ledger. Draft is intentionally non-admission and must return BLOCKED from its verifier.",
+  "policy": {
+    "canonical_execution_authority": "Rust Lumen SessionActor",
+    "external_runtime_authority": "denied",
+    "root_license_overrides_nested_license": false,
+    "restricted_source_policy": "do-not-copy-or-derive; clean-room from open standards and independently written requirements only",
+    "unreviewed_asset_is_executable": false,
+    "unreviewed_data_or_model_is_scientific_truth": false,
+    "provider_or_billable_calls_during_intake": false
+  },
+  "expected_source_ids": [
+    "snap-stanford-biomni",
+    "jvogan-motif",
+    "aipoch-open-science",
+    "qzzqzzb-openclaudescience",
+    "hust-ningkang-lab-bgc-prophet",
+    "aurekaresearch-opendde",
+    "ai4s-research-open-science",
+    "exergyleizhou-ux-lumen",
+    "exergyleizhou-ux-lumen-science"
+  ],
+  "sources": [],
+  "blocked_by": [
+    "I1-02: collect immutable archive, root/nested license, data/model/binary/service, and per-component evidence for each expected source.",
+    "I1-02: record exactly one disposition for every inventoried component and add forbidden-path negative tests.",
+    "Lumen remains source-gate blocked; it is cataloged here but not pin eligible."
+  ]
+}
