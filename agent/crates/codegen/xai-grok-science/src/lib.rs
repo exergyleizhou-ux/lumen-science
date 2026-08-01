@@ -29,6 +29,7 @@ pub mod governance;
 pub mod import;
 pub mod multimodal;
 pub mod preview;
+pub mod primer_thermo;
 pub mod project;
 pub mod release;
 pub mod remote;
