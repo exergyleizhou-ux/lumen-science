@@ -21,6 +21,11 @@ assume any two of them must be equal.
    (`131` diverged + `5` missing) by `scripts/check-core-drift.py` +
    `docs/science/5.0/core-v0.1.251-admission.lock.json`. The target tag
    `v0.1.251` (`88a204cf…`) remains separate and is not the comparison checkout.
+   That Core number deliberately excludes the Science domain crate. Its separate,
+   commit-to-commit inventory is `scripts/report-science-crate-drift.py` +
+   `docs/science/5.0/science-crate-drift-audit-2026-08-01.json`; it records 53
+   duplicated-crate differences at the same audited source pin and is not folded
+   into the Core admission lock.
 
 ## Released / planned tags
 
