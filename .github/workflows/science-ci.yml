@@ -124,6 +124,12 @@ jobs:
             --upstream-root "$CORE_DRIFT_UPSTREAM_ROOT" \
             --lock docs/science/5.0/core-v0.1.251-admission.lock.json
 
+      - name: Duplicated Science crate audited-head inventory comparison
+        run: |
+          python3 scripts/verify-science-crate-drift.py \
+            --upstream-repo "${{ github.workspace }}/.tmp/lumen-core-drift-pin" \
+            --upstream-rev dc563b1e0db9eaca7e970d56d7816e1522511723
+
       - name: Go module boundary (product vs legacy)
         run: bash scripts/science-go-module-boundary.sh
 

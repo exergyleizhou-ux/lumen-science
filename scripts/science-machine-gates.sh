@@ -154,6 +154,10 @@ if [[ -n "${CORE_DRIFT_UPSTREAM_ROOT:-}" ]]; then
     --upstream-root "$CORE_DRIFT_UPSTREAM_ROOT" \
     --lock docs/science/5.0/core-v0.1.251-admission.lock.json
   ok "Core drift audited-head manifest comparison against $CORE_DRIFT_UPSTREAM_ROOT"
+  python3 scripts/verify-science-crate-drift.py \
+    --upstream-repo "$CORE_DRIFT_UPSTREAM_ROOT" \
+    --upstream-rev dc563b1e0db9eaca7e970d56d7816e1522511723
+  ok "duplicated Science crate audited-head inventory comparison"
 else
   echo "WARN  CORE_DRIFT_UPSTREAM_ROOT unset — audited-head Core drift comparison NOT RUN"
 fi
