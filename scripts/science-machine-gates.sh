@@ -10,6 +10,17 @@ ok() { echo "GATE OK: $*"; }
 python3 scripts/verify-ecosystem-admission.py || fail "ecosystem admission"
 ok "ecosystem admission"
 
+# v2 is deliberately a draft intake lock, so the verifier itself returns 2.
+# Its focused tests prove that draft status cannot be mistaken for a product
+# admission and that every selected source path is present in its exact tree.
+python3 scripts/test-upstream-intake-v2.py || fail "upstream v2 intake contract"
+python3 scripts/test-upstream-intake-dashboard.py || fail "upstream v2 intake dashboard"
+python3 scripts/test-upstream-git-tree-inventory.py || fail "metadata tree inventory"
+python3 scripts/test-upstream-tree-inventory.py || fail "checkout tree inventory"
+python3 scripts/test-upstream-component-coverage.py || fail "upstream component coverage"
+python3 scripts/test-motif-provenance-lock.py || fail "Motif product provenance lock"
+ok "v2 intake and Motif provenance contracts"
+
 python3 - <<'PY' || fail "fusion-sources.lock.json"
 import json
 from pathlib import Path
