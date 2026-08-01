@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "recorded_at": "2026-08-01T19:50:09+08:00",
+  "recorded_at": "2026-08-01T19:58:50+08:00",
   "status": "historical_snapshot",
   "purpose": "Machine-readable F0 snapshot for the NextGen plan. It records an auditable starting point; it does not claim a runnable extension, a green CI, or a consumable Lumen Core.",
   "science": {
@@ -39,15 +39,15 @@
     "observation_only": true,
     "repository": "https://github.com/exergyleizhou-ux/lumen.git",
     "local_branch": "sync/absorb-upstream-20260731",
-    "local_head": "e7afd15b1656108598c6f78966e69fea36ea7bde",
+    "local_head": "da41a7c0ecad9b5f3fd8bc50466ba30cb02a70dc",
     "origin_main": "2f47a9ad84e94b20291a1ad3d6b005ccbd3885f4",
     "divergence_from_origin_main": {
-      "behind": 2,
-      "ahead": 21
+      "behind": 0,
+      "ahead": 77
     },
-    "tracked_or_untracked_file_count": 40,
-    "nextgen_execution_book_tracked": false,
+    "tracked_or_untracked_file_count": 3,
+    "nextgen_execution_book_tracked": true,
     "pin_eligible": false,
-    "reason": "The observed Lumen worktree is owned by another session, is dirty, and its NextGen execution book is untracked. Science must wait for LUMEN_R0_SOURCE_GATE and PLATFORM_API_GATE evidence."
+    "reason": "The observed Lumen branch is an origin/main descendant and has published NextGen work, but its active worktree is owned by another session and still has three dirty paths. It has no canonical-main R0 evidence packet, public versioned extension contract, compatibility fixture, or exact-main CI receipt. Science must wait for LUMEN_R0_SOURCE_GATE and PLATFORM_API_GATE evidence."
   }
 }

@@ -119,9 +119,14 @@ def verify_baseline(baseline: dict[str, Any], science_repo: Path) -> None:
     require(isinstance(lumen, dict), "baseline.canonical_lumen_observation is missing")
     require(lumen.get("observation_only") is True, "Lumen observation must remain read-only")
     require(lumen.get("pin_eligible") is False, "dirty Lumen observation must not be pin eligible")
+    # This is an observation, not a source-pin criterion.  The book may become
+    # tracked on an otherwise dirty branch; treating the former "untracked"
+    # observation as a permanent invariant would make the baseline reject a
+    # strictly more auditable upstream state.  `pin_eligible == false` above
+    # remains mandatory until the independent R0/API evidence gates pass.
     require(
-        lumen.get("nextgen_execution_book_tracked") is False,
-        "untracked Lumen book must not be represented as tracked evidence",
+        isinstance(lumen.get("nextgen_execution_book_tracked"), bool),
+        "nextgen_execution_book_tracked must be a boolean observation",
     )
     for field in ("local_head", "origin_main"):
         value = lumen.get(field)

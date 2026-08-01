@@ -80,6 +80,13 @@ def main() -> int:
         "must not be pin eligible",
     )
     check(
+        "the Lumen book tracking observation must remain typed",
+        lambda value, _gates: value["canonical_lumen_observation"].__setitem__(
+            "nextgen_execution_book_tracked", "yes"
+        ),
+        "must be a boolean observation",
+    )
+    check(
         "a mandatory gate cannot disappear",
         lambda _value, registry: registry["gates"].pop(),
         "required exact gate set",
