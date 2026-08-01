@@ -2,7 +2,7 @@
 
 **日期：** 2026-08-01（北京时间）
 **性质：** 唯一的后续实施排序、依赖、验收和交接总纲；不是功能完成、CI 通过、发布或 live 证明
-**Science 基线：** `ls5-core-v0.1.251-sync@2a146578b64110acaaca0c90521e680c05aedc1e`
+**Science 编写起点：** `ls5-core-v0.1.251-sync@2a146578b64110acaaca0c90521e680c05aedc1e`；后续对齐提交须以其自己的 full SHA 报告
 **范围：** macOS first；不做 Windows 专项、未授权 live/provider/billable 调用、deploy 或 release
 
 **保留而非删除的输入计划：**
@@ -13,6 +13,8 @@
 - `/Users/lei/code/lumen/docs/LUMEN-NEXTGEN-EXECUTION-BOOK-2026-08-01.md`：Lumen 本地候选执行书。它目前未进入可 pin 的 Lumen commit，故仅是设计输入，**不是 Science 可依赖的 API 或现行发布事实**。
 
 本书不删除上述文档、不抹除早期成果；它只将以后谁先做、谁可并行、谁必须等待、何时必须停止写成一个可执行顺序。若本书与旧文档的执行次序冲突，以本书为准；旧文档继续提供来源、测试 oracle 和历史证据。
+
+**2026-08-01 二次对齐结论：** 已逐行复核同日重写后的 Lumen 书（740 行）。它将 R0 明确拆为 `R0-00` 至 `R0-05`，补全了三层树、四层记忆、activity/budget 和 rebuilt-binary golden path；本书据此补齐依赖，但仍把该 Lumen 文件视为未提交候选合同。它不自动创造 Science 可调用 API：公开 extension seam 仍须由 canonical Lumen 的后续版本化 Core PR 实现。
 
 ---
 
@@ -50,9 +52,9 @@
 
 | 项 | 已知真实状态 | 本书的处理 |
 |---|---|---|
-| Science 工作树 | `2a14657` 已保存先前两份 NextGen 规划；本书开始时分支与上游一致 | 本书只增加规划，不把它包装为运行时完成 |
+| Science 工作树 | `2a14657` 是本书的编写起点；`336b529` 已保存首版总纲，后续对齐提交另报 exact SHA | 本书只增加规划，不把它包装为运行时完成 |
 | 单 Rust 底座 | Science 仍有复制 Core，诚实版本线仍不是 canonical Lumen 当前发布线 | 不再新增 Science 专用 Core authority；走 strangler + public platform API |
-| Lumen NextGen 书 | 本地未跟踪文件；Lumen 当前候选 worktree dirty，且与 `origin/main` 不是同一可消费提交 | 列为候选合同；必须先过 Lumen R0，才可被 Science pin |
+| Lumen NextGen 书 | 740 行本地未跟踪文件；Lumen 当前候选 worktree dirty，且与 `origin/main` 不是同一可消费提交；其书内记录的 `main` exact CI 仍失败 | 列为候选合同；必须先过 R0-00…04 和公开契约门，才可被 Science pin |
 | 现有 Expert | 有双 proposal、只读 consultant、持久化 barrier、host verification | 仅作 `AdvisorPolicy` 的安全基础，不等于自主路由或完成权威 |
 | 当前 nested agent | 有低层 depth/config/coordinator 积木；Science copy 仍单层，且当前权力继承不够科学级安全 | 在 `TaskTree + Capability Ceiling + TreeBudget` 前不开放 Science 多层执行 |
 | 当前 memory | 有 session/global/workspace 搜索、summary、dream | 不是项目/树级共享事实账本；不能充当双模研究记忆 |
@@ -60,18 +62,21 @@
 | 既有外部 intake lock | `ecosystem-admission.lock.json` 当前锁住 Biomni、Motif、AIPOCH、OpenClaudeScience 与 transitive SCP | BGC-Prophet、OpenDDE、AI4S 及 canonical Lumen/Science 还没有统一 v2 nine-source lock，不能假称“九源已审完” |
 | 既有成果 | actor-gated `seq_analyze`、Motif 多个 deterministic slice、Open Science preview/classifier、Biomni/SCP catalog、Desktop/ACP hardening | 全部保留为 migration oracle、fixture、provenance 和产品基础，不推倒重来 |
 
-### 1.1 Lumen R0 是唯一的跨仓前置门
+### 1.1 跨仓必须分开的两个 gate
 
-Science 不得依据本地 Lumen 文件名、未提交的设计或旧测试结果 import private module。以下四项必须同时存在，才可启动任何 Science 对 **新 canonical Lumen port** 的调用方：
+Science 不得依据本地 Lumen 文件名、未提交的设计或旧测试结果 import private module。**R0 source 可消费**与**新 public API 已存在**是两件不同的事，绝不能混成一个绿灯：
 
 ```text
-LUMEN_R0_COMMIT                  full immutable commit SHA
-PLATFORM_API_SEMVER              versioned public contract
-COMPATIBILITY_MANIFEST_SHA256    exact API/capability manifest digest
-LUMEN_EXACT_HEAD_CI              required Core jobs passed for that commit
+LUMEN_R0_SOURCE_GATE=PASS
+  LUMEN_R0_COMMIT / R0_MANIFEST_SHA256 / SOURCE_LOCK_SHA256
+  BINARY_SHA256 / exact GitHub CI / rollback commit
+
+PLATFORM_API_GATE=PASS
+  PLATFORM_API_COMMIT / PLATFORM_API_SEMVER / COMPATIBILITY_MANIFEST_SHA256
+  public adapter compile fixture / exact GitHub CI / rollback commit
 ```
 
-缺一项即 `BLOCKED_UPSTREAM`。Science 可以在此期间做纯 domain、fixture、source-intake、license ledger、UI read model 和 contract mock；不得复制 Lumen 私有 `SessionActor`、`expert.rs`、subagent coordinator、memory storage 或 daemon 以“先跑起来”。
+`C1` 仅依赖前一个 gate，负责产生后一个 gate；`S1`、W1–W6 和任何 Science 对新 port 的实际调用都依赖后一个 gate。缺任一字段即 `BLOCKED_UPSTREAM` 或 `BLOCKED_CONTRACT`。在两个 gate 之前，Science 可以做纯 domain、fixture、source-intake、license ledger、UI read model 和 contract mock；不得复制 Lumen 私有 `SessionActor`、`expert.rs`、subagent coordinator、memory storage 或 daemon 以“先跑起来”。
 
 ### 1.2 `bypass` 的两种含义必须永远分开
 
@@ -129,6 +134,12 @@ Advisor 可以提出独立反证，但**不能**作为子 agent 幻觉的安全�
 
 Advisor 是第八道、可选的独立审阅：它可指出证据缺口、冲突或风险；它不能替代以上七道，也不能消除没有证据的幻觉。
 
+### 2.2.1 child 的可实现输入/存活合同
+
+每个 child 必须由 root actor durable 签发 `TaskContractV1`，最少包含 `task_tree_id`、`node_id`、assignment、allowed artifact refs、accepted ledger snapshot hash、grant refs、budget slice、deadline、expected output schema、policy revision。调用方给出的 parent/depth 只是 hint，actor 从 durable lineage 推导实际值。
+
+child 只可 append `TaskHeartbeatV1 { task_tree_id, node_id, parent_id, state_revision, current_objective, last_evidence_ref, next_bounded_step, remaining_budget, grant_expiry, blocker_or_uncertainty }`。若输入缺失、与 accepted facts 冲突、下一步扩大 scope、没有新证据却循环、或 tool result 不能支持文本结论，状态只能是 `Blocked` 或 `NeedParentDecision`；不得继续 spawn、promotion 或终态成功。
+
 ### 2.3 研究 claim 的状态机
 
 ```text
@@ -149,7 +160,7 @@ Proposed
 | 来源 | 当前已知/锁状态 | 应吸收的高价值 | 复用模式 | 永不成为 authority 的部分 | 首个产品化切片 |
 |---|---|---|---|---|---|
 | `exergyleizhou-ux/lumen` | GitHub main 与本地候选仍待 R0；新执行书未提交 | SessionActor、public platform ports、TaskTree、Capability Ceiling、TreeBudget、provider health、ledger、Kairos | owned source pin，不复制进 Science | private actor internals、dirty checkout、第二 release train | `DomainOperation` + compatibility manifest |
-| `exergyleizhou-ux/lumen-science` | 本仓 `2a14657`；已有 actor-gated paths/desktop/admission evidence | 科学 domain、fixtures、ResearchProject、desktop projection、product tests | owned product source | 历史 Go CLI/MCP 作为第二执行 authority | `seq_analyze` generic strangler |
+| `exergyleizhou-ux/lumen-science` | 本书编写起点 `2a14657`；首版总纲 `336b529`；已有 actor-gated paths/desktop/admission evidence | 科学 domain、fixtures、ResearchProject、desktop projection、product tests | owned product source | 历史 Go CLI/MCP 作为第二执行 authority | `seq_analyze` generic strangler |
 | `snap-stanford/Biomni` | 已有 Apache source lock/catalog；224 tools、273 records 仍多数 quarantine | taxonomy、tool/resource descriptors、know-how metadata、offline eval vocabulary、connector priorities | adapt/vendor with attribution | A1/LangGraph/ReAct、dynamic Python/R/Bash、任意 MCP、自动大下载、未审数据 | `CapabilityDescriptor v1` + one offline evidence connector |
 | `jvogan/motif` | MIT pin；多个 Rust `seq_analyze` deterministic slice 已 actor-gated | FASTA/GenBank、primer/PCR、assembly、MSA behavior vectors、plasmid/sequence renderer | vendor/adapt with MIT notice + differential fixtures | MCP server、installer、browser workspace、PATH discovery、unlocked external MSA | `SequenceReviewArtifact v1` then primer/PCR/assembly slices |
 | `aipoch/open-science` | Apache ledger已吸收大量桌面文件；preview/classifier source slice 存在 | connector descriptor/registry、archive hardening、materialization, provenance verify、notebook/environment mechanics、review UI | vendor/adapt with Apache §4 change notice | Electron/Node ACP authority、Prisma terminal state、agent-framework、descriptor `run()` escape hatch、arbitrary MCP | SessionActor-owned `AttachmentImport v1` |
@@ -203,29 +214,54 @@ scripts/test-upstream-intake-v2.py
 flowchart LR
   F0["F0 Science truth freeze"] --> I1["I1 nine-source lock v2"]
   F0 --> LR0["Lumen R0 exact source gate"]
-  LR0 --> C1["C1 Platform API + DomainOperation"]
-  C1 --> S1["S1 root-only seq_analyze generic pilot"]
-  C1 --> C2["C2 NG-01 TaskTree identity"]
+  LR0 --> C1["C1 public extension contract"]
+  C1 --> PAPI["Platform API gate"]
+  PAPI --> S1["S1 root-only seq_analyze generic pilot"]
+  LR0 --> C2["C2 NG-01 TaskTree identity"]
   C2 --> C3["C3 NG-02 Capability Ceiling"]
   C3 --> C4["C4 NG-03 TreeBudget"]
-  LR0 --> C5["C5 NG-04 provider health/no-replay"]
-  C3 --> C6["C6 NG-05 Shared Working Ledger"]
+  LR0 --> C5["C5 NG-05 provider health/no-replay"]
+  C3 --> C6["C6 NG-04 Shared Working Ledger"]
   C5 --> C7["C7 Advisor shadow"]
   C6 --> C7
   C4 --> C8["C8 Advisor recommend / bounded assignment"]
   C7 --> C8
-  C4 --> K1["K1 NG-08 Kairos local"]
-  C6 --> K1
-  S1 --> S2["S2 Science tree/memory/advisor product proof"]
-  C8 --> S2
+  C4 --> K1A["K1a NG-08 Core Kairos proof"]
+  C6 --> K1A
+  K1A --> K1B["K1b Science managed-run proof"]
+  S1 --> K1B
+  S1 --> S2A["S2a offline tree/ledger golden path"]
+  C4 --> S2A
+  C7 --> S2A
+  S2A --> S2B["S2b bounded assignment extension"]
+  C8 --> S2B
   I1 --> W1["W1-W6 capability waves"]
-  S1 --> K1
-  K1 --> M1["M1 de-copy + source-pin bot"]
+  PAPI --> W1
+  LR0 --> M1A["M1a ownership map + draft pin bot"]
+  M1A --> M1B["M1b de-copy short-running families"]
+  PAPI --> M1B
+  S1 --> M1B
+  M1B --> M1C["M1c workflow/long-running migration"]
+  K1B --> M1C
   W1 --> G1["G1 macOS product/release gates"]
-  M1 --> G1
+  M1C --> G1
 ```
 
-**并行规则：** `F0/I1` 可以与 Lumen `R0` 同时进行；Science pure-domain extraction 可在 `C1` 前进行；但 nested execution、applied model routing、shared-memory promotion、Kairos 和任何 effectful capability 都必须等待图中的上游 gate。
+**并行规则：** `F0/I1` 可以与 Lumen `R0` 同时进行；Science pure-domain extraction 可在 `C1` 前进行；Lumen C2–C6/K1a 的 Core 施工也不应被 Science generic host 阻塞。反过来，Science 不得把这类 Core 施工复制到本仓。nested execution、applied model routing、shared-memory promotion、Kairos product integration 和任何 effectful capability 都必须等待图中的上游 gate。
+
+**固定 crosswalk（不得再反转编号）：**
+
+| Science phase | Canonical Lumen phase |
+|---|---|
+| C2 | NG-01 `TaskTreeLineage` |
+| C3 | NG-02 `CapabilityCeiling` |
+| C4 | NG-03 `TreeBudget` / managed activity |
+| C6 | NG-04 `SharedWorkingLedger` / four-layer memory |
+| C5 | NG-05 `ProviderHealth` / no-replay |
+| C7 | NG-06 Advisor shadow |
+| C8 | NG-07 bounded assignment |
+| K1a/K1b | NG-08 Kairos Core/Science proof |
+| S2a/S2b | NG-09 offline golden path plus bounded-assignment extension |
 
 ---
 
@@ -244,7 +280,7 @@ flowchart LR
 
 1. 新建 `docs/science/5.0/NEXTGEN_BASELINE.json`，记录 Science full SHA、branch、source-lock version、existing plan hashes、Lumen candidate observation（明确 `not_pin_eligible`）；
 2. 新建 `docs/science/5.0/PLAN_SUPERSESSION_MAP.md`，将本书、两个旧计划、ecosystem plan、versioning/release docs 的角色写清；不删除任何旧文档；
-3. 为下列 hard gates 写 machine-readable identifiers：`LUMEN_R0_GATE`、`PLATFORM_API_GATE`、`TASKTREE_GATE`、`SOURCE_INTAKE_GATE`、`PRODUCT_PROOF_GATE`；
+3. 为下列 hard gates 写 machine-readable identifiers：`LUMEN_R0_SOURCE_GATE`、`PLATFORM_API_GATE`、`TASKTREE_GATE`、`SOURCE_INTAKE_GATE`、`PRODUCT_PROOF_GATE`；
 4. 检查所有文档/UI 状态文字：不得将 `candidate`、`catalog`、`source-only`, `preview`、`CI pending` 写成 runnable/released；
 5. 固定行为：以后任何新 `BeginScience*` / `FinishScience*` specialization 先触发 `CORE_EXPANSION_FREEZE` review；只有 emergency exception 可绕开。
 
@@ -306,27 +342,44 @@ python3 scripts/check-core-drift.py --self-test
 
 **目的：** 把 Lumen 的本地候选、GitHub main、source lock、CI 和 compatibility story 合成一个可消费的 immutable baseline。Science 只观察、记录、等待，不写 `/Users/lei/code/lumen`。
 
+**R0 的六道门与 Science 的边界：**
+
+| Lumen 卡 | Lumen 交付 | Science 可以据此做什么 | 不代表 |
+|---|---|---|---|
+| `R0-00` | path-level manifest、protected/owner/disposition、remote snapshot | F0/I1 的只读 parallel 工作 | 有可 pin Core |
+| `R0-01` | R0-A/B/C 分组验证和 raw exits | 阅读已验证的契约/测试 oracle | 整包全绿 |
+| `R0-02` | clean source candidate、精确路径提交 | 审核候选范围 | 已与 GitHub 集成 |
+| `R0-03` | integration decision、exact GitHub SHA/CI | 等待可消费 integration source | 已发布/可安装 |
+| `R0-04` | 同源 binary SHA、source lock、SBOM/readiness/evidence | 允许 C1 在干净 Core source 上定义公开契约 | 新 extension port 已存在 |
+| `R0-05a` | PR + canonical `main` merge review | 完成 `LUMEN_R0_SOURCE_GATE` 的最后一环 | tag/release/install 已完成 |
+| `R0-05b` | tag/release/install 分门 | G1 的产品/发布证据输入 | 可以用 release 取代 source/CI 证明 |
+
+本书中的 `LUMEN_R0_SOURCE_GATE=PASS` **仅**指 `R0-00…04` 加 `R0-05a` 已完成：Lumen owner 接受的 immutable GitHub integration SHA 已通过 exact CI、进入 canonical `origin/main` 且有 merge review。`R0-05b` 仍是 G1 的单独门，既不被跳过，也不阻塞纯 source-contract 的 C1。
+
 **Lumen R0 必须做：**
 
 1. 只读记录 cwd/top-level/branch/HEAD/remote/divergence/status/process；保护所有 dirty files；
 2. 将上游吸收、Lumen restore、文档、evidence 分成小组，逐项 review；不用 `reset/clean/stash/force-push`；
 3. 形成可审查 candidate commit；处理与 GitHub main 的历史关系时由 Lumen owner 显式选择/审查，不让 Science 或辅助 agent 覆盖；
 4. 运行 Lumen 精确 crate/contract gates，推送候选分支，让 GitHub CI 跑 exact HEAD；
-5. 生成 `platform-api` pre-release manifest 与 supported/deprecated/removed list；
-6. 只有 commit、manifest、CI、version/rollback metadata 齐全后，发给 Science one-line `LUMEN_R0_GATE=PASS` evidence packet。
+5. 从 clean integration source 生成 source lock、binary SHA、SBOM/readiness/evidence；source/binary/evidence 不得跨不同 source SHA；
+6. 只有 commit、R0 manifest、CI、binary/source-lock/rollback metadata 齐全后，发给 Science one-line `LUMEN_R0_SOURCE_GATE=PASS` evidence packet。
 
 **Science 接收包最少字段：**
 
 ```json
 {
   "lumen_commit": "full SHA",
-  "platform_api_semver": "x.y.z-prerelease",
-  "compatibility_manifest_sha256": "sha256",
+  "canonical_main_commit": "same full SHA",
+  "r0_manifest_sha256": "sha256",
   "source_lock_sha256": "sha256",
+  "binary_sha256": "sha256",
   "required_ci": [{"name": "...", "url": "...", "conclusion": "success"}],
   "rollback_commit": "full SHA"
 }
 ```
+
+**公开接缝的额外门：** R0 只使 Core source 可消费，**不**等于 `DomainOperation` 等 extension API 已存在。C1 必须先有 Lumen-owned RFC/PR，把 public crate/module、semver、manifest entries、compatibility fixture 和 deprecation policy 写入同一 exact source；在这之前 Science 状态是 `BLOCKED_CONTRACT`，不能从 R0 推断任何私有模块可 import。
 
 **不得做：** 用 Lumen 本地 dirty HEAD 当 dependency；把 Lumen R0 的 `release`、`tag`、`installability` 与 source/CI 混为同一门；让 Science merge/rebase Lumen history。
 
@@ -334,7 +387,7 @@ python3 scripts/check-core-drift.py --self-test
 
 ## 8. Phase C1 — 一个稳定平台接缝，而不是更多专用命令
 
-**前置：** `LUMEN_R0_GATE=PASS`。
+**前置：** `LUMEN_R0_SOURCE_GATE=PASS`；R0 本身不自动满足 public extension contract。
 
 **目的：** 只在 canonical Lumen 建一个版本化、最小的 generic domain-operation host，让 Science 不再为每种能力修改 `SessionCommand`、`SessionHandle`、run loop 和 ACP route。
 
@@ -353,6 +406,10 @@ TerminalOutcome v1
 
 RFC 需明确：input schema/version/digest、owner/project/session/workspace/call binding、idempotency、Prepare/approval/execute/finish/replay/recovery、artifact/evidence/provenance、error codes、extension registration lifecycle、compatibility/deprecation、opaque handles 和 no-raw-path rule。
 
+这是一张 **cross-repo 单 writer 合同卡**：Lumen owner 改 canonical Core；Science 只在合约 fixture/mock 上并行。不得在 Science copy 先造同名 trait 或通过私有 `SessionActor`、`SessionCommand`、`SessionHandle`、run loop、ACP route 临时接线后再要求 Core 兼容。
+
+**C1 Exit / `PLATFORM_API_GATE=PASS` evidence packet：** `platform_api_commit`（已进入 canonical `origin/main`）、`platform_api_semver`、`compatibility_manifest_sha256`、supported/deprecated/removed list、public adapter compile fixture 的 raw exit、exact GitHub CI URL/conclusion、source lock 与 rollback commit。只有这个包存在后，S1/W1–W6 或 Science extension 才能调用新 port；R0 source receipt 不能代替它。
+
 ### C1.2 现有正确模式与迁移护栏
 
 - 参考 canonical Lumen 现有 CSV/import/fetch Begin/Finish actor pattern；
@@ -369,7 +426,7 @@ RFC 需明确：input schema/version/digest、owner/project/session/workspace/ca
 
 ## 9. Phase S1 — 纯 domain 先行与 root-only `seq_analyze` pilot
 
-**前置：** C1 public API，可无 TaskTree/Advisor/Kairos。
+**前置：** `PLATFORM_API_GATE=PASS`，可无 TaskTree/Advisor/Kairos。
 
 **目的：** 把现有最强的 Science product proof 变成第一个 generic vertical slice，不改变其已有安全语义。
 
@@ -392,15 +449,15 @@ RFC 需明确：input schema/version/digest、owner/project/session/workspace/ca
 
 ### C2 — TaskTree identity
 
-**产物：** `TaskNodeIdentity { task_tree_id, node_id, root_session_id, immediate_parent_session_id, lineage_path, depth, root_process_scope }`，贯穿 pending/active/completed、spawn metadata、resume、UI DTO、cancel/reparent。
+**产物：** canonical Core 的 `TaskTreeLineageV1 { task_tree_id, root_session_id, immediate_parent_session_id, child_session_id, depth, lineage_path, root_process_scope, schema_version }`，贯穿 pending/active/completed、spawn metadata、resume、UI DTO、cancel/reparent。Science 若保留 `TaskNodeIdentity`，它只能是该结构的无损只读 projection，不能另立 schema/authority。
 
-**关键语义：** root process scope 仍用于 process cleanup/whole-tree cancel；logical parent 用于 UI、summary、capability inheritance 和 working ledger branch。它们不能互相替代。
+**关键语义：** root process scope 仍用于 process cleanup/whole-tree cancel；logical parent 用于 UI、summary、capability inheritance 和 working ledger branch。它们不能互相替代。迁移期旧 `parent_session_id` wire 语义固定为 root parent，不能悄悄重解释；新 `immediate_parent_session_id` 才承载逻辑父边。`max_depth=3` 的固定含义是 root=0、仅允许 1/2/3 三代 child，depth 3 硬拒再 spawn。
 
 **反证：** forged depth/parent、cycle、leaf spawn、root vs immediate-parent mismatch、crash/resume metadata drift、dashboard early success、old client decode failure。
 
 ### C3 — Capability Ceiling
 
-**产物：** actor-owned `CapabilityGrant` / ceiling，child effective capabilities 永远等于 root policy ∩ parent ceiling ∩ role ∩ operation approval。
+**产物：** actor-owned `CapabilityGrantV1 { grant_id, issuer_root_session_id, target_node_id, capability, resource_scope, issued_at, expires_at, reason, approval_ref, nonce, state(Active|Revoked|Expired) }` / ceiling。child effective capabilities 永远等于 root policy ∩ parent ceiling ∩ role ∩ operation approval；child 只能持有 grant reference，不能反序列化/伪造 raw permission authority。
 
 **科研 profile：**
 
@@ -417,7 +474,9 @@ unknown ToolKind/MCP/custom tool 在 child 一律 deny。parent yolo、inherited
 
 ### C4 — TreeBudget 与并行进程治理
 
-**产物：** `TreeBudget` 与 atomic reserve/release ledger：`max_depth`、fanout、live/background node、token/tool/wall-time/daily-cost/artifact bytes；root only increase；provider usage missing 即 `usage_unavailable`。
+**C4a activity 先行：** `SessionActivitySnapshot` 必须由 actor 内单个 check-and-act 读取 foreground、background terminal、monitor、scheduler fire、background subagent、lease、pending approval。任一 activity 存在就拒绝 unload；late completion 不能复活 disposed/cancelled session。没有这项，不开放 background child、scheduler 或 daemon。
+
+**产物：** `TreeBudget` 与 atomic reserve/release ledger：`max_depth`、fanout、live/background node、token/tool/wall-time/daily-cost/artifact bytes；root only increase；provider usage missing 即 `usage_unavailable`。`reserve_spawn` 必须原子 check+reserve，返回 reservation id；success/fail/cancel/timeout 的 release 均幂等且恰好一次。
 
 background process 记录 owner node、tree id、lease、deadline、artifact location，并被 root process scope 回收。重复 cancel、orphan、late completion、idle unload 和 scheduler fire 不能泄漏 reservation 或复活取消节点。
 
@@ -427,7 +486,7 @@ background process 记录 owner node、tree id、lease、deadline、artifact loc
 
 ## 11. Phase C5 — provider health 与 no-replay failover
 
-**前置：** Lumen R0；并在任何自动 model routing 之前完成。
+**前置：** `LUMEN_R0_SOURCE_GATE=PASS`；并在任何自动 model routing 之前完成。
 
 **目的：** 模型挂了时保持真实，不让 Advisor/route silently swap provider、重复收费或重放部分输出。
 
@@ -440,6 +499,8 @@ background process 记录 owner node、tree id、lease、deadline、artifact loc
 5. each fallback writes actual from/to/reason/breaker state to artifact/provenance/UI/turn-tail；
 6. usage/accounting/verification 均归实际 executor；无可靠 usage 不伪装 cost truth；
 7. 第一版不做“最便宜/最快”优化器，也不自动改 user pin/private endpoint。
+
+每次尝试都写 actor-owned `ProviderAttemptReceipt`，绑定 operation/call、actual provider/base URL/model、output-emitted state、usage availability、failure classification 和 fallback decision。无法可靠判定是否已输出 block 时，一律按“已输出”处理，禁止 fallback/replay。
 
 **offline test corpus：** mock clock, N×503 open/half-open/close, different base URL isolation, 401/403/400 non-breaker, first-block failover, after-first-block no-replay, quota exhausted, catalog alias swap.
 
@@ -463,13 +524,13 @@ background process 记录 owner node、tree id、lease、deadline、artifact loc
 ```text
 claim_id, task_tree_id, branch_id, sequence, revision, author_node_id,
 kind(Fact|Progress|Evidence|Assumption|Blocker|Decision),
-status(Proposed|Accepted|Rejected|Conflicted|Superseded),
+status(Proposed|EvidenceAttached|HostVerified|Accepted|Rejected|Conflicted|Inconclusive|Superseded),
 content_hash, evidence_refs, provenance_refs, confidence,
 owner/project/session/workspace bindings, policy_revision,
 supersedes, created_at, expiry/review_after
 ```
 
-**写入协议：** child 仅向自己的 branch append `Proposed`; root actor 校验 scope、artifact hash、classification、source evidence、conflict 后才写 `Accepted`; SQLite/FTS/vector 只是可重建索引，append-only event log 才是 authority。Session summary 只能引用 accepted snapshot，不能把一个 model-written `MEMORY.md` 当 research truth。
+**写入协议：** child 仅向自己的 branch append `Proposed`; root actor 只能按 `Proposed → EvidenceAttached → HostVerified → Accepted/...` 迁移，并对每次 transition durable 记录 actor、snapshot revision、artifact/provenance hash、policy revision 和 reason code。SQLite/FTS/vector 只是可重建索引，append-only event log 才是 authority。Session summary 只能引用 accepted snapshot，不能把一个 model-written `MEMORY.md` 当 research truth；检索到的内容一律是带 citation 的不可信数据，不是控制指令。
 
 **恢复协议：** lenient tail recovery 要生成 `RecoveryEvent`（skipped count/offset/hash/quarantine path）并标 `NeedsRecoveryReview`；不能静默丢掉坏尾或自动 promotion。
 
@@ -483,7 +544,7 @@ supersedes, created_at, expiry/review_after
 
 **前置：** C5 provider health + C6 shared ledger。C2–C4 不必全部完备，因为 shadow 不改变执行。
 
-`AdvisorPolicy.evaluate` 读 immutable task intent、risk, user pin, project/data policy, model catalog snapshot, provider health, budget, context/evidence snapshot，输出 durable `ModelSelectionAdvice`。它只记录“若要选，将选什么/为何拒绝其它候选”；不会 switch model、spawn child、请求工具、写文件或改变 terminal state。
+`AdvisorPolicy.evaluate` 读 immutable task intent、risk, user pin, project/data policy, model catalog snapshot, provider health, budget, context/evidence snapshot，输出 durable `ModelSelectionAdvice`。它只记录“若要选，将选什么/为何拒绝其它候选”；Advisor 本身不会 switch model、spawn child、请求工具、写 workspace/arbitrary file 或改变 terminal state。唯一允许的写入是 SessionActor append 有 provenance 的 advice record。
 
 ### C8 — recommend / bounded assignment
 
@@ -502,26 +563,29 @@ supersedes, created_at, expiry/review_after
 
 **核心限制：** Advisor 不处理 child hallucination；它只能以只读 evidence report 提出质疑。高风险 scientific claim 的 Advisor disagreement 或 lack of evidence 让 root 走 `NeedsEvidence`/`Inconclusive`/human review，不能自动 pick a winner。
 
+**Applied 的耐久条件：** root approval、actual executor `ProviderAttemptReceipt`、budget reservation 和 ledger decision 缺一不可；任何一个字段缺失都只保留 `Recommend`/`Rejected`，不得启动 child。
+
 **禁止：** `SetDefaultModel`、replace streaming model、把 `fallback_executor_model` 当 transport failover、Advisor PASS→success、advisor text→tool call、无限 spend、自动跨 provider 发送未告知数据。
 
 ---
 
-## 14. Phase S2 — Science 多 agent / memory / advisor 黄金路径
+## 14. Phase S2a/S2b — Science 多 agent / memory / advisor 黄金路径
 
-**前置：** S1 + C2/C3/C4 + C5/C6 + C8。
+### S2a — shadow-only 安全黄金路径（Lumen NG-09 的 Science 对应）
 
-**第一个完整、无 live 的产品 proof：**
+**前置：** S1 + C2/C3/C4 + C5/C6/C7；**不等待 C8**。此切片证明树、grant、budget、ledger、shadow advice 与根节点合流本身安全，而不是为了等自动模型分派才开始验证子 agent 幻觉控制。
 
 ```text
 offline FASTA + approved UniProt fixture
-  → root creates project + immutable input/evidence snapshot
-  → policy creates shadow/recommend record from fixture model identities
-  → root creates Code workstream at depth 1
+  → root creates project + immutable TaskContract/input/evidence snapshot
+  → policy records Shadow advice from fixture model identities; no model switch
+  → root manually approves Code workstream at depth 1
   → workstream creates up to three read-only depth-2 tasks
-  → optional depth-3 evidence leaf returns typed proposal only
-  → branches use SharedWorkingLedger proposals, not session chat
-  → root verifies artifacts/evidence/provenance and handles conflicts
-  → Advisor may challenge evidence, but cannot accept it
+  → optional depth-3 evidence leaf returns typed Proposal only and cannot spawn
+  → branches append Proposed ledger facts with fixture evidence, not session chat
+  → root verifies artifacts/evidence/provenance, conflict and heartbeat state
+  → root cancels one branch, preserves siblings, replays/rebuilds ledger read model
+  → Advisor may challenge evidence but cannot accept it
   → root produces Succeeded / Inconclusive / Denied / Cancelled truthfully
 ```
 
@@ -534,13 +598,17 @@ offline FASTA + approved UniProt fixture
 - `research.run.review`：artifact/evidence/provenance/host verification，而不是 child 自我报告；
 - sender 必须绑定 owner/project/session/workspace；所有 deny/timeout/cancel 可见。
 
-**built-binary acceptance：** exact-source binary 真正经过 ACP/Desktop seam，证明 depth/fanout/capability/budget scope、child cancellation cascade、stale summary rejection、memory proposal-only、advisor non-authority、artifact tamper、owner/project/session/workspace failures。仅 Rust unit test 不够。
+**S2a built-binary acceptance：** newly rebuilt exact-source binary 真正经过 ACP/Desktop seam，证明 depth/fanout、grant TTL/revoke、unknown MCP deny、capability/budget scope、child cancellation cascade（不误杀 sibling）、stale snapshot/summary rejection、memory proposal-only、advisor non-authority、artifact tamper、owner/project/session/workspace failures、ledger replay/read-model rebuild。仅 Rust unit test 不够。
+
+### S2b — bounded assignment 扩展
+
+**前置：** S2a + C8。仅在无输出的新 child、无 user pin、privacy/health/grant/budget 都满足时，root 可消费一条 advice 作受限 assignment。必须证明 `Applied` 带 root approval、actual executor receipt、budget reservation、ledger decision；user pin、breaker open、budget exhausted、schema mismatch、已有输出或 stale advice 都 fail closed。S2b 是“可宣传 bounded assignment”的门，不是 S2a 安全 tree proof、M1-A/M1-B 或第一个 shadow-only Science 产品的前置。
 
 ---
 
 ## 15. Phase W1–W6 — 九源能力波次
 
-所有 wave 均以 C1 generic host 为 execution seam；有 nested/long-running 需求的再加 C2–C8 prerequisites。每个 wave 只合一条 capability family，小 commit、小 PR、小 evidence packet。
+所有 wave 均以 `PLATFORM_API_GATE` 对应的 C1 generic host 为 execution seam；有 nested/long-running 需求的再加 C2–C8 prerequisites。C1 前只允许 I1 的 source extraction/fixture/catalog 工作，不能把它称作 capability wave。每个 wave 只合一条 capability family，小 commit、小 PR、小 evidence packet。
 
 ### W1 — AIPOCH/OCS/AI4S 的受控产品 mechanics
 
@@ -589,11 +657,13 @@ offline FASTA + approved UniProt fixture
 
 ---
 
-## 16. Phase K1 — Kairos、ManagedRunSupervisor 与 macOS daemon
+## 16. Phase K1a/K1b — Kairos、ManagedRunSupervisor 与 macOS daemon
 
-**前置：** C2/C3/C4/C6 + S1。Advisor/S2 都不是前置；它们不能用来修复 scheduler/child truth。
+### K1a — canonical Core local proof
 
-### K1.1 durable state
+**前置：** C2/C3/C4/C6。它是 Lumen NG-08 的 Core 证明，故不等待 C1/S1、Advisor 或 S2；它只能使用 no-side-effect fixture，不能因此让 Science 在 copy Core 中自建 scheduler。
+
+### K1a.1 durable state
 
 ```text
 AutomationPlan, WakeRequest, JobLease, AttemptRecord, Heartbeat,
@@ -607,7 +677,7 @@ Draft → AwaitingScheduleApproval → Scheduled → Leased → Starting
       → Cancelled | Frozen | TakenOver | RecoveryRequired
 ```
 
-### K1.2 hard recovery policy
+### K1a.2 hard recovery policy
 
 | Work state at crash | Only allowed action |
 |---|---|
@@ -619,7 +689,11 @@ Draft → AwaitingScheduleApproval → Scheduled → Leased → Starting
 
 `DaemonSupervisor` only supervises a pinned Lumen process (PID lock, ready, heartbeat, bounded restart, logs, drain, kill/reap). It never accepts model command strings or runs science capability. macOS may use `launchd` only as an OS host; it is not a second authority.
 
-**K1 gates:** fake clock + lease race + two-daemon race + crash between lease/dispatch + duplicate outbox + expired approval + root cancel cascade + no-replay + local exact binary start/ready/crash/reconcile/stop. K2 is not a 24h claim; K3 bounded soak needs explicit user authorization and a no-side-effect fixture.
+**K1a gates:** fake clock + lease race + two-daemon race + crash between lease/dispatch + duplicate outbox + expired approval + root cancel cascade + no-replay + local exact binary start/ready/crash/reconcile/stop. K1a is not a 24h claim; bounded soak needs explicit user authorization and a no-side-effect fixture.
+
+### K1b — Science managed-run integration proof
+
+**前置：** K1a + `PLATFORM_API_GATE=PASS` + S1。只接一个 read-only/deterministic Science fixture through the generic host，证明 scheduler 仍只能请求 Begin、worker 只交 hash artifacts、SessionActor 决定 approval/finish/recovery。它不接 live connector、任意 shell、模型流或 effectful capability。workflow/long-running family 的 M1-C 必须等待 K1b；其余去复制工作不必被 K1a/K1b 串行阻塞。
 
 ---
 
@@ -627,23 +701,32 @@ Draft → AwaitingScheduleApproval → Scheduled → Leased → Starting
 
 **目的：** 让“底座升级”从手工合并数百文件变成 pin + compatibility review。
 
-### M1.1 migration order
+### M1-A — 立即停止漂移扩大
 
-按风险从低到高迁：
+**前置：** `LUMEN_R0_SOURCE_GATE=PASS`；不等待 Kairos。source ownership 的只读 inventory 可与 R0 并行，但 enforcement/pin-lock 只能以通过该 gate 的 source 为准。交付 Core ownership map、禁止新增 copied-Core path 的 mechanical gate、one-source pin-lock schema 和 draft-only upgrade bot skeleton。先固定一种消费形态：版本化 `lumen-platform-api`/SDK crate **或**版本化 ACP extension protocol；不能一边依赖本机 `/Users/lei/code/lumen` path、一边宣称 single-base。
+
+M1-A verifier 必须检查 exact Git revision、manifest digest、`Cargo.lock`、`cargo metadata` 中没有未批准 path dependency，且 Core ownership map 没有重新扩张。机器人只开 draft PR，绝不自动 merge。
+
+### M1-B — 迁出短运行 Core family
+
+**前置：** `PLATFORM_API_GATE=PASS` + S1。按风险从低到高迁：
 
 1. attachment/skill quarantine；
 2. evidence dossier；
-3. project mutation/review;
-4. kernel admission;
-5. workflow execution/long-running worker。
+3. project mutation/review；
+4. kernel admission。
 
 每个 family 固定九步：legacy behavior map → extract pure schema/fixtures → adapter codec → generic host → parity corpus → ACP/Desktop cutover → built-binary proof → delete specific Core touchpoints → reduce drift metrics/provenance update。
+
+### M1-C — workflow/long-running family
+
+**前置：** K1b。仅此最后一个 family 迁 workflow execution/long-running worker；它复用 K1b lease/recovery/no-replay proof，不能用一次 short-run parity 取代长期恢复边界。
 
 ### M1.2 upgrade train
 
 ```text
-immutable canonical Lumen release/commit
-  → verify tag/signature/source lock/compat manifest
+immutable canonical Lumen `main` commit or release
+  → verify main/integration review/source lock/compat manifest; verify tag/signature when a tag exists
   → Science draft-only pin PR
   → Cargo lock + public adapter compile fixtures
   → actor product corpus + Desktop E2E
@@ -681,21 +764,25 @@ Rust canonical Lumen release, legacy Go CLI/MCP, Science Desktop and research ad
 | F0-01 | baseline/supersession/core-expansion freeze | current Science HEAD | 先统一真相 |
 | I1-01 | v2 source lock schema + validator | F0 | 防止先复制后补许可 |
 | I1-02 | nine source manifests/nested deny tests | I1-01 | BGC/OpenDDE/AI4S 未锁 |
-| L0 | Lumen R0 candidate + manifest | Lumen owner | Science cannot consume dirty source |
-| C1 | public platform API + `DomainOperation` | L0 | 消灭专用 route 扩张 |
-| S1 | generic root-only `seq_analyze` | C1 | 以既有安全 path 作 oracle |
-| C2 | TaskTree identity | L0/C1 | parent/lineage first |
+| L0 | Lumen R0-00…04 + R0-05a source receipt | Lumen owner | Science cannot consume dirty/ambiguous/unmerged source |
+| C1 | public platform API + `DomainOperation` / `PLATFORM_API_GATE` | `LUMEN_R0_SOURCE_GATE` | 消灭专用 route 扩张 |
+| S1 | generic root-only `seq_analyze` | `PLATFORM_API_GATE` | 以既有安全 path 作 oracle |
+| C2 | TaskTree identity | `LUMEN_R0_SOURCE_GATE` | parent/lineage must not wait for extension API |
 | C3 | Capability Ceiling | C2 | child cannot inherit root rights |
 | C4 | TreeBudget/process governance | C2/C3 | parallelism cannot precede budget |
 | C5 | provider health/no-replay | L0 | routing cannot precede failure truth |
 | C6 | SharedWorkingLedger/LongTerm promotion | C2/C3 | shared truth needs scope/grants |
 | C7 | Advisor shadow | C5/C6 | advisor reads stable evidence/health |
 | C8 | Advisor recommend/bounded assignment | C2/C3/C4/C7 | actual assignment needs grants/budget |
-| S2 | Science tree/memory/advisor offline product | S1/C2–C8 | prove all boundaries together |
-| W1–W6 | one capability family at a time | I1 + applicable Core gate | no free-running upstream runtime |
-| K1 | Kairos local daemon proof | C2/C3/C4/C6/S1 | schedule must inherit tree truth |
-| M1 | progressive de-copy/source-pin bot | C1/S1/K1 | only after public seam proved |
-| G1 | macOS package/release gates | M1 + selected W E5 | product before GA claim |
+| S2a | shadow-only Science tree/ledger offline product | S1/C2–C7 | prove hallucination controls before auto assignment |
+| S2b | bounded-assignment extension | S2a/C8 | only if product exposes applied advice |
+| W1–W6 | one capability family at a time | I1 + `PLATFORM_API_GATE` + applicable Core gate | no free-running upstream runtime |
+| K1a | Kairos Core local proof | C2/C3/C4/C6 | Core proof can parallelize with C1/S1 |
+| K1b | Science managed-run product proof | K1a/S1/`PLATFORM_API_GATE` | schedule must inherit generic-host truth |
+| M1-A | ownership map + draft pin bot | `LUMEN_R0_SOURCE_GATE` | stop drift expansion now |
+| M1-B | short-running family de-copy | M1-A/S1/`PLATFORM_API_GATE` | migrate public seam before long runners |
+| M1-C | workflow/long-running de-copy | M1-B/K1b | recovery boundary first |
+| G1 | macOS package/release gates | M1-C + selected W E5 | product before GA claim |
 
 ### 19.2 Grok 4.5 可做的机械卡
 
@@ -796,20 +883,20 @@ generated_at
 3. 所有九源有完整 immutable intake/rights/asset/disposition ledger，且所有已吸收代码可追溯；
 4. `seq_analyze` 等至少一个 golden path 已走 generic host，并保持 actor/product/CI proof；
 5. child tree 有 logical lineage、scope contraction、grants、budget、cancel/recovery；child hallucination不能被文本或 Advisor 直接晋升；
-6. Shared Working Ledger / Long-term Memory / SessionMemory 三者职责清晰，只有 evidence-backed root acceptance 才 promotion；
+6. SessionMemory、BranchScratchpad、Shared Working Ledger、Long-term Memory 四层职责清晰，只有 evidence-backed root acceptance 才 promotion；
 7. Advisor 是可解释、可撤销、受 health/privacy/budget/user-pin 限制的建议器，不是执行/完成权威；
 8. Kairos/ManagedRunSupervisor 在 macOS local proof 中经 lease/crash/idempotency/takeover/no-replay 演练；
 9. macOS product has exact binary, package/release gates and truthful status; live/HPC/device claims separately authorized/proved。
 
 ### 21.2 从今天起的最短、可执行路径
 
-1. 提交本总纲与 supersession pointer；不改 runtime；
-2. 启动 `F0-01` + `I1-01` 的只读/文档/validator工作，同时等待 Lumen R0；
-3. Lumen owner 完成 R0 evidence packet；Science 审查四字段后才开 C1；
-4. C1 后先走 S1 root-only `seq_analyze`，用已有 built-binary tests 做 generic host oracle；
-5. parallel 做 C2/C3/C4 和 C5；不开放 child；
-6. C6 shared ledger；C7 advisor shadow；C8 受限 recommend；
-7. S2 offline multi-agent golden path 与 K1 local Kairos 在共同前置通过后并行；两者均通过再进 M1；
-8. W1–W6 按权利与风险逐 capability 入场；M1 去 copy-core；最后 G1 macOS product/release。
+1. `[done: 336b529]` 提交总纲与 pointers；不把文档提交包装为 runtime 完成；
+2. Lumen 先做 `R0-00` path-level manifest；Science 同时做 `F0-01` + `I1-01` 的只读/文档/validator 工作；
+3. Lumen 依次完成 `R0-01…04` 加 `R0-05a` 的 main merge review；Science 审查 `LUMEN_R0_SOURCE_GATE` evidence packet 后，C1 和 C2/C5/M1-A 才分别按图开工；
+4. C1 产出 `PLATFORM_API_GATE`；之后先走 S1 root-only `seq_analyze`，用已有 built-binary tests 做 generic-host oracle；
+5. C2/C3/C4、C5、C6 可按各自 gate 并行，但不开放 child；K1a 只跑 Core no-side-effect local proof；
+6. C7 Advisor shadow；S2a 做无自动分派的三层 tree/ledger exact-binary golden path；
+7. C8 后才做 S2b bounded assignment；K1b 只在 S1/Platform API/K1a 后接 Science managed-run fixture；
+8. M1-A 立即阻止 copy drift，M1-B 迁短运行 family，M1-C 等 K1b；W1–W6 按权利与风险逐 capability 入场；最后 G1 macOS product/release。
 
 这条路线让前面一天/数天的 actor closure、Motif、catalog、Desktop、provenance、negative tests 都继续有用：它们成为新平台的 fixture、parity corpus、authority oracle 和产品 proof。真正改变的是从今天起不再用“在 Science 复制 Core 上补更多特例”来换短期进度。
