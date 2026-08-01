@@ -36,11 +36,11 @@
     },
     {
       "source_id": "ai4s-research-open-science",
-      "path": "runtime/skills/external/**",
+      "path": "runtime/opencode-profile/**",
       "copy_forbidden": true,
       "clean_room_only": false,
       "required_disposition": "reject-authority",
-      "reason": "Build-fetched external skill packs and their runtime/service rights cannot become Lumen execution authority."
+      "reason": "OpenCode profile and runtime configuration cannot become a parallel Lumen execution authority; fetched packs remain denied by intake policy."
     },
     {
       "source_id": "aipoch-open-science",

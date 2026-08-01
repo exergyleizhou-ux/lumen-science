@@ -60,9 +60,9 @@ def active_lock() -> dict[str, Any]:
         if source_id == "ai4s-research-open-science":
             components.append(
                 {
-                    "id": f"{source_id}-external-skills",
-                    "path": "runtime/skills/external/**",
-                    "asset_kind": "skill",
+                    "id": f"{source_id}-opencode-profile",
+                    "path": "runtime/opencode-profile/**",
+                    "asset_kind": "code",
                     "disposition": "reject-authority",
                     "reuse_mode": "none",
                     "rights_status": "restricted",
@@ -175,7 +175,7 @@ def main() -> int:
         "violates forbidden-path disposition",
     )
     check(
-        "an AI4S external skill cannot be relabelled as adaptable",
+        "an AI4S OpenCode profile cannot be relabelled as adaptable",
         lambda lock: lock["sources"][6]["components"][1].update({"disposition": "adapt", "reuse_mode": "adapt", "rights_status": "verified"}),
         1,
         "violates forbidden-path disposition",

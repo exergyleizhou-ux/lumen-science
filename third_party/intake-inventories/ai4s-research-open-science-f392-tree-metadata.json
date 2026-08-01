@@ -1,0 +1,4950 @@
+{
+  "entries": [
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ea13186371b3c6e6643d3475ce65620c79ebcd8a",
+      "kind": "git-blob-metadata-only",
+      "path": ".github/workflows/build.yml",
+      "size_bytes": 10340
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "66e43c58dc30a74901efced8aa5e63b938658d6b",
+      "kind": "git-blob-metadata-only",
+      "path": ".github/workflows/finalize-macos-notarization.yml",
+      "size_bytes": 5851
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c167bb9ebf46f8efd304aa382e24ef4bc8e2c45b",
+      "kind": "git-blob-metadata-only",
+      "path": ".gitignore",
+      "size_bytes": 949
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "86a26b88307f47c88a068f200f1796b59d9cb597",
+      "kind": "git-blob-metadata-only",
+      "path": ".opencode/skills/my-skill/SKILL.md",
+      "size_bytes": 193
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2f4507d47cf82b6020099828b0fc4d38348f65e0",
+      "kind": "git-blob-metadata-only",
+      "path": "AGENTS.md",
+      "size_bytes": 3388
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ba0de025b4e7e41171d8bb5b1fd0d1f7eb78a28b",
+      "kind": "git-blob-metadata-only",
+      "path": "CITATION.cff",
+      "size_bytes": 571
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "47dc3e3d863cfb5727b87d785d09abf9743c0a72",
+      "kind": "git-blob-metadata-only",
+      "path": "CLAUDE.md",
+      "size_bytes": 9
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "39738f6927a1af8ab05f682977046b5320ccdd95",
+      "kind": "git-blob-metadata-only",
+      "path": "LICENSE",
+      "size_bytes": 1248
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3aaf36bb33a3ba1e30399662f74ec406f9fbb153",
+      "kind": "git-blob-metadata-only",
+      "path": "PROGRESS.md",
+      "size_bytes": 270460
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f7e8eded584b5a039e9b5ded58394e960291a8fa",
+      "kind": "git-blob-metadata-only",
+      "path": "README.de.md",
+      "size_bytes": 14990
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "caa3b0c7073d75c7e1e4af5d8415893fc903b70a",
+      "kind": "git-blob-metadata-only",
+      "path": "README.es.md",
+      "size_bytes": 14990
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9580af7004afa5da7df2894515c03fb9ddfe7aba",
+      "kind": "git-blob-metadata-only",
+      "path": "README.fr.md",
+      "size_bytes": 15394
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8713b0b9d0c7b1ebc6e3b8a8651c1b69bc8800b8",
+      "kind": "git-blob-metadata-only",
+      "path": "README.ja.md",
+      "size_bytes": 16648
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5e6dbee82629c08c78e7289f197c5455f9790837",
+      "kind": "git-blob-metadata-only",
+      "path": "README.ko.md",
+      "size_bytes": 14958
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8fae4e8037f769c1e58d8ec3d1c80b1c77d07ffb",
+      "kind": "git-blob-metadata-only",
+      "path": "README.md",
+      "size_bytes": 16425
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "eb69ca2f6b92889199053e15c43d75119146c288",
+      "kind": "git-blob-metadata-only",
+      "path": "README.zh.md",
+      "size_bytes": 15910
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "dd974d80658de3d6d2ac9545a320cdf491e649a8",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/.claude/skills/verify/SKILL.md",
+      "size_bytes": 1352
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9b9696663517eac0a9bbaaf6f6f41c7d06ad16b4",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/.eslintrc.cjs",
+      "size_bytes": 4387
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2ddeaf3094f51c67baf60fdcd9d01fcbcf3b0ffa",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/README.md",
+      "size_bytes": 1181
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5c0aaaa6198aa65d216859f69d6dff5349431ee5",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/index.html",
+      "size_bytes": 563
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c3f0ba031e02638bb9be87007071e56b952c9db3",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/package.json",
+      "size_bytes": 2474
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2aa7205d4b402a1bdfbe07110c61df920b370066",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/postcss.config.js",
+      "size_bytes": 81
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0abf385e060898aa82cc826980feb97e45d1f0a7",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/public/favicon-32x32.png",
+      "size_bytes": 1751
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "79e85cf7b8b88d4a797075d8b6a8988f629b3328",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/public/favicon.ico",
+      "size_bytes": 43128
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c74d5cf93bee6fb6c494f922121286e1c8880d16",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/public/favicon.svg",
+      "size_bytes": 577
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b663d93d36a96c9c5c31d169804814d78b6f4651",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/Cargo.lock",
+      "size_bytes": 145638
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0122d7226364be1ae867007d9695742d881fa06d",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/Cargo.toml",
+      "size_bytes": 1548
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9049c52d851fec90867c1c5d23314cd29b3ce874",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/Info.plist",
+      "size_bytes": 1359
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "28b7ab0ca322577ee41dead36b55f9ddfa58dc11",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/README.md",
+      "size_bytes": 677
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d860e1e6a7cac333c3cc0bc9cb67faf286b07d69",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/build.rs",
+      "size_bytes": 39
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "654f5d7c579bcc2d40fad6bbf169fb978011c12f",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/capabilities/default.json",
+      "size_bytes": 991
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0d82a5e5de6517275da7d60b42fae3a889e1203c",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/128x128.png",
+      "size_bytes": 12150
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3ecb025cff00d65ff14f6d0bfe8b14d72207158b",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/128x128@2x.png",
+      "size_bytes": 32099
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0abf385e060898aa82cc826980feb97e45d1f0a7",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/32x32.png",
+      "size_bytes": 1751
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "55ccb2c808888d0007e001c4afad922c9eb4a7c9",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/64x64.png",
+      "size_bytes": 4450
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "939c4f0933aa84ad2eb0acf1ef7923c949cd83f5",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/Square107x107Logo.png",
+      "size_bytes": 9225
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9b80f6a50d6ab147e6e8108c503dc0d2c5420569",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/Square142x142Logo.png",
+      "size_bytes": 14174
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "72ff5badfdcc9e13a169827e02e6fbb3e735397f",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/Square150x150Logo.png",
+      "size_bytes": 15248
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a026486459bc1b06325494317ed9250564024efb",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/Square284x284Logo.png",
+      "size_bytes": 36378
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "47f8d708f3d5436a60214f285e18694e0ffb5b8f",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/Square30x30Logo.png",
+      "size_bytes": 1615
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ded44a0b21c590e9d52b363dbfcd90e04f27f484",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/Square310x310Logo.png",
+      "size_bytes": 40906
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1160c7f5ca4802a0a2d697da37bf1ed55c310e5b",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/Square44x44Logo.png",
+      "size_bytes": 2692
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b596998de7844b25befa07f732f17dad3582e7f2",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/Square71x71Logo.png",
+      "size_bytes": 5066
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6ca03e2fa793bbea695fa1968550f21a754850ba",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/Square89x89Logo.png",
+      "size_bytes": 7050
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a1f7fe458a5a9fe53c915a92aeb2fa4f40d24cb3",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/StoreLogo.png",
+      "size_bytes": 3185
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2ffbf24b68988bd935f5c695a59753fcb1a5de0e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/android/mipmap-anydpi-v26/ic_launcher.xml",
+      "size_bytes": 261
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e6558344fd358b7db2226a77d14c3f521c2f98d0",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/android/mipmap-hdpi/ic_launcher.png",
+      "size_bytes": 2983
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9e4a827725d270b4bc063c12590f78aad6d715bb",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/android/mipmap-hdpi/ic_launcher_foreground.png",
+      "size_bytes": 16864
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0cb5f8a83be99ecddaa1d7cf00d25375af24146d",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/android/mipmap-hdpi/ic_launcher_round.png",
+      "size_bytes": 2935
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9a92482585790a901443996a82ef0952ce5c3740",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/android/mipmap-mdpi/ic_launcher.png",
+      "size_bytes": 2796
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "73a385a5849bb68938e0c788ea799ea2fcb40d52",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/android/mipmap-mdpi/ic_launcher_foreground.png",
+      "size_bytes": 9404
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2d43a77982e27d44f37ae22c2792c0e60670dc62",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/android/mipmap-mdpi/ic_launcher_round.png",
+      "size_bytes": 2746
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "bb79e26339825faf1b2e280c2cba1417bdccf1cc",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/android/mipmap-xhdpi/ic_launcher.png",
+      "size_bytes": 7288
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4abee86ea1107f4ab5be866ab153095ec8716871",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/android/mipmap-xhdpi/ic_launcher_foreground.png",
+      "size_bytes": 24955
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "85aea96535483e00a8aebc17a8ac82954f06a8a3",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/android/mipmap-xhdpi/ic_launcher_round.png",
+      "size_bytes": 7547
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "80660562d1b45507c64aa464e309bf4f6d114914",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/android/mipmap-xxhdpi/ic_launcher.png",
+      "size_bytes": 12845
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2adb1a862934ab01a6c8098ba853c8aadf88a871",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/android/mipmap-xxhdpi/ic_launcher_foreground.png",
+      "size_bytes": 43453
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "50669438d01025f481325cee3dbb3002dc427afe",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/android/mipmap-xxhdpi/ic_launcher_round.png",
+      "size_bytes": 13741
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b38348fcc76a82b4f652dd232f9fa6019344b77a",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/android/mipmap-xxxhdpi/ic_launcher.png",
+      "size_bytes": 19089
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "24eaf00405c630a0dd234ddabb51c0434704e2c9",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/android/mipmap-xxxhdpi/ic_launcher_foreground.png",
+      "size_bytes": 63402
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a7fb8b06ae453397687e6e8299cffa3845d332cf",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/android/mipmap-xxxhdpi/ic_launcher_round.png",
+      "size_bytes": 20419
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ea9c223a6cbab0465000584a9d5dd052adffe3c2",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/android/values/ic_launcher_background.xml",
+      "size_bytes": 115
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f44851404a3d37b8a34766c90cfd483812db955c",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/icon.icns",
+      "size_bytes": 430291
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "79e85cf7b8b88d4a797075d8b6a8988f629b3328",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/icon.ico",
+      "size_bytes": 43128
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "52c9d044f97961e49b55ab4d5a271e9008c227cb",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/icon.png",
+      "size_bytes": 84552
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "bde3bcef548187262e37bd381b5e9177c3e9edb4",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/ios/AppIcon-20x20@1x.png",
+      "size_bytes": 800
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0a51eaae9ec233e6dd5548a31b03a9289dba4a7e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/ios/AppIcon-20x20@2x-1.png",
+      "size_bytes": 2022
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0a51eaae9ec233e6dd5548a31b03a9289dba4a7e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/ios/AppIcon-20x20@2x.png",
+      "size_bytes": 2022
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9774cdcd0760a5b710476a79f63c2a5440fe323f",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/ios/AppIcon-20x20@3x.png",
+      "size_bytes": 3647
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9eb0ee58948e1710be47e1dddf94b605eca7aa2f",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/ios/AppIcon-29x29@1x.png",
+      "size_bytes": 1348
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "39fc8815af570817861674ec2fd81304ee19d75b",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/ios/AppIcon-29x29@2x-1.png",
+      "size_bytes": 3446
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "39fc8815af570817861674ec2fd81304ee19d75b",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/ios/AppIcon-29x29@2x.png",
+      "size_bytes": 3446
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "598484bbc0a63178bbb1341c9e8d3114691c5f1c",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/ios/AppIcon-29x29@3x.png",
+      "size_bytes": 6252
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0a51eaae9ec233e6dd5548a31b03a9289dba4a7e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/ios/AppIcon-40x40@1x.png",
+      "size_bytes": 2022
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "eacd62fabf07b2144fca427b6b63ae42a5ce841e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/ios/AppIcon-40x40@2x-1.png",
+      "size_bytes": 5538
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "eacd62fabf07b2144fca427b6b63ae42a5ce841e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/ios/AppIcon-40x40@2x.png",
+      "size_bytes": 5538
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8e89e6656f96a6b39c1112b10e065e2cdb80b423",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/ios/AppIcon-40x40@3x.png",
+      "size_bytes": 10092
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7814c84a08311f01578021c4ab16e9dc9699bec3",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/ios/AppIcon-512@2x.png",
+      "size_bytes": 164645
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8e89e6656f96a6b39c1112b10e065e2cdb80b423",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/ios/AppIcon-60x60@2x.png",
+      "size_bytes": 10092
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "60374de0acc29f0fd226d64d51dcadf8e0b2a37c",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/ios/AppIcon-60x60@3x.png",
+      "size_bytes": 18185
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d40a105dee16e2583ee9bb65d25c9982ca1bae29",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/ios/AppIcon-76x76@1x.png",
+      "size_bytes": 5118
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a461ac8159b94521c65c1cf612f6a4e47baf29c0",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/ios/AppIcon-76x76@2x.png",
+      "size_bytes": 14331
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5d23f71ef83581604a5aee24ef5520043389692b",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/icons/ios/AppIcon-83.5x83.5@2x.png",
+      "size_bytes": 16375
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1c46518418c8e90b3146a9501955c6011c453dc5",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/artifact_file.rs",
+      "size_bytes": 40018
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6eef2e01234ed8013e1fb0be98236faf6cc32640",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/browser.rs",
+      "size_bytes": 9691
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2922beeaba79494aa5c6656e0a74c76da096b7b1",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/compute.rs",
+      "size_bytes": 24417
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b6174a9260a2c644e0ad91356bd5f5b608da46b1",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/debug_log.rs",
+      "size_bytes": 1849
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "64f1178312137fa6bb376936bb8b78f77030a22f",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/examples.rs",
+      "size_bytes": 2752
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "25f85fa235300f27e36735a1b27a6962d4f46eb6",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/gateway.rs",
+      "size_bytes": 44880
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8d9b4423b9d67b024be1dbc741f96eab93dbb2e9",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/git_snapshot.rs",
+      "size_bytes": 39806
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "aaef75c450c0eb29f2ad15cc9a160d0dc0edc4ee",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/goal.rs",
+      "size_bytes": 6531
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a971992bf1e73576b6655d732dd64e71ea9e8891",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/harness.rs",
+      "size_bytes": 1226
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2041aca31284f8c00e641c865c6b4ad27f908faf",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/jupyter.rs",
+      "size_bytes": 10551
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d73bb65da77216f71d5affe158fb412cd6039114",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/kernel.rs",
+      "size_bytes": 36350
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4c6c7b47617cab754da372c4ed2d37a64928f9c5",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/large_file.rs",
+      "size_bytes": 3294
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1029bc26595d5266decee255eb28f05c97dd3918",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/lib.rs",
+      "size_bytes": 7625
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c8c92eaf43c422a8e996628bcde6fe8ff8790edd",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/macos.rs",
+      "size_bytes": 2448
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a9e8b43e7ca19fbc12a76b7f16185ce5836871c6",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/main.rs",
+      "size_bytes": 171
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "450bb155ec2b2234941fd2ec63b29a0d63e30824",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/modal.rs",
+      "size_bytes": 3153
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "676473fef3ef3cd5351cd1b4af4ad17869f0fc81",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/model_probe.rs",
+      "size_bytes": 10494
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "63c15c3675967bebefb20cb8ae311c00f6f3e799",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/opencode_config.rs",
+      "size_bytes": 20566
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0aea2a18710a2af8cb367431f47f4adc8d3797f2",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/preview_server.rs",
+      "size_bytes": 21999
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "93d558d6ca262d3b3c23ae0b72bb8131f72c5a1b",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/project.rs",
+      "size_bytes": 45376
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f0dd881cd1c35e991be0795717adedda1314e5f4",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/provenance.rs",
+      "size_bytes": 35209
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "95b4db087c959cdea6c3cc1943390475d83f578d",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/runs.rs",
+      "size_bytes": 27277
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9c6cd50c1d37ddd3ef8a8836a85e1959c543fc1e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/runs_index.rs",
+      "size_bytes": 23445
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4dbcfb86efcec59690ad6ee6e05c2232b4c09f12",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/runtime.rs",
+      "size_bytes": 85147
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1a4102f9ea441cd01151edd8e8b9a7eea073ec3c",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/science_mcp.rs",
+      "size_bytes": 4282
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "10dc3d7fa031bc2195b01e7de9e7ab6c34e53f27",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/tools.rs",
+      "size_bytes": 4512
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "be3a06c7c2e47c988e5e717b67caa0cfb343150e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/updates.rs",
+      "size_bytes": 3799
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6542bed91c7185ddbb7ad471c029e9ab379fbec7",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/src/uv.rs",
+      "size_bytes": 7472
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "18d8b9a6bfe728be23f799a819f327001fe536e9",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/tauri.conf.json",
+      "size_bytes": 1674
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9c50335896cc1135cad24efa6084e8525a995222",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src-tauri/tauri.macos.conf.json",
+      "size_bytes": 554
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/layout/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0049c6f0534b5c0a6107820a9fa5d6d165987f5d",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/layout/AppShell.tsx",
+      "size_bytes": 10470
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/providers/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6a7632d5d20a1d42fb3e1a497684d625352cb14e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/providers/LocaleProvider.test.tsx",
+      "size_bytes": 994
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "57431eb8789e1c7c89fee65d1664bfced357a395",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/providers/LocaleProvider.tsx",
+      "size_bytes": 722
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a243dd88eb6c831ccfe90b53cafbfd9205427c75",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/providers/ThemeProvider.tsx",
+      "size_bytes": 748
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "382318c15692d6ee38e129bdc466b57a9177c0bb",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/providers/ZoomProvider.tsx",
+      "size_bytes": 1800
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "19c91cddd0386477d2c157ccc33bb4ef3822a5da",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/router.tsx",
+      "size_bytes": 1540
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/routes/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8e79fdf77376fc6d53028bf3ec9edc4eb743747f",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/routes/FilesPage.test.tsx",
+      "size_bytes": 3685
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "24599e841f14aa3c256b10ee370811839f00f157",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/routes/FilesPage.tsx",
+      "size_bytes": 14265
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "319c035eb6c40555ffe014acb875397f2e00317b",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/routes/HistoryPage.test.tsx",
+      "size_bytes": 7081
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d7d3bc675aea77af81852429760fba8c172c46fd",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/routes/HistoryPage.tsx",
+      "size_bytes": 21644
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d8538513de98df200f923ff38396b230a15b04ac",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/routes/LiveSessionPage.tsx",
+      "size_bytes": 8617
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6d6c4fbdab235c5b8d6115439a96c4a75e65d2b4",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/routes/NotFound.tsx",
+      "size_bytes": 533
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "741ae6699ae77ebc14053ee88b8c580f1861c112",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/routes/NotebooksPage.test.tsx",
+      "size_bytes": 1720
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d11307af54a42869c0b15fb5c8849bc9ddb9d90a",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/routes/NotebooksPage.tsx",
+      "size_bytes": 8568
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "343468ec2c4aaab17d75bcf1dd2d77f61000fde7",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/routes/Pages.i18n.test.tsx",
+      "size_bytes": 2786
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2473de129b8affe33c8a067acaf3c0cf75abfad2",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/routes/ProjectsPage.test.tsx",
+      "size_bytes": 2435
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "cff49ff9503610fd37be1650cb30c377d94c2b08",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/routes/ProjectsPage.tsx",
+      "size_bytes": 13444
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "063e15cd0827ef8d783d16e9d7abbc881ccfc0ac",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/routes/RunsPage.i18n.test.tsx",
+      "size_bytes": 1308
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ddff2aed44f6324cac10bbae80ac6b0e5bad4ee0",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/routes/RunsPage.test.tsx",
+      "size_bytes": 6301
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "dca990e3c688633316352a377c1e1966f4de2afe",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/routes/RunsPage.tsx",
+      "size_bytes": 23961
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d30ee68e6fd295c086290dc3e1e601ca8dd64119",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/routes/SessionPage.test.tsx",
+      "size_bytes": 1661
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ddf524ad5da5b18dbb99b050123291b8e3ddb558",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/routes/SessionPage.tsx",
+      "size_bytes": 1398
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4b7bea3f40f77140713aeb2ba017622e4d07e9e7",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/routes/SettingsPage.i18n.test.tsx",
+      "size_bytes": 3222
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "edca3972ea93bcb5ec9b7acdf88dd71674797570",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/routes/SettingsPage.modelBrowser.test.tsx",
+      "size_bytes": 13518
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8a402704b1b5a2b1d08cba694b2815c46ed89ee2",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/routes/SettingsPage.tsx",
+      "size_bytes": 85372
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "779857588bfde03eda9ff1c8346555a2c7d2f1d6",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/app/routes/SkillsPage.tsx",
+      "size_bytes": 8890
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1cad1729d771d76d60f9ed3cfb1816aad5323576",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/assets/logo.webp",
+      "size_bytes": 14026
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/approval-dialog/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/artifact-viewer/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/cards/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "aaf82ada903c277840174efa7526747c9440eeba",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/cards/EmptyState.tsx",
+      "size_bytes": 323
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/code-viewer/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "196ecb864321e6dc955beba52afd3a585efe3717",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/code-viewer/CodeViewer.tsx",
+      "size_bytes": 1519
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "334bb784d16805d6ee3dd25eec3f6f4619868531",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/code-viewer/DiffView.tsx",
+      "size_bytes": 928
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/command-palette/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1ac0fc1c0f57f93d9eab09da9a7f3d995f912947",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/command-palette/CommandPalette.test.tsx",
+      "size_bytes": 930
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5c538f20188565ca317262e749ee6e0cf0898cb6",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/command-palette/CommandPalette.tsx",
+      "size_bytes": 5147
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8a379e1c62b35ad41aaddf5a42d9168fe21dbe87",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/files/FileContextMenu.tsx",
+      "size_bytes": 3576
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c5add33c9aab43002b34ab0300b53525ca75b707",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/AnomalyMapView.test.tsx",
+      "size_bytes": 1052
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "134a8781dcef330de321e155466b7c6f762a59d2",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/AnomalyMapView.tsx",
+      "size_bytes": 8594
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9a8b8cf0c97b6d8d14f734fb994b752458af98f5",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/ArtifactInspector.test.tsx",
+      "size_bytes": 1466
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a425c6fe03a34e1fe6170a6c1601b411bc69ebb3",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/ArtifactInspector.tsx",
+      "size_bytes": 6334
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9bb533ff40e34d938763e62439bf89d2a8329155",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/BandView.test.tsx",
+      "size_bytes": 1210
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8de7013de77061b5ba8e77e2b7f4c0f3b2f5b76a",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/BandView.tsx",
+      "size_bytes": 5713
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a87be78366bae845d427c4e7bb0c0e924ef19d1c",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/DataViewers.i18n.test.tsx",
+      "size_bytes": 4176
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fd2dc6ed293c4c78b96e7edbcf182b26508075ad",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/DosView.test.tsx",
+      "size_bytes": 1388
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0b23140f17ae15e4cf0c4141d6a5b36f986470f0",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/DosView.tsx",
+      "size_bytes": 7221
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e1f51fcb1905444cba9642803908acd4ca9c1bf6",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/FilePreviewInspector.test.tsx",
+      "size_bytes": 7667
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8f1efa1ccffa38400bfef38647130323482612e4",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/FilePreviewInspector.tsx",
+      "size_bytes": 27105
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "61407624054cadc046cd40023815fa00f45ffe55",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/FitsView.test.tsx",
+      "size_bytes": 1872
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "666257679639d9b5c9506f75319d8ea0d5ba583f",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/FitsView.tsx",
+      "size_bytes": 12905
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1e081abc469f6058c45ac5b919c42148aa5206b6",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/GenomeView.test.tsx",
+      "size_bytes": 1755
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "abdc0d55d222b92c93c08607fc9ae168bd04703d",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/GenomeView.tsx",
+      "size_bytes": 13015
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d137be6f7a4f97c5a09e1a9fae2ebe55c0672602",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/Inspector.i18n.test.tsx",
+      "size_bytes": 8194
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ed1ef90e1d9cc73433ab72c383a6d81eb0110a92",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/InspectorShell.tsx",
+      "size_bytes": 2265
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "901a3d1e1c9ec1b9710a99bf43f26059f5d85afb",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/MeshView.tsx",
+      "size_bytes": 15795
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "62a183a3dfda5e94dedab1f5aa7e5f8a6a116609",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/MoleculeView.test.tsx",
+      "size_bytes": 3390
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9e928031ebb1618583d6736b443067340d28719e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/MoleculeView.tsx",
+      "size_bytes": 9320
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0d86420028170d335dd411c7ac2c662390754886",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/NotebookInspector.tsx",
+      "size_bytes": 5573
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0b36c98dc43af51015e55e5c76eca4b28da58fff",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/OfficePreview.tsx",
+      "size_bytes": 11232
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d15adbfe7765df94fbb0db19817e36e2520df69b",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/PdfInspector.tsx",
+      "size_bytes": 3484
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b3e16c7b11dd2b6499661f475f277ef0f17b58d5",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/PhaseView.test.tsx",
+      "size_bytes": 1510
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "30ead638f1e3e81b6d0a7a4d0f74dd1b7e7295eb",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/PhaseView.tsx",
+      "size_bytes": 6162
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2f822c6ce73e417e45dddd4ad2cfec0165be688e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/ProvenancePanel.test.tsx",
+      "size_bytes": 7339
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2498409b4ab052145544d3ef162758e769ebccc5",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/ProvenancePanel.tsx",
+      "size_bytes": 11953
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e4afbb781af5d7db1b12dbe3a546dd26e63ac34e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/QCodeView.test.tsx",
+      "size_bytes": 1430
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e3f203e55b6c1be0c8b7e0c782ebfb9239a07b9e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/QCodeView.tsx",
+      "size_bytes": 6604
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f44b08acc6d80a700ea0939260d1f93f41946ac6",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/RightPane.tsx",
+      "size_bytes": 4696
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2abaaeef5ec1d64b840731ddf2f64cb681e1dd67",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/TableChart.test.tsx",
+      "size_bytes": 1691
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "29e9b9a5e5f7a5ca5edbffa5e012d9d441b6176f",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/TableChart.tsx",
+      "size_bytes": 9069
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2dfc6f0417b0cfa0b8d721957e8417ec622b38b1",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/inspector/TablePreview.tsx",
+      "size_bytes": 1488
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/markdown-viewer/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "225913be5fd434a1b3a39ff49b279bd20fbfc1b9",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/markdown-viewer/MarkdownViewer.test.tsx",
+      "size_bytes": 4178
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4815c6d852dc0ed97c7cd25c56ff419ccfc75695",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/markdown-viewer/MarkdownViewer.tsx",
+      "size_bytes": 8548
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5c2e6b6857d5231829e251e66f0bf1794dd73f24",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/notebook/NotebookEditor.test.tsx",
+      "size_bytes": 3062
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4aab2d5e8f57af655e297202da1fc6efe6eae99b",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/notebook/NotebookEditor.tsx",
+      "size_bytes": 16719
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d80579cdfc22d80e81cb460f6704d1ffabe74fe4",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/session/EmptyGroup.tsx",
+      "size_bytes": 1735
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "74a5523175cedfceb024be0156087ef2ceeabcf4",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/session/GroupTabs.test.tsx",
+      "size_bytes": 3716
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "49c456a443fdedd205cc5987e8dfabc549eec9ed",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/session/GroupTabs.tsx",
+      "size_bytes": 7385
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "81c42f138dec9dd2cfa490c6c44949aadf60afd0",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/session/PaneDragGhost.tsx",
+      "size_bytes": 1572
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "59db4f0191b20eba697a7c49dc1a72a1b76d9824",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/session/PaneTree.test.tsx",
+      "size_bytes": 1442
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "43b47ba99a602c6f9043bb539a2eb931f859e631",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/session/PaneTree.tsx",
+      "size_bytes": 8748
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5891258f2794d5fe565951de375bef7041fa4918",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/session/PresentedArtifactPane.test.tsx",
+      "size_bytes": 1467
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ea244d6b0d8fa3d3d7406de412262d59b7b623f6",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/session/PresentedArtifactPane.tsx",
+      "size_bytes": 3090
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "92c0dcf5dedca3b0b9e32bcf1e399fa995d5c0db",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/session/SessionView.tsx",
+      "size_bytes": 41084
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e7da4db0d0d2ca4e7dd95bd67bd53dc6ef018caf",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/settings/AgentModelsCard.tsx",
+      "size_bytes": 3859
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b898e568bccdfff260a2227bd9e43a034aabb777",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/settings/DataFlowCard.test.tsx",
+      "size_bytes": 1041
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "175723d79f762ac2ab135083864bf327a4692cf8",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/settings/DataFlowCard.tsx",
+      "size_bytes": 3274
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8d78a533280207878ff590bc34693e364eddf04d",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/settings/MemoryCard.tsx",
+      "size_bytes": 6074
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3957bdc23e2620887dd8fb7e4ebfe12b1ea59392",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/settings/ModalCard.test.tsx",
+      "size_bytes": 621
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "bdb3b31acf2246063f603e7c122d14541614dcfb",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/settings/ModalCard.tsx",
+      "size_bytes": 3004
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "47cb8000f0520a22860d009178d8916bbe5f7df1",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/settings/ModelBrowser.test.tsx",
+      "size_bytes": 7903
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6286b128b8c5e3f94a90ad302034a5c3dec4672a",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/settings/ModelBrowser.tsx",
+      "size_bytes": 9384
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "dd5d5e6e3af7e7cdc153483739f94bf63d96bd6f",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/settings/ProviderManagerCard.test.tsx",
+      "size_bytes": 2162
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "62fbe97c292bd868a692e7a363da2a43533dc1df",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/settings/ProviderManagerCard.tsx",
+      "size_bytes": 1743
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8e4a1bfd13dea2fd472643d9b7f34d3815cde995",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/settings/RemoteAccessCard.tsx",
+      "size_bytes": 8541
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "28fcfb281eb1bfcd4a4e961589b398f2f51db90e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/settings/RemoteComputeCard.test.tsx",
+      "size_bytes": 4150
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "36b8ab86be1261ca388ee960c2900250d4d7b368",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/settings/RemoteComputeCard.tsx",
+      "size_bytes": 14256
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "18218c3a042b0ffa21474b3cce3a61a8a7b50d09",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/settings/Section.tsx",
+      "size_bytes": 2737
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e948a719ce9d2c18a06d6784cf05e44331f5da68",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/settings/inputCls.ts",
+      "size_bytes": 1080
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "bf3c5a7c159bfcf49580e118fb6a836a13f05861",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/settings/modelCatalog.test.ts",
+      "size_bytes": 2984
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "593c011d07134c66e38fceaad6d4ed021e1f4a60",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/settings/modelCatalog.ts",
+      "size_bytes": 2573
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f06f34152d6cac24d95efc24c94222fdfc128c2d",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/settings/modelPreferences.test.ts",
+      "size_bytes": 1585
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0547d48648fa5253497ceb3f33eb10352679894b",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/settings/modelPreferences.ts",
+      "size_bytes": 1628
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4084873f1ee1036abdbbd444a39f525a4614e18d",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/settings/sections.ts",
+      "size_bytes": 1620
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/sidebar/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b21993fe4b04678231b019b1dbe40ebf8117ed30",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/sidebar/Sidebar.contextmenu.test.tsx",
+      "size_bytes": 3328
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9428a5f02378ea6f481285511b8f5fdfb040f4f7",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/sidebar/Sidebar.i18n.test.tsx",
+      "size_bytes": 822
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6a099634f3b68ee0cbfec1ed17149b46c1e79411",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/sidebar/Sidebar.projects.test.tsx",
+      "size_bytes": 2174
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "bbe78755fa32553f2e09cb69c31353b5410c29f4",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/sidebar/Sidebar.sessions.test.tsx",
+      "size_bytes": 4634
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "27b51deac2c7b5de051af88a956f03821b03a4a7",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/sidebar/Sidebar.tsx",
+      "size_bytes": 48502
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ef4ab630b794a99e14112a4989438b05409e4586",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/sidebar/StatusPills.tsx",
+      "size_bytes": 1616
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "54f34ebb17235e3ad62c0950debfc5e9f8eda6c5",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/sidebar/isInside.test.ts",
+      "size_bytes": 1442
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "334b09f45d0351ee3f9497f00cc1dbcca4e854a1",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/ArtifactCard.tsx",
+      "size_bytes": 1954
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b47ae53dd05e8aca7aba8678d2348a9d0f6dca97",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/BlockList.test.tsx",
+      "size_bytes": 1469
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "39a3797a3741d5bbfdc96ac0abdff9a3f407d15c",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/BlockList.tsx",
+      "size_bytes": 4346
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5f54cfc27a8a575a1978cf8f40ec6988050ed7b6",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/CompactionRow.test.tsx",
+      "size_bytes": 1567
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "19194608987b4cdb3f4c63b65465c8cf8ee16708",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/CompactionRow.tsx",
+      "size_bytes": 2216
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c45d385d4de9cbb27e214d31a381cc6453db2fc3",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/Composer.i18n.test.tsx",
+      "size_bytes": 1916
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3096009ce430454fb4d09c12d0d61e3f035cc09b",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/Composer.test.tsx",
+      "size_bytes": 16521
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9afd60f054447b64fc4f685d4dbe1186249cc873",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/Composer.tsx",
+      "size_bytes": 40771
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "69e5d57fe2b5e88b05b3682b3c5cb8a45749137b",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/ComposerAttach.test.tsx",
+      "size_bytes": 3449
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0fad712b8341f3eb9b4322992d728992d6e23715",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/ComposerReferences.test.tsx",
+      "size_bytes": 3519
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b680e9322f50b55985b1b22b0f316fe74ce50873",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/FigureBlock.test.tsx",
+      "size_bytes": 1709
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "daeee0b9314da773e44c41fabdff86b0e3a7e68f",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/FigureBlock.tsx",
+      "size_bytes": 5463
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8ac81e9f0794674f2fc22d55462281f29225bfd0",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/GoalPill.test.tsx",
+      "size_bytes": 3998
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "66aaf5d509f5173dcd7a0ed8169333d9cb79c096",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/GoalPill.tsx",
+      "size_bytes": 5462
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2b69f750007ca5835c3ac02b03c0da28a88c16ba",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/InlineArtifact.tsx",
+      "size_bytes": 969
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e91fd576da8c53a4cf151f8ca8c466a5009ee1bf",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/InteractionPrompt.test.tsx",
+      "size_bytes": 3113
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9f422e5303c0291ac3d0ab5d6b7cc90bd6b073c9",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/InteractionPrompt.tsx",
+      "size_bytes": 9000
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "087759d318087ae4eb68b8d402cce5e6956635eb",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/ModelPicker.test.tsx",
+      "size_bytes": 4766
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0114c8a0369e616e38c500fab9b5d853f547fb4a",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/ModelPicker.tsx",
+      "size_bytes": 21662
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ed85c3cc8f2b1dd85e1ef1bc35c0d5a12bd229f3",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/ReasoningRow.test.tsx",
+      "size_bytes": 1082
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8f9a9980d0dcc5838625cb6c31ae0abede2c02b4",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/ReasoningRow.tsx",
+      "size_bytes": 2475
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f90c1bdf81080c846adeb0cf2c9c896d0f292523",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/ReviewerCard.test.tsx",
+      "size_bytes": 1967
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e7508a19865f75c90fdd6765bcfdb22cacdefe09",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/ReviewerCard.tsx",
+      "size_bytes": 3728
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b197865d3510b0224de53116a21c8f81a9d1c2c9",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/SelectionActions.test.tsx",
+      "size_bytes": 3075
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "cbffdc0c641639a445372f3a70555278ed4735fb",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/SelectionActions.tsx",
+      "size_bytes": 5975
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7dd2443c148abd731baafb5e56a8458d1ede33df",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/StepSummaryRow.tsx",
+      "size_bytes": 1344
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "dd6a36355429f2d03866d79a2e63ddc5677116e0",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/SubagentActivity.tsx",
+      "size_bytes": 1084
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "36f89c896787a83331a63323ac3da23580c71774",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/SubagentPane.test.tsx",
+      "size_bytes": 2303
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "af8fad6d18133147cce8590e4a5becc0719cc046",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/SubagentPane.tsx",
+      "size_bytes": 4892
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "80a6295ffd04d8d9ff20c1e78e92a456634a05ca",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/ThreadView.tsx",
+      "size_bytes": 3087
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c35d92a299c4a5fe7bdc0c0600de5b8e8ebb0ce4",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/ToolCallRow.test.tsx",
+      "size_bytes": 2790
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "697b19e4a94179223b951c098b64cef452e90570",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/ToolCallRow.tsx",
+      "size_bytes": 3936
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "44b8c42cd72d3815c7a15c1bf4136d8bec5392e7",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/ToolGroup.i18n.test.tsx",
+      "size_bytes": 2117
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "99a0075492ddc71b1b7dc8833dccbbdd413e35e7",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/ToolGroup.test.tsx",
+      "size_bytes": 5645
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "cff2797101c8ce8feddbd62a5c5b76885c3d1045",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/ToolGroup.tsx",
+      "size_bytes": 14050
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b09c4943b1514dcfb54887adacff88e77decc55d",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/UserMessage.test.tsx",
+      "size_bytes": 5685
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ce973c8d810f78fe7f9344b9b82ad98c00d3e534",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/WorkflowStarters.test.tsx",
+      "size_bytes": 2772
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8cdc596d9db26c506cc924395de993445eccd3ae",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/WorkflowStarters.tsx",
+      "size_bytes": 6358
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "81b7ea1caa97c9c108a1cdba64f0c59622c9b10c",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/WorkspaceChip.test.tsx",
+      "size_bytes": 3218
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "156fed0f0d6ab02b4c974f2e70815894e2e76e96",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/WorkspaceChip.tsx",
+      "size_bytes": 2658
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "05c204b20fcdc0ff8610b0556a0e16875baeefc2",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/atoms.tsx",
+      "size_bytes": 12381
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2e66860ac60fafa1148b590cbf20443b751f1d57",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/references.test.ts",
+      "size_bytes": 4196
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "bf0ffdb3b83e7e3e630d09935418fac238c5a2af",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/thread/references.ts",
+      "size_bytes": 5725
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/tool-call-card/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/topbar/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1cc04c6e609d98a2ed04715c87f41de93a556a38",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/ui/ConfirmDialog.tsx",
+      "size_bytes": 2027
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7f763af73f5bce0d8a1fad8905cabfdd46060fd8",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/ui/ContextMenu.tsx",
+      "size_bytes": 3110
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c74acf5f50a12a814750ea24ed548cbefe0b57fd",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/ui/Toaster.tsx",
+      "size_bytes": 1165
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a91163ffad001b2a473b51d327a3646a696f7c29",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/components/web/WebTokenGate.tsx",
+      "size_bytes": 2311
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/features/agent-runtime/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/features/artifacts/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/features/chat/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/features/literature/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/features/onboarding/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/features/projects/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/features/provenance/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/features/review/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/features/settings/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/features/skills/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ca678e41ccbe6d0100a5463e2d385cf4354469e0",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/config.detect.test.ts",
+      "size_bytes": 1771
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "95524fa1cb7018fd76ed14aa80abe7f0e2e1678c",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/config.test.ts",
+      "size_bytes": 1791
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c7f316645bf282d307aa9e0b74908801791e8d1b",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/config.ts",
+      "size_bytes": 2831
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7fe7764736d6aa7c9d91d86f89a20f77cffad8ad",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/format.test.ts",
+      "size_bytes": 496
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "054d99940a88863166defe248dab4063d3758c42",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/format.ts",
+      "size_bytes": 490
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "24802cadfd5bc662b8d0ff6ab3934066ff045816",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/index.test.ts",
+      "size_bytes": 731
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "05619e1a46a4c76ad1e57d2f2c06eb3b3a62bd6a",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/index.ts",
+      "size_bytes": 4604
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a09af7aaedbebf46ba0df9eca12d76bfa07d1a25",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/de/common.json",
+      "size_bytes": 101
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0967ef424bce6791893e9a57bb952f80fd536e93",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/de/errors.json",
+      "size_bytes": 3
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1ac09a65e6bab78bfc51cebc011e3942c97f7dee",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/de/inspector.json",
+      "size_bytes": 11493
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "944537fd5502102511a1632228986db64d1a949d",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/de/nav.json",
+      "size_bytes": 5385
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f0f664e27aa037b461a0c73737680b46e23c1489",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/de/pages.json",
+      "size_bytes": 5134
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "489a7d72096e9c413f3379b9eff79b89e7eecf14",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/de/runs.json",
+      "size_bytes": 2412
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "bc1488610a4b90ac818a5176bdec3b9af1d55253",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/de/session.json",
+      "size_bytes": 13215
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "be14482d969289e9b3cb9e42e8b42eecec325774",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/de/settings.json",
+      "size_bytes": 20547
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a0913b0e288c5771fd6d5b361bd9b8a94b255651",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/en/common.json",
+      "size_bytes": 90
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0967ef424bce6791893e9a57bb952f80fd536e93",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/en/errors.json",
+      "size_bytes": 3
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9beb5666aa81f0c926f9ec7331dccb4805058793",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/en/inspector.json",
+      "size_bytes": 10426
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "bc34a75eff967e60fd5617f15e41acd5a665ff22",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/en/nav.json",
+      "size_bytes": 4856
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "053ff11c75c54afdff1a0c7120feb4869528fddc",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/en/pages.json",
+      "size_bytes": 4608
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "35f2dffedfba4c5ded6a1282da206ec6baa97f3c",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/en/runs.json",
+      "size_bytes": 2119
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "01bb95df4fb392ad827cdeb61bbe0574ef00be77",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/en/session.json",
+      "size_bytes": 11863
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "403a02eebb09f2ced72aeb21297d6dba5d20f5d8",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/en/settings.json",
+      "size_bytes": 18113
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "319fc80ec4d5758a9e8a7ff9056a1cd6f640203a",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/es/common.json",
+      "size_bytes": 95
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0967ef424bce6791893e9a57bb952f80fd536e93",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/es/errors.json",
+      "size_bytes": 3
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "079383920a44f942759a55b55a776b56b19f85c7",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/es/inspector.json",
+      "size_bytes": 11652
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7b8e3dcdb61c08118f319d5b87370ba799b72746",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/es/nav.json",
+      "size_bytes": 5307
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2198324357170e768e1fd9179886cf6713787822",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/es/pages.json",
+      "size_bytes": 5239
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "23c0bfc1146fe9a635f61c7163f9aa0b258d25a3",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/es/runs.json",
+      "size_bytes": 2353
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "51bb4a772944b7b3ecdd4b216d1763bb189f9299",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/es/session.json",
+      "size_bytes": 13080
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9c4df3bed21c963982d5cfb44ee0f4a4f2cae440",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/es/settings.json",
+      "size_bytes": 20253
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4a2b85adcacb72b8d2b4b59cc7d29cc5d73f1e95",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/fr/common.json",
+      "size_bytes": 101
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0967ef424bce6791893e9a57bb952f80fd536e93",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/fr/errors.json",
+      "size_bytes": 3
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ee5eccb398950d868c48be5d7724959dd9edf65b",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/fr/inspector.json",
+      "size_bytes": 11699
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ea5acb8cff77bb1c96bf026eadfcaee56de6f614",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/fr/nav.json",
+      "size_bytes": 5487
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "999400646bc08b1bb9fc8a4edf74df409cd69f0b",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/fr/pages.json",
+      "size_bytes": 5369
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f37c6ca7ed515b6029fdc4fb8ce918d85298f943",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/fr/runs.json",
+      "size_bytes": 2445
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e5f64d4c8946513686206714aafadb298c6ceba5",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/fr/session.json",
+      "size_bytes": 13514
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "151d832aaec3974284be7f8cbbe4c78617c4d8f8",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/fr/settings.json",
+      "size_bytes": 21048
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1415f6acc35efefd81cc7d0e0bd7a6827b4cc17f",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/ja/common.json",
+      "size_bytes": 101
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0967ef424bce6791893e9a57bb952f80fd536e93",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/ja/errors.json",
+      "size_bytes": 3
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "61d782354615c909d8b8a254518aebc8a424c213",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/ja/inspector.json",
+      "size_bytes": 12313
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9078a147a16ab1b3861cca78fadc269247adfccd",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/ja/nav.json",
+      "size_bytes": 6034
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8a284a49a5b1757a452593dacb8a277f6ebdfa9e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/ja/pages.json",
+      "size_bytes": 6280
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7ce0a22cd42808124ca7b8eaeed0f8f8c109a89e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/ja/runs.json",
+      "size_bytes": 2533
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "005c9c64b1be9c1a11cc5d0608aff5f1c7b0bbaf",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/ja/session.json",
+      "size_bytes": 14155
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e9e934dc78eea3401f46dd4869520c2da9d7be38",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/ja/settings.json",
+      "size_bytes": 23928
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e342a3deedac8bd0075823e77d6a628f8023f071",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/ko/common.json",
+      "size_bytes": 92
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0967ef424bce6791893e9a57bb952f80fd536e93",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/ko/errors.json",
+      "size_bytes": 3
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7e9cd7531bec36c94fcab3f4851f7f006fa91ed4",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/ko/inspector.json",
+      "size_bytes": 11218
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c3cc502b6ccf0b98b4ff0bb8e8b374cb9ca20974",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/ko/nav.json",
+      "size_bytes": 5297
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "65d2df63a378be10a286e6dda3f1417e47ba1a39",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/ko/pages.json",
+      "size_bytes": 5537
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0d2c31a2bec3f143228d7684f317f67919fd4f04",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/ko/runs.json",
+      "size_bytes": 2265
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0a4d3ccb6a9620eed8d9ab8ccba86ab7f3baed9d",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/ko/session.json",
+      "size_bytes": 12963
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "18a1edda78dac514e8e6c3482e08187332a396e5",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/ko/settings.json",
+      "size_bytes": 21505
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "13fe40945b914509949b7203f3e31821d4f6f23c",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/zh-Hans/common.json",
+      "size_bytes": 92
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0967ef424bce6791893e9a57bb952f80fd536e93",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/zh-Hans/errors.json",
+      "size_bytes": 3
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e52197c047946d9a4a520e74365f689ecd6a749a",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/zh-Hans/inspector.json",
+      "size_bytes": 9904
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4d63af23099bde45d8a239286085b7db1f21f20e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/zh-Hans/nav.json",
+      "size_bytes": 4700
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "81b159a674e68f36d192b66de441afc352d0f774",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/zh-Hans/pages.json",
+      "size_bytes": 4733
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f5ebc101ef36901b1eea669bfb0017459c879e2d",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/zh-Hans/runs.json",
+      "size_bytes": 2090
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fc750550a99a15e9d91f5f0c5b5d8adba2e6a423",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/zh-Hans/session.json",
+      "size_bytes": 11594
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "be7c6c49a9d5c15f58d7652ee52101c9f3dcd076",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/locales/zh-Hans/settings.json",
+      "size_bytes": 18271
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a0b894aae1941c1bf5b7d8f7fe1ea62d3e34c289",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/parity.test.ts",
+      "size_bytes": 1679
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7c3755782056162a8dd156fb838fe6e084218d8a",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/i18n/resources.d.ts",
+      "size_bytes": 814
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "65f0d7a306fbd1a651a8754a457409eaff5b9bcc",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/index.css",
+      "size_bytes": 9324
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f3f630e4476fc846ef58d42dd36f065cb5118ab8",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/anomaly.test.ts",
+      "size_bytes": 1829
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "632465564dab027c1baa694047256f3969f19d19",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/anomaly.ts",
+      "size_bytes": 4737
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/api/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b41d4d10617ab1432bcd91b113143972da3f48a7",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/artifactFile.ts",
+      "size_bytes": 7115
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b834e36f32e7f91bf4b11c5fdabb50e4edd12608",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/artifacts.test.ts",
+      "size_bytes": 10868
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1abc6c70ee8237a49f819b1bdb71bb1e0f87d1dc",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/artifacts.ts",
+      "size_bytes": 14243
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "090ae8ce59265dc91fddf96b9e725101eda70dc3",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/bands.test.ts",
+      "size_bytes": 1843
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "67acb12f08126657dc7a60e92468faedb54c9ce8",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/bands.ts",
+      "size_bytes": 2943
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "70e8730ea8a575cf963b1a467f718ab93fba588e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/browser.ts",
+      "size_bytes": 3101
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d1a96f49285df1f9dc6b5568032f1bbe7d822e6b",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/chartPalette.test.ts",
+      "size_bytes": 1724
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ecb027145428bfd7a9e55dcac6beab7de92481a5",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/clipboard.ts",
+      "size_bytes": 615
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c7468211a47ca94ea95bb1cded362111ad6bd2d7",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/cn.ts",
+      "size_bytes": 245
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "702a7d762ee5f4994f062ae8c6c6e525bb6f24db",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/csv.test.ts",
+      "size_bytes": 2178
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "796beceebb8d0984c6b4964ecbd0d9b47562dff6",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/csv.ts",
+      "size_bytes": 3208
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0198bd5eeb24effea79cf52e28bc302636c1abc1",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/dos.test.ts",
+      "size_bytes": 1495
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "951058a5d10ffd002e0663cab047e997e6322885",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/dos.ts",
+      "size_bytes": 1874
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "cd6c5c306132e6da6981568d9db16ddadbf74b34",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/download.ts",
+      "size_bytes": 1340
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c50432c5771e46e88715250d35fa05521218f900",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/dragPane.ts",
+      "size_bytes": 9418
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/events/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "47cbfc576f667b644aaa5be8f6c5983e5593564b",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/exportSession.test.ts",
+      "size_bytes": 3593
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b855ce1d6029aab197436150c4f23734edc01ff5",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/exportSession.ts",
+      "size_bytes": 3302
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b0e0c09e5c654fc0c56361b6178a96973bbaf214",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/fits.fixtures.ts",
+      "size_bytes": 15694
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c6acb638c2f6126302504c68aa3a99c0ae06c356",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/fits.test.ts",
+      "size_bytes": 2567
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "07a9f21fb5c629ef8a1711036c4e5c99e51e8110",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/fits.ts",
+      "size_bytes": 7826
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "cae90d0b354e259b12500ed5abe6f271de8b8c3e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/genome.test.ts",
+      "size_bytes": 3047
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5c96761b223a83cae0721472469440673202b875",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/genome.ts",
+      "size_bytes": 7153
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "816a1355832b3e16e919b52ea4440a983ca6a842",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/kernel.ts",
+      "size_bytes": 2230
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "501132270799855cd4c0bd5a5f8ef0ae844a2496",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/layout.test.ts",
+      "size_bytes": 15102
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e4464a0cc630e90dc35b67a618659914af8ba94e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/layout.ts",
+      "size_bytes": 36134
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ac21e9a9bca19662ec4c1ecdfc59e088f372f904",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/mock/figures.ts",
+      "size_bytes": 10515
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e76314310c31b8876556ac23ca1cb12f4893c1b7",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/mock/index.ts",
+      "size_bytes": 25581
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f9f93cd4015ff4b91b3224ebcdbf82fcb8c03741",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/molecule.test.ts",
+      "size_bytes": 3034
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a74237ec37db61e0d1903433f390cd57a66cfe4f",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/molecule.ts",
+      "size_bytes": 3492
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "426ea5ff7021c12a6ae16f4f50806169798239c3",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/nativeMenu.guard.test.tsx",
+      "size_bytes": 2252
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "937ca09eb68691bae466fea4572ff5d29a7952a3",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/nativeMenu.test.ts",
+      "size_bytes": 3226
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c93c684c03d3e53f7f4c69a1984fb56804f30d13",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/nativeMenu.ts",
+      "size_bytes": 2584
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7d03f1b0cdfe70c0a4afe12f6fbb9398b7a8091c",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/notebook-file.test.ts",
+      "size_bytes": 4130
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "44e0918db0b248818c2d06ab168d37799c706330",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/notebook-file.ts",
+      "size_bytes": 4421
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "41aae52ed121813cc4d58b783f2b1339a13e625c",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/phase.test.ts",
+      "size_bytes": 2326
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1230a7aea7ab274cb4c6b8e9b6ec32447bd57f97",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/phase.ts",
+      "size_bytes": 3598
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a59f8d1984d13664e5f773178315ddbc961d251c",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/polyfills.ts",
+      "size_bytes": 768
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c6741a15ebd725b22061a5a63401b4a44233e0c3",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/pptx.test.ts",
+      "size_bytes": 4622
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e0ca1587888496f5c1f2a0b3b96cffa0743032c3",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/pptx.ts",
+      "size_bytes": 4901
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "34b272b333c1ed3cff59bf4f8c67095fbb1dc1e3",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/provenance.test.ts",
+      "size_bytes": 4282
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5d88da6d8546ea2b7ea1f2bce4c41d5d974f2ffc",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/provenance.ts",
+      "size_bytes": 5277
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7bec87ee3999b65a59e8bdd82aacc79efa2fb713",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/qcode.test.ts",
+      "size_bytes": 2842
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b6d78f8cc31180968b1552e6458e5ced167cfe55",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/qcode.ts",
+      "size_bytes": 4308
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b10b0689918a35445ab42637014f4f3cfa707022",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/relativeTime.ts",
+      "size_bytes": 1450
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f276eb35711e26c9b5f0db25281b9bfde5f165ba",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/review.test.ts",
+      "size_bytes": 2716
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "999445397de2acbee5713ba507dea0a749ba6c50",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/review.ts",
+      "size_bytes": 1716
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "34b01b99cd19e40c86578797da4fdd5a84a933cf",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/runs.test.ts",
+      "size_bytes": 10342
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "526eefcc9bf0197fc4d88c764958eba64df9f2c1",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/runs.ts",
+      "size_bytes": 13484
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "10a5b9a713d30e4f9f2ebdbf0e3fba12e5492a87",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/runtime.store.test.ts",
+      "size_bytes": 76094
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3ac4092b98421b5bc0bccf1bfae15b3175780836",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/runtime.test.ts",
+      "size_bytes": 19861
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "19e538afcb82b63b7ec4441f9747ee4c83d4d0f1",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/runtime.ts",
+      "size_bytes": 125749
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "97314711af6954bc70f75f28ef7f670796267c73",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/scienceConnectors.test.ts",
+      "size_bytes": 3744
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ecf6a782b59c91949974773e077104933410096b",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/scienceConnectors.ts",
+      "size_bytes": 4907
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "67ecd274256fa1ff794361432e05ef43672948ee",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/scrollMemory.test.ts",
+      "size_bytes": 6492
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f9071a157539086cb24fe26e937ed8ec82a1ef34",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/scrollMemory.ts",
+      "size_bytes": 4425
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ede725f715982bca012e39d851b0cd48d8b0a89e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/setup.test.ts",
+      "size_bytes": 5655
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fe18d358ea3191d1236487cfeec50e600939567e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/setup.ts",
+      "size_bytes": 7379
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e5b2969d8c93ffcca80d688abec9e75bd43a01bf",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/store.test.ts",
+      "size_bytes": 807
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "23d90e380ee1f5ee1a840c27daff3efd2d093077",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/store.ts",
+      "size_bytes": 6755
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/store/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "46d06afa0f8184a87f27a89d5333d6099534798c",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/systemNotification.test.ts",
+      "size_bytes": 2114
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "61c48267fe0383424017f10bc74b5cd6de690b68",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/systemNotification.ts",
+      "size_bytes": 834
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "314534af286eed90f542a8ecff1f18d42fa47496",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/tableChart.test.ts",
+      "size_bytes": 2308
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1599a2f114d49053192d232be386369d0f3be03e",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/tableChart.ts",
+      "size_bytes": 2605
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0b27f9a78c73e991278d37272478b191bc17ff53",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/tauri.ts",
+      "size_bytes": 37735
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/theme/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5c9d8710a2c3dc26ade6ab7a6cd07c582b4f2ed3",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/titlebar.test.ts",
+      "size_bytes": 1975
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "218a33025fdd68dc63ac2f2352d52c38867ec851",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/titlebar.ts",
+      "size_bytes": 1700
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ad4f3a4803a51e36577982ef7bd834e7895c99a3",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/toast.test.ts",
+      "size_bytes": 966
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "924fee389b60756ed0e99a4a9fd0f7355c7ded00",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/toast.ts",
+      "size_bytes": 871
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c9324471f6613ff1404c75f34c566b748f8862db",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/update.test.ts",
+      "size_bytes": 2970
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c8f2437e57be0a0bf07e722ce42f03349f907332",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/update.ts",
+      "size_bytes": 6726
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5fcf9981727ed20b8b48000607591dbc5a861050",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/useDragDivider.ts",
+      "size_bytes": 3650
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f1f33363ca6ddc2a45619e147b8d7e1f5ca98561",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/useIsMobile.ts",
+      "size_bytes": 899
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a04de83e37ca1e4afce494400b6d5b67c9a8eedf",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/useThrottledValue.test.tsx",
+      "size_bytes": 1894
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f73ac3d8f54b625958ecb1b9d6eed9e8e37e4ed6",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/useThrottledValue.ts",
+      "size_bytes": 1553
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8221fe0b4311389f05a0f8d3cac7db9e6964b7f8",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/webMode.ts",
+      "size_bytes": 4413
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d735d435ba2b87fa1b6325eed08e24c9522547bb",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/xlsx.test.ts",
+      "size_bytes": 2144
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2823454a8007c7acc6524bf3fda14f31ef583adb",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/lib/xlsx.ts",
+      "size_bytes": 5535
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "bce6981c4154d772964577d47d637fbb0b60e829",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/main.tsx",
+      "size_bytes": 1048
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "439e9a8bbb7a256ac304cb7f9872fe8be8ec9aad",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/test/opencode-client.node.test.ts",
+      "size_bytes": 23477
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a5062d36f2d0a8925b1bf380ce8be78aee9742c7",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/test/opencode-client.sessions.test.ts",
+      "size_bytes": 9604
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "10d270912e2587fbe6a0d998ee3092c9e9fdafc8",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/test/render.tsx",
+      "size_bytes": 402
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5143c18643dc103fd0af0a11096aea4d1b7b8147",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/test/setup.ts",
+      "size_bytes": 2337
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "dbb4c627d26fe006966ccd118ee6a08d53d364e9",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/src/vite-env.d.ts",
+      "size_bytes": 78
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ec6643dc5697cefa125a1f9eac557f87de4465d4",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/tailwind.config.js",
+      "size_bytes": 1104
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "03f77f1e20064d430ac4bdf9c08b98f6381231d3",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/tsconfig.json",
+      "size_bytes": 873
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "13c27fe62c135f57705a6c289ea9ebafceb4b038",
+      "kind": "git-blob-metadata-only",
+      "path": "apps/desktop/vite.config.ts",
+      "size_bytes": 754
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "87a506c793e5d6db8973907e726b6740d072da72",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/APP_OPERATOR.md",
+      "size_bytes": 6061
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "414cfc4505ab46f7e802eb3dab9884472ad393df",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/CONNECT_YOUR_TOOLS.md",
+      "size_bytes": 3700
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "072a7dc0c8fc76d93f591146dc1fc6a56340d7cf",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/PRD.md",
+      "size_bytes": 18101
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "79923e1a0b4d4fe05c8df4f982b67885ab361add",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/REQUIREMENTS.md",
+      "size_bytes": 49035
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7c180efbc4bb9a47adca7477f709ba94ea913632",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/TECHNICAL_DESIGN.md",
+      "size_bytes": 19026
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "aa116c0e06fd3f6c616ad0da1a1edad002d5f70b",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/banner.webp",
+      "size_bytes": 61858
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "18899aff66941b4500395689a9508d7077336514",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/showcase-browser.webp",
+      "size_bytes": 104080
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a22e5a6257bb0e3cbd57bf36441d8f64c2fad0ef",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/showcase-experiment.webp",
+      "size_bytes": 104754
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c6348cd2a991c6ee2cdd7012d618d452d3d37672",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/showcase-literature.webp",
+      "size_bytes": 129910
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "39052c5e5622f061db460e5761b55162201cf14c",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/showcase-mobile-home.webp",
+      "size_bytes": 30404
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6471cb271dd8a33ce2f5ff97b7bc488866d7bfec",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/showcase-mobile-reproduce.webp",
+      "size_bytes": 52484
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "359e56917c4caaf681f6293244f98ceb5229c35e",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/showcase-mobile-run.webp",
+      "size_bytes": 54784
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "376371067cd11e81dcc8f8b56cbb0d89801d7038",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/showcase-provenance.webp",
+      "size_bytes": 72812
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7791807e7b070e3e906dd19fdc6df1a4943e0251",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/showcase-remote.webp",
+      "size_bytes": 77604
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2d8167d024bb96c4dcde56d0e2f8bab6b46329b2",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/open-science-desktop-vs-openscience.md",
+      "size_bytes": 2433
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7234d8ec4f0d8f2f7703f328905c0b3c8a20b86d",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/research/2026-07-05-multidiscipline-needs.md",
+      "size_bytes": 16830
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e506a37b1c83e90d8ee53de96029b228089715ad",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/rfc/agent-runtime.md",
+      "size_bytes": 9729
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d5dfd2f4aa43c2c89bcc00f300d4dcda63bf6b4f",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/rfc/multi-agent-acp.md",
+      "size_bytes": 10505
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "31650af9768584da9364d72216c0ae60988f7394",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/rfc/remote-access-gateway.md",
+      "size_bytes": 17026
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "26623da01eb3e4f2eeb8290c2324d3b110e45458",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/bci-trends/.codegraph",
+      "size_bytes": 62
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "73ac92ac1e75d630a6b54e76fb042da293bf2849",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/bci-trends/.omo/run-continuation/ses_0dc5bf101ffeSeRnQ4wmudTJtW.json",
+      "size_bytes": 214
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "12583cad9be288af51c2de0b9de0defc0d6c68d7",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/bci-trends/.omo/run-continuation/ses_0dc5c901fffeS1D2okx256DtJ7.json",
+      "size_bytes": 214
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "465ea66de17983dafb20e3f85c4c7f29b08c1173",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/bci-trends/.omo/run-continuation/ses_0dc5d29b8ffedzx0VWj0zaibp7.json",
+      "size_bytes": 214
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "58d446f00782a80a072797556494b3d1849d71eb",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/bci-trends/README.md",
+      "size_bytes": 725
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/bci-trends/artifacts/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/bci-trends/data/processed/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/bci-trends/data/raw/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/bci-trends/figures/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/bci-trends/notebooks/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/bci-trends/papers/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/bci-trends/parsed/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/bci-trends/reports/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/bci-trends/reviews/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/bci-trends/scripts/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ed62734b9b99c01775bdf0ce2b1d2112687c5e27",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/climate-trends/README.md",
+      "size_bytes": 1321
+    },
+    {
+      "candidate_asset_kind": "data",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "78388d50c99ee0b3023297f61e6bfe9d45cf3e83",
+      "kind": "git-blob-metadata-only",
+      "path": "examples/climate-trends/data/gistemp_global_means.csv",
+      "size_bytes": 12883
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "aefb0504b678dc8fd1a76f4b7f3f16dbea467322",
+      "kind": "git-blob-metadata-only",
+      "path": "package.json",
+      "size_bytes": 1093
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1167374a964b44b62c4dbc29e5a30771735d5595",
+      "kind": "git-blob-metadata-only",
+      "path": "packages/sdk/README.md",
+      "size_bytes": 794
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6cb062ff390e4a4dff3b6f21ba38a9a9d5f65ad6",
+      "kind": "git-blob-metadata-only",
+      "path": "packages/sdk/package.json",
+      "size_bytes": 289
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d63eaadc1758568627941c1685c1a112d0460d7a",
+      "kind": "git-blob-metadata-only",
+      "path": "packages/sdk/src/OpenCodeClient.ts",
+      "size_bytes": 62489
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8d72f4b28d536a3d558a42e520718ee5af0163d8",
+      "kind": "git-blob-metadata-only",
+      "path": "packages/sdk/src/base-runtime.ts",
+      "size_bytes": 2396
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "eb1c0fc22df229753692390c7ecea3fc47fb158a",
+      "kind": "git-blob-metadata-only",
+      "path": "packages/sdk/src/index.ts",
+      "size_bytes": 929
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e70c56510245c45bb791206261aa19b53dfb3bb6",
+      "kind": "git-blob-metadata-only",
+      "path": "packages/sdk/src/mockServer.ts",
+      "size_bytes": 11249
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fdc807fc4336388642ab447d545a12b85a81f5f7",
+      "kind": "git-blob-metadata-only",
+      "path": "packages/sdk/src/runtime.ts",
+      "size_bytes": 4912
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c7ec5b113fb9b6ce41b6dab2a3fe98434c2be322",
+      "kind": "git-blob-metadata-only",
+      "path": "packages/sdk/src/types.ts",
+      "size_bytes": 12994
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d38fd3f1931f8d57847ab1d172ada343010d8334",
+      "kind": "git-blob-metadata-only",
+      "path": "packages/sdk/tsconfig.json",
+      "size_bytes": 350
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d1eac84781abc56a99d183135a63e938c467ce3e",
+      "kind": "git-blob-metadata-only",
+      "path": "packages/shared/README.md",
+      "size_bytes": 408
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c5542aa81b19b79423a423ba3f4a1639d6459c4d",
+      "kind": "git-blob-metadata-only",
+      "path": "packages/shared/package.json",
+      "size_bytes": 189
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fd9b1bae1d3b9ea197986b179493411268659650",
+      "kind": "git-blob-metadata-only",
+      "path": "packages/shared/src/index.ts",
+      "size_bytes": 17192
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "176dcf241ba2cb74f1c643966fb2be1492c439db",
+      "kind": "git-blob-metadata-only",
+      "path": "packages/shared/tsconfig.json",
+      "size_bytes": 284
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "636aa7329148b0088779aa33c8a5f08419ef315a",
+      "kind": "git-blob-metadata-only",
+      "path": "packages/ui/README.md",
+      "size_bytes": 398
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "aae50c7697b5eb9cccf630d9bd96c1789d217083",
+      "kind": "git-blob-metadata-only",
+      "path": "pnpm-lock.yaml",
+      "size_bytes": 237248
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3ff5faaaf5f139c707e338e7e89e51606e9e0ace",
+      "kind": "git-blob-metadata-only",
+      "path": "pnpm-workspace.yaml",
+      "size_bytes": 40
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7f63c8ec458ffb6120eecf2e2ee9b8fa376ec785",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/harness/.gitignore",
+      "size_bytes": 25
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4c51666adf216d89182847dcebc261986b02c8fd",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/harness/AGENTS.md",
+      "size_bytes": 2688
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4dbd577fd8a5af8690a83e4701f6cc583eb83add",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/harness/KNOWLEDGE.md",
+      "size_bytes": 177
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "dd852bbf62df825e68c7ba660949d1af0bbeb559",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/harness/README.md",
+      "size_bytes": 1159
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c304a06f6019f4983130589fd823c94f505329f9",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/harness/knowledge/current-state.md",
+      "size_bytes": 165
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ebfc39cf7aa511dd5e7c8af92e7a535dbb705930",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/harness/knowledge/system.md",
+      "size_bytes": 297
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/harness/notes/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a9d84133061886a475f50113c11bf2e0bd85ca1d",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/kernel/kernel_bridge.R",
+      "size_bytes": 3179
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "413581e0b38aef14b153b4f7d48c31c77f0a0383",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/kernel/kernel_bridge.py",
+      "size_bytes": 3016
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "606ace0098e52e730b2a37e1d78cbd55ddc4bc65",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/manager/README.md",
+      "size_bytes": 975
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c122e1d33b2def9db7b7db5a95b7fe62db8039f5",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/mcp/README.md",
+      "size_bytes": 554
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ef2a2fbd526a1d7d7f0ac0553556d19e5a3886e7",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/opencode-profile/README.md",
+      "size_bytes": 1247
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/opencode-profile/skills/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "58ab3c9fdfbc45c405b343a7566dc60b2ec0f38f",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/skills/README.md",
+      "size_bytes": 2409
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/skills/core/bibliometric-analysis/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/skills/core/citation-reviewer/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "35136e15c07d52275dca49385e6d1c1efe4ce11a",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/skills/core/domain-check/SKILL.md",
+      "size_bytes": 4505
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6d4c5c21e6fc52f5de63bc8284232c61f5600337",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/skills/core/domain-check/domain_check.py",
+      "size_bytes": 27987
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/skills/core/figure-provenance/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "27ca2aa887d85a61aee066320ad6e2d457b7f4c0",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/skills/core/large-file/SKILL.md",
+      "size_bytes": 3886
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d7a3d6a3f849f5c9df5d1c5e7a262876b05b5f5c",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/skills/core/large-file/large_file_probe.py",
+      "size_bytes": 20451
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/skills/core/literature-review/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "bb90deebd38f4babb13400f2f7136be589aedfa7",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/skills/core/modal-run/SKILL.md",
+      "size_bytes": 4536
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "55b0d1c8f7b22aca11e2dcb8d2c97a8a501a9a74",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/skills/core/modal-run/record_run.py",
+      "size_bytes": 9167
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/skills/core/paper-to-report/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e16648a0b5bd99bc413eac38f14575fbd522e7b1",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/skills/core/publication-figures/SKILL.md",
+      "size_bytes": 6175
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6c1e23542edff66487b5f1fbaa1c8b75e2348c15",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/skills/core/publication-figures/openscience.mplstyle",
+      "size_bytes": 1625
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "715c914b1200de280d2e230e1c4e6072183466e5",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/skills/core/remote-compute/SKILL.md",
+      "size_bytes": 8912
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "55b0d1c8f7b22aca11e2dcb8d2c97a8a501a9a74",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/skills/core/remote-compute/record_run.py",
+      "size_bytes": 9167
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/skills/core/reproducible-research/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "513a944ae998c7fec59f95026d51fe0eb49f82e7",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/skills/core/stats-integrity/SKILL.md",
+      "size_bytes": 3864
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "64a1b9a115aff1ad71534e9ee4971f2f44e966d2",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/skills/core/stats-integrity/stats_integrity_check.py",
+      "size_bytes": 11018
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "553eb526e1ca05cee009a6e7c4e4db9a1cf171a7",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/skills/core/traceability-review/SKILL.md",
+      "size_bytes": 4417
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "050a3e67e9d4434b4ebee3f8fabcd3a9c8c92f78",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/skills/core/traceability-review/pdf_extract.py",
+      "size_bytes": 5245
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "00e35dbd1cc98e4ea1830494cfdc81973bc19139",
+      "kind": "git-blob-metadata-only",
+      "path": "runtime/tools/present_artifact.ts",
+      "size_bytes": 3290
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ecc7a22fa278895de40944a36fa44264784153f3",
+      "kind": "git-blob-metadata-only",
+      "path": "scripts/README.md",
+      "size_bytes": 266
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "scripts/dev/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "059bb14195af221c05dde101b47940cfa48fb369",
+      "kind": "git-blob-metadata-only",
+      "path": "scripts/dev/fetch-agent-browser.sh",
+      "size_bytes": 1408
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "da820f7a232379013a0e8c5ee34ebc0bda070f7c",
+      "kind": "git-blob-metadata-only",
+      "path": "scripts/dev/fetch-goal-plugin.sh",
+      "size_bytes": 2193
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a71b2554e9cddbaf3e621f9d444c6abc617cc716",
+      "kind": "git-blob-metadata-only",
+      "path": "scripts/dev/fetch-opencode.sh",
+      "size_bytes": 1801
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b3c37c496c3af3d005fe41ba4f051753c1ac12c5",
+      "kind": "git-blob-metadata-only",
+      "path": "scripts/dev/fetch-skills.sh",
+      "size_bytes": 2116
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2fe67a8cb022dcd2553cedd9700d89aa21f662d8",
+      "kind": "git-blob-metadata-only",
+      "path": "scripts/dev/fetch-uv.sh",
+      "size_bytes": 1377
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "94164a03072755e8b95036962a8bd002db932f16",
+      "kind": "git-blob-metadata-only",
+      "path": "scripts/dev/test_domain_check.py",
+      "size_bytes": 11074
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f0e354a86a4e92d0f9d52dd822cc25a0087719ae",
+      "kind": "git-blob-metadata-only",
+      "path": "scripts/dev/test_large_file_probe.py",
+      "size_bytes": 7932
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1f99a4525f44885ae76feea4e6c67699e1f4bc16",
+      "kind": "git-blob-metadata-only",
+      "path": "scripts/dev/test_pdf_extract.py",
+      "size_bytes": 4419
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "30016a109336f86a263acd9eee22bb035edc0ac2",
+      "kind": "git-blob-metadata-only",
+      "path": "scripts/dev/test_record_run_guard.py",
+      "size_bytes": 2683
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1365357f894399c367471f06a3128552677409ea",
+      "kind": "git-blob-metadata-only",
+      "path": "scripts/dev/test_stats_integrity.py",
+      "size_bytes": 5764
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "scripts/release/.gitkeep",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ac2dcfa70d54ec1ec3dd92c890a628c4905b2243",
+      "kind": "git-blob-metadata-only",
+      "path": "scripts/release/finalize-macos-notarization.sh",
+      "size_bytes": 5422
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f380dc4e8df1c4f511504959faf269417022f0c9",
+      "kind": "git-blob-metadata-only",
+      "path": "scripts/release/verify-macos-signing.sh",
+      "size_bytes": 1483
+    }
+  ],
+  "exact_commit": "f3928bda37acfdbe3dfe18792fc1eca38c2e884f",
+  "recorded_at": "2026-08-01T18:08:00+08:00",
+  "schema_version": 1,
+  "scope": "Git tree metadata only; no source blob content was fetched or retained; every entry remains quarantined.",
+  "source_id": "ai4s-research-open-science"
+}

@@ -131,8 +131,8 @@ def verify_forbidden_paths(value: dict[str, Any]) -> dict[tuple[str, str], dict[
     }
     require(required.issubset(found), "forbidden-paths is missing a required proprietary OpenClaudeScience rule")
     require(
-        ("ai4s-research-open-science", "runtime/skills/external/**") in found,
-        "forbidden-paths is missing the required AI4S external-skill rule",
+        ("ai4s-research-open-science", "runtime/opencode-profile/**") in found,
+        "forbidden-paths is missing the required AI4S OpenCode-profile rule",
     )
     return found
 

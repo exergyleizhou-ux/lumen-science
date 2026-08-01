@@ -6,6 +6,7 @@
   "archive_sha256": "5cd37c71206a5b9c55f820a454884c01b4731d01e06250f9883ed45c485292b4",
   "root_license": {"spdx": "MIT", "path": "LICENSE", "sha256": "8f844b63f71cc8acb08d844081425183bc28fbb7312e1576651d2cf4cc013738"},
   "nested_license_inventory": [["LICENSE", "8f844b63f71cc8acb08d844081425183bc28fbb7312e1576651d2cf4cc013738"]],
+  "tree_inventory": {"path": "third_party/intake-inventories/ai4s-research-open-science-f392-tree-metadata.json", "sha256": "06d139dfba1f2393992c0540ee4d85a075057ad495dfc8bda33c74c06fa72f7a", "entry_count": 549},
   "runtime_admission": "none",
   "rights_status": "pending-github-metadata-reconciliation"
 }
