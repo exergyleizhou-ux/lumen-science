@@ -195,6 +195,28 @@ def verify_evidence_record(source: dict[str, Any], record_path: str, label: str)
         actual_digest == source["nested_license_scan"]["sha256"],
         f"{label} evidence record nested license inventory digest disagrees with lock",
     )
+    tree_inventory = evidence.get("tree_inventory")
+    if tree_inventory is not None:
+        require(isinstance(tree_inventory, dict), f"{label} tree_inventory must be an object")
+        inventory_path = require_relative_glob(tree_inventory.get("path"), f"{label} tree_inventory.path")
+        require_sha(tree_inventory.get("sha256"), f"{label} tree_inventory.sha256")
+        entry_count = tree_inventory.get("entry_count")
+        require(isinstance(entry_count, int) and entry_count > 0, f"{label} tree_inventory.entry_count must be positive")
+        raw_inventory = (ROOT / inventory_path).read_bytes()
+        require(
+            hashlib.sha256(raw_inventory).hexdigest() == tree_inventory["sha256"],
+            f"{label} tree inventory digest disagrees with receipt",
+        )
+        inventory = json.loads(raw_inventory)
+        require(inventory.get("source_id") == source["id"], f"{label} tree inventory source_id disagrees with receipt")
+        require(inventory.get("exact_commit") == source["exact_commit"], f"{label} tree inventory commit disagrees with receipt")
+        entries = inventory.get("entries")
+        require(isinstance(entries, list) and len(entries) == entry_count, f"{label} tree inventory entry_count disagrees with receipt")
+        require(all(isinstance(entry, dict) for entry in entries), f"{label} tree inventory has a malformed entry")
+        require(
+            all(entry.get("disposition") == "quarantine" and entry.get("execution_authority") == "none" for entry in entries),
+            f"{label} tree inventory contains a non-quarantined or executable entry",
+        )
 
 
 def verify_source_records(
