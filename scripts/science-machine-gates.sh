@@ -27,8 +27,8 @@ ok "v2 intake and Motif provenance contracts"
 python3 scripts/test-lumen-platform-pin.py || fail "canonical Lumen consumer pin contract"
 ok "canonical Lumen consumer pin contract"
 
-python3 scripts/test-capability-intake.py || fail "Motif capability intake contract"
-ok "Motif capability intake contract"
+python3 scripts/test-capability-intake.py || fail "capability intake contracts"
+ok "capability intake contracts"
 
 python3 - <<'PY' || fail "fusion-sources.lock.json"
 import json
