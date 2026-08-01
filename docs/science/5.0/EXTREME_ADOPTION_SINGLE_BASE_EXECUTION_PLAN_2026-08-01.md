@@ -7,6 +7,7 @@
 **当前 Rust source baseline：** `979e2848076ee88b381eb71b3bac42c530701e70`（`1fa748a` 只刷新了与该源码一致的漂移锁）
 **Canonical Lumen：** 独立会话维护；本计划只读取、精确 pin、通过兼容契约协作，绝不覆盖该会话的工作树  
 **自治控制平面补充：** [`NEXT_GENERATION_AUTONOMY_CONTROL_PLANE_EXECUTION_PLAN_2026-08-01.md`](NEXT_GENERATION_AUTONOMY_CONTROL_PLANE_EXECUTION_PLAN_2026-08-01.md) 定义 Advisor/模型选择、三代委派、双模研究记忆、Kairos/daemon 的权威边界与实施顺序；其中 Lumen 另一会话的建议在合入可复现 commit 前均视为候选合同。
+**最终执行次序：** [`LUMEN_SCIENCE_NEXTGEN_FINAL_EXECUTION_BOOK_2026-08-01.md`](LUMEN_SCIENCE_NEXTGEN_FINAL_EXECUTION_BOOK_2026-08-01.md) 将本计划、自治计划和九源 intake 合为单一依赖/验收顺序；本计划保留为技术与来源细节，不删除。
 
 ---
 

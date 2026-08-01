@@ -6,6 +6,7 @@
 **Science 证据快照：** `ls5-core-v0.1.251-sync@a93446fc230e54d2e4616c303e89686268ec398d`
 **Canonical Lumen 状态：** 另一个工作会话正在设计；本文件只把其建议当作**未合入候选合同**。在其进入一个可复现的 Lumen commit、compatibility manifest 和 CI 前，Science 不得依赖它。
 **范围：** macOS first；不在本阶段制作 Windows 产品证明、release、live/provider/billable 调用或自动部署。
+**最终执行次序：** [`LUMEN_SCIENCE_NEXTGEN_FINAL_EXECUTION_BOOK_2026-08-01.md`](LUMEN_SCIENCE_NEXTGEN_FINAL_EXECUTION_BOOK_2026-08-01.md) 增加 Lumen R0/NG 依赖、九源 intake 和精确交接顺序；本文件仍是自治语义与反证细节的参考。
 
 ---
 
