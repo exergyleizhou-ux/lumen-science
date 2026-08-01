@@ -14,6 +14,8 @@ const INIT_H_KCAL_PER_MOL: f64 = 0.1;
 const INIT_S_CAL_PER_MOL_K: f64 = -2.8;
 const MIN_STEM_OR_DIMER_BASES: usize = 3;
 const MIN_HAIRPIN_LOOP_BASES: usize = 3;
+/// At most 16 candidates gives at most 120 unordered hetero-dimer screens.
+pub const MAX_PRIMER_CANDIDATES: usize = 16;
 
 /// Approximate first-order screening cutoff compatible with the source slice.
 pub const DEFAULT_MAX_HAIRPIN_DELTA_G_KCAL_PER_MOL: f64 = -3.0;
@@ -38,6 +40,32 @@ pub struct DimerResult {
     pub pair_length: usize,
     pub offset: isize,
     pub structure: String,
+}
+
+/// One input primer after the deterministic DNA normalization used by Motif.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrimerScreen {
+    pub sequence: String,
+    pub hairpin: HairpinResult,
+    pub self_dimer: DimerResult,
+}
+
+/// One unordered pair of candidate primers, represented by input indices.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrimerPairDimer {
+    pub first_index: usize,
+    pub second_index: usize,
+    pub dimer: DimerResult,
+}
+
+/// Deterministic secondary-structure screen for a bounded caller-owned list.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrimerThermodynamicsReport {
+    pub primers: Vec<PrimerScreen>,
+    pub hetero_dimers: Vec<PrimerPairDimer>,
 }
 
 fn round_hundredth(value: f64) -> f64 {
@@ -210,6 +238,45 @@ pub fn predict_self_dimer(primer: &str) -> DimerResult {
     predict_primer_dimer(primer, primer)
 }
 
+/// Screen each candidate and each unordered pair.  This helper intentionally
+/// accepts no paths, handles, commands, URLs, or mutable stores.
+pub fn screen_primer_candidates(
+    candidates: &[String],
+) -> Result<PrimerThermodynamicsReport, String> {
+    if candidates.len() > MAX_PRIMER_CANDIDATES {
+        return Err(format!(
+            "primer candidate count {} exceeds maximum {MAX_PRIMER_CANDIDATES}",
+            candidates.len()
+        ));
+    }
+    let normalized: Vec<String> = candidates
+        .iter()
+        .map(|candidate| normalized_dna(candidate))
+        .collect();
+    let primers = normalized
+        .iter()
+        .map(|sequence| PrimerScreen {
+            sequence: sequence.clone(),
+            hairpin: predict_hairpin(sequence),
+            self_dimer: predict_self_dimer(sequence),
+        })
+        .collect();
+    let mut hetero_dimers = Vec::new();
+    for first_index in 0..normalized.len() {
+        for second_index in first_index + 1..normalized.len() {
+            hetero_dimers.push(PrimerPairDimer {
+                first_index,
+                second_index,
+                dimer: predict_primer_dimer(&normalized[first_index], &normalized[second_index]),
+            });
+        }
+    }
+    Ok(PrimerThermodynamicsReport {
+        primers,
+        hetero_dimers,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -289,5 +356,33 @@ mod tests {
                 expected["structure"].as_str().expect("structure")
             );
         }
+    }
+
+    #[test]
+    fn bounded_report_keeps_only_unordered_hetero_pairs_and_normalized_sequences() {
+        let report = screen_primer_candidates(&[
+            "AUGC-N".to_owned(),
+            "CGCTCGGTACG".to_owned(),
+            "CGTACCGAGCG".to_owned(),
+        ])
+        .expect("bounded candidates");
+        assert_eq!(report.primers.len(), 3);
+        assert_eq!(report.primers[0].sequence, "ATGC");
+        assert_eq!(report.hetero_dimers.len(), 3);
+        assert_eq!(report.hetero_dimers[0].first_index, 0);
+        assert_eq!(report.hetero_dimers[0].second_index, 1);
+        let strongest = report
+            .hetero_dimers
+            .iter()
+            .find(|pair| pair.first_index == 1 && pair.second_index == 2)
+            .expect("complementary pair exists");
+        assert_eq!(strongest.dimer.delta_g, -14.72);
+    }
+
+    #[test]
+    fn candidate_count_cap_fails_before_quadratic_pairing() {
+        let candidates = vec!["ATGC".to_owned(); MAX_PRIMER_CANDIDATES + 1];
+        let error = screen_primer_candidates(&candidates).expect_err("candidate cap");
+        assert!(error.contains("exceeds maximum"));
     }
 }
