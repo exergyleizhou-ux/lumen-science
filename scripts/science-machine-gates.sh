@@ -21,6 +21,12 @@ python3 scripts/test-upstream-component-coverage.py || fail "upstream component 
 python3 scripts/test-motif-provenance-lock.py || fail "Motif product provenance lock"
 ok "v2 intake and Motif provenance contracts"
 
+# The Lumen consumer pin remains a deliberate non-pass until its upstream R0
+# and public extension contract have immutable evidence.  Its tests ensure a
+# later activation cannot omit source, API, CI, binary, or rollback evidence.
+python3 scripts/test-lumen-platform-pin.py || fail "canonical Lumen consumer pin contract"
+ok "canonical Lumen consumer pin contract"
+
 python3 - <<'PY' || fail "fusion-sources.lock.json"
 import json
 from pathlib import Path
