@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "status": "active-containment",
+  "upstream_lock_sha256": "7e40515384151230ec69c25840e2825bd8ed4a8840c91590d4cb7760e79d2c58",
+  "purpose": "Every discovered external source-tree entry is either matched by one selected v2 component disposition or held by the explicit default quarantine. This is containment coverage, not per-file rights approval or runnable-capability admission.",
+  "default": {
+    "disposition": "quarantine",
+    "execution_authority": "none",
+    "reuse_mode": "none"
+  },
+  "sources": [
+    {"source_id":"snap-stanford-biomni","tree_sha256":"c508dd116225ada9ba3a92cff4660872308bb9b263b5be340ecf05e9a60daf71","entry_count":231},
+    {"source_id":"jvogan-motif","tree_sha256":"75dd199f61c2acc3e1528c5abe4542b7902f16f76b879f19fbfaffb77e365c95","entry_count":280},
+    {"source_id":"aipoch-open-science","tree_sha256":"8a6ffe51911cd2dfb72302a7cab344a110430c67cc6ef582def35f3806a539c9","entry_count":1262},
+    {"source_id":"qzzqzzb-openclaudescience","tree_sha256":"8d87da59c0aecfaebb5e1330bc1ad332237e65ce649b4c56165dd483929d2095","entry_count":553},
+    {"source_id":"hust-ningkang-lab-bgc-prophet","tree_sha256":"0c114158be6b3d1b8bd7e6970cedc4032f99aaf8f354164c502b84dc891fb648","entry_count":41},
+    {"source_id":"aurekaresearch-opendde","tree_sha256":"ee2e7c647b88f12194e4bf4b2b9c025229e126687edf9560bb0361de222995e9","entry_count":223},
+    {"source_id":"ai4s-research-open-science","tree_sha256":"06d139dfba1f2393992c0540ee4d85a075057ad495dfc8bda33c74c06fa72f7a","entry_count":549}
+  ],
+  "excluded_pending_core_sources": [
+    "exergyleizhou-ux-lumen: no immutable R0 source receipt",
+    "exergyleizhou-ux-lumen-science: this repository is the containment consumer, not an external source tree"
+  ],
+  "non_claims": [
+    "Default quarantine is not a rights review.",
+    "A selected adapt disposition is not a product implementation or execution grant.",
+    "No source entry can acquire execution authority through this manifest."
+  ]
+}

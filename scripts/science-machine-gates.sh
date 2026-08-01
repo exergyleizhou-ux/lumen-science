@@ -18,6 +18,7 @@ python3 scripts/test-upstream-intake-dashboard.py || fail "upstream v2 intake da
 python3 scripts/test-upstream-git-tree-inventory.py || fail "metadata tree inventory"
 python3 scripts/test-upstream-tree-inventory.py || fail "checkout tree inventory"
 python3 scripts/test-upstream-component-coverage.py || fail "upstream component coverage"
+python3 scripts/test-upstream-containment.py || fail "external source containment"
 python3 scripts/test-motif-provenance-lock.py || fail "Motif product provenance lock"
 ok "v2 intake and Motif provenance contracts"
 
