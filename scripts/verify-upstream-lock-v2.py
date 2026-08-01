@@ -177,6 +177,40 @@ def verify_component(
         require(reuse_mode == "none", f"{label} rejected component cannot have a reuse mode")
 
 
+def verify_ai4s_license_reconciliation(source: dict[str, Any], evidence: dict[str, Any], label: str) -> None:
+    """Require a durable explanation for GitHub's classifier/text mismatch.
+
+    GitHub reported ``NOASSERTION`` for this exact repository revision even
+    though the immutable LICENSE blob is an MIT grant.  The raw pinned blob is
+    the rights evidence; the API classifier remains recorded as a conflicting
+    observation rather than being silently overwritten.  This only verifies
+    the root license and never relaxes per-path third-party restrictions.
+    """
+    reconciliation = evidence.get("license_metadata_reconciliation")
+    require(isinstance(reconciliation, dict), f"{label} lacks AI4S license metadata reconciliation")
+    github = reconciliation.get("github_api")
+    require(isinstance(github, dict), f"{label} AI4S reconciliation github_api is malformed")
+    require(
+        github.get("repository_license_spdx_id") == "NOASSERTION",
+        f"{label} AI4S reconciliation must preserve GitHub NOASSERTION",
+    )
+    require(
+        github.get("license_blob_sha") == "39738f6927a1af8ab05f682977046b5320ccdd95",
+        f"{label} AI4S reconciliation license blob does not match the pinned revision",
+    )
+    pinned = reconciliation.get("pinned_license_text")
+    require(pinned == source["root_license"], f"{label} AI4S reconciliation pinned license disagrees with lock")
+    require(
+        reconciliation.get("conclusion") == "root-license-verified-from-pinned-file",
+        f"{label} AI4S reconciliation conclusion is not fail-closed",
+    )
+    scope = reconciliation.get("scope")
+    require(
+        isinstance(scope, str) and "third-party" in scope and "no execution authority" in scope,
+        f"{label} AI4S reconciliation scope must preserve third-party and authority boundaries",
+    )
+
+
 def verify_evidence_record(source: dict[str, Any], record_path: str, label: str) -> set[str] | None:
     path = ROOT / record_path
     evidence = load_json(path, f"{label} evidence record")
@@ -187,6 +221,8 @@ def verify_evidence_record(source: dict[str, Any], record_path: str, label: str)
     require(evidence.get("runtime_admission") == "none", f"{label} evidence record cannot admit a runtime")
     root_license = evidence.get("root_license")
     require(root_license == source["root_license"], f"{label} evidence record root license disagrees with lock")
+    if source["id"] == "ai4s-research-open-science":
+        verify_ai4s_license_reconciliation(source, evidence, label)
     inventory = evidence.get("nested_license_inventory")
     require(isinstance(inventory, list) and inventory, f"{label} evidence record has no nested license inventory")
     encoded = json.dumps(inventory, separators=(",", ":"), ensure_ascii=True).encode("utf-8")

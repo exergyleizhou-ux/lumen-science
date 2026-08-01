@@ -234,6 +234,25 @@ def main() -> int:
     actual_output = actual.stdout + actual.stderr
     results.append(("the checked-in draft has nine matching evidence records", actual.returncode == 2 and "nine-source evidence" in actual_output, "" if actual.returncode == 2 and "nine-source evidence" in actual_output else f"exit={actual.returncode}; output={actual_output.strip()[:240]!r}"))
 
+    checked_in_lock = json.loads((ROOT / "third_party/upstream-lock.v2.json").read_text(encoding="utf-8"))
+    ai4s_source = next(source for source in checked_in_lock["sources"] if source["id"] == "ai4s-research-open-science")
+    ai4s_evidence = json.loads((ROOT / "third_party/intake-evidence/ai4s-research-open-science.json").read_text(encoding="utf-8"))
+    try:
+        verifier_module.verify_ai4s_license_reconciliation(ai4s_source, ai4s_evidence, "AI4S")
+        ai4s_reconciliation_is_bound = True
+    except ValueError:
+        ai4s_reconciliation_is_bound = False
+    results.append(("AI4S NOASSERTION metadata cannot silently override the pinned MIT LICENSE", ai4s_reconciliation_is_bound, "" if ai4s_reconciliation_is_bound else "checked-in AI4S reconciliation was rejected"))
+
+    altered_ai4s_evidence = copy.deepcopy(ai4s_evidence)
+    altered_ai4s_evidence["license_metadata_reconciliation"]["github_api"]["repository_license_spdx_id"] = "MIT"
+    try:
+        verifier_module.verify_ai4s_license_reconciliation(ai4s_source, altered_ai4s_evidence, "AI4S")
+        ai4s_metadata_tamper_rejected = False
+    except ValueError as error:
+        ai4s_metadata_tamper_rejected = "preserve GitHub NOASSERTION" in str(error)
+    results.append(("AI4S reconciliation rejects a rewritten GitHub classifier", ai4s_metadata_tamper_rejected, "" if ai4s_metadata_tamper_rejected else "rewritten classifier was accepted"))
+
     passed = sum(1 for _, good, _ in results if good)
     print("test-upstream-intake-v2")
     for name, good, detail in results:

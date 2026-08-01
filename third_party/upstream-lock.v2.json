@@ -105,7 +105,7 @@
       ]
     },
     {
-      "id":"ai4s-research-open-science", "repository":"https://github.com/ai4s-research/open-science.git", "exact_commit":"f3928bda37acfdbe3dfe18792fc1eca38c2e884f", "archive_sha256":"5cd37c71206a5b9c55f820a454884c01b4731d01e06250f9883ed45c485292b4", "rights_status":"pending", "source_gate_status":"evidence-collected",
+      "id":"ai4s-research-open-science", "repository":"https://github.com/ai4s-research/open-science.git", "exact_commit":"f3928bda37acfdbe3dfe18792fc1eca38c2e884f", "archive_sha256":"5cd37c71206a5b9c55f820a454884c01b4731d01e06250f9883ed45c485292b4", "rights_status":"verified", "source_gate_status":"evidence-collected",
       "root_license":{"spdx":"MIT","path":"LICENSE","sha256":"8f844b63f71cc8acb08d844081425183bc28fbb7312e1576651d2cf4cc013738"}, "nested_license_scan":{"status":"complete","sha256":"b92075fa7cf18c86f791609eeef9fedd66598c7c518ee4ca5180c3cadc7e32ed"},
       "components":[
         {"id":"run-projection-ux","path":"apps/desktop/src-tauri/src/**","asset_kind":"code","disposition":"quarantine","reuse_mode":"none","rights_status":"restricted","execution_authority":"none","evidence":{"source_sha256":"5cd37c71206a5b9c55f820a454884c01b4731d01e06250f9883ed45c485292b4","record":"third_party/intake-evidence/ai4s-research-open-science.json"}},
@@ -129,7 +129,6 @@
   ],
   "blocked_by": [
     "I1-02 records immutable source evidence, but final legal/asset review and source-to-component completeness remain open.",
-    "AI4S root LICENSE and repository metadata still require explicit reconciliation before its source rights can be verified.",
     "Lumen remains source-gate blocked; it is cataloged here but not pin eligible."
   ]
 }
