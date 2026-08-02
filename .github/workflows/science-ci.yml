@@ -13,6 +13,8 @@ on:
       - 'scripts/verify-science-crate-drift.py'
       - 'scripts/verify-nextgen-baseline.py'
       - 'scripts/test-nextgen-baseline.py'
+      - 'scripts/verify-nextgen-canonical-book.py'
+      - 'scripts/test-nextgen-canonical-book.py'
       - 'third_party/science-core-ownership.v1.json'
       - 'scripts/science-go-module-boundary.sh'
       - 'scripts/verify-release-assets.sh'
@@ -23,6 +25,10 @@ on:
       - 'docs/science/5.0/science-crate-drift-audit-2026-08-01.json'
       - 'docs/science/5.0/NEXTGEN_BASELINE.json'
       - 'docs/science/5.0/NEXTGEN_GATE_REGISTRY.json'
+      - 'docs/science/5.0/NEXTGEN_CANONICAL_EXECUTION_BOOK.lock.json'
+      - 'docs/science/5.0/LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-02.md'
+      - 'docs/science/5.0/PLAN_SUPERSESSION_MAP.md'
+      - 'docs/science/5.0/README.md'
       - 'docs/science/fusion-sources.lock.json'
       # agent/**: same reasoning as the pull_request trigger below — core
       # changes reach main through merges, and the record on main should carry

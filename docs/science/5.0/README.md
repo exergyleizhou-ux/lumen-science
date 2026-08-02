@@ -1,5 +1,15 @@
 # Lumen Science 5.0 — Governed Embodied Science
 
+> **Canonical execution book (2026-08-02):**
+> [`LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-02.md`](LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-02.md).
+> It is the sole source for global ordering, current gate semantics, the
+> single-Rust-base migration, nine-source capability admission, NextGen Agent
+> control, macOS product proof, and the final definition of done. Older plans
+> remain evidence/detail oracles; see [`PLAN_SUPERSESSION_MAP.md`](PLAN_SUPERSESSION_MAP.md).
+> Its plan-only integrity lock is
+> [`NEXTGEN_CANONICAL_EXECUTION_BOOK.lock.json`](NEXTGEN_CANONICAL_EXECUTION_BOOK.lock.json);
+> the lock explicitly claims zero completed top-level gates.
+
 **Target Version**: 5.0  
 **Status**: IN PROGRESS — WP-2～8 **software preview / contract** (not product GA)  
 **Prerequisite**: **Lumen Science CLI/MCP** formal release — **DONE** (`v1.0.0`, current line **`v1.0.1`**)

@@ -16,6 +16,13 @@ python3 scripts/verify-nextgen-baseline.py || fail "NextGen F0 baseline"
 python3 scripts/test-nextgen-baseline.py || fail "NextGen F0 baseline tamper corpus"
 ok "NextGen F0 baseline and gate registry"
 
+# The 2026-08-02 book supersedes the older plans for ordering only.  Hash-lock
+# it, verify the dependency DAG, and prove that document drift cannot invent a
+# passed gate.  This remains plan evidence, not a runtime/product gate.
+python3 scripts/verify-nextgen-canonical-book.py || fail "canonical NextGen execution book"
+python3 scripts/test-nextgen-canonical-book.py || fail "canonical execution-book tamper corpus"
+ok "canonical NextGen execution book (plan only; zero gates claimed)"
+
 # v2 is deliberately a draft intake lock, so the verifier itself returns 2.
 # Its focused tests prove that draft status cannot be mistaken for a product
 # admission and that every selected source path is present in its exact tree.
