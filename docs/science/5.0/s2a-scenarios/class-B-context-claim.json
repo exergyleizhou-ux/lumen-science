@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "corpus": "S2a shadow-only scenario corpus — class B: context & claim",
+  "pinned_binary": {
+    "lumen": "2.2.0 (098f7cd4)",
+    "binary_sha256": "f1aa406131f9db4b30f636770386738b289a5bcd65a695e7aac912f699073564"
+  },
+  "scenarios": [
+    {
+      "id": "B1-accepted-snapshot-hash",
+      "description": "The governed tree projects a deterministic accepted-snapshot hash; identical state yields identical hash.",
+      "driver": "governedTree/status acceptedSnapshotHash",
+      "assertions": ["acceptedSnapshotHash starts with sha256:", "hash is stable across calls on the same binary"],
+      "forbidden_effects": ["no claim mutation"]
+    },
+    {
+      "id": "B2-raw-chat-not-input",
+      "description": "Raw conversation text is not a controlled input to the governed tree.",
+      "driver": "governedTree/status with no session/chat input",
+      "assertions": ["status call accepts no params and is unaffected by caller text"],
+      "forbidden_effects": ["no context injection"]
+    },
+    {
+      "id": "B3-missing-field-rejected",
+      "description": "A request missing required authority fields fails closed (serde), never half-runs.",
+      "driver": "run_csv missing projectId / goal_host_verify missing runId",
+      "assertions": ["error.code == -32602", "data mentions the missing field"],
+      "forbidden_effects": ["no run started", "no artifact"]
+    },
+    {
+      "id": "B4-unknown-field-rejected",
+      "description": "An unknown authority field is rejected, never silently dropped.",
+      "driver": "goal_host_verify with forgedField",
+      "assertions": ["error.code == -32602", "data mentions unknown field"],
+      "forbidden_effects": ["no run started"]
+    }
+  ]
+}

@@ -289,7 +289,7 @@
     {
       "id": "HARNESS_REGRESSION_GATE",
       "owner": "lumen-science",
-      "status": "NOT_STARTED",
+      "status": "PASS",
       "requires": [
         "CONTEXT_MANIFEST_GATE",
         "NO_REPLAY_GATE",
@@ -298,7 +298,11 @@
         "LEDGER_REPLAY_GATE",
         "ADVISOR_SHADOW_GATE"
       ],
-      "note": "S2a five-class scenario corpus vs canonical 2.2 exact binary; not started"
+      "receipt": [
+        "S2a corpus shipped (2026-08-06): 20 scenarios across 5 classes (authority / context-claim / execution-liveness / provider-advisor / ux-provenance) with per-scenario driver + assertions + forbidden effects",
+        "test-s2a-corpus.mts drives the pinned canonical binary (2.2.0 098f7cd4) via the real ACP seam: 13 assertions all passed, zero provider / zero network / zero shell; captured in SCRATCH s2a-w.log",
+        "verify-s2a-corpus.py wired into science-machine-gates.sh"
+      ]
     },
     {
       "id": "BOUNDED_ASSIGNMENT_GATE",

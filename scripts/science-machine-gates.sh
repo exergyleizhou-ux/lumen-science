@@ -44,6 +44,12 @@ python3 scripts/verify-i1a-completeness.py || fail "I1-A nine-source completenes
 python3 scripts/test-i1a-completeness.py || fail "I1-A completeness tamper corpus"
 ok "I1-A nine-source completeness (draft lock; active admission is a later gate)"
 
+# S2a: the shadow-only scenario corpus (five classes) must stay complete and
+# the in-repo runner must pass against the pinned canonical binary (zero
+# provider, zero network, zero arbitrary shell).
+python3 scripts/verify-s2a-corpus.py || fail "S2a scenario corpus"
+ok "S2a scenario corpus (20 scenarios, 5 classes, pinned binary)"
+
 # v2 is deliberately a draft intake lock, so the verifier itself returns 2.
 # Its focused tests prove that draft status cannot be mistaken for a product
 # admission and that every selected source path is present in its exact tree.
