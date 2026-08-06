@@ -7,6 +7,7 @@ import copy
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -15,7 +16,7 @@ VERIFIER = ROOT / "scripts/verify-i1a-completeness.py"
 
 
 def run(lock: dict) -> tuple[int, str]:
-    path = Path("/var/folders/dn/_prdhdnn5l53lb71bhtx_n5w0000gn/T/grok-goal-405d73baecdb/implementer/lock-tmp.json")
+    path = Path(tempfile.mkdtemp(prefix="i1a-lock-")) / "lock-tmp.json"
     path.write_text(json.dumps(lock), encoding="utf-8")
     proc = subprocess.run(
         [sys.executable, str(VERIFIER), "--lock", str(path)],

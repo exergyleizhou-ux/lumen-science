@@ -13,6 +13,7 @@ import copy
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -123,7 +124,7 @@ def main() -> int:
     def run_verifier(mutate) -> tuple[int, str]:
         tmp = copy.deepcopy(catalog)
         mutate(tmp)
-        path = Path("/var/folders/dn/_prdhdnn5l53lb71bhtx_n5w0000gn/T/grok-goal-405d73baecdb/implementer/catalog-tmp.json")
+        path = Path(tempfile.mkdtemp(prefix="xc1-catalog-")) / "catalog-tmp.json"
         path.write_text(json.dumps(tmp), encoding="utf-8")
         proc = subprocess.run(
             [sys.executable, str(VERIFIER), "--catalog", str(path)],
