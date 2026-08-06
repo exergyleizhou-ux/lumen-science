@@ -144,7 +144,36 @@ def verify_contract(lock_path: Path, root: Path) -> None:
     lumen = lock.get("canonical_lumen_observation")
     require(isinstance(lumen, dict), "canonical_lumen_observation is missing")
     require(lumen.get("observation_only") is True, "Lumen observation must remain read-only")
-    require(lumen.get("pin_eligible") is False, "observed Lumen worktree must not be pin eligible")
+    pin_eligible = lumen.get("pin_eligible")
+    require(isinstance(pin_eligible, bool), "pin_eligible must be a boolean observation")
+    if pin_eligible is True:
+        receipt = lumen.get("r0_receipt")
+        require(isinstance(receipt, dict), "pin requires an r0 receipt object")
+        require(
+            isinstance(receipt.get("release_tags"), list)
+            and receipt["release_tags"]
+            and all(isinstance(t, str) and t for t in receipt["release_tags"]),
+            "pin r0 receipt must list release tags",
+        )
+        for field in ("source_commit_a", "evidence_commit_b"):
+            value = receipt.get(field)
+            require(
+                isinstance(value, str) and SHA_RE.fullmatch(value) is not None,
+                f"pin r0 receipt {field} must be a full SHA",
+            )
+        require(
+            isinstance(receipt.get("ci_green"), str) and receipt["ci_green"],
+            "pin r0 receipt must record exact CI green evidence",
+        )
+        require(
+            isinstance(receipt.get("observed_at"), str) and receipt["observed_at"],
+            "pin r0 receipt must record an observation timestamp",
+        )
+    else:
+        require(
+            lumen.get("r0_receipt") is None,
+            "a non-eligible observation must not carry an r0 receipt",
+        )
     lumen_head = lumen.get("local_head")
     require(isinstance(lumen_head, str) and SHA_RE.fullmatch(lumen_head), "Lumen observed head is malformed")
 

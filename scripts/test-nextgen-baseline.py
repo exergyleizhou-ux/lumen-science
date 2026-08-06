@@ -75,9 +75,27 @@ def main() -> int:
         "baseline input hash drifted",
     )
     check(
-        "the dirty Lumen observation cannot become a pin",
-        lambda value, _gates: value["canonical_lumen_observation"].__setitem__("pin_eligible", True),
-        "must not be pin eligible",
+        "a pin without an r0 receipt is rejected",
+        lambda value, _gates: (
+            value["canonical_lumen_observation"].__setitem__("pin_eligible", True),
+            value["canonical_lumen_observation"].__setitem__("r0_receipt", None),
+        ),
+        "pin requires an r0 receipt",
+    )
+    check(
+        "a forged r0 receipt is rejected",
+        lambda value, _gates: value["canonical_lumen_observation"]["r0_receipt"].__setitem__(
+            "source_commit_a", "not-a-sha"
+        ),
+        "pin r0 receipt source_commit_a must be a full SHA",
+    )
+    check(
+        "a non-eligible observation cannot carry an r0 receipt",
+        lambda value, _gates: (
+            value["canonical_lumen_observation"].__setitem__("pin_eligible", False),
+        ),
+        "must not carry an r0 receipt",
+        expected_exit=1,
     )
     check(
         "the Lumen book tracking observation must remain typed",

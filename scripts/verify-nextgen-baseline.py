@@ -32,6 +32,7 @@ ALLOWED_GATE_STATUSES = {
     "BLOCKED_CONTRACT",
     "BLOCKED",
     "PASS",
+    "PASS_UPSTREAM",
 }
 
 
@@ -115,15 +116,48 @@ def verify_baseline(baseline: dict[str, Any], science_repo: Path) -> None:
             f"baseline input hash drifted: {path_text}",
         )
 
-    lumen = baseline.get("canonical_lumen_observation")
+def verify_lumen_observation(lumen: dict[str, Any]) -> None:
     require(isinstance(lumen, dict), "baseline.canonical_lumen_observation is missing")
     require(lumen.get("observation_only") is True, "Lumen observation must remain read-only")
-    require(lumen.get("pin_eligible") is False, "dirty Lumen observation must not be pin eligible")
+    # 2026-08-06 revision: the canonical Lumen main line is now a released,
+    # receipt-backed source (v2.0.0/v2.1.0/v2.2.0 tuples).  pin_eligible may be
+    # true only when an R0 receipt is present and well-formed; otherwise the
+    # observation must stay not pin eligible (dirty or unproven upstream).
+    pin_eligible = lumen.get("pin_eligible")
+    require(isinstance(pin_eligible, bool), "pin_eligible must be a boolean observation")
+    if pin_eligible is True:
+        receipt = lumen.get("r0_receipt")
+        require(isinstance(receipt, dict), "pin requires an r0 receipt object")
+        require(
+            isinstance(receipt.get("release_tags"), list)
+            and receipt["release_tags"]
+            and all(isinstance(t, str) and t for t in receipt["release_tags"]),
+            "pin r0 receipt must list release tags",
+        )
+        for field in ("source_commit_a", "evidence_commit_b"):
+            value = receipt.get(field)
+            require(
+                isinstance(value, str) and SHA_RE.fullmatch(value) is not None,
+                f"pin r0 receipt {field} must be a full SHA",
+            )
+        require(
+            isinstance(receipt.get("ci_green"), str) and receipt["ci_green"],
+            "pin r0 receipt must record exact CI green evidence",
+        )
+        require(
+            isinstance(receipt.get("observed_at"), str) and receipt["observed_at"],
+            "pin r0 receipt must record an observation timestamp",
+        )
+    else:
+        require(
+            lumen.get("r0_receipt") is None,
+            "a non-eligible observation must not carry an r0 receipt",
+        )
     # This is an observation, not a source-pin criterion.  The book may become
     # tracked on an otherwise dirty branch; treating the former "untracked"
     # observation as a permanent invariant would make the baseline reject a
-    # strictly more auditable upstream state.  `pin_eligible == false` above
-    # remains mandatory until the independent R0/API evidence gates pass.
+    # strictly more auditable upstream state.  pin_eligible is allowed only
+    # with a valid r0_receipt (2026-08-06: canonical main is released).
     require(
         isinstance(lumen.get("nextgen_execution_book_tracked"), bool),
         "nextgen_execution_book_tracked must be a boolean observation",
@@ -134,6 +168,10 @@ def verify_baseline(baseline: dict[str, Any], science_repo: Path) -> None:
             isinstance(value, str) and SHA_RE.fullmatch(value) is not None,
             f"baseline.canonical_lumen_observation.{field} must be a full SHA",
         )
+
+
+def verify_baseline_lumen(baseline: dict[str, Any]) -> None:
+    verify_lumen_observation(baseline.get("canonical_lumen_observation"))
 
 
 def verify_gates(gate_registry: dict[str, Any]) -> None:
@@ -152,6 +190,19 @@ def verify_gates(gate_registry: dict[str, Any]) -> None:
             gate.get("status") in ALLOWED_GATE_STATUSES,
             f"{label}.status is unsupported",
         )
+        status = gate.get("status")
+        if status == "PASS":
+            receipt = gate.get("receipt")
+            require(
+                isinstance(receipt, list) and receipt and all(isinstance(i, str) and i for i in receipt),
+                f"{label}: PASS without Science-side receipt evidence",
+            )
+        if status == "PASS_UPSTREAM":
+            receipt = gate.get("upstream_receipt")
+            require(
+                isinstance(receipt, list) and receipt and all(isinstance(i, str) and i for i in receipt),
+                f"{label}: PASS_UPSTREAM without upstream receipt evidence",
+            )
         require(
             isinstance(gate.get("owner"), str) and gate["owner"],
             f"{label}.owner is missing",
@@ -172,6 +223,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         verify_baseline(load_json(args.baseline, "baseline"), args.science_repo)
+        verify_baseline_lumen(load_json(args.baseline, "baseline"))
         verify_gates(load_json(args.gates, "gate registry"))
     except ValueError as error:
         print(f"FAIL: {error}", file=sys.stderr)

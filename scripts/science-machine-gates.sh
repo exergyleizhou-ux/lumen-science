@@ -23,6 +23,14 @@ python3 scripts/verify-nextgen-canonical-book.py || fail "canonical NextGen exec
 python3 scripts/test-nextgen-canonical-book.py || fail "canonical execution-book tamper corpus"
 ok "canonical NextGen execution book (plan only; zero gates claimed)"
 
+# The 2026-08-06 granular registry re-maps upstream facts: PASS_UPSTREAM
+# records upstream-delivered capabilities with receipts (never Science
+# completion), PASS requires Science-side receipts, and the dependency graph
+# must stay acyclic with no gate wired through an unresolved dependency.
+python3 scripts/verify-nextgen-gates-v2.py || fail "granular gate registry v2"
+python3 scripts/test-nextgen-gates-v2.py || fail "granular gate registry tamper corpus"
+ok "granular gate registry v2 (receipt-backed)"
+
 # v2 is deliberately a draft intake lock, so the verifier itself returns 2.
 # Its focused tests prove that draft status cannot be mistaken for a product
 # admission and that every selected source path is present in its exact tree.

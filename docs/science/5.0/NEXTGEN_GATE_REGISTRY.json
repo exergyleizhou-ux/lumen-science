@@ -1,65 +1,89 @@
 {
-  "schema_version": 1,
-  "recorded_at": "2026-08-01T16:19:11+08:00",
-  "purpose": "F0 machine-readable gate registry. A non-PASS status is an explicit truth, not a failure to report.",
-  "gates": [
-    {
-      "id": "LUMEN_R0_SOURCE_GATE",
-      "owner": "canonical-lumen",
-      "status": "BLOCKED_UPSTREAM",
-      "requires": [
-        "R0-00 path manifest",
-        "R0-01 grouped verification",
-        "R0-02 clean candidate",
-        "R0-03 exact GitHub integration CI",
-        "R0-04 same-source binary/lock/evidence",
-        "R0-05a canonical main merge review"
-      ]
-    },
-    {
-      "id": "PLATFORM_API_GATE",
-      "owner": "canonical-lumen",
-      "status": "BLOCKED_CONTRACT",
-      "requires": [
-        "LUMEN_R0_SOURCE_GATE=PASS",
-        "versioned public extension contract",
-        "compatibility manifest",
-        "public adapter compile fixture",
-        "exact GitHub CI"
-      ]
-    },
-    {
-      "id": "TASKTREE_GATE",
-      "owner": "canonical-lumen",
-      "status": "BLOCKED_UPSTREAM",
-      "requires": [
-        "TaskTreeLineageV1",
-        "CapabilityGrantV1",
-        "TreeBudgetV1",
-        "recursive revoke/cancel proof"
-      ]
-    },
-    {
-      "id": "SOURCE_INTAKE_GATE",
-      "owner": "lumen-science",
-      "status": "IMPLEMENTING",
-      "requires": [
-        "upstream-lock.v2 active with all nine sources",
-        "exact-one disposition per component",
-        "forbidden-path negative tests",
-        "rights and asset evidence"
-      ]
-    },
-    {
-      "id": "PRODUCT_PROOF_GATE",
-      "owner": "lumen-science",
-      "status": "BLOCKED_UPSTREAM",
-      "requires": [
-        "PLATFORM_API_GATE=PASS",
-        "newly rebuilt exact-source binary",
-        "actor/product negative proof",
-        "exact-head CI"
-      ]
-    }
-  ]
+    "schema_version": 1,
+    "recorded_at": "2026-08-06T00:00:00+08:00",
+    "purpose": "F0 machine-readable gate registry, re-mapped 2026-08-06 against canonical Lumen 2.2 facts. PASS_UPSTREAM = upstream (canonical lumen) delivered capability with exact receipts; it is NOT a Science completion claim. PASS = Science-side independently verified receipt. A non-PASS status is an explicit truth, not a failure to report. Granular gates live in NEXTGEN_GATE_REGISTRY_V2.json.",
+    "gates": [
+        {
+            "id": "LUMEN_R0_SOURCE_GATE",
+            "owner": "canonical-lumen",
+            "status": "PASS_UPSTREAM",
+            "requires": [
+                "R0-00 path manifest",
+                "R0-01 grouped verification",
+                "R0-02 clean candidate",
+                "R0-03 exact GitHub integration CI",
+                "R0-04 same-source binary/lock/evidence",
+                "R0-05a canonical main merge review"
+            ],
+            "upstream_receipt": [
+                "v2.0.0 peeled tag -> f51fb902; v2.1.0 -> 3d5d52cf; v2.2.0 -> 098f7cd4 (source A); v2.2.0 evidence B = af2857a2",
+                "artifacts/release-source-tuple.json v2.2.0: source_commit=098f7cd4, evidence_commit=af2857a2, tag_commit=098f7cd4, binary_sha256=f1aa4061..., source_lock_sha256=18b95181...",
+                "CI 5/5 SUCCESS on 7b8f385b (version-check / regenerate / Lumen crates+clippy / Offline gates / Expert v2 gate)",
+                "GitHub release v2.2.0: 19 assets, non-draft; readiness automated gates all PASS (only M5/M6 human gates pending)"
+            ]
+        },
+        {
+            "id": "PLATFORM_API_GATE",
+            "owner": "canonical-lumen",
+            "status": "IMPLEMENTING",
+            "requires": [
+                "LUMEN_R0_SOURCE_GATE=PASS_UPSTREAM",
+                "versioned public extension contract",
+                "compatibility manifest",
+                "public adapter compile fixture",
+                "exact GitHub CI"
+            ],
+            "receipt": [
+                "Seam exists in 2.2: x.ai/science/* (run_csv, import_preview, connector_fetch, ssh_scp_fixture, goal_host_verify) + x.ai/governedTree/* (status, assignmentRecommendation), dispatch acp_agent.rs:3821",
+                "xai-grok-science crate 0.1.0 SCHEMA_VERSION=1 in canonical main",
+                "Missing: versioned method catalog, compat manifest, consumer compile fixture -> X-C1 card"
+            ]
+        },
+        {
+            "id": "TASKTREE_GATE",
+            "owner": "canonical-lumen",
+            "status": "PASS_UPSTREAM",
+            "requires": [
+                "TaskTreeLineageV1",
+                "CapabilityGrantV1",
+                "TreeBudgetV1",
+                "recursive revoke/cancel proof"
+            ],
+            "upstream_receipt": [
+                "TaskTreeLifecycle JSONL durable journal + child terminal handoff receipt",
+                "depth=3 hard cap, lineage, ancestor cancel; x.ai/governedTree/status preview + pager pane",
+                "resume/orphan/late-event handling (validate_resume_manifest_identity)"
+            ]
+        },
+        {
+            "id": "SOURCE_INTAKE_GATE",
+            "owner": "lumen-science",
+            "status": "IMPLEMENTING",
+            "requires": [
+                "upstream-lock.v2 active with all nine sources",
+                "exact-one disposition per component",
+                "forbidden-path negative tests",
+                "rights and asset evidence"
+            ],
+            "receipt": [
+                "third_party/upstream-lock.v2.json status=draft, 9 sources pinned (designed BLOCKED)",
+                "I1-A 14-step completeness, transitive bridge, SourceTreeCoverageV1, destination receipts not yet closed"
+            ]
+        },
+        {
+            "id": "PRODUCT_PROOF_GATE",
+            "owner": "lumen-science",
+            "status": "BLOCKED_UPSTREAM",
+            "requires": [
+                "PLATFORM_API_GATE=PASS",
+                "newly rebuilt exact-source binary",
+                "actor/product negative proof",
+                "exact-head CI"
+            ],
+            "receipt": [
+                "PLATFORM_API_GATE is IMPLEMENTING (seam exists, contract not formalized); X-C1 in progress",
+                "X-S1 seq family push-up + rebuilt canonical composition not started"
+            ]
+        }
+    ]
 }

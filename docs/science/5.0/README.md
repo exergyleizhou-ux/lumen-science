@@ -1,18 +1,23 @@
 # Lumen Science 5.0 — Governed Embodied Science
 
-> **Canonical execution book (2026-08-02):**
-> [`LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-02.md`](LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-02.md).
+> **Canonical execution book (2026-08-06):**
+> [`LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-06.md`](LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-06.md).
 > It is the sole source for global ordering, current gate semantics, the
-> single-Rust-base migration, nine-source capability admission, NextGen Agent
-> control, macOS product proof, and the final definition of done. Older plans
-> remain evidence/detail oracles; see [`PLAN_SUPERSESSION_MAP.md`](PLAN_SUPERSESSION_MAP.md).
+> single-Rust-base migration (re-oriented: push Science-only slices into
+> canonical Lumen, then de-copy), nine-source capability admission, NextGen
+> Agent control, macOS product proof, and the final definition of done.
+> The 2026-08-02 book
+> [`LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-02.md`](LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-02.md)
+> remains the detail oracle; older plans remain evidence/detail oracles; see
+> [`PLAN_SUPERSESSION_MAP.md`](PLAN_SUPERSESSION_MAP.md).
 > Its plan-only integrity lock is
 > [`NEXTGEN_CANONICAL_EXECUTION_BOOK.lock.json`](NEXTGEN_CANONICAL_EXECUTION_BOOK.lock.json);
-> the lock explicitly claims zero completed top-level gates.
+> the lock explicitly claims zero completed top-level gates. Granular gate
+> truth (PASS_UPSTREAM vs PASS) lives in
+> [`NEXTGEN_GATE_REGISTRY_V2.json`](NEXTGEN_GATE_REGISTRY_V2.json).
 
 **Target Version**: 5.0  
-**Status**: IN PROGRESS — WP-2～8 **software preview / contract** (not product GA)  
-**Prerequisite**: **Lumen Science CLI/MCP** formal release — **DONE** (`v1.0.0`, current line **`v1.0.1`**)
+**Status**: IN PROGRESS — 2026-08-06: canonical Lumen 2.2 released (kernel absorbed upstream); Science P0s (PR #28 red, Desktop skill bypass) still open; see canonical book §1/§4.1
 
 ## Evidence levels (how to read status)
 
