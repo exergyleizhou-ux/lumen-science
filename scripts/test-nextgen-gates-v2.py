@@ -59,12 +59,15 @@ def main() -> int:
     check("the real granular registry passes", None, "PASS: NextGen granular", expected_exit=0)
     check(
         "PASS without Science-side receipt is rejected",
-        lambda reg: find(reg["gates"], "LUMEN_R0_SOURCE_GATE").__setitem__("status", "PASS"),
+        lambda reg: find(reg["gates"], "SCIENCE_PR_CI_GATE").__setitem__("receipt", []),
         "PASS without Science-side receipt",
     )
     check(
         "PASS_UPSTREAM without upstream receipt is rejected",
-        lambda reg: find(reg["gates"], "LUMEN_R0_SOURCE_GATE").__setitem__("upstream_receipt", []),
+        lambda reg: (
+            find(reg["gates"], "LUMEN_R0_SOURCE_GATE").__setitem__("status", "PASS_UPSTREAM"),
+            find(reg["gates"], "LUMEN_R0_SOURCE_GATE").__setitem__("upstream_receipt", []),
+        ),
         "PASS_UPSTREAM without upstream receipt",
     )
     check(
