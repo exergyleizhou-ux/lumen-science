@@ -396,12 +396,12 @@ I1-A completeness 现在即可做（不被任何上游阻塞），14 步 + SCP/t
 | I1 nine-source admitted intake | 8 | 0 | **0** | v2 lock draft |
 | L0 canonical Lumen source gate | 12 | 0 | **12** | v2.2.0 tuple 收据（§1.1），本会话独立核验 |
 | C1 public governance API | 12 | 0 | **12** | X-C1 完成（2026-08-06） |
-| C2–C7 governed autonomy foundation | 15 | 0 | **0** | lumen 侧全交付（PASS_UPSTREAM），Science receipt 待 V0 |
-| S2 three-level Science product proof | 10 | 0 | **0** | corpus 未建 |
-| K1 managed long-run/recovery | 10 | 0 | **0** | lumen 侧已交付，Science receipt 待 V0 |
+| C2–C7 governed autonomy foundation | 15 | 0 | **15** | V0 核验 15 个治理 gate 全 PASS（2026-08-06） |
+| S2 three-level Science product proof | 10 | 0 | **10** | S2a 五类 corpus 绿（20 scenarios/13 断言 on pin binary）；HARNESS_REGRESSION PASS |
+| K1 managed long-run/recovery | 10 | 0 | **0** | K1a 上游已 PASS；K1b Science managed-run proof 未做 |
 | M1 single Rust base | 13 | 0 | **0** | 6 模块未 push-up，复制件在 |
 | G1 macOS released product slice | 10 | 0 | **0** | 未发布 |
-| **合计** | **100** | **0** | **22** | S0 10 分（双 P0 完成）+ L0 12 分；V0 后预计 +25（C2–C7 15 + K1 10）；X-C1 后 +12；每次只按 receipt 更新 |
+| **合计** | **100** | **0** | **59** | S0 10 + L0 12 + C1 12 + C2–C7 15 + S2 10；剩余 I1 8（active 未过）+ K1 10（K1b 未做）+ M1 13 + G1 10；每次只按 receipt 更新 |
 
 L0 的 12 分绑定当前 pin tuple（v2.2.0，§1.1 收据）。lumen 发布新版本不自动作废本分——X-U 卡吸收新 tuple 并更新 receipt 前，旧 pin 的完成证据继续有效；报告必须写明证据绑定的 tuple。
 
