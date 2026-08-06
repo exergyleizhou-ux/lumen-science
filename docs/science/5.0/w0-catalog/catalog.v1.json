@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "read_only": true,
+  "recorded_at": "2026-08-06T00:00:00+08:00",
+  "purpose": "W0-A read-only Science capability catalog v1. Aggregates built-in / adopted / user-owned entries with the six-state admission ladder. The catalog holds no execution handle; admission_state advances only with a receipt.",
+  "entries": [
+    {
+      "id": "seq-analyze",
+      "name": "Deterministic sequence analysis (Motif-class)",
+      "source": "jvogan-motif (adapt) + own clean-room",
+      "admission_state": "FixtureOnly",
+      "ui_label": "offline sample",
+      "runnable": false,
+      "receipt": "seqbench parity corpus frozen (xm1-seq-parity-corpus.json); golden tests 603/0/8; live slice pending canonical method registration"
+    },
+    {
+      "id": "uniprot-query-offline",
+      "name": "UniProt offline query (Biomni adapter)",
+      "source": "snap-stanford/biomni tool-descriptors (adapt candidate)",
+      "admission_state": "FixtureOnly",
+      "ui_label": "offline sample",
+      "runnable": false,
+      "receipt": "connector_fetch fixture path E4 evidence in science repo; live pending-deny"
+    },
+    {
+      "id": "biomni-tool-catalog",
+      "name": "Biomni 224-tool descriptor catalog",
+      "source": "snap-stanford/biomni",
+      "admission_state": "Cataloged",
+      "ui_label": "candidate",
+      "runnable": false
+    },
+    {
+      "id": "scp-207-skill-corpus",
+      "name": "SCP 207 skill corpus (transitive)",
+      "source": "InternScience/scp (transitive bridge)",
+      "admission_state": "Quarantined",
+      "ui_label": "dev-diagnostic",
+      "runnable": false,
+      "receipt": "VENDOR_MANIFEST.json quarantined corpus; not executable skills"
+    },
+    {
+      "id": "bgc-prophet-candidate",
+      "name": "BGC prediction (BGC-Prophet family)",
+      "source": "hust-ningkang-lab/bgc-prophet (quarantine; clean-room contract)",
+      "admission_state": "Quarantined",
+      "ui_label": "dev-diagnostic",
+      "runnable": false,
+      "receipt": "upstream disposition=quarantine; models/data reject-data-model"
+    },
+    {
+      "id": "motif-renderer",
+      "name": "Motif web renderer (offline)",
+      "source": "own renderer + motif reference",
+      "admission_state": "Sandboxed",
+      "ui_label": "runnable offline",
+      "runnable": true,
+      "receipt": "renderers/static/motif.html CSP + runtime_authority=none + sandbox product proof"
+    }
+  ]
+}

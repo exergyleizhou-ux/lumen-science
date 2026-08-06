@@ -50,6 +50,12 @@ ok "I1-A nine-source completeness (draft lock; active admission is a later gate)
 python3 scripts/verify-s2a-corpus.py || fail "S2a scenario corpus"
 ok "S2a scenario corpus (20 scenarios, 5 classes, pinned binary)"
 
+# W0-A: the read-only Science catalog keeps the six-state admission ladder
+# with receipts; Cataloged can never report runnable.
+python3 scripts/verify-w0-catalog.py || fail "W0-A catalog"
+python3 scripts/test-w0-catalog.py || fail "W0-A catalog tamper corpus"
+ok "W0-A read-only catalog (six-state ladder)"
+
 # v2 is deliberately a draft intake lock, so the verifier itself returns 2.
 # Its focused tests prove that draft status cannot be mistaken for a product
 # admission and that every selected source path is present in its exact tree.
