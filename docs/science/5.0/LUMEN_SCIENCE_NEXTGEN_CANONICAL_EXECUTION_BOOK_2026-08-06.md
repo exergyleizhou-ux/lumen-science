@@ -236,7 +236,7 @@ flowchart TD
 | Gate | Owner | 08-02 状态 | 08-06 状态 | Receipt（exact 引用） |
 |---|---|---|---|---|
 | SCIENCE_PR_CI_GATE | Science | FAILED | **PASS** | exact-head CI 绿 @1d3fd7d（run 31066618159：26 SUCCESS + 1 SKIPPED main-only）；S0-A 产品测试 + swap fixture + lib 619/0/8 全过（2026-08-06 观测） |
-| SKILL_LIFECYCLE_AUTHORITY_GATE | Science | FAILED | **FAILED** | packs/science-desktop settings/ipc.ts 426–445 直连 mutation |
+| SKILL_LIFECYCLE_AUTHORITY_GATE | Science | FAILED | **PASS** | S0-B 落地：四通道 typed fail-close（零 service 调用、零 reload）、真实注册负例（字节不变 + forced 不重生）、纯函数 7 测、service 152/unit 全绿（2026-08-06；本机 authority live probe 环境性 SKIP 详见 registry receipt） |
 | P0_NR_SAFETY_GATE | Lumen | UNVERIFIED_COMMITTED | **PASS_UPSTREAM** | S8：no_replay_policy 3 counting-server 测、FULL_AUDIT_GATE 六 deny reason、s8_sealed_retry_live 5 测（v2.0.0 起） |
 | LUMEN_R0_SOURCE_GATE | Lumen | BLOCKED_UPSTREAM | **PASS_UPSTREAM** | v2.0.0→f51fb902 / v2.1.0→3d5d52cf / v2.2.0→098f7cd4（peeled tag）；B=af2857a2；CI 5/5 @7b8f385b；release 19 assets；readiness 仅 M5/M6 blocker |
 | PLATFORM_API_GATE | Lumen | BLOCKED_CONTRACT | **IMPLEMENTING** | 接缝存在（`x.ai/science/*` + `x.ai/governedTree/*` + xai-grok-science 0.1.0）；缺版本化 contract / compat manifest / consumer fixture → X-C1 |
@@ -392,7 +392,7 @@ I1-A completeness 现在即可做（不被任何上游阻塞），14 步 + SCP/t
 
 | 顶层 gate | 权重 | 08-02 | 08-06 | 依据 |
 |---|---:|---:|---:|---|
-| S0 Science P0 clean exact-head | 10 | 0 | **0** | PR #28 红 + bypass 在（§1.4） |
+| S0 Science P0 clean exact-head | 10 | 0 | **10** | S0-A（PR #28 全绿）+ S0-B（skill 直写封死）均完成（2026-08-06） |
 | I1 nine-source admitted intake | 8 | 0 | **0** | v2 lock draft |
 | L0 canonical Lumen source gate | 12 | 0 | **12** | v2.2.0 tuple 收据（§1.1），本会话独立核验 |
 | C1 public governance API | 12 | 0 | **0** | IMPLEMENTING；X-C1 未完成 |
@@ -401,7 +401,7 @@ I1-A completeness 现在即可做（不被任何上游阻塞），14 步 + SCP/t
 | K1 managed long-run/recovery | 10 | 0 | **0** | lumen 侧已交付，Science receipt 待 V0 |
 | M1 single Rust base | 13 | 0 | **0** | 6 模块未 push-up，复制件在 |
 | G1 macOS released product slice | 10 | 0 | **0** | 未发布 |
-| **合计** | **100** | **0** | **12** | V0 后预计 +25（C2–C7 15 + K1 10）；X-C1 后 +12；每次只按 receipt 更新 |
+| **合计** | **100** | **0** | **22** | S0 10 分（双 P0 完成）+ L0 12 分；V0 后预计 +25（C2–C7 15 + K1 10）；X-C1 后 +12；每次只按 receipt 更新 |
 
 L0 的 12 分绑定当前 pin tuple（v2.2.0，§1.1 收据）。lumen 发布新版本不自动作废本分——X-U 卡吸收新 tuple 并更新 receipt 前，旧 pin 的完成证据继续有效；报告必须写明证据绑定的 tuple。
 

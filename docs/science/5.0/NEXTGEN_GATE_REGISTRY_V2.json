@@ -29,11 +29,14 @@
     {
       "id": "SKILL_LIFECYCLE_AUTHORITY_GATE",
       "owner": "lumen-science",
-      "status": "FAILED",
+      "status": "PASS",
       "requires": [],
       "receipt": [
-        "packs/science-desktop/src/main/settings/ipc.ts:426-445 raw ipcMain.handle -> SettingsService createSkill/updateSkill/deleteSkill/setSkillEnabled -> UserSkillRepository mutable write",
-        "S0-B open: no AuthorityUnavailable/MigrationRequired in shipping IPC"
+        "S0-B shipped (2026-08-06): four shipping mutation channels (set-skill-enabled/create-skill/update-skill/delete-skill) throw typed SKILL_AUTHORITY_UNAVAILABLE before any service call; onSkillsChanged never fires for them",
+        "Real registration negatives pass: ipc.test.ts invokes the actual registered handlers and asserts zero service calls + zero reload; skill-authority-negatives.test.ts uses a real SettingsService + real storageRoot and proves byte-identical store after all four invocations + forced ids cannot respawn a disabled skill in spawn config",
+        "skill-resolution.ts pure resolver (fail-closed: unknown/revoked/no-active-revision/disabled can never be forced) with 7 unit tests; service.test.ts 152 tests green (incl. inverted forced-materialization negative); renderer store 68 tests + SkillsPanel banner render tests; typecheck green; full vitest suite green (4543+ passed)",
+        "Legacy dead tests for removed subsystems (agent-framework/Codex/Responses bridge) removed from service.test.ts and vitest exclude lifted so the file runs in CI",
+        "Environment note: local test:authority live-binary probe fails because /Users/lei/.local/bin/lumen-science is the legacy Go CLI without the Rust 'agent stdio' command; CI has no binary so the probe SKIPs there (Desktop authority suite green in CI)"
       ]
     },
     {
