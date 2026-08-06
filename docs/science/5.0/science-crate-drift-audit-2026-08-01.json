@@ -1,21 +1,21 @@
 {
-  "schema": "lumen-science-crate-drift-v1",
-  "status": "inventory_only_not_admission_lock",
-  "generated_from": "scripts/report-science-crate-drift.py",
-  "science_commit": "a161ad5100af0f941a2477007ca4fde44a895c0e",
-  "upstream_commit": "dc563b1e0db9eaca7e970d56d7816e1522511723",
   "crate": "agent/crates/codegen/xai-grok-science",
-  "science_files": 94,
-  "upstream_files": 72,
-  "shared_identical": 41,
-  "shared_diverged": 31,
-  "science_only": 22,
-  "upstream_only": 0,
   "duplicate_delta": 53,
-  "manifest_sha256": "560dee76fc579ee5bad8bc38dcec3a82a2960d9b3dbc4ff391219933fdf03d28",
+  "generated_from": "scripts/report-science-crate-drift.py",
+  "manifest_sha256": "d785347d02eb7d67948501b7121819bcae424dda1a65c7ecd4e19b22ec002284",
   "non_claims": [
     "This inventory does not change the Core admission-lock total of 136.",
     "This inventory does not make either copy canonical or safe.",
     "A new report is required at every proposed canonical Lumen source pin."
-  ]
+  ],
+  "schema": "lumen-science-crate-drift-v1",
+  "science_commit": "4e74482effc70100ec5b0b086ec9e4f7f66f10d5",
+  "science_files": 94,
+  "science_only": 22,
+  "shared_diverged": 31,
+  "shared_identical": 41,
+  "status": "inventory_only_not_admission_lock",
+  "upstream_commit": "dc563b1e0db9eaca7e970d56d7816e1522511723",
+  "upstream_files": 72,
+  "upstream_only": 0
 }
