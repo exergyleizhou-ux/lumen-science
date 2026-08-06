@@ -9,13 +9,13 @@
     "A new report is required at every proposed canonical Lumen source pin."
   ],
   "schema": "lumen-science-crate-drift-v1",
-  "science_commit": "01e05a12c1b3cba2b7e0f77f750f0e5fde12d021",
+  "science_commit": "1b1fa7a23033e3788ef360e650faff10dba51cd6",
   "science_files": 94,
   "science_only": 0,
   "shared_diverged": 0,
   "shared_identical": 94,
   "status": "inventory_only_not_admission_lock",
-  "upstream_commit": "0eb52c10d2e890f5173244bbd9c931c3d143f901",
+  "upstream_commit": "16ac1d936bcbec069a799fdd1e5941f66cf00744",
   "upstream_files": 94,
   "upstream_only": 0
 }

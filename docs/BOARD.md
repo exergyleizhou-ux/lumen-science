@@ -1,7 +1,7 @@
 # Lumen Science 看板（NextGen 执行）
 
 > **更新规则：** 里程碑时更新（gate 翻转/进度变化）。无心跳 monitor。
-> 上次刷新：**2026-08-06**（北京时间）— I1-B 九源全量采纳，67/100
+> 上次刷新：**2026-08-06**（北京时间）— K1b managed-run proof 闭合，77/100
 > 权威进度：`docs/science/5.0/LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-06.md` §40；gate 真值：`docs/science/5.0/NEXTGEN_GATE_REGISTRY_V2.json`
 
 ---
@@ -10,7 +10,7 @@
 
 | 项 | 完成度 | 状态 |
 |----|--------|------|
-| **正式进度（书 §40 九项）** | **67 / 100** | S0 10 + L0 12 + C1 12 + C2–C7 15 + S2 10 + I1 8 |
+| **正式进度（书 §40 九项）** | **77 / 100** | S0 10 + L0 12 + C1 12 + C2–C7 15 + S2 10 + I1 8 + K1 10 |
 | 机器门 | 22 项 | 全绿（exit 0） |
 | PR #28 CI | 全绿（历次 head） | 最新轮验证中 |
 
@@ -24,7 +24,7 @@
 | C2–C7 安全治理底座 | 15 | ✅ 15 | 15 个治理 gate 核验 PASS（V0） |
 | S2 三层科研 Agent 证明 | 10 | ✅ 10 | S2a 五类场景语料全绿（pin binary） |
 | I1 九源审查 | 8 | ✅ 8 | 九源全量采纳（资产方授权）；upstream-lock active；rights gate 9/9 |
-| K1 长期任务运行 | 10 | ⏳ 0 | K1b 依赖 X-M1 融合 |
+| K1 长期任务运行 | 10 | ✅ 10 | K1b managed-run proof：restart/reprompt/resume/kill/replay 的 built-binary E4 证据（X-S1 融合后） |
 | M1 单底座 | 13 | ⏳ 0 | parity 冻结 + push-up 分支已备；store 融合待 lumen 协作 |
 | G1 macOS 正式发布 | 10 | ⏳ 0 | **硬 blocker：无 Apple 签名证书/Xcode/公证凭据** |
 
@@ -53,4 +53,4 @@
 
 ## 一句话
 
-**67/100：漏水全止、底座核验、接口正式化、九源全量采纳、影子场景、能力目录全部落地；剩余 33 分卡在 Apple 凭据与 lumen 跨仓融合（K1b/M1/G1）上。**
+**77/100：漏水全止、底座核验、接口正式化、九源全量采纳、managed-run 证明全部落地；剩余 23 分卡在 M1 全 agent/ 删复制（65 复制 crate）与 Apple 凭据（G1）上。**

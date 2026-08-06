@@ -1,6 +1,6 @@
 {
   "book_path": "docs/science/5.0/LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-06.md",
-  "book_sha256": "8d75ef4ee1b53db84efa8bfcce141bad2128e6552a10619853a2672e559e8d00",
+  "book_sha256": "f5b6a2efd2e9b330728845474b5fa3a2821d436077805510bc614a781eba1a4b",
   "canonical_lumen_observation": {
     "local_branch": "main",
     "local_head": "7b8f385b183825f81b2497572b0e44e8d3eea7d4",
@@ -28,7 +28,7 @@
     "docs/science/5.0/PLAN_SUPERSESSION_MAP.md"
   ],
   "purpose": "Hash-lock the canonical Lumen Science execution order (2026-08-06 dialectical revision against canonical Lumen 2.2) and its non-completion claims. This lock proves document integrity only; it does not admit a source, implement a gate, or prove CI, package, release, live provider, HPC, or device behavior. PASS_UPSTREAM statuses recorded in the gate registries are upstream facts with receipts, not Science completion.",
-  "recorded_at": "2026-08-06T17:50:00+08:00",
+  "recorded_at": "2026-08-06T23:10:00+08:00",
   "required_headings": [
     "# Lumen Science NextGen \u552f\u4e00\u6267\u884c\u603b\u7eb2",
     "## 0. \u4e00\u9875\u7ed3\u8bba",

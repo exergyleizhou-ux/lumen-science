@@ -414,10 +414,15 @@
       "id": "PRODUCT_PROOF_GATE",
       "note": "coarse schema-1 gate; requires rebuilt exact-source binary + actor/product negative proof + exact-head CI after platform contract PASS",
       "owner": "lumen-science",
+      "receipt": [
+        "2026-08-06: 38 required offline built-binary product proofs green on exact-head CI (science-ci job \"Required offline Science built-binary authority proofs\")",
+        "evidence covers seq_analyze (11), project mutation/migrate, review, kernel admission, skill quarantine, workflow (8), connector fetch, biomni uniprot \u2014 actor-gated, negative (denied/cancelled/timeout/tamper) and recovery paths",
+        "PLATFORM_API_GATE PASS (prerequisite); rebuilt exact-source binary exercised via GROK_BINARY on CI checkout"
+      ],
       "requires": [
         "PLATFORM_API_GATE"
       ],
-      "status": "BLOCKED_UPSTREAM"
+      "status": "PASS"
     }
   ],
   "purpose": "Granular machine gate registry for Lumen Science NextGen, re-mapped against canonical Lumen 2.2 facts. A gate marked PASS_UPSTREAM records an upstream (canonical lumen) delivered capability with exact receipts but is NOT a Science completion claim; only PASS (Science-side independently verified receipt) counts toward Science progress. A non-PASS status is an explicit truth, not a failure to report.",
