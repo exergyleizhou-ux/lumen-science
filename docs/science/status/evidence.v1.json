@@ -8,7 +8,7 @@
      "command": "npm run dist:full && bundle integrity checks",
      "exitCode": 0,
      "sourceAnchor": {
-      "headCommit": "942b6fb45dce094b90fa7e8cb306fce061174c40",
+      "headCommit": "50e3380810b0625e8b3db1306e46f8377e51c539",
       "protectedPaths": [
        "packs/science-desktop",
        ".github/workflows/desktop-ci.yml"
@@ -17,17 +17,16 @@
      "github": {
       "repository": "exergyleizhou-ux/lumen-science",
       "workflow": "Desktop CI",
-      "runId": 31069738838,
-      "jobId": 92514980273,
-      "runUrl": "https://github.com/exergyleizhou-ux/lumen-science/actions/runs/31069738838",
-      "pullRequestHeadCommit": "942b6fb45dce094b90fa7e8cb306fce061174c40",
-      "testedMergeCandidateCommit": "1cb2b95429204557be2035f7d4be767883c38a6c"
+      "runId": 31100318563,
+      "runUrl": "https://github.com/exergyleizhou-ux/lumen-science/actions/runs/31100318563",
+      "pullRequestHeadCommit": "50e3380810b0625e8b3db1306e46f8377e51c539",
+      "testedMergeCandidateCommit": "f31672e78f61240d31633c1492b018bd030a7c75"
      },
      "artifact": {
       "name": "desktop-full-package-provenance",
-      "sha256": "54a451dd973c194e90595adaffe629588017e390a991d6075f3be2fc67c51ead",
-      "appExecutableSha256": "9feeb48dde23a60b614da340d65247665621728a6398bf8f88f5468d76ce26ad",
-      "appAsarSha256": "d4bc16381682fdee6a27d4a9ebe9b06b1be1c765988a919d7e56b6a9761ff3f6"
+      "sha256": "cc6134e0aada9e8536746f02eb616f27ead554b2ed57f3e0f2289921d6af560f",
+      "appExecutableSha256": "3743798e27043900371623bd95bf82471d2a1fac85dd8b507d24e36de8e64d50",
+      "appAsarSha256": "554c36f1f476100337799f0b021aec9a09c563609f68bec8843c4f506ee3d825"
      },
      "signing": {
       "signature": "adhoc",
