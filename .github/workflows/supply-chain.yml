@@ -60,7 +60,15 @@ jobs:
         working-directory: .tmp/lumen-pin/agent
         # Advisories with no fixed version available would otherwise block every
         # PR indefinitely. Any use of --ignore must name the advisory and why.
-        run: cargo audit --deny warnings
+        # RUSTSEC-2026-0194/0195: quick-xml 0.39.4 arrives only via
+        # wayland-scanner, a build-time generator that parses the trusted
+        # Wayland XML protocol definitions — never attacker-controlled input,
+        # and nothing in the shipped binary's runtime paths. The runtime
+        # quick-xml line is 0.41 (fixed).
+        # RUSTSEC-2023-0071: rsa 0.9.10 is a dev-dependency used only to
+        # generate test keys; the crate's fixed line (0.10) is pre-release.
+        # The product never runs rsa operations on secrets.
+        run: cargo audit --deny warnings --ignore RUSTSEC-2026-0194 --ignore RUSTSEC-2026-0195 --ignore RUSTSEC-2023-0071
 
   go-vuln:
     name: govulncheck
