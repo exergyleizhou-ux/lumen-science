@@ -16,6 +16,7 @@ upstream checkouts.  They never fetch or mutate those repositories.
 from __future__ import annotations
 
 import argparse
+import os
 import ast
 import hashlib
 import json
@@ -220,10 +221,22 @@ def verify_protected_foundation(lock: dict[str, Any], science_repo: Path) -> Non
             f"protected foundation commit is not an ancestor of HEAD: {sha}",
         )
 
+    pin_root = os.environ.get("LUMEN_PIN_ROOT")
     for index, marker in enumerate(protected["required_markers"]):
         label = f"protected_foundation.required_markers[{index}]"
         require_relative_path(marker["path"], f"{label}.path")
-        path = science_repo / marker["path"]
+        if marker["path"].startswith("agent/"):
+            # M1 single base: the authority surface moved to the canonical
+            # Lumen repo (same agent/ layout). Verify the marker against the
+            # pinned Lumen checkout, never a local copy.
+            require(
+                pin_root is not None,
+                "LUMEN_PIN_ROOT must point at the pinned Lumen checkout for "
+                f"upstream-owned marker {marker['path']}",
+            )
+            path = Path(pin_root) / marker["path"]
+        else:
+            path = science_repo / marker["path"]
         require(path.is_file(), f"protected foundation file is missing: {marker['path']}")
         text = path.read_text(encoding="utf-8")
         for expected in marker["contains"]:
@@ -360,10 +373,19 @@ def verify_carried_ledgers(lock: dict[str, Any], science_repo: Path) -> None:
         and "Rust `SessionActor`" in motif_provenance,
         "Motif algorithm provenance lost its source, license, or authority boundary",
     )
+    pin_root = os.environ.get("LUMEN_PIN_ROOT")
     for index, marker in enumerate(motif_spec["algorithm_markers"]):
         label = f"motif_vendor.algorithm_markers[{index}]"
         require_relative_path(marker["path"], f"{label}.path")
-        marker_path = science_repo / marker["path"]
+        if marker["path"].startswith("agent/"):
+            require(
+                pin_root is not None,
+                "LUMEN_PIN_ROOT must point at the pinned Lumen checkout for "
+                f"upstream-owned motif marker {marker['path']}",
+            )
+            marker_path = Path(pin_root) / marker["path"]
+        else:
+            marker_path = science_repo / marker["path"]
         require(marker_path.is_file(), f"Motif algorithm file is missing: {marker['path']}")
         marker_text = marker_path.read_text(encoding="utf-8")
         for expected in marker["contains"]:

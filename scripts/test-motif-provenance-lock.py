@@ -13,11 +13,18 @@ import re
 from pathlib import Path
 
 
+import os
+
 ROOT = Path(__file__).resolve().parent.parent
 LOCK = ROOT / "third_party/upstream-lock.v2.json"
 VENDOR = ROOT / "third_party/motif/VENDOR_MANIFEST.json"
 PROVENANCE = ROOT / "third_party/provenance/motif-876a-seqbench.md"
-SEQBENCH = ROOT / "agent/crates/codegen/xai-grok-science/src/seqbench.rs"
+# M1 single base: the runnable seqbench lives in the canonical Lumen repo at
+# the pinned tuple, never in a Science-side copy.
+_PIN_ROOT = os.environ.get("LUMEN_PIN_ROOT")
+if not _PIN_ROOT:
+    raise SystemExit("LUMEN_PIN_ROOT must point at the pinned Lumen checkout")
+SEQBENCH = Path(_PIN_ROOT) / "agent/crates/codegen/xai-grok-science/src/seqbench.rs"
 ALGORITHMS = {
     "src/bio/fasta-parser.ts",
     "src/bio/gc-content.ts",

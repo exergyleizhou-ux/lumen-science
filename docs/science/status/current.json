@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "generator": "scripts/generate-science-status.py",
   "doc": "Machine-generated product status. Derived from the source tree and git only. Prose documents must point here rather than restate status. Regenerate with: python3 scripts/generate-science-status.py",
-  "sourceCommit": "860cd2eb67e6bd728f98cdea332bdddd81e24640",
-  "sourceCommitEpoch": 1786038130,
-  "sourceCommitIso": "2026-08-07T01:42:10+08:00",
+  "sourceCommit": "546da54a8857dc94508f5f436eda13d6afb9fa30",
+  "sourceCommitEpoch": 1786038291,
+  "sourceCommitIso": "2026-08-07T01:44:51+08:00",
   "gateVocabulary": {
     "states": [
       "pass",
@@ -33,13 +33,13 @@
       "authoritative": true
     },
     "rustCoreVersion": {
-      "value": "0.1.222",
+      "value": null,
       "path": "agent/crates/codegen/xai-grok-pager/Cargo.toml",
       "role": "Lumen Core coding agent; single Rust base NOT complete (known drift vs audited Lumen head is machine-gated; v0.1.251 is the admission target)",
       "authoritative": true
     },
     "rustCoreBinVersion": {
-      "value": "0.1.222",
+      "value": null,
       "path": "agent/crates/codegen/xai-grok-pager-bin/Cargo.toml",
       "role": "binary crate that produces `lumen`",
       "authoritative": false
@@ -175,7 +175,7 @@
         "usesVerifyTag": false,
         "sourceDateEpochFromCommit": false,
         "sourceDateEpochFromWallClock": false,
-        "lineCount": 709
+        "lineCount": 731
       }
     },
     "desktopCiAllowsTypecheckFailure": false
@@ -271,40 +271,8 @@
       "rust": {
         "path": "agent/crates/codegen/xai-grok-science",
         "transport": "ACP ext methods over `lumen agent stdio`",
-        "acpMethods": [
-          "x.ai/science/artifact_list",
-          "x.ai/science/capability_run",
-          "x.ai/science/claim_propose",
-          "x.ai/science/collaboration_invite",
-          "x.ai/science/connector_fetch",
-          "x.ai/science/evidence_attach",
-          "x.ai/science/evidence_compare",
-          "x.ai/science/evidence_consistency",
-          "x.ai/science/evidence_dossier",
-          "x.ai/science/evidence_reproduction",
-          "x.ai/science/evidence_trace",
-          "x.ai/science/goal_host_verify",
-          "x.ai/science/import_preview",
-          "x.ai/science/kernel_admission",
-          "x.ai/science/multimodal_index",
-          "x.ai/science/project_assert_membership",
-          "x.ai/science/project_create",
-          "x.ai/science/project_get",
-          "x.ai/science/project_list",
-          "x.ai/science/project_migrate",
-          "x.ai/science/project_transition",
-          "x.ai/science/project_update_question",
-          "x.ai/science/remote_compute_plan",
-          "x.ai/science/review_record",
-          "x.ai/science/run_csv",
-          "x.ai/science/seq_analyze",
-          "x.ai/science/skill_quarantine_import",
-          "x.ai/science/ssh_scp_fixture",
-          "x.ai/science/workflow_dry_run",
-          "x.ai/science/workflow_execute",
-          "x.ai/science/workflow_validate"
-        ],
-        "acpMethodCount": 31
+        "acpMethods": [],
+        "acpMethodCount": 0
       },
       "go": {
         "path": "packs/science",
@@ -331,7 +299,10 @@
       ],
       "toolNamesUnservedByEitherEngine": [
         "artifact_resolve",
-        "compute_plan"
+        "compute_plan",
+        "project_assert_membership",
+        "review_record",
+        "workflow_execute"
       ]
     },
     "knownAuthorityGaps": [

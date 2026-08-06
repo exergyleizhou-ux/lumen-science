@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -138,7 +139,17 @@ def validate(record: dict[str, Any], lock: dict[str, Any]) -> None:
         require(path not in paths, "capability source file repeats a path")
         paths.add(path)
     require(paths == expected["paths"], "capability source files are incomplete")
-    source_text = (ROOT / implementation["path"]).read_text(encoding="utf-8")
+    # M1 single base: Rust implementations live in the pinned Lumen checkout.
+    impl_path = implementation["path"]
+    if impl_path.startswith("agent/"):
+        pin_root = os.environ.get("LUMEN_PIN_ROOT")
+        require(
+            pin_root is not None,
+            "LUMEN_PIN_ROOT must point at the pinned Lumen checkout for "
+            f"implementation {impl_path}",
+        )
+        impl_path = str(Path(pin_root) / impl_path)
+    source_text = Path(impl_path).read_text(encoding="utf-8")
     require(all(marker in source_text for marker in expected["source_markers"]), "implementation is missing expected provenance markers")
     if record["id"] == "motif-seq-analyze-v1":
         require(f'pub const MOTIF_COMMIT: &str = "{record["source_commit"]}";' in source_text, "seqbench commit disagrees with capability intake")
@@ -159,7 +170,17 @@ def validate(record: dict[str, Any], lock: dict[str, Any]) -> None:
         require(source_commit_is_current_ancestor(proof["source_commit"]), "E4 source commit is not an ancestor of current HEAD")
         tests = proof.get("tests")
         require(isinstance(tests, list) and len(tests) >= expected["e4_minimum_tests"] and all(isinstance(item, str) and item for item in tests), "E4 proof is missing an exact required product test")
-        test_path = ROOT / str(evidence.get("legacy_product_tests", ""))
+        legacy_tests = str(evidence.get("legacy_product_tests", ""))
+        if legacy_tests.startswith("agent/"):
+            pin_root = os.environ.get("LUMEN_PIN_ROOT")
+            require(
+                pin_root is not None,
+                "LUMEN_PIN_ROOT must point at the pinned Lumen checkout for "
+                f"product-test source {legacy_tests}",
+            )
+            test_path = Path(pin_root) / legacy_tests
+        else:
+            test_path = ROOT / legacy_tests
         require(test_path.is_file(), "E4 proof must name an existing product-test source")
         test_source = test_path.read_text(encoding="utf-8")
         require(all(test in test_source for test in tests), "E4 proof names a product test absent from its source")

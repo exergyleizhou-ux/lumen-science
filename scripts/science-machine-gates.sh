@@ -7,7 +7,26 @@ cd "$ROOT"
 fail() { echo "GATE FAIL: $*" >&2; exit 1; }
 ok() { echo "GATE OK: $*"; }
 
-python3 scripts/verify-ecosystem-admission.py || fail "ecosystem admission"
+# M1 single base: the authority surface markers live in the canonical Lumen
+# repo. Checkout the pinned tuple (read from the admission lock — the single
+# source of truth) so the ecosystem gate can verify them upstream-owned.
+LUMEN_PIN_ROOT="${LUMEN_PIN_ROOT:-}"
+if [[ -z "$LUMEN_PIN_ROOT" ]]; then
+  PIN="$(python3 -c "
+import json
+l=json.load(open('docs/science/5.0/core-v0.1.251-admission.lock.json'))
+print(l['comparison']['lumen_head'])
+")"
+  rm -rf .tmp/lumen-pin
+  git clone --quiet --filter=blob:none https://github.com/exergyleizhou-ux/lumen.git .tmp/lumen-pin
+  git -C .tmp/lumen-pin fetch --quiet --depth 1 origin "$PIN"
+  git -C .tmp/lumen-pin checkout --quiet "$PIN"
+  LUMEN_PIN_ROOT="$(pwd)/.tmp/lumen-pin"
+fi
+export LUMEN_PIN_ROOT
+echo "pinned Lumen tuple: $(git -C "$LUMEN_PIN_ROOT" rev-parse --short HEAD)"
+
+LUMEN_PIN_ROOT="$LUMEN_PIN_ROOT" python3 scripts/verify-ecosystem-admission.py || fail "ecosystem admission"
 ok "ecosystem admission"
 
 # F0 records a current, auditable input set.  Verify both the real snapshot
@@ -199,48 +218,25 @@ if grep -Eq '(\.\./\.\./VERSION|ROOT/VERSION)' \
 fi
 ok "Go release/sign version source boundary"
 
-# Rust Core version truth: root VERSION == agent/VERSION == eight Core crates.
-python3 scripts/release_version.py --root . check >/dev/null
-ok "Rust Core VERSION contract (root + agent + 8 crates)"
+# Science root version truth: the root VERSION stays parseable SemVer and the
+# Rust product version is owned by the pinned Lumen tuple (its VERSION lives in
+# the canonical repo). The admission lock records the tuple.
+python3 - <<'PY' || fail "root VERSION contract"
+import re
+from pathlib import Path
+version = Path("VERSION").read_text().strip()
+assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?", version), version
+PY
+ok "Science root VERSION contract (Rust product line owned by the Lumen pin)"
 
-# Offline Core-drift fixture gate (no upstream checkout required).
-python3 scripts/check-core-drift.py --self-test
-ok "Core drift fixture self-test"
+# M1 single base: the Science repo owns no Rust product copy. Product tests
+# consume the pinned Lumen tuple; this gate asserts zero-copy end to end.
+python3 scripts/verify-single-base.py || fail "zero-copy single base"
+ok "zero-copy single base (no agent/ copy; pinned Lumen consumption)"
 
-# Freeze the copied authority surface. This is an anti-growth gate, not a
-# single-base completion claim: only a public Lumen platform-port migration or
-# an explicitly reviewed exception may update its digest.
-python3 scripts/test-science-core-ownership.py
-ok "copied-Core ownership anti-growth contract"
-
-# Never allow a future migration to replace a versioned canonical source pin
-# with a machine-local path to another Lumen checkout.
-python3 scripts/test-no-external-cargo-path-deps.py
-ok "external Cargo path dependency anti-regression contract"
-
-# Audited-head Core drift comparison when that exact Lumen checkout is provided.
-# Local: CORE_DRIFT_UPSTREAM_ROOT=/Users/lei/code/lumen
-# CI: checkout the lock pin into a temp dir and set the same env var.
-# The pinned rev is read from the admission lock (single source of truth),
-# never hard-coded — X-U refreshes move the pin without touching this file.
-if [[ -n "${CORE_DRIFT_UPSTREAM_ROOT:-}" ]]; then
-  LOCK_PIN=$(python3 -c "
-import json
-l=json.load(open('docs/science/5.0/core-v0.1.251-admission.lock.json'))
-print(l['comparison']['lumen_head'])
-")
-  python3 scripts/check-core-drift.py \
-    --science-root . \
-    --upstream-root "$CORE_DRIFT_UPSTREAM_ROOT" \
-    --lock docs/science/5.0/core-v0.1.251-admission.lock.json
-  ok "Core drift audited-head manifest comparison against $CORE_DRIFT_UPSTREAM_ROOT"
-  python3 scripts/verify-science-crate-drift.py \
-    --upstream-repo "$CORE_DRIFT_UPSTREAM_ROOT" \
-    --upstream-rev "$LOCK_PIN"
-  ok "duplicated Science crate audited-head inventory comparison"
-else
-  echo "WARN  CORE_DRIFT_UPSTREAM_ROOT unset — audited-head Core drift comparison NOT RUN"
-fi
+# Anti-growth: no copied Core authority surface may be reintroduced. The
+# zero-copy gate above already fails on any Cargo.toml/Cargo.lock outside
+# packs/, so no separate ownership manifest is needed.
 
 echo
 echo "All science machine gates passed (documentation + lock integrity)."

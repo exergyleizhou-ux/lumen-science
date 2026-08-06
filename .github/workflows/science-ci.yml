@@ -30,10 +30,6 @@ on:
       - 'docs/science/5.0/PLAN_SUPERSESSION_MAP.md'
       - 'docs/science/5.0/README.md'
       - 'docs/science/fusion-sources.lock.json'
-      # agent/**: same reasoning as the pull_request trigger below — core
-      # changes reach main through merges, and the record on main should carry
-      # the same evidence the PR gate demanded.
-      - 'agent/**'
       - 'VERSION'
       - 'packs/science/VERSION'
   pull_request:
@@ -42,15 +38,6 @@ on:
       - 'packs/science/**'
       - 'scripts/**'
       - 'docs/science/**'
-      # agent/** (not just the science crate): three of main's four REQUIRED
-      # status contexts live in this workflow, and required checks that never
-      # fire never report — so a PR touching only core crates (exactly what a
-      # core-security sync is) was unmergeable by construction. PR #12 had to
-      # be unblocked by manual workflow_dispatch; this makes the next one
-      # merge like any other PR. Core changes genuinely can break the science
-      # crate — one cargo workspace — so running these jobs on them is not
-      # merely ritual.
-      - 'agent/**'
       - 'packs/science/VERSION'
   workflow_dispatch:
 
@@ -192,9 +179,26 @@ jobs:
     timeout-minutes: 90
     defaults:
       run:
-        working-directory: agent
+        working-directory: .tmp/lumen-pin/agent
     steps:
       - uses: actions/checkout@v4
+
+      # M1 single base: the Science repo owns no Rust copy. Every Rust step
+      # runs against the pinned Lumen tuple read from the admission lock.
+      - name: Read pinned Lumen tuple from admission lock
+        working-directory: ${{ github.workspace }}
+        run: |
+          PIN="$(python3 -c "import json; print(json.load(open('docs/science/5.0/core-v0.1.251-admission.lock.json'))['comparison']['lumen_head'])")"
+          echo "LUMEN_PIN=$PIN" >> "$GITHUB_ENV"
+          echo "pinned lumen tuple: $PIN"
+
+      - name: Checkout pinned Lumen (single Rust base)
+        working-directory: ${{ github.workspace }}
+        run: |
+          git clone --quiet --filter=blob:none https://github.com/exergyleizhou-ux/lumen.git .tmp/lumen-pin
+          git -C .tmp/lumen-pin fetch --quiet --depth 1 origin "$LUMEN_PIN"
+          git -C .tmp/lumen-pin checkout --quiet "$LUMEN_PIN"
+          git -C .tmp/lumen-pin rev-parse --short HEAD
 
       # The Linux sandbox deliberately trusts only a root-owned, non-writable
       # /usr chain. GitHub runner images have occasionally shipped /usr owned
@@ -285,8 +289,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            agent/target
-          key: ${{ runner.os }}-cargo-science-${{ hashFiles('agent/Cargo.lock') }}
+            .tmp/lumen-pin/agent/target
+          key: ${{ runner.os }}-cargo-science-${{ hashFiles('.tmp/lumen-pin/agent/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-science-
 
@@ -336,8 +340,10 @@ jobs:
       # product tests prove that the shipped `lumen` composition root exposes
       # the same authority chain over ACP stdio: SessionActor, production
       # permission prompt, durable terminal state, and store-owned artifacts.
-      # Every test is offline and uses the local mock inference server.
-      - name: Build Lumen composition-root binary
+      # Every test is offline and uses the local mock inference server. The
+      # binary and the built-binary corpus both come from the pinned Lumen
+      # tuple — the Science repo contributes no Rust of its own.
+      - name: Build pinned Lumen composition-root binary
         run: cargo build -p xai-grok-pager-bin --bin lumen --locked
 
       # Each `cargo test` invocation re-evaluates the workspace fingerprint and
@@ -380,7 +386,7 @@ jobs:
 
       - name: Required offline Science built-binary authority proofs
         env:
-          GROK_BINARY: ${{ github.workspace }}/agent/target/debug/lumen
+          GROK_BINARY: ${{ github.workspace }}/.tmp/lumen-pin/agent/target/debug/lumen
         run: |
           set -euo pipefail
           tests=(
@@ -476,9 +482,25 @@ jobs:
     timeout-minutes: 90
     defaults:
       run:
-        working-directory: agent
+        working-directory: .tmp/lumen-pin/agent
     steps:
       - uses: actions/checkout@v4
+
+      # M1 single base: consume the pinned Lumen tuple, never a local copy.
+      - name: Read pinned Lumen tuple from admission lock
+        working-directory: ${{ github.workspace }}
+        run: |
+          PIN="$(python3 -c "import json; print(json.load(open('docs/science/5.0/core-v0.1.251-admission.lock.json'))['comparison']['lumen_head'])")"
+          echo "LUMEN_PIN=$PIN" >> "$GITHUB_ENV"
+          echo "pinned lumen tuple: $PIN"
+
+      - name: Checkout pinned Lumen (single Rust base)
+        working-directory: ${{ github.workspace }}
+        run: |
+          git clone --quiet --filter=blob:none https://github.com/exergyleizhou-ux/lumen.git .tmp/lumen-pin
+          git -C .tmp/lumen-pin fetch --quiet --depth 1 origin "$LUMEN_PIN"
+          git -C .tmp/lumen-pin checkout --quiet "$LUMEN_PIN"
+          git -C .tmp/lumen-pin rev-parse --short HEAD
 
       - name: Install protoc
         run: brew install protobuf
@@ -492,13 +514,13 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            agent/target
-          key: ${{ runner.os }}-cargo-science-product-${{ hashFiles('agent/Cargo.lock') }}
+            .tmp/lumen-pin/agent/target
+          key: ${{ runner.os }}-cargo-science-product-${{ hashFiles('.tmp/lumen-pin/agent/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-science-product-
             ${{ runner.os }}-cargo-science-
 
-      - name: Build Lumen composition-root binary
+      - name: Build pinned Lumen composition-root binary
         run: cargo build -p xai-grok-pager-bin --bin lumen --locked
 
       # Same harness-once pattern as the Linux job: per-invocation fingerprint
@@ -539,7 +561,7 @@ jobs:
 
       - name: Required macOS workflow sandbox product proofs
         env:
-          GROK_BINARY: ${{ github.workspace }}/agent/target/debug/lumen
+          GROK_BINARY: ${{ github.workspace }}/.tmp/lumen-pin/agent/target/debug/lumen
         run: |
           set -euo pipefail
           tests=(
