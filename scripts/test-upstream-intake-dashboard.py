@@ -27,13 +27,16 @@ def main() -> int:
     lock = json.loads(LOCK.read_text(encoding="utf-8"))
     good = run(lock)
     bad_lock = copy.deepcopy(lock)
+    # The runtime-authority rejection is a DRAFT-state guard: an active lock
+    # has already passed intake. Re-derive the draft shape explicitly.
+    bad_lock["status"] = "draft"
+    bad_lock["blocked_by"] = ["I1-02 must collect immutable source and rights evidence before activation."]
     bad_lock["sources"][0]["components"][0]["execution_authority"] = "upstream runtime"
     bad = run(bad_lock)
     results = [
-        ("checked-in dashboard reports draft evidence without product proof", good.returncode == 0 and '"runnable_from_intake": 0' in good.stdout),
+        ("checked-in active lock reports intake evidence without product proof", good.returncode == 0 and '"runnable_from_intake": 0' in good.stdout),
         ("checked-in dashboard separates nine source scans from Core migration (all scanned after V0)", good.returncode == 0 and '"sources_scanned": 9' in good.stdout and '"entries_scanned": 12191' in good.stdout and '"external_sources_scanned": 7' in good.stdout and '"core_sources_scanned": 2' in good.stdout),
-        ("draft dashboard rejects a component that claims runtime authority", bad.returncode == 1 and "cannot contain a runnable component" in bad.stdout),
-    ]
+        ("draft dashboard rejects a component that claims runtime authority", bad.returncode == 1 and "cannot contain a runnable component" in bad.stdout),    ]
     for name, passed in results:
         print(f"  {'ok' if passed else 'FAIL':<4}  {name}")
     print(f"\n{'OK' if all(passed for _, passed in results) else 'FAIL'}: {sum(passed for _, passed in results)}/{len(results)} passed")

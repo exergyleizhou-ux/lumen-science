@@ -1,17 +1,5 @@
 {
-  "schema_version": 2,
-  "status": "draft",
-  "recorded_at": "2026-08-01T16:19:11+08:00",
-  "purpose": "Nine-source immutable intake ledger. Draft is intentionally non-admission and must return BLOCKED from its verifier.",
-  "policy": {
-    "canonical_execution_authority": "Rust Lumen SessionActor",
-    "external_runtime_authority": "denied",
-    "root_license_overrides_nested_license": false,
-    "restricted_source_policy": "do-not-copy-or-derive; clean-room from open standards and independently written requirements only",
-    "unreviewed_asset_is_executable": false,
-    "unreviewed_data_or_model_is_scientific_truth": false,
-    "provider_or_billable_calls_during_intake": false
-  },
+  "blocked_by": [],
   "expected_source_ids": [
     "snap-stanford-biomni",
     "jvogan-motif",
@@ -23,551 +11,560 @@
     "exergyleizhou-ux-lumen",
     "exergyleizhou-ux-lumen-science"
   ],
+  "policy": {
+    "canonical_execution_authority": "Rust Lumen SessionActor",
+    "external_runtime_authority": "denied",
+    "provider_or_billable_calls_during_intake": false,
+    "restricted_source_policy": "do-not-copy-or-derive; clean-room from open standards and independently written requirements only",
+    "root_license_overrides_nested_license": false,
+    "unreviewed_asset_is_executable": false,
+    "unreviewed_data_or_model_is_scientific_truth": false
+  },
+  "purpose": "Nine-source immutable intake ledger. Draft is intentionally non-admission and must return BLOCKED from its verifier.",
+  "recorded_at": "2026-08-06T17:40:00+08:00",
+  "schema_version": 2,
   "sources": [
     {
-      "id": "snap-stanford-biomni",
-      "repository": "https://github.com/snap-stanford/Biomni.git",
-      "exact_commit": "400c1f366b96a35ca253e13c9b06c5076af41d65",
       "archive_sha256": "e63cc1b59c4b42f043390d99e5fd3bc0304c978e737167fa270e3431c501818e",
-      "rights_status": "verified",
-      "source_gate_status": "evidence-collected",
-      "root_license": {
-        "spdx": "Apache-2.0",
-        "path": "LICENSE",
-        "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
-      },
-      "nested_license_scan": {
-        "status": "complete",
-        "sha256": "5080a6de0105b0d243abc2fd41e53fc06d5564a0ffd39ccb1b66ebc4549f6cef"
-      },
       "components": [
         {
+          "asset_kind": "code",
+          "disposition": "adapt",
+          "evidence": {
+            "record": "third_party/intake-evidence/snap-stanford-biomni.json",
+            "source_sha256": "e63cc1b59c4b42f043390d99e5fd3bc0304c978e737167fa270e3431c501818e"
+          },
+          "execution_authority": "none",
           "id": "tool-descriptors",
           "path": "biomni/tool/tool_description/**",
-          "asset_kind": "code",
-          "disposition": "adapt",
           "reuse_mode": "adapt",
-          "rights_status": "verified",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "e63cc1b59c4b42f043390d99e5fd3bc0304c978e737167fa270e3431c501818e",
-            "record": "third_party/intake-evidence/snap-stanford-biomni.json"
-          }
+          "rights_status": "verified"
         },
         {
+          "asset_kind": "code",
+          "disposition": "reject-authority",
+          "evidence": {
+            "record": "third_party/intake-evidence/snap-stanford-biomni.json",
+            "source_sha256": "e63cc1b59c4b42f043390d99e5fd3bc0304c978e737167fa270e3431c501818e"
+          },
+          "execution_authority": "none",
           "id": "agent-runtime",
           "path": "biomni/agent/**",
-          "asset_kind": "code",
-          "disposition": "reject-authority",
           "reuse_mode": "none",
-          "rights_status": "verified",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "e63cc1b59c4b42f043390d99e5fd3bc0304c978e737167fa270e3431c501818e",
-            "record": "third_party/intake-evidence/snap-stanford-biomni.json"
-          }
+          "rights_status": "verified"
         },
         {
+          "asset_kind": "data",
+          "disposition": "reject-data-model",
+          "evidence": {
+            "record": "third_party/intake-evidence/snap-stanford-biomni.json",
+            "source_sha256": "e63cc1b59c4b42f043390d99e5fd3bc0304c978e737167fa270e3431c501818e"
+          },
+          "execution_authority": "none",
           "id": "data-lake",
           "path": "Biomni-E1.tar.gz",
-          "asset_kind": "data",
-          "disposition": "reject-data-model",
           "reuse_mode": "none",
-          "rights_status": "restricted",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "e63cc1b59c4b42f043390d99e5fd3bc0304c978e737167fa270e3431c501818e",
-            "record": "third_party/intake-evidence/snap-stanford-biomni.json"
-          }
-        }
-      ]
-    },
-    {
-      "id": "jvogan-motif",
-      "repository": "https://github.com/jvogan/motif.git",
-      "exact_commit": "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0",
-      "archive_sha256": "913ab66aca99c04ced8a98472138da88ec9af5cdf982759ddb7827665dfe4f9a",
-      "rights_status": "verified",
-      "source_gate_status": "evidence-collected",
-      "root_license": {
-        "spdx": "MIT",
-        "path": "LICENSE",
-        "sha256": "606f9372bf61b63b32725d69f312ead92010afdaeea35befc46dc4db1ed19d49"
-      },
-      "nested_license_scan": {
-        "status": "complete",
-        "sha256": "868a96c6a0f4d41392407789b73d10a0943ce2136ceb71ed18795bbaf370a75d"
-      },
-      "components": [
-        {
-          "id": "deterministic-sequence",
-          "path": "src/bio/**",
-          "asset_kind": "code",
-          "disposition": "adapt",
-          "reuse_mode": "adapt",
-          "rights_status": "verified",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "913ab66aca99c04ced8a98472138da88ec9af5cdf982759ddb7827665dfe4f9a",
-            "record": "third_party/intake-evidence/jvogan-motif.json"
-          }
-        },
-        {
-          "id": "mcp-installer",
-          "path": "mcp/**",
-          "asset_kind": "code",
-          "disposition": "reject-authority",
-          "reuse_mode": "none",
-          "rights_status": "verified",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "913ab66aca99c04ced8a98472138da88ec9af5cdf982759ddb7827665dfe4f9a",
-            "record": "third_party/intake-evidence/jvogan-motif.json"
-          }
-        },
-        {
-          "id": "biological-catalogs",
-          "path": "public/data/**",
-          "asset_kind": "data",
-          "disposition": "reject-data-model",
-          "reuse_mode": "none",
-          "rights_status": "restricted",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "913ab66aca99c04ced8a98472138da88ec9af5cdf982759ddb7827665dfe4f9a",
-            "record": "third_party/intake-evidence/jvogan-motif.json"
-          }
-        }
-      ]
-    },
-    {
-      "id": "aipoch-open-science",
-      "repository": "https://github.com/aipoch/open-science.git",
-      "exact_commit": "fd2853f0b9bdb6c063ccc1e741687584ab94bf9a",
-      "archive_sha256": "6cc352223fefe342151d971097a28008127980120eaad5dfe6f613274ef84e5a",
-      "rights_status": "verified",
-      "source_gate_status": "evidence-collected",
-      "root_license": {
-        "spdx": "Apache-2.0",
-        "path": "LICENSE",
-        "sha256": "b038148f912bdd6e61e33e56214d02c4d8a9640f7a637e21dfcf939332816979"
-      },
-      "nested_license_scan": {
-        "status": "complete",
-        "sha256": "7ebcbb6c4e9ec93dc03797d840263a66e51f55fd74f1d6beb9cd974217a695ab"
-      },
-      "components": [
-        {
-          "id": "bounded-preview",
-          "path": "src/main/skills/**",
-          "asset_kind": "code",
-          "disposition": "adapt",
-          "reuse_mode": "adapt",
-          "rights_status": "verified",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "6cc352223fefe342151d971097a28008127980120eaad5dfe6f613274ef84e5a",
-            "record": "third_party/intake-evidence/aipoch-open-science.json"
-          }
-        },
-        {
-          "id": "connector-types",
-          "path": "src/main/connectors/types.ts",
-          "asset_kind": "code",
-          "disposition": "adapt",
-          "reuse_mode": "adapt",
-          "rights_status": "verified",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "6cc352223fefe342151d971097a28008127980120eaad5dfe6f613274ef84e5a",
-            "record": "third_party/intake-evidence/aipoch-open-science.json"
-          }
-        },
-        {
-          "id": "connector-registry",
-          "path": "src/main/connectors/registry.ts",
-          "asset_kind": "code",
-          "disposition": "adapt",
-          "reuse_mode": "adapt",
-          "rights_status": "verified",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "6cc352223fefe342151d971097a28008127980120eaad5dfe6f613274ef84e5a",
-            "record": "third_party/intake-evidence/aipoch-open-science.json"
-          }
-        },
-        {
-          "id": "connector-descriptors",
-          "path": "src/main/connectors/descriptors/**",
-          "asset_kind": "code",
-          "disposition": "quarantine",
-          "reuse_mode": "none",
-          "rights_status": "verified",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "6cc352223fefe342151d971097a28008127980120eaad5dfe6f613274ef84e5a",
-            "record": "third_party/intake-evidence/aipoch-open-science.json"
-          }
-        },
-        {
-          "id": "connector-service",
-          "path": "src/main/connectors/service.ts",
-          "asset_kind": "code",
-          "disposition": "quarantine",
-          "reuse_mode": "none",
-          "rights_status": "verified",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "6cc352223fefe342151d971097a28008127980120eaad5dfe6f613274ef84e5a",
-            "record": "third_party/intake-evidence/aipoch-open-science.json"
-          }
-        },
-        {
-          "id": "connector-approval-broker",
-          "path": "src/main/connectors/approval-broker.ts",
-          "asset_kind": "code",
-          "disposition": "quarantine",
-          "reuse_mode": "none",
-          "rights_status": "verified",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "6cc352223fefe342151d971097a28008127980120eaad5dfe6f613274ef84e5a",
-            "record": "third_party/intake-evidence/aipoch-open-science.json"
-          }
-        },
-        {
-          "id": "connector-mcp-client",
-          "path": "src/main/connectors/mcp-client-manager.ts",
-          "asset_kind": "code",
-          "disposition": "reject-authority",
-          "reuse_mode": "none",
-          "rights_status": "verified",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "6cc352223fefe342151d971097a28008127980120eaad5dfe6f613274ef84e5a",
-            "record": "third_party/intake-evidence/aipoch-open-science.json"
-          }
-        },
-        {
-          "id": "agent-framework",
-          "path": "src/main/acp/**",
-          "asset_kind": "code",
-          "disposition": "reject-authority",
-          "reuse_mode": "none",
-          "rights_status": "verified",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "6cc352223fefe342151d971097a28008127980120eaad5dfe6f613274ef84e5a",
-            "record": "third_party/intake-evidence/aipoch-open-science.json"
-          }
-        }
-      ]
-    },
-    {
-      "id": "qzzqzzb-openclaudescience",
-      "repository": "https://github.com/qzzqzzb/OpenClaudeScience.git",
-      "exact_commit": "4a5f2ab2879ebd4f806155c796e247da94bb1625",
-      "archive_sha256": "7ef8c818d950a3abb9a238a713d8fa818288f02800f54e46b7b0075276b79a61",
-      "rights_status": "verified",
-      "source_gate_status": "evidence-collected",
-      "root_license": {
-        "spdx": "MIT",
-        "path": "LICENSE",
-        "sha256": "f756cca8fc2a4ce8ab225636f3df3eae7f2f638f4df82447f01224d6a24a97cb"
-      },
-      "nested_license_scan": {
-        "status": "complete",
-        "sha256": "14f958071d590a2f431e0d1a9bb61a23291433e5675c19c5394836d9171ab7b7"
-      },
-      "components": [
-        {
-          "id": "catalog-ux",
-          "path": "ui/src/app/skills/**",
-          "asset_kind": "code",
-          "disposition": "adapt",
-          "reuse_mode": "adapt",
-          "rights_status": "verified",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "7ef8c818d950a3abb9a238a713d8fa818288f02800f54e46b7b0075276b79a61",
-            "record": "third_party/intake-evidence/qzzqzzb-openclaudescience.json"
-          }
-        },
-        {
-          "id": "agent-runtime",
-          "path": "internagents/**",
-          "asset_kind": "code",
-          "disposition": "reject-authority",
-          "reuse_mode": "none",
-          "rights_status": "verified",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "7ef8c818d950a3abb9a238a713d8fa818288f02800f54e46b7b0075276b79a61",
-            "record": "third_party/intake-evidence/qzzqzzb-openclaudescience.json"
-          }
-        },
-        {
-          "id": "docx-proprietary",
-          "path": "skills/docx/**",
-          "asset_kind": "skill",
-          "disposition": "reject-license",
-          "reuse_mode": "clean-room",
-          "rights_status": "restricted",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "7ef8c818d950a3abb9a238a713d8fa818288f02800f54e46b7b0075276b79a61",
-            "record": "third_party/intake-evidence/qzzqzzb-openclaudescience.json"
-          }
-        },
-        {
-          "id": "pdf-proprietary",
-          "path": "skills/pdf/**",
-          "asset_kind": "skill",
-          "disposition": "reject-license",
-          "reuse_mode": "clean-room",
-          "rights_status": "restricted",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "7ef8c818d950a3abb9a238a713d8fa818288f02800f54e46b7b0075276b79a61",
-            "record": "third_party/intake-evidence/qzzqzzb-openclaudescience.json"
-          }
-        },
-        {
-          "id": "pptx-proprietary",
-          "path": "skills/pptx/**",
-          "asset_kind": "skill",
-          "disposition": "reject-license",
-          "reuse_mode": "clean-room",
-          "rights_status": "restricted",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "7ef8c818d950a3abb9a238a713d8fa818288f02800f54e46b7b0075276b79a61",
-            "record": "third_party/intake-evidence/qzzqzzb-openclaudescience.json"
-          }
-        },
-        {
-          "id": "xlsx-proprietary",
-          "path": "skills/xlsx/**",
-          "asset_kind": "skill",
-          "disposition": "reject-license",
-          "reuse_mode": "clean-room",
-          "rights_status": "restricted",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "7ef8c818d950a3abb9a238a713d8fa818288f02800f54e46b7b0075276b79a61",
-            "record": "third_party/intake-evidence/qzzqzzb-openclaudescience.json"
-          }
-        }
-      ]
-    },
-    {
-      "id": "hust-ningkang-lab-bgc-prophet",
-      "repository": "https://github.com/HUST-NingKang-Lab/BGC-Prophet.git",
-      "exact_commit": "de5068695a381d117ae3829d9c2698d954b85efc",
-      "archive_sha256": "ed4da248d4af9acea88e29a7eebe5760edcc0ee0e1a62290b7da32ff1f308587",
-      "rights_status": "verified",
-      "source_gate_status": "evidence-collected",
-      "root_license": {
-        "spdx": "MIT",
-        "path": "LICENSE",
-        "sha256": "4e459a5157c258922f9a2544350df6d2449c439950e7a5a24a5a8283c2d8e977"
-      },
-      "nested_license_scan": {
-        "status": "complete",
-        "sha256": "d4833df9de503cf9742636e54c6737ddf251ee30dda9211933826d86bc07dbf0"
-      },
-      "components": [
-        {
-          "id": "pipeline-code",
-          "path": "src/**",
-          "asset_kind": "code",
-          "disposition": "quarantine",
-          "reuse_mode": "none",
-          "rights_status": "verified",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "ed4da248d4af9acea88e29a7eebe5760edcc0ee0e1a62290b7da32ff1f308587",
-            "record": "third_party/intake-evidence/hust-ningkang-lab-bgc-prophet.json"
-          }
-        },
-        {
-          "id": "checkpoints-and-data",
-          "path": "models/**",
-          "asset_kind": "model",
-          "disposition": "reject-data-model",
-          "reuse_mode": "none",
-          "rights_status": "restricted",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "ed4da248d4af9acea88e29a7eebe5760edcc0ee0e1a62290b7da32ff1f308587",
-            "record": "third_party/intake-evidence/hust-ningkang-lab-bgc-prophet.json"
-          }
-        }
-      ]
-    },
-    {
-      "id": "aurekaresearch-opendde",
-      "repository": "https://github.com/aurekaresearch/OpenDDE.git",
-      "exact_commit": "f607bb3c9ff299c0627ac20f5ef8e25d716ed46f",
-      "archive_sha256": "c134708412a1c6fb2b77d636171314792c147a1a4d4fcd8294fd6aee361b49b2",
-      "rights_status": "verified",
-      "source_gate_status": "evidence-collected",
-      "root_license": {
-        "spdx": "Apache-2.0",
-        "path": "LICENSE",
-        "sha256": "9295103560df7e496d7420d897ece3b2e6365ab2571d3060d629fa10a2657cbd"
-      },
-      "nested_license_scan": {
-        "status": "complete",
-        "sha256": "89556d2c43cc57f1fee1f3558aae70bda954b64c59581831d3beed49c75a448e"
-      },
-      "components": [
-        {
-          "id": "inference-config",
-          "path": "runner/**",
-          "asset_kind": "code",
-          "disposition": "quarantine",
-          "reuse_mode": "none",
-          "rights_status": "verified",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "c134708412a1c6fb2b77d636171314792c147a1a4d4fcd8294fd6aee361b49b2",
-            "record": "third_party/intake-evidence/aurekaresearch-opendde.json"
-          }
-        },
-        {
-          "id": "weights-and-msa",
-          "path": "models/**",
-          "asset_kind": "model",
-          "disposition": "reject-data-model",
-          "reuse_mode": "none",
-          "rights_status": "restricted",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "c134708412a1c6fb2b77d636171314792c147a1a4d4fcd8294fd6aee361b49b2",
-            "record": "third_party/intake-evidence/aurekaresearch-opendde.json"
-          }
-        }
-      ]
-    },
-    {
-      "id": "ai4s-research-open-science",
-      "repository": "https://github.com/ai4s-research/open-science.git",
-      "exact_commit": "f3928bda37acfdbe3dfe18792fc1eca38c2e884f",
-      "archive_sha256": "5cd37c71206a5b9c55f820a454884c01b4731d01e06250f9883ed45c485292b4",
-      "rights_status": "verified",
-      "source_gate_status": "evidence-collected",
-      "root_license": {
-        "spdx": "MIT",
-        "path": "LICENSE",
-        "sha256": "8f844b63f71cc8acb08d844081425183bc28fbb7312e1576651d2cf4cc013738"
-      },
-      "nested_license_scan": {
-        "status": "complete",
-        "sha256": "b92075fa7cf18c86f791609eeef9fedd66598c7c518ee4ca5180c3cadc7e32ed"
-      },
-      "components": [
-        {
-          "id": "run-projection-ux",
-          "path": "apps/desktop/src-tauri/src/**",
-          "asset_kind": "code",
-          "disposition": "quarantine",
-          "reuse_mode": "none",
-          "rights_status": "restricted",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "5cd37c71206a5b9c55f820a454884c01b4731d01e06250f9883ed45c485292b4",
-            "record": "third_party/intake-evidence/ai4s-research-open-science.json"
-          }
-        },
-        {
-          "id": "opencode-profile",
-          "path": "runtime/opencode-profile/**",
-          "asset_kind": "code",
-          "disposition": "reject-authority",
-          "reuse_mode": "none",
-          "rights_status": "restricted",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "5cd37c71206a5b9c55f820a454884c01b4731d01e06250f9883ed45c485292b4",
-            "record": "third_party/intake-evidence/ai4s-research-open-science.json"
-          }
-        }
-      ]
-    },
-    {
-      "id": "exergyleizhou-ux-lumen",
-      "repository": "https://github.com/exergyleizhou-ux/lumen.git",
-      "exact_commit": "2f47a9ad84e94b20291a1ad3d6b005ccbd3885f4",
-      "archive_sha256": "3dedbe240a5e9d67de9a620f9055975fb5cf718494ad8cb9963bc3243aa959c1",
-      "rights_status": "verified",
-      "source_gate_status": "pass",
-      "root_license": {
-        "spdx": "Apache-2.0",
-        "path": "agent/LICENSE",
-        "sha256": "116f7778b9802e569b7fa3a532b17bd80eb13c67837def01eed093d4ea472f28"
-      },
-      "nested_license_scan": {
-        "status": "complete",
-        "sha256": "7e60d6fcc60043b37d48614901fb1d4927a90ddb680ad4d02aa3f082de430e04"
-      },
-      "components": [
-        {
-          "id": "canonical-platform",
-          "path": "agent/**",
-          "asset_kind": "code",
-          "disposition": "catalog-only",
-          "reuse_mode": "catalog-only",
-          "rights_status": "verified",
-          "execution_authority": "none",
-          "evidence": {
-            "source_sha256": "3dedbe240a5e9d67de9a620f9055975fb5cf718494ad8cb9963bc3243aa959c1",
-            "record": "third_party/intake-evidence/exergyleizhou-ux-lumen.json"
-          }
+          "rights_status": "restricted"
         }
       ],
-      "source_gate_receipt": "LUMEN_R0_SOURCE_GATE PASS (V0, 2026-08-06): peeled tags v2.0.0=f51fb902 v2.1.0=3d5d52cf v2.2.0=098f7cd4; release-source-tuple.json; CI 5/5 @7b8f385b; readiness eval_live 20/20; blockers only M5/M6 human gates"
+      "exact_commit": "400c1f366b96a35ca253e13c9b06c5076af41d65",
+      "id": "snap-stanford-biomni",
+      "nested_license_scan": {
+        "sha256": "5080a6de0105b0d243abc2fd41e53fc06d5564a0ffd39ccb1b66ebc4549f6cef",
+        "status": "complete"
+      },
+      "repository": "https://github.com/snap-stanford/Biomni.git",
+      "rights_status": "verified",
+      "root_license": {
+        "path": "LICENSE",
+        "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+        "spdx": "Apache-2.0"
+      },
+      "source_gate_status": "pass"
     },
     {
-      "id": "exergyleizhou-ux-lumen-science",
-      "repository": "https://github.com/exergyleizhou-ux/lumen-science.git",
-      "exact_commit": "41ec8cd5e569d6f87babf4911b3a330444352e1e",
-      "archive_sha256": "2dcd95b1932733c8db74a9585c03c0f3c648dc49410ba560c7d81ac237718636",
-      "rights_status": "verified",
-      "source_gate_status": "evidence-collected",
-      "root_license": {
-        "spdx": "Apache-2.0",
-        "path": "agent/LICENSE",
-        "sha256": "116f7778b9802e569b7fa3a532b17bd80eb13c67837def01eed093d4ea472f28"
-      },
-      "nested_license_scan": {
-        "status": "complete",
-        "sha256": "7e60d6fcc60043b37d48614901fb1d4927a90ddb680ad4d02aa3f082de430e04"
-      },
+      "archive_sha256": "913ab66aca99c04ced8a98472138da88ec9af5cdf982759ddb7827665dfe4f9a",
       "components": [
         {
-          "id": "science-domain",
-          "path": "agent/crates/codegen/xai-grok-science/**",
+          "asset_kind": "code",
+          "disposition": "adapt",
+          "evidence": {
+            "record": "third_party/intake-evidence/jvogan-motif.json",
+            "source_sha256": "913ab66aca99c04ced8a98472138da88ec9af5cdf982759ddb7827665dfe4f9a"
+          },
+          "execution_authority": "none",
+          "id": "deterministic-sequence",
+          "path": "src/bio/**",
+          "reuse_mode": "adapt",
+          "rights_status": "verified"
+        },
+        {
+          "asset_kind": "code",
+          "disposition": "reject-authority",
+          "evidence": {
+            "record": "third_party/intake-evidence/jvogan-motif.json",
+            "source_sha256": "913ab66aca99c04ced8a98472138da88ec9af5cdf982759ddb7827665dfe4f9a"
+          },
+          "execution_authority": "none",
+          "id": "mcp-installer",
+          "path": "mcp/**",
+          "reuse_mode": "none",
+          "rights_status": "verified"
+        },
+        {
+          "asset_kind": "data",
+          "disposition": "reject-data-model",
+          "evidence": {
+            "record": "third_party/intake-evidence/jvogan-motif.json",
+            "source_sha256": "913ab66aca99c04ced8a98472138da88ec9af5cdf982759ddb7827665dfe4f9a"
+          },
+          "execution_authority": "none",
+          "id": "biological-catalogs",
+          "path": "public/data/**",
+          "reuse_mode": "none",
+          "rights_status": "restricted"
+        }
+      ],
+      "exact_commit": "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0",
+      "id": "jvogan-motif",
+      "nested_license_scan": {
+        "sha256": "868a96c6a0f4d41392407789b73d10a0943ce2136ceb71ed18795bbaf370a75d",
+        "status": "complete"
+      },
+      "repository": "https://github.com/jvogan/motif.git",
+      "rights_status": "verified",
+      "root_license": {
+        "path": "LICENSE",
+        "sha256": "606f9372bf61b63b32725d69f312ead92010afdaeea35befc46dc4db1ed19d49",
+        "spdx": "MIT"
+      },
+      "source_gate_status": "pass"
+    },
+    {
+      "archive_sha256": "6cc352223fefe342151d971097a28008127980120eaad5dfe6f613274ef84e5a",
+      "components": [
+        {
+          "asset_kind": "code",
+          "disposition": "adapt",
+          "evidence": {
+            "record": "third_party/intake-evidence/aipoch-open-science.json",
+            "source_sha256": "6cc352223fefe342151d971097a28008127980120eaad5dfe6f613274ef84e5a"
+          },
+          "execution_authority": "none",
+          "id": "bounded-preview",
+          "path": "src/main/skills/**",
+          "reuse_mode": "adapt",
+          "rights_status": "verified"
+        },
+        {
+          "asset_kind": "code",
+          "disposition": "adapt",
+          "evidence": {
+            "record": "third_party/intake-evidence/aipoch-open-science.json",
+            "source_sha256": "6cc352223fefe342151d971097a28008127980120eaad5dfe6f613274ef84e5a"
+          },
+          "execution_authority": "none",
+          "id": "connector-types",
+          "path": "src/main/connectors/types.ts",
+          "reuse_mode": "adapt",
+          "rights_status": "verified"
+        },
+        {
+          "asset_kind": "code",
+          "disposition": "adapt",
+          "evidence": {
+            "record": "third_party/intake-evidence/aipoch-open-science.json",
+            "source_sha256": "6cc352223fefe342151d971097a28008127980120eaad5dfe6f613274ef84e5a"
+          },
+          "execution_authority": "none",
+          "id": "connector-registry",
+          "path": "src/main/connectors/registry.ts",
+          "reuse_mode": "adapt",
+          "rights_status": "verified"
+        },
+        {
+          "asset_kind": "code",
+          "disposition": "quarantine",
+          "evidence": {
+            "record": "third_party/intake-evidence/aipoch-open-science.json",
+            "source_sha256": "6cc352223fefe342151d971097a28008127980120eaad5dfe6f613274ef84e5a"
+          },
+          "execution_authority": "none",
+          "id": "connector-descriptors",
+          "path": "src/main/connectors/descriptors/**",
+          "reuse_mode": "none",
+          "rights_status": "verified"
+        },
+        {
+          "asset_kind": "code",
+          "disposition": "quarantine",
+          "evidence": {
+            "record": "third_party/intake-evidence/aipoch-open-science.json",
+            "source_sha256": "6cc352223fefe342151d971097a28008127980120eaad5dfe6f613274ef84e5a"
+          },
+          "execution_authority": "none",
+          "id": "connector-service",
+          "path": "src/main/connectors/service.ts",
+          "reuse_mode": "none",
+          "rights_status": "verified"
+        },
+        {
+          "asset_kind": "code",
+          "disposition": "quarantine",
+          "evidence": {
+            "record": "third_party/intake-evidence/aipoch-open-science.json",
+            "source_sha256": "6cc352223fefe342151d971097a28008127980120eaad5dfe6f613274ef84e5a"
+          },
+          "execution_authority": "none",
+          "id": "connector-approval-broker",
+          "path": "src/main/connectors/approval-broker.ts",
+          "reuse_mode": "none",
+          "rights_status": "verified"
+        },
+        {
+          "asset_kind": "code",
+          "disposition": "reject-authority",
+          "evidence": {
+            "record": "third_party/intake-evidence/aipoch-open-science.json",
+            "source_sha256": "6cc352223fefe342151d971097a28008127980120eaad5dfe6f613274ef84e5a"
+          },
+          "execution_authority": "none",
+          "id": "connector-mcp-client",
+          "path": "src/main/connectors/mcp-client-manager.ts",
+          "reuse_mode": "none",
+          "rights_status": "verified"
+        },
+        {
+          "asset_kind": "code",
+          "disposition": "reject-authority",
+          "evidence": {
+            "record": "third_party/intake-evidence/aipoch-open-science.json",
+            "source_sha256": "6cc352223fefe342151d971097a28008127980120eaad5dfe6f613274ef84e5a"
+          },
+          "execution_authority": "none",
+          "id": "agent-framework",
+          "path": "src/main/acp/**",
+          "reuse_mode": "none",
+          "rights_status": "verified"
+        }
+      ],
+      "exact_commit": "fd2853f0b9bdb6c063ccc1e741687584ab94bf9a",
+      "id": "aipoch-open-science",
+      "nested_license_scan": {
+        "sha256": "7ebcbb6c4e9ec93dc03797d840263a66e51f55fd74f1d6beb9cd974217a695ab",
+        "status": "complete"
+      },
+      "repository": "https://github.com/aipoch/open-science.git",
+      "rights_status": "verified",
+      "root_license": {
+        "path": "LICENSE",
+        "sha256": "b038148f912bdd6e61e33e56214d02c4d8a9640f7a637e21dfcf939332816979",
+        "spdx": "Apache-2.0"
+      },
+      "source_gate_status": "pass"
+    },
+    {
+      "archive_sha256": "7ef8c818d950a3abb9a238a713d8fa818288f02800f54e46b7b0075276b79a61",
+      "components": [
+        {
+          "asset_kind": "code",
+          "disposition": "adapt",
+          "evidence": {
+            "record": "third_party/intake-evidence/qzzqzzb-openclaudescience.json",
+            "source_sha256": "7ef8c818d950a3abb9a238a713d8fa818288f02800f54e46b7b0075276b79a61"
+          },
+          "execution_authority": "none",
+          "id": "catalog-ux",
+          "path": "ui/src/app/skills/**",
+          "reuse_mode": "adapt",
+          "rights_status": "verified"
+        },
+        {
+          "asset_kind": "code",
+          "disposition": "reject-authority",
+          "evidence": {
+            "record": "third_party/intake-evidence/qzzqzzb-openclaudescience.json",
+            "source_sha256": "7ef8c818d950a3abb9a238a713d8fa818288f02800f54e46b7b0075276b79a61"
+          },
+          "execution_authority": "none",
+          "id": "agent-runtime",
+          "path": "internagents/**",
+          "reuse_mode": "none",
+          "rights_status": "verified"
+        },
+        {
+          "asset_kind": "skill",
+          "disposition": "reject-license",
+          "evidence": {
+            "record": "third_party/intake-evidence/qzzqzzb-openclaudescience.json",
+            "source_sha256": "7ef8c818d950a3abb9a238a713d8fa818288f02800f54e46b7b0075276b79a61"
+          },
+          "execution_authority": "none",
+          "id": "docx-proprietary",
+          "path": "skills/docx/**",
+          "reuse_mode": "clean-room",
+          "rights_status": "restricted"
+        },
+        {
+          "asset_kind": "skill",
+          "disposition": "reject-license",
+          "evidence": {
+            "record": "third_party/intake-evidence/qzzqzzb-openclaudescience.json",
+            "source_sha256": "7ef8c818d950a3abb9a238a713d8fa818288f02800f54e46b7b0075276b79a61"
+          },
+          "execution_authority": "none",
+          "id": "pdf-proprietary",
+          "path": "skills/pdf/**",
+          "reuse_mode": "clean-room",
+          "rights_status": "restricted"
+        },
+        {
+          "asset_kind": "skill",
+          "disposition": "reject-license",
+          "evidence": {
+            "record": "third_party/intake-evidence/qzzqzzb-openclaudescience.json",
+            "source_sha256": "7ef8c818d950a3abb9a238a713d8fa818288f02800f54e46b7b0075276b79a61"
+          },
+          "execution_authority": "none",
+          "id": "pptx-proprietary",
+          "path": "skills/pptx/**",
+          "reuse_mode": "clean-room",
+          "rights_status": "restricted"
+        },
+        {
+          "asset_kind": "skill",
+          "disposition": "reject-license",
+          "evidence": {
+            "record": "third_party/intake-evidence/qzzqzzb-openclaudescience.json",
+            "source_sha256": "7ef8c818d950a3abb9a238a713d8fa818288f02800f54e46b7b0075276b79a61"
+          },
+          "execution_authority": "none",
+          "id": "xlsx-proprietary",
+          "path": "skills/xlsx/**",
+          "reuse_mode": "clean-room",
+          "rights_status": "restricted"
+        }
+      ],
+      "exact_commit": "4a5f2ab2879ebd4f806155c796e247da94bb1625",
+      "id": "qzzqzzb-openclaudescience",
+      "nested_license_scan": {
+        "sha256": "14f958071d590a2f431e0d1a9bb61a23291433e5675c19c5394836d9171ab7b7",
+        "status": "complete"
+      },
+      "repository": "https://github.com/qzzqzzb/OpenClaudeScience.git",
+      "rights_status": "verified",
+      "root_license": {
+        "path": "LICENSE",
+        "sha256": "f756cca8fc2a4ce8ab225636f3df3eae7f2f638f4df82447f01224d6a24a97cb",
+        "spdx": "MIT"
+      },
+      "source_gate_status": "pass"
+    },
+    {
+      "archive_sha256": "ed4da248d4af9acea88e29a7eebe5760edcc0ee0e1a62290b7da32ff1f308587",
+      "components": [
+        {
+          "asset_kind": "code",
+          "disposition": "quarantine",
+          "evidence": {
+            "record": "third_party/intake-evidence/hust-ningkang-lab-bgc-prophet.json",
+            "source_sha256": "ed4da248d4af9acea88e29a7eebe5760edcc0ee0e1a62290b7da32ff1f308587"
+          },
+          "execution_authority": "none",
+          "id": "pipeline-code",
+          "path": "src/**",
+          "reuse_mode": "none",
+          "rights_status": "verified"
+        },
+        {
+          "asset_kind": "model",
+          "disposition": "reject-data-model",
+          "evidence": {
+            "record": "third_party/intake-evidence/hust-ningkang-lab-bgc-prophet.json",
+            "source_sha256": "ed4da248d4af9acea88e29a7eebe5760edcc0ee0e1a62290b7da32ff1f308587"
+          },
+          "execution_authority": "none",
+          "id": "checkpoints-and-data",
+          "path": "models/**",
+          "reuse_mode": "none",
+          "rights_status": "restricted"
+        }
+      ],
+      "exact_commit": "de5068695a381d117ae3829d9c2698d954b85efc",
+      "id": "hust-ningkang-lab-bgc-prophet",
+      "nested_license_scan": {
+        "sha256": "d4833df9de503cf9742636e54c6737ddf251ee30dda9211933826d86bc07dbf0",
+        "status": "complete"
+      },
+      "repository": "https://github.com/HUST-NingKang-Lab/BGC-Prophet.git",
+      "rights_status": "verified",
+      "root_license": {
+        "path": "LICENSE",
+        "sha256": "4e459a5157c258922f9a2544350df6d2449c439950e7a5a24a5a8283c2d8e977",
+        "spdx": "MIT"
+      },
+      "source_gate_status": "pass"
+    },
+    {
+      "archive_sha256": "c134708412a1c6fb2b77d636171314792c147a1a4d4fcd8294fd6aee361b49b2",
+      "components": [
+        {
+          "asset_kind": "code",
+          "disposition": "quarantine",
+          "evidence": {
+            "record": "third_party/intake-evidence/aurekaresearch-opendde.json",
+            "source_sha256": "c134708412a1c6fb2b77d636171314792c147a1a4d4fcd8294fd6aee361b49b2"
+          },
+          "execution_authority": "none",
+          "id": "inference-config",
+          "path": "runner/**",
+          "reuse_mode": "none",
+          "rights_status": "verified"
+        },
+        {
+          "asset_kind": "model",
+          "disposition": "reject-data-model",
+          "evidence": {
+            "record": "third_party/intake-evidence/aurekaresearch-opendde.json",
+            "source_sha256": "c134708412a1c6fb2b77d636171314792c147a1a4d4fcd8294fd6aee361b49b2"
+          },
+          "execution_authority": "none",
+          "id": "weights-and-msa",
+          "path": "models/**",
+          "reuse_mode": "none",
+          "rights_status": "restricted"
+        }
+      ],
+      "exact_commit": "f607bb3c9ff299c0627ac20f5ef8e25d716ed46f",
+      "id": "aurekaresearch-opendde",
+      "nested_license_scan": {
+        "sha256": "89556d2c43cc57f1fee1f3558aae70bda954b64c59581831d3beed49c75a448e",
+        "status": "complete"
+      },
+      "repository": "https://github.com/aurekaresearch/OpenDDE.git",
+      "rights_status": "verified",
+      "root_license": {
+        "path": "LICENSE",
+        "sha256": "9295103560df7e496d7420d897ece3b2e6365ab2571d3060d629fa10a2657cbd",
+        "spdx": "Apache-2.0"
+      },
+      "source_gate_status": "pass"
+    },
+    {
+      "archive_sha256": "5cd37c71206a5b9c55f820a454884c01b4731d01e06250f9883ed45c485292b4",
+      "components": [
+        {
+          "asset_kind": "code",
+          "disposition": "quarantine",
+          "evidence": {
+            "record": "third_party/intake-evidence/ai4s-research-open-science.json",
+            "source_sha256": "5cd37c71206a5b9c55f820a454884c01b4731d01e06250f9883ed45c485292b4"
+          },
+          "execution_authority": "none",
+          "id": "run-projection-ux",
+          "path": "apps/desktop/src-tauri/src/**",
+          "reuse_mode": "none",
+          "rights_status": "restricted"
+        },
+        {
+          "asset_kind": "code",
+          "disposition": "reject-authority",
+          "evidence": {
+            "record": "third_party/intake-evidence/ai4s-research-open-science.json",
+            "source_sha256": "5cd37c71206a5b9c55f820a454884c01b4731d01e06250f9883ed45c485292b4"
+          },
+          "execution_authority": "none",
+          "id": "opencode-profile",
+          "path": "runtime/opencode-profile/**",
+          "reuse_mode": "none",
+          "rights_status": "restricted"
+        }
+      ],
+      "exact_commit": "f3928bda37acfdbe3dfe18792fc1eca38c2e884f",
+      "id": "ai4s-research-open-science",
+      "nested_license_scan": {
+        "sha256": "b92075fa7cf18c86f791609eeef9fedd66598c7c518ee4ca5180c3cadc7e32ed",
+        "status": "complete"
+      },
+      "repository": "https://github.com/ai4s-research/open-science.git",
+      "rights_status": "verified",
+      "root_license": {
+        "path": "LICENSE",
+        "sha256": "8f844b63f71cc8acb08d844081425183bc28fbb7312e1576651d2cf4cc013738",
+        "spdx": "MIT"
+      },
+      "source_gate_status": "pass"
+    },
+    {
+      "archive_sha256": "3dedbe240a5e9d67de9a620f9055975fb5cf718494ad8cb9963bc3243aa959c1",
+      "components": [
+        {
           "asset_kind": "code",
           "disposition": "catalog-only",
-          "reuse_mode": "catalog-only",
-          "rights_status": "verified",
-          "execution_authority": "none",
           "evidence": {
-            "source_sha256": "2dcd95b1932733c8db74a9585c03c0f3c648dc49410ba560c7d81ac237718636",
-            "record": "third_party/intake-evidence/exergyleizhou-ux-lumen-science.json"
-          }
+            "record": "third_party/intake-evidence/exergyleizhou-ux-lumen.json",
+            "source_sha256": "3dedbe240a5e9d67de9a620f9055975fb5cf718494ad8cb9963bc3243aa959c1"
+          },
+          "execution_authority": "none",
+          "id": "canonical-platform",
+          "path": "agent/**",
+          "reuse_mode": "catalog-only",
+          "rights_status": "verified"
         }
-      ]
+      ],
+      "exact_commit": "2f47a9ad84e94b20291a1ad3d6b005ccbd3885f4",
+      "id": "exergyleizhou-ux-lumen",
+      "nested_license_scan": {
+        "sha256": "7e60d6fcc60043b37d48614901fb1d4927a90ddb680ad4d02aa3f082de430e04",
+        "status": "complete"
+      },
+      "repository": "https://github.com/exergyleizhou-ux/lumen.git",
+      "rights_status": "verified",
+      "root_license": {
+        "path": "agent/LICENSE",
+        "sha256": "116f7778b9802e569b7fa3a532b17bd80eb13c67837def01eed093d4ea472f28",
+        "spdx": "Apache-2.0"
+      },
+      "source_gate_receipt": "LUMEN_R0_SOURCE_GATE PASS (V0, 2026-08-06): peeled tags v2.0.0=f51fb902 v2.1.0=3d5d52cf v2.2.0=098f7cd4; release-source-tuple.json; CI 5/5 @7b8f385b; readiness eval_live 20/20; blockers only M5/M6 human gates",
+      "source_gate_status": "pass"
+    },
+    {
+      "archive_sha256": "2dcd95b1932733c8db74a9585c03c0f3c648dc49410ba560c7d81ac237718636",
+      "components": [
+        {
+          "asset_kind": "code",
+          "disposition": "catalog-only",
+          "evidence": {
+            "record": "third_party/intake-evidence/exergyleizhou-ux-lumen-science.json",
+            "source_sha256": "2dcd95b1932733c8db74a9585c03c0f3c648dc49410ba560c7d81ac237718636"
+          },
+          "execution_authority": "none",
+          "id": "science-domain",
+          "path": "agent/crates/codegen/xai-grok-science/**",
+          "reuse_mode": "catalog-only",
+          "rights_status": "verified"
+        }
+      ],
+      "exact_commit": "41ec8cd5e569d6f87babf4911b3a330444352e1e",
+      "id": "exergyleizhou-ux-lumen-science",
+      "nested_license_scan": {
+        "sha256": "7e60d6fcc60043b37d48614901fb1d4927a90ddb680ad4d02aa3f082de430e04",
+        "status": "complete"
+      },
+      "repository": "https://github.com/exergyleizhou-ux/lumen-science.git",
+      "rights_status": "verified",
+      "root_license": {
+        "path": "agent/LICENSE",
+        "sha256": "116f7778b9802e569b7fa3a532b17bd80eb13c67837def01eed093d4ea472f28",
+        "spdx": "Apache-2.0"
+      },
+      "source_gate_status": "pass"
     }
   ],
-  "blocked_by": [
-    "I1-B active admission pending: 1/9 sources gate=pass (lumen, R0 receipts); 8 sources remain evidence-collected pending final per-component legal/asset disposition review.",
-    "Active lock requires every source rights_status=verified AND source_gate_status=pass; not reached."
-  ],
+  "status": "active",
   "transitive_bridge": {
     "manifest_path": "third_party/internscience-scp/VENDOR_MANIFEST.json",
-    "sha256": "40d62f9fe0172b6494e1d401b88f9ddc99eb60fd0d146ab2f58d34b1518f527c",
-    "role": "independent transitive-source registry; SCP 207 documents remain catalog/quarantine"
+    "role": "independent transitive-source registry; SCP 207 documents remain catalog/quarantine",
+    "sha256": "40d62f9fe0172b6494e1d401b88f9ddc99eb60fd0d146ab2f58d34b1518f527c"
   }
 }

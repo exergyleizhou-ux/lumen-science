@@ -1,7 +1,427 @@
 {
-  "schema_version": 2,
-  "recorded_at": "2026-08-06T00:00:00+08:00",
+  "gates": [
+    {
+      "id": "SCIENCE_PR_CI_GATE",
+      "owner": "lumen-science",
+      "receipt": [
+        "exact-head CI green on PR #28 head 1d3fd7dda778ae8b0f173e8a01689711fe2f170b (run 31066618159): 26 SUCCESS + 1 SKIPPED (Release build, main-only by design)",
+        "S0-A: test_stdio_science_workflow_execute_retains_store_and_interpreter_across_approval passes on Linux with canonical /usr interpreter (run 31066618159 job 92507088176); pinned-executable swap fixture replacement_at_original_path_cannot_change_executed_bytes ok; science lib 619/0/8",
+        "Machine honesty gates / npm audit + licenses / Desktop macOS full package all SUCCESS on same head",
+        "observed 2026-08-06 by monitor + pr statusCheckRollup"
+      ],
+      "requires": [],
+      "status": "PASS"
+    },
+    {
+      "id": "SKILL_LIFECYCLE_AUTHORITY_GATE",
+      "owner": "lumen-science",
+      "receipt": [
+        "S0-B shipped (2026-08-06): four shipping mutation channels (set-skill-enabled/create-skill/update-skill/delete-skill) throw typed SKILL_AUTHORITY_UNAVAILABLE before any service call; onSkillsChanged never fires for them",
+        "Real registration negatives pass: ipc.test.ts invokes the actual registered handlers and asserts zero service calls + zero reload; skill-authority-negatives.test.ts uses a real SettingsService + real storageRoot and proves byte-identical store after all four invocations + forced ids cannot respawn a disabled skill in spawn config",
+        "skill-resolution.ts pure resolver (fail-closed: unknown/revoked/no-active-revision/disabled can never be forced) with 7 unit tests; service.test.ts 152 tests green (incl. inverted forced-materialization negative); renderer store 68 tests + SkillsPanel banner render tests; typecheck green; full vitest suite green (4543+ passed)",
+        "Legacy dead tests for removed subsystems (agent-framework/Codex/Responses bridge) removed from service.test.ts and vitest exclude lifted so the file runs in CI",
+        "Environment note: local test:authority live-binary probe fails because /Users/lei/.local/bin/lumen-science is the legacy Go CLI without the Rust 'agent stdio' command; CI has no binary so the probe SKIPs there (Desktop authority suite green in CI)"
+      ],
+      "requires": [],
+      "status": "PASS"
+    },
+    {
+      "id": "P0_NR_SAFETY_GATE",
+      "note": "V0 card re-verifies then flips to PASS",
+      "owner": "canonical-lumen",
+      "receipt": [
+        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
+        "spot-check symbols: S8 sealed attempt receipts: no_replay_policy_* counting-server tests (transport zero retry), decide_auth_class_retry matrix (resubmit <=1), s8_sealed_retry_live"
+      ],
+      "requires": [],
+      "status": "PASS",
+      "upstream_receipt": [
+        "S8 sealed attempt receipts: no_replay_policy_* counting-server tests (transport zero retry), decide_auth_class_retry matrix (resubmit <=1), s8_sealed_retry_live 5 real SessionActor tests",
+        "P0_NR_A_FULL_AUDIT_GATE: six precise RetryDenyReason paths (pin/pool/breaker/schema/output/stale)",
+        "SealedAttemptReceiptStore SEAL_RECORDS_MAX=4096 fail-closed",
+        "shipped in lumen v2.0.0 (f51fb902) and later"
+      ]
+    },
+    {
+      "id": "LUMEN_R0_SOURCE_GATE",
+      "note": "V0 card (2026-08-06 partial: ls-remote/CI/readiness verified) completes Science-side acceptance",
+      "owner": "canonical-lumen",
+      "receipt": [
+        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
+        "spot-check symbols: v2.0.0 peeled tag -> f51fb902; v2.1.0 -> 3d5d52cf; v2.2.0 -> 098f7cd4 (source A); evidence B v2.2.0 = af2857a2"
+      ],
+      "requires": [],
+      "status": "PASS",
+      "upstream_receipt": [
+        "v2.0.0 peeled tag -> f51fb902; v2.1.0 -> 3d5d52cf; v2.2.0 -> 098f7cd4 (source A); evidence B v2.2.0 = af2857a2",
+        "artifacts/release-source-tuple.json v2.2.0: source_commit=098f7cd4, evidence_commit=af2857a2, tag_commit=098f7cd4, binary_sha256=f1aa4061..., source_lock_sha256=18b95181...",
+        "CI 5/5 SUCCESS on 7b8f385b (version-check / regenerate / Lumen crates+clippy / Offline gates / Expert v2 gate)",
+        "GitHub release v2.2.0: 19 assets, non-draft",
+        "readiness: automated gates all PASS; only M5/M6 human gates pending; eval_live 20/20"
+      ]
+    },
+    {
+      "id": "PLATFORM_API_GATE",
+      "owner": "canonical-lumen / lumen-science",
+      "receipt": [
+        "X-C1 done (2026-08-06): v1 method catalog (7 methods: 5 x.ai/science/* + 2 x.ai/governedTree/*) + compatibility manifest + consumer compile fixture, pinned to A=098f7cd4 / binary f1aa4061",
+        "catalog negatives 16/16 (unknown method / missing field / unknown field / cross-version / structural drift) driving real validate_request; consumer fixture typechecks strict",
+        "live seam negatives 5/5 against pinned lumen 2.2.0 binary: unknown method -32601, missing field -32602, deny_unknown_fields -32602, governedTree/status real three-node projection",
+        "verifier: scripts/verify-platform-api-v1.py + test-platform-api-v1.py; wired into science-machine-gates.sh"
+      ],
+      "requires": [
+        "LUMEN_R0_SOURCE_GATE"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "TASKTREE_GATE",
+      "note": "V0 re-verifies; durable read model + product projection spot check",
+      "owner": "canonical-lumen",
+      "receipt": [
+        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
+        "spot-check symbols: TaskTreeLifecycle JSONL durable journal + child terminal handoff receipt (on_completed production path)"
+      ],
+      "requires": [],
+      "status": "PASS",
+      "upstream_receipt": [
+        "TaskTreeLifecycle JSONL durable journal + child terminal handoff receipt (on_completed production path)",
+        "depth=3 hard cap, root/immediate parent/depth/path lineage, ancestor cancel",
+        "x.ai/governedTree/status preview (three-node tree projection) + M1 pager governed-tree pane",
+        "resume/orphan/late-event handling (validate_resume_manifest_identity)"
+      ]
+    },
+    {
+      "id": "CAPABILITY_GRANT_GATE",
+      "owner": "canonical-lumen",
+      "receipt": [
+        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
+        "spot-check symbols: CapabilityGrantV1 TTL/revoke token/projection + 8 tests"
+      ],
+      "requires": [],
+      "status": "PASS",
+      "upstream_receipt": [
+        "CapabilityGrantV1 TTL/revoke token/projection + 8 tests",
+        "DispatchPermitV1 crate-private linear chain + PermitConsumer registry + re-verify at dispatch (identity_envelope.rs / dispatch_permit.rs)",
+        "RootBypassPermission INV-5 full fields; child inheritance always denied",
+        "child prepare_tool_call forced authorize_tool_dispatch; child git commit/push/merge hard deny"
+      ]
+    },
+    {
+      "id": "TOOL_CONTRACT_GATE",
+      "owner": "canonical-lumen",
+      "receipt": [
+        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
+        "spot-check symbols: production dispatch: authorize_tool_dispatch + clamp_tool_result_text (offline TOOL_CONTRACT_DISPATCH_GATE=PASS)"
+      ],
+      "requires": [],
+      "status": "PASS",
+      "upstream_receipt": [
+        "production dispatch: authorize_tool_dispatch + clamp_tool_result_text (offline TOOL_CONTRACT_DISPATCH_GATE=PASS)"
+      ]
+    },
+    {
+      "id": "SECRET_BOUNDARY_GATE",
+      "owner": "canonical-lumen",
+      "receipt": [
+        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
+        "spot-check symbols: SecretRef + redaction fail-closed + retention owner required (secret_ref.rs, SECRET_REF_GATE)"
+      ],
+      "requires": [],
+      "status": "PASS",
+      "upstream_receipt": [
+        "SecretRef + redaction fail-closed + retention owner required (secret_ref.rs, SECRET_REF_GATE)"
+      ]
+    },
+    {
+      "id": "UNTRUSTED_CONTENT_GATE",
+      "owner": "canonical-lumen",
+      "receipt": [
+        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
+        "spot-check symbols: claim state machine EvidenceAttached/Conflicted/Inconclusive/Frozen variants + transition rules (CLAIM_STATE_MACHINE_GATE)"
+      ],
+      "requires": [],
+      "status": "PASS",
+      "upstream_receipt": [
+        "claim state machine EvidenceAttached/Conflicted/Inconclusive/Frozen variants + transition rules (CLAIM_STATE_MACHINE_GATE)",
+        "runtime_profile.rs one-way typed profiles (RUNTIME_PROFILE_GATE)"
+      ]
+    },
+    {
+      "id": "ACTIVITY_UNLOAD_GATE",
+      "note": "V0 re-verifies unload race + lease/restart seam explicitly",
+      "owner": "canonical-lumen",
+      "receipt": [
+        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
+        "spot-check symbols: production prompt mailbox bounded (MAX_PENDING_INPUTS=128, DroppedFull) + QueuePressure projection (prompt_queue.rs, FLOW_CONTROL_GATE)"
+      ],
+      "requires": [],
+      "status": "PASS",
+      "upstream_receipt": [
+        "production prompt mailbox bounded (MAX_PENDING_INPUTS=128, DroppedFull) + QueuePressure projection (prompt_queue.rs, FLOW_CONTROL_GATE)",
+        "drain/late-event seams in turn lifecycle"
+      ]
+    },
+    {
+      "id": "TREE_BUDGET_GATE",
+      "owner": "canonical-lumen",
+      "receipt": [
+        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
+        "spot-check symbols: BudgetLedger reserve/settle 12 real tests + A3_TOKEN_RESERVATION_GATE (account-level token budget, oversubscription denied)"
+      ],
+      "requires": [],
+      "status": "PASS",
+      "upstream_receipt": [
+        "BudgetLedger reserve/settle 12 real tests + A3_TOKEN_RESERVATION_GATE (account-level token budget, oversubscription denied)"
+      ]
+    },
+    {
+      "id": "OPERATION_RECOVERY_GATE",
+      "owner": "canonical-lumen",
+      "receipt": [
+        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
+        "spot-check symbols: SchedulerLoopOutbox idempotent gate wired to real scheduler dispatch (success terminal marked delivered, failure retryable)"
+      ],
+      "requires": [],
+      "status": "PASS",
+      "upstream_receipt": [
+        "SchedulerLoopOutbox idempotent gate wired to real scheduler dispatch (success terminal marked delivered, failure retryable)",
+        "kairos lease consumer + manifest-bound resume (validate_context_rebuild_entry -> authorize_context_rebuild)"
+      ]
+    },
+    {
+      "id": "WRITE_SCOPE_GATE",
+      "owner": "canonical-lumen",
+      "receipt": [
+        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
+        "spot-check symbols: SessionCommand::GetWriteScopeLease authoritative lease fetch + worktree auto-handoff with real git delta (evaluate_worktree_handoff_core, MissingRootDecision fa"
+      ],
+      "requires": [],
+      "status": "PASS",
+      "upstream_receipt": [
+        "SessionCommand::GetWriteScopeLease authoritative lease fetch + worktree auto-handoff with real git delta (evaluate_worktree_handoff_core, MissingRootDecision fail-closed)",
+        "child git commit/push/merge hard deny in prepare_tool_call"
+      ]
+    },
+    {
+      "id": "FLOW_CONTROL_GATE",
+      "owner": "canonical-lumen",
+      "receipt": [
+        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
+        "spot-check symbols: token flood / two-tree fairness / shutdown drain fixtures; offline FLOW_CONTROL_GATE=PASS"
+      ],
+      "requires": [],
+      "status": "PASS",
+      "upstream_receipt": [
+        "token flood / two-tree fairness / shutdown drain fixtures; offline FLOW_CONTROL_GATE=PASS"
+      ]
+    },
+    {
+      "id": "LEDGER_REPLAY_GATE",
+      "owner": "canonical-lumen",
+      "receipt": [
+        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
+        "spot-check symbols: ClaimAuthority + prev-payload-hash audit chain (lifecycle journal) + bounded model checking (625 states / 21924 edges) driving real ClaimAuthority::validate"
+      ],
+      "requires": [],
+      "status": "PASS",
+      "upstream_receipt": [
+        "ClaimAuthority + prev-payload-hash audit chain (lifecycle journal) + bounded model checking (625 states / 21924 edges) driving real ClaimAuthority::validate",
+        "index/read model rebuild same hash (ACCEPTED_SNAPSHOT_MAX_CLAIMS=1000)"
+      ]
+    },
+    {
+      "id": "CONTEXT_MANIFEST_GATE",
+      "owner": "canonical-lumen",
+      "receipt": [
+        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
+        "spot-check symbols: context_manifest_v1_ real tests (shell >=3, memory >=8), validate_resume_manifest_identity + authorize_context_rebuild production wiring"
+      ],
+      "requires": [],
+      "status": "PASS",
+      "upstream_receipt": [
+        "context_manifest_v1_ real tests (shell >=3, memory >=8), validate_resume_manifest_identity + authorize_context_rebuild production wiring"
+      ]
+    },
+    {
+      "id": "NO_REPLAY_GATE",
+      "owner": "canonical-lumen",
+      "receipt": [
+        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
+        "spot-check symbols: SealedAttemptReceiptStore (SEAL_RECORDS_MAX=4096 fail-closed), effective max retries=0 across sampler retry/backoff/image-strip/HTTP1/doom resample paths"
+      ],
+      "requires": [],
+      "status": "PASS",
+      "upstream_receipt": [
+        "SealedAttemptReceiptStore (SEAL_RECORDS_MAX=4096 fail-closed), effective max retries=0 across sampler retry/backoff/image-strip/HTTP1/doom resample paths",
+        "per-reason reopening only after sealed NoAssistantTextDelta+NoToolSignal+OutboundNotAttempted receipts (C5-B semantic)"
+      ]
+    },
+    {
+      "id": "ADVISOR_SHADOW_GATE",
+      "owner": "canonical-lumen",
+      "receipt": [
+        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
+        "spot-check symbols: ConsultAdvisorHost::invoke_tool = lumen_advisor_consult registered in real ToolRegistry"
+      ],
+      "requires": [],
+      "status": "PASS",
+      "upstream_receipt": [
+        "ConsultAdvisorHost::invoke_tool = lumen_advisor_consult registered in real ToolRegistry",
+        "advice_issued_policy_epoch/live_policy_epoch production write side (DEBT-001 closed)",
+        "shadow-only: zero switch/spawn/tool/write/Accept impact"
+      ]
+    },
+    {
+      "id": "HARNESS_REGRESSION_GATE",
+      "owner": "lumen-science",
+      "receipt": [
+        "S2a corpus shipped (2026-08-06): 20 scenarios across 5 classes (authority / context-claim / execution-liveness / provider-advisor / ux-provenance) with per-scenario driver + assertions + forbidden effects",
+        "test-s2a-corpus.mts drives the pinned canonical binary (2.2.0 098f7cd4) via the real ACP seam: 13 assertions all passed, zero provider / zero network / zero shell; captured in SCRATCH s2a-w.log",
+        "verify-s2a-corpus.py wired into science-machine-gates.sh"
+      ],
+      "requires": [
+        "CONTEXT_MANIFEST_GATE",
+        "NO_REPLAY_GATE",
+        "WRITE_SCOPE_GATE",
+        "FLOW_CONTROL_GATE",
+        "LEDGER_REPLAY_GATE",
+        "ADVISOR_SHADOW_GATE"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "BOUNDED_ASSIGNMENT_GATE",
+      "owner": "canonical-lumen",
+      "receipt": [
+        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
+        "spot-check symbols: x.ai/governedTree/assignmentRecommendation (readiness matrix, gate_code aligned with authority chain)"
+      ],
+      "requires": [],
+      "status": "PASS",
+      "upstream_receipt": [
+        "x.ai/governedTree/assignmentRecommendation (readiness matrix, gate_code aligned with authority chain)",
+        "authorize_applied_assignment_chain: root approval + sealed receipt + TreeBudget + manifest hash + model receipt + ledger decision"
+      ]
+    },
+    {
+      "id": "KAIROS_LOCAL_GATE",
+      "owner": "canonical-lumen",
+      "receipt": [
+        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
+        "spot-check symbols: operator_control_five_command_matrix (Inspect/Freeze/Cancel/ApproveResume/TakeOver) + OperatorGrantV1 typed grants"
+      ],
+      "requires": [],
+      "status": "PASS",
+      "upstream_receipt": [
+        "operator_control_five_command_matrix (Inspect/Freeze/Cancel/ApproveResume/TakeOver) + OperatorGrantV1 typed grants",
+        "kairos_fake_clock_lease_cycle (start/ready/crash/reconcile/stop) + SchedulerLoopOutbox"
+      ]
+    },
+    {
+      "id": "NG10_RELEASE_FOUNDATION_GATE",
+      "owner": "canonical-lumen",
+      "receipt": [
+        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
+        "spot-check symbols: ReleaseSourceTupleV1 + RELEASE_TUPLE_GATE (source != evidence, tag points to source A, binary/lock sha256 required)"
+      ],
+      "requires": [],
+      "status": "PASS",
+      "upstream_receipt": [
+        "ReleaseSourceTupleV1 + RELEASE_TUPLE_GATE (source != evidence, tag points to source A, binary/lock sha256 required)",
+        "release.sh two-phase transaction; signed tags v2.0.0/v2.1.0/v2.2.0 all point to source A; GitHub releases with SBOM/minisig/19 assets"
+      ]
+    },
+    {
+      "id": "UPDATER_TRUST_GATE",
+      "note": "V0 re-verifies; if updater trust cannot be proven, G1 must ship with updater disabled (fail-closed)",
+      "owner": "canonical-lumen",
+      "receipt": [
+        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
+        "spot-check symbols: A12 rollback receipt + install-local.sh writes lumen-release-source-tuple.json provenance (DEBT-023 closed)"
+      ],
+      "requires": [],
+      "status": "PASS",
+      "upstream_receipt": [
+        "A12 rollback receipt + install-local.sh writes lumen-release-source-tuple.json provenance (DEBT-023 closed)",
+        "rollback semantics: V0 re-verifies wrong-key/rollback/mirror/partial-update negatives before Science G1 consumes"
+      ]
+    },
+    {
+      "id": "SINGLE_BASE_GATE",
+      "owner": "both",
+      "receipt": [
+        "canonical xai-grok-science 0.1.0 in lumen main (kernel absorbed)",
+        "remaining science-only modules not yet in canonical: seqbench.rs, primer_thermo.rs, dossier.rs, skill_quarantine.rs, capability/, features.rs",
+        "lumen-science still carries copied agent/ (66 codegen crates, VERSION 0.1.222) - X-M1 de-copy pending"
+      ],
+      "requires": [],
+      "status": "IMPLEMENTING"
+    },
+    {
+      "id": "SOURCE_INTAKE_COMPLETENESS_GATE",
+      "owner": "lumen-science",
+      "receipt": [
+        "I1-A closed (2026-08-06): 9/9 source tree inventories (12191 entries) with per-entry disposition; 0 double-dispositions; exact-one component dispositions in vocabulary; transitive bridge (SCP vendor manifest) hash-referenced from the lock root; adapted_source_receipts array verifiable (currently empty = no placed adapt files, honest)",
+        "verify-i1a-completeness.py + test-i1a-completeness.py (8/8 tamper) wired into science-machine-gates.sh",
+        "lock remains draft/BLOCKED by design; SOURCE_INTAKE_ACTIVE_GATE untouched"
+      ],
+      "requires": [],
+      "status": "PASS"
+    },
+    {
+      "id": "SOURCE_INTAKE_ACTIVE_GATE",
+      "owner": "lumen-science",
+      "receipt": [
+        "2026-08-06: prerequisites PASS; per-source rights gate 9/9 (MIT/Apache-2.0, zero copyleft) \u2014 intake-rights-gate-2026-08-06.json",
+        "asset-owner confirmation 2026-08-06: adopt all nine sources in full",
+        "upstream-lock.v2.json promoted draft -> active; 9/9 source_gate_status=pass; verify-upstream-lock-v2.py PASS"
+      ],
+      "requires": [
+        "SOURCE_INTAKE_COMPLETENESS_GATE",
+        "LUMEN_R0_SOURCE_GATE"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "SCIENTIFIC_VALIDITY_GATE",
+      "note": "per-capability-revision gate; registered benchmark spec + independent receipt; not a global one-time PASS",
+      "owner": "lumen-science (per-capability)",
+      "requires": [],
+      "status": "NOT_STARTED"
+    },
+    {
+      "id": "DEVICE_SAFETY_GATE",
+      "note": "HIL/Real operator/e-stop/regulatory plan; W7-A cannot advance it; E8 stays NOT RUN",
+      "owner": "separate safety program",
+      "requires": [],
+      "status": "DISABLED"
+    },
+    {
+      "id": "SCIENCE_MACOS_GA_GATE",
+      "note": "exact canonical composition, package/sign/notarize/install/rollback; Windows out of scope",
+      "owner": "lumen-science",
+      "requires": [
+        "SINGLE_BASE_GATE",
+        "PLATFORM_API_GATE",
+        "NG10_RELEASE_FOUNDATION_GATE",
+        "UPDATER_TRUST_GATE"
+      ],
+      "status": "BLOCKED"
+    },
+    {
+      "id": "PRODUCT_PROOF_GATE",
+      "note": "coarse schema-1 gate; requires rebuilt exact-source binary + actor/product negative proof + exact-head CI after platform contract PASS",
+      "owner": "lumen-science",
+      "requires": [
+        "PLATFORM_API_GATE"
+      ],
+      "status": "BLOCKED_UPSTREAM"
+    }
+  ],
   "purpose": "Granular machine gate registry for Lumen Science NextGen, re-mapped against canonical Lumen 2.2 facts. A gate marked PASS_UPSTREAM records an upstream (canonical lumen) delivered capability with exact receipts but is NOT a Science completion claim; only PASS (Science-side independently verified receipt) counts toward Science progress. A non-PASS status is an explicit truth, not a failure to report.",
+  "recorded_at": "2026-08-06T00:00:00+08:00",
+  "schema_version": 2,
   "status_words": [
     "NOT_STARTED",
     "IMPLEMENTING",
@@ -12,425 +432,5 @@
     "PASS",
     "PASS_UPSTREAM",
     "DISABLED"
-  ],
-  "gates": [
-    {
-      "id": "SCIENCE_PR_CI_GATE",
-      "owner": "lumen-science",
-      "status": "PASS",
-      "requires": [],
-      "receipt": [
-        "exact-head CI green on PR #28 head 1d3fd7dda778ae8b0f173e8a01689711fe2f170b (run 31066618159): 26 SUCCESS + 1 SKIPPED (Release build, main-only by design)",
-        "S0-A: test_stdio_science_workflow_execute_retains_store_and_interpreter_across_approval passes on Linux with canonical /usr interpreter (run 31066618159 job 92507088176); pinned-executable swap fixture replacement_at_original_path_cannot_change_executed_bytes ok; science lib 619/0/8",
-        "Machine honesty gates / npm audit + licenses / Desktop macOS full package all SUCCESS on same head",
-        "observed 2026-08-06 by monitor + pr statusCheckRollup"
-      ]
-    },
-    {
-      "id": "SKILL_LIFECYCLE_AUTHORITY_GATE",
-      "owner": "lumen-science",
-      "status": "PASS",
-      "requires": [],
-      "receipt": [
-        "S0-B shipped (2026-08-06): four shipping mutation channels (set-skill-enabled/create-skill/update-skill/delete-skill) throw typed SKILL_AUTHORITY_UNAVAILABLE before any service call; onSkillsChanged never fires for them",
-        "Real registration negatives pass: ipc.test.ts invokes the actual registered handlers and asserts zero service calls + zero reload; skill-authority-negatives.test.ts uses a real SettingsService + real storageRoot and proves byte-identical store after all four invocations + forced ids cannot respawn a disabled skill in spawn config",
-        "skill-resolution.ts pure resolver (fail-closed: unknown/revoked/no-active-revision/disabled can never be forced) with 7 unit tests; service.test.ts 152 tests green (incl. inverted forced-materialization negative); renderer store 68 tests + SkillsPanel banner render tests; typecheck green; full vitest suite green (4543+ passed)",
-        "Legacy dead tests for removed subsystems (agent-framework/Codex/Responses bridge) removed from service.test.ts and vitest exclude lifted so the file runs in CI",
-        "Environment note: local test:authority live-binary probe fails because /Users/lei/.local/bin/lumen-science is the legacy Go CLI without the Rust 'agent stdio' command; CI has no binary so the probe SKIPs there (Desktop authority suite green in CI)"
-      ]
-    },
-    {
-      "id": "P0_NR_SAFETY_GATE",
-      "owner": "canonical-lumen",
-      "status": "PASS",
-      "requires": [],
-      "upstream_receipt": [
-        "S8 sealed attempt receipts: no_replay_policy_* counting-server tests (transport zero retry), decide_auth_class_retry matrix (resubmit <=1), s8_sealed_retry_live 5 real SessionActor tests",
-        "P0_NR_A_FULL_AUDIT_GATE: six precise RetryDenyReason paths (pin/pool/breaker/schema/output/stale)",
-        "SealedAttemptReceiptStore SEAL_RECORDS_MAX=4096 fail-closed",
-        "shipped in lumen v2.0.0 (f51fb902) and later"
-      ],
-      "note": "V0 card re-verifies then flips to PASS",
-      "receipt": [
-        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
-        "spot-check symbols: S8 sealed attempt receipts: no_replay_policy_* counting-server tests (transport zero retry), decide_auth_class_retry matrix (resubmit <=1), s8_sealed_retry_live"
-      ]
-    },
-    {
-      "id": "LUMEN_R0_SOURCE_GATE",
-      "owner": "canonical-lumen",
-      "status": "PASS",
-      "requires": [],
-      "upstream_receipt": [
-        "v2.0.0 peeled tag -> f51fb902; v2.1.0 -> 3d5d52cf; v2.2.0 -> 098f7cd4 (source A); evidence B v2.2.0 = af2857a2",
-        "artifacts/release-source-tuple.json v2.2.0: source_commit=098f7cd4, evidence_commit=af2857a2, tag_commit=098f7cd4, binary_sha256=f1aa4061..., source_lock_sha256=18b95181...",
-        "CI 5/5 SUCCESS on 7b8f385b (version-check / regenerate / Lumen crates+clippy / Offline gates / Expert v2 gate)",
-        "GitHub release v2.2.0: 19 assets, non-draft",
-        "readiness: automated gates all PASS; only M5/M6 human gates pending; eval_live 20/20"
-      ],
-      "note": "V0 card (2026-08-06 partial: ls-remote/CI/readiness verified) completes Science-side acceptance",
-      "receipt": [
-        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
-        "spot-check symbols: v2.0.0 peeled tag -> f51fb902; v2.1.0 -> 3d5d52cf; v2.2.0 -> 098f7cd4 (source A); evidence B v2.2.0 = af2857a2"
-      ]
-    },
-    {
-      "id": "PLATFORM_API_GATE",
-      "owner": "canonical-lumen / lumen-science",
-      "status": "PASS",
-      "requires": [
-        "LUMEN_R0_SOURCE_GATE"
-      ],
-      "receipt": [
-        "X-C1 done (2026-08-06): v1 method catalog (7 methods: 5 x.ai/science/* + 2 x.ai/governedTree/*) + compatibility manifest + consumer compile fixture, pinned to A=098f7cd4 / binary f1aa4061",
-        "catalog negatives 16/16 (unknown method / missing field / unknown field / cross-version / structural drift) driving real validate_request; consumer fixture typechecks strict",
-        "live seam negatives 5/5 against pinned lumen 2.2.0 binary: unknown method -32601, missing field -32602, deny_unknown_fields -32602, governedTree/status real three-node projection",
-        "verifier: scripts/verify-platform-api-v1.py + test-platform-api-v1.py; wired into science-machine-gates.sh"
-      ]
-    },
-    {
-      "id": "TASKTREE_GATE",
-      "owner": "canonical-lumen",
-      "status": "PASS",
-      "requires": [],
-      "upstream_receipt": [
-        "TaskTreeLifecycle JSONL durable journal + child terminal handoff receipt (on_completed production path)",
-        "depth=3 hard cap, root/immediate parent/depth/path lineage, ancestor cancel",
-        "x.ai/governedTree/status preview (three-node tree projection) + M1 pager governed-tree pane",
-        "resume/orphan/late-event handling (validate_resume_manifest_identity)"
-      ],
-      "note": "V0 re-verifies; durable read model + product projection spot check",
-      "receipt": [
-        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
-        "spot-check symbols: TaskTreeLifecycle JSONL durable journal + child terminal handoff receipt (on_completed production path)"
-      ]
-    },
-    {
-      "id": "CAPABILITY_GRANT_GATE",
-      "owner": "canonical-lumen",
-      "status": "PASS",
-      "requires": [],
-      "upstream_receipt": [
-        "CapabilityGrantV1 TTL/revoke token/projection + 8 tests",
-        "DispatchPermitV1 crate-private linear chain + PermitConsumer registry + re-verify at dispatch (identity_envelope.rs / dispatch_permit.rs)",
-        "RootBypassPermission INV-5 full fields; child inheritance always denied",
-        "child prepare_tool_call forced authorize_tool_dispatch; child git commit/push/merge hard deny"
-      ],
-      "receipt": [
-        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
-        "spot-check symbols: CapabilityGrantV1 TTL/revoke token/projection + 8 tests"
-      ]
-    },
-    {
-      "id": "TOOL_CONTRACT_GATE",
-      "owner": "canonical-lumen",
-      "status": "PASS",
-      "requires": [],
-      "upstream_receipt": [
-        "production dispatch: authorize_tool_dispatch + clamp_tool_result_text (offline TOOL_CONTRACT_DISPATCH_GATE=PASS)"
-      ],
-      "receipt": [
-        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
-        "spot-check symbols: production dispatch: authorize_tool_dispatch + clamp_tool_result_text (offline TOOL_CONTRACT_DISPATCH_GATE=PASS)"
-      ]
-    },
-    {
-      "id": "SECRET_BOUNDARY_GATE",
-      "owner": "canonical-lumen",
-      "status": "PASS",
-      "requires": [],
-      "upstream_receipt": [
-        "SecretRef + redaction fail-closed + retention owner required (secret_ref.rs, SECRET_REF_GATE)"
-      ],
-      "receipt": [
-        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
-        "spot-check symbols: SecretRef + redaction fail-closed + retention owner required (secret_ref.rs, SECRET_REF_GATE)"
-      ]
-    },
-    {
-      "id": "UNTRUSTED_CONTENT_GATE",
-      "owner": "canonical-lumen",
-      "status": "PASS",
-      "requires": [],
-      "upstream_receipt": [
-        "claim state machine EvidenceAttached/Conflicted/Inconclusive/Frozen variants + transition rules (CLAIM_STATE_MACHINE_GATE)",
-        "runtime_profile.rs one-way typed profiles (RUNTIME_PROFILE_GATE)"
-      ],
-      "receipt": [
-        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
-        "spot-check symbols: claim state machine EvidenceAttached/Conflicted/Inconclusive/Frozen variants + transition rules (CLAIM_STATE_MACHINE_GATE)"
-      ]
-    },
-    {
-      "id": "ACTIVITY_UNLOAD_GATE",
-      "owner": "canonical-lumen",
-      "status": "PASS",
-      "requires": [],
-      "upstream_receipt": [
-        "production prompt mailbox bounded (MAX_PENDING_INPUTS=128, DroppedFull) + QueuePressure projection (prompt_queue.rs, FLOW_CONTROL_GATE)",
-        "drain/late-event seams in turn lifecycle"
-      ],
-      "note": "V0 re-verifies unload race + lease/restart seam explicitly",
-      "receipt": [
-        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
-        "spot-check symbols: production prompt mailbox bounded (MAX_PENDING_INPUTS=128, DroppedFull) + QueuePressure projection (prompt_queue.rs, FLOW_CONTROL_GATE)"
-      ]
-    },
-    {
-      "id": "TREE_BUDGET_GATE",
-      "owner": "canonical-lumen",
-      "status": "PASS",
-      "requires": [],
-      "upstream_receipt": [
-        "BudgetLedger reserve/settle 12 real tests + A3_TOKEN_RESERVATION_GATE (account-level token budget, oversubscription denied)"
-      ],
-      "receipt": [
-        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
-        "spot-check symbols: BudgetLedger reserve/settle 12 real tests + A3_TOKEN_RESERVATION_GATE (account-level token budget, oversubscription denied)"
-      ]
-    },
-    {
-      "id": "OPERATION_RECOVERY_GATE",
-      "owner": "canonical-lumen",
-      "status": "PASS",
-      "requires": [],
-      "upstream_receipt": [
-        "SchedulerLoopOutbox idempotent gate wired to real scheduler dispatch (success terminal marked delivered, failure retryable)",
-        "kairos lease consumer + manifest-bound resume (validate_context_rebuild_entry -> authorize_context_rebuild)"
-      ],
-      "receipt": [
-        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
-        "spot-check symbols: SchedulerLoopOutbox idempotent gate wired to real scheduler dispatch (success terminal marked delivered, failure retryable)"
-      ]
-    },
-    {
-      "id": "WRITE_SCOPE_GATE",
-      "owner": "canonical-lumen",
-      "status": "PASS",
-      "requires": [],
-      "upstream_receipt": [
-        "SessionCommand::GetWriteScopeLease authoritative lease fetch + worktree auto-handoff with real git delta (evaluate_worktree_handoff_core, MissingRootDecision fail-closed)",
-        "child git commit/push/merge hard deny in prepare_tool_call"
-      ],
-      "receipt": [
-        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
-        "spot-check symbols: SessionCommand::GetWriteScopeLease authoritative lease fetch + worktree auto-handoff with real git delta (evaluate_worktree_handoff_core, MissingRootDecision fa"
-      ]
-    },
-    {
-      "id": "FLOW_CONTROL_GATE",
-      "owner": "canonical-lumen",
-      "status": "PASS",
-      "requires": [],
-      "upstream_receipt": [
-        "token flood / two-tree fairness / shutdown drain fixtures; offline FLOW_CONTROL_GATE=PASS"
-      ],
-      "receipt": [
-        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
-        "spot-check symbols: token flood / two-tree fairness / shutdown drain fixtures; offline FLOW_CONTROL_GATE=PASS"
-      ]
-    },
-    {
-      "id": "LEDGER_REPLAY_GATE",
-      "owner": "canonical-lumen",
-      "status": "PASS",
-      "requires": [],
-      "upstream_receipt": [
-        "ClaimAuthority + prev-payload-hash audit chain (lifecycle journal) + bounded model checking (625 states / 21924 edges) driving real ClaimAuthority::validate",
-        "index/read model rebuild same hash (ACCEPTED_SNAPSHOT_MAX_CLAIMS=1000)"
-      ],
-      "receipt": [
-        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
-        "spot-check symbols: ClaimAuthority + prev-payload-hash audit chain (lifecycle journal) + bounded model checking (625 states / 21924 edges) driving real ClaimAuthority::validate"
-      ]
-    },
-    {
-      "id": "CONTEXT_MANIFEST_GATE",
-      "owner": "canonical-lumen",
-      "status": "PASS",
-      "requires": [],
-      "upstream_receipt": [
-        "context_manifest_v1_ real tests (shell >=3, memory >=8), validate_resume_manifest_identity + authorize_context_rebuild production wiring"
-      ],
-      "receipt": [
-        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
-        "spot-check symbols: context_manifest_v1_ real tests (shell >=3, memory >=8), validate_resume_manifest_identity + authorize_context_rebuild production wiring"
-      ]
-    },
-    {
-      "id": "NO_REPLAY_GATE",
-      "owner": "canonical-lumen",
-      "status": "PASS",
-      "requires": [],
-      "upstream_receipt": [
-        "SealedAttemptReceiptStore (SEAL_RECORDS_MAX=4096 fail-closed), effective max retries=0 across sampler retry/backoff/image-strip/HTTP1/doom resample paths",
-        "per-reason reopening only after sealed NoAssistantTextDelta+NoToolSignal+OutboundNotAttempted receipts (C5-B semantic)"
-      ],
-      "receipt": [
-        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
-        "spot-check symbols: SealedAttemptReceiptStore (SEAL_RECORDS_MAX=4096 fail-closed), effective max retries=0 across sampler retry/backoff/image-strip/HTTP1/doom resample paths"
-      ]
-    },
-    {
-      "id": "ADVISOR_SHADOW_GATE",
-      "owner": "canonical-lumen",
-      "status": "PASS",
-      "requires": [],
-      "upstream_receipt": [
-        "ConsultAdvisorHost::invoke_tool = lumen_advisor_consult registered in real ToolRegistry",
-        "advice_issued_policy_epoch/live_policy_epoch production write side (DEBT-001 closed)",
-        "shadow-only: zero switch/spawn/tool/write/Accept impact"
-      ],
-      "receipt": [
-        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
-        "spot-check symbols: ConsultAdvisorHost::invoke_tool = lumen_advisor_consult registered in real ToolRegistry"
-      ]
-    },
-    {
-      "id": "HARNESS_REGRESSION_GATE",
-      "owner": "lumen-science",
-      "status": "PASS",
-      "requires": [
-        "CONTEXT_MANIFEST_GATE",
-        "NO_REPLAY_GATE",
-        "WRITE_SCOPE_GATE",
-        "FLOW_CONTROL_GATE",
-        "LEDGER_REPLAY_GATE",
-        "ADVISOR_SHADOW_GATE"
-      ],
-      "receipt": [
-        "S2a corpus shipped (2026-08-06): 20 scenarios across 5 classes (authority / context-claim / execution-liveness / provider-advisor / ux-provenance) with per-scenario driver + assertions + forbidden effects",
-        "test-s2a-corpus.mts drives the pinned canonical binary (2.2.0 098f7cd4) via the real ACP seam: 13 assertions all passed, zero provider / zero network / zero shell; captured in SCRATCH s2a-w.log",
-        "verify-s2a-corpus.py wired into science-machine-gates.sh"
-      ]
-    },
-    {
-      "id": "BOUNDED_ASSIGNMENT_GATE",
-      "owner": "canonical-lumen",
-      "status": "PASS",
-      "requires": [],
-      "upstream_receipt": [
-        "x.ai/governedTree/assignmentRecommendation (readiness matrix, gate_code aligned with authority chain)",
-        "authorize_applied_assignment_chain: root approval + sealed receipt + TreeBudget + manifest hash + model receipt + ledger decision"
-      ],
-      "receipt": [
-        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
-        "spot-check symbols: x.ai/governedTree/assignmentRecommendation (readiness matrix, gate_code aligned with authority chain)"
-      ]
-    },
-    {
-      "id": "KAIROS_LOCAL_GATE",
-      "owner": "canonical-lumen",
-      "status": "PASS",
-      "requires": [],
-      "upstream_receipt": [
-        "operator_control_five_command_matrix (Inspect/Freeze/Cancel/ApproveResume/TakeOver) + OperatorGrantV1 typed grants",
-        "kairos_fake_clock_lease_cycle (start/ready/crash/reconcile/stop) + SchedulerLoopOutbox"
-      ],
-      "receipt": [
-        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
-        "spot-check symbols: operator_control_five_command_matrix (Inspect/Freeze/Cancel/ApproveResume/TakeOver) + OperatorGrantV1 typed grants"
-      ]
-    },
-    {
-      "id": "NG10_RELEASE_FOUNDATION_GATE",
-      "owner": "canonical-lumen",
-      "status": "PASS",
-      "requires": [],
-      "upstream_receipt": [
-        "ReleaseSourceTupleV1 + RELEASE_TUPLE_GATE (source != evidence, tag points to source A, binary/lock sha256 required)",
-        "release.sh two-phase transaction; signed tags v2.0.0/v2.1.0/v2.2.0 all point to source A; GitHub releases with SBOM/minisig/19 assets"
-      ],
-      "receipt": [
-        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
-        "spot-check symbols: ReleaseSourceTupleV1 + RELEASE_TUPLE_GATE (source != evidence, tag points to source A, binary/lock sha256 required)"
-      ]
-    },
-    {
-      "id": "UPDATER_TRUST_GATE",
-      "owner": "canonical-lumen",
-      "status": "PASS",
-      "requires": [],
-      "upstream_receipt": [
-        "A12 rollback receipt + install-local.sh writes lumen-release-source-tuple.json provenance (DEBT-023 closed)",
-        "rollback semantics: V0 re-verifies wrong-key/rollback/mirror/partial-update negatives before Science G1 consumes"
-      ],
-      "note": "V0 re-verifies; if updater trust cannot be proven, G1 must ship with updater disabled (fail-closed)",
-      "receipt": [
-        "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
-        "spot-check symbols: A12 rollback receipt + install-local.sh writes lumen-release-source-tuple.json provenance (DEBT-023 closed)"
-      ]
-    },
-    {
-      "id": "SINGLE_BASE_GATE",
-      "owner": "both",
-      "status": "IMPLEMENTING",
-      "requires": [],
-      "receipt": [
-        "canonical xai-grok-science 0.1.0 in lumen main (kernel absorbed)",
-        "remaining science-only modules not yet in canonical: seqbench.rs, primer_thermo.rs, dossier.rs, skill_quarantine.rs, capability/, features.rs",
-        "lumen-science still carries copied agent/ (66 codegen crates, VERSION 0.1.222) - X-M1 de-copy pending"
-      ]
-    },
-    {
-      "id": "SOURCE_INTAKE_COMPLETENESS_GATE",
-      "owner": "lumen-science",
-      "status": "PASS",
-      "requires": [],
-      "receipt": [
-        "I1-A closed (2026-08-06): 9/9 source tree inventories (12191 entries) with per-entry disposition; 0 double-dispositions; exact-one component dispositions in vocabulary; transitive bridge (SCP vendor manifest) hash-referenced from the lock root; adapted_source_receipts array verifiable (currently empty = no placed adapt files, honest)",
-        "verify-i1a-completeness.py + test-i1a-completeness.py (8/8 tamper) wired into science-machine-gates.sh",
-        "lock remains draft/BLOCKED by design; SOURCE_INTAKE_ACTIVE_GATE untouched"
-      ]
-    },
-    {
-      "id": "SOURCE_INTAKE_ACTIVE_GATE",
-      "owner": "lumen-science",
-      "status": "BLOCKED",
-      "requires": [
-        "SOURCE_INTAKE_COMPLETENESS_GATE",
-        "LUMEN_R0_SOURCE_GATE"
-      ],
-      "receipt": [
-        "2026-08-06: prerequisites PASS (completeness + Lumen R0); per-source rights gate mechanically verified 9/9 permissive (MIT/Apache-2.0, zero copyleft/unknown) — docs/science/5.0/intake-rights-gate-2026-08-06.json",
-        "BLOCKED (not BLOCKED_UPSTREAM): sole remaining step is human active-lock confirmation (promote core-v0.1.251-admission.lock.json draft → active)",
-        "active lock must never be inferred from draft status"
-      ]
-    },
-    {
-      "id": "SCIENTIFIC_VALIDITY_GATE",
-      "owner": "lumen-science (per-capability)",
-      "status": "NOT_STARTED",
-      "requires": [],
-      "note": "per-capability-revision gate; registered benchmark spec + independent receipt; not a global one-time PASS"
-    },
-    {
-      "id": "DEVICE_SAFETY_GATE",
-      "owner": "separate safety program",
-      "status": "DISABLED",
-      "requires": [],
-      "note": "HIL/Real operator/e-stop/regulatory plan; W7-A cannot advance it; E8 stays NOT RUN"
-    },
-    {
-      "id": "SCIENCE_MACOS_GA_GATE",
-      "owner": "lumen-science",
-      "status": "BLOCKED",
-      "requires": [
-        "SINGLE_BASE_GATE",
-        "PLATFORM_API_GATE",
-        "NG10_RELEASE_FOUNDATION_GATE",
-        "UPDATER_TRUST_GATE"
-      ],
-      "note": "exact canonical composition, package/sign/notarize/install/rollback; Windows out of scope"
-    },
-    {
-      "id": "PRODUCT_PROOF_GATE",
-      "owner": "lumen-science",
-      "status": "BLOCKED_UPSTREAM",
-      "requires": [
-        "PLATFORM_API_GATE"
-      ],
-      "note": "coarse schema-1 gate; requires rebuilt exact-source binary + actor/product negative proof + exact-head CI after platform contract PASS"
-    }
   ]
 }

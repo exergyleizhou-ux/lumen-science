@@ -393,7 +393,7 @@ I1-A completeness 现在即可做（不被任何上游阻塞），14 步 + SCP/t
 | 顶层 gate | 权重 | 08-02 | 08-06 | 依据 |
 |---|---:|---:|---:|---|
 | S0 Science P0 clean exact-head | 10 | 0 | **10** | S0-A（PR #28 全绿）+ S0-B（skill 直写封死）均完成（2026-08-06） |
-| I1 nine-source admitted intake | 8 | 0 | **0** | v2 lock draft |
+| I1 nine-source admitted intake | 8 | 0 | **8** | upstream-lock.v2 active（9/9 source_gate=pass）+ rights gate 9/9 许可证核验 + 资产方全量采纳授权（2026-08-06） |
 | L0 canonical Lumen source gate | 12 | 0 | **12** | v2.2.0 tuple 收据（§1.1），本会话独立核验 |
 | C1 public governance API | 12 | 0 | **12** | X-C1 完成（2026-08-06） |
 | C2–C7 governed autonomy foundation | 15 | 0 | **15** | V0 核验 15 个治理 gate 全 PASS（2026-08-06） |
@@ -401,7 +401,7 @@ I1-A completeness 现在即可做（不被任何上游阻塞），14 步 + SCP/t
 | K1 managed long-run/recovery | 10 | 0 | **0** | K1a 上游已 PASS；K1b Science managed-run proof 未做 |
 | M1 single Rust base | 13 | 0 | **0** | 6 模块未 push-up，复制件在 |
 | G1 macOS released product slice | 10 | 0 | **0** | 未发布 |
-| **合计** | **100** | **0** | **59** | S0 10 + L0 12 + C1 12 + C2–C7 15 + S2 10；剩余 I1 8（active 未过）+ K1 10（K1b 未做）+ M1 13 + G1 10；每次只按 receipt 更新 |
+| **合计** | **100** | **0** | **67** | S0 10 + L0 12 + C1 12 + C2–C7 15 + S2 10 + I1 8；剩余 K1 10（K1b 未做）+ M1 13 + G1 10；每次只按 receipt 更新 |
 
 L0 的 12 分绑定当前 pin tuple（v2.2.0，§1.1 收据）。lumen 发布新版本不自动作废本分——X-U 卡吸收新 tuple 并更新 receipt 前，旧 pin 的完成证据继续有效；报告必须写明证据绑定的 tuple。
 

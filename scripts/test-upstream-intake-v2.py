@@ -232,7 +232,7 @@ def main() -> int:
         text=True,
     )
     actual_output = actual.stdout + actual.stderr
-    results.append(("the checked-in draft has nine matching evidence records", actual.returncode == 2 and "nine-source evidence" in actual_output, "" if actual.returncode == 2 and "nine-source evidence" in actual_output else f"exit={actual.returncode}; output={actual_output.strip()[:240]!r}"))
+    results.append(("the checked-in active lock validates nine-source intake (I1-B closed)", actual.returncode == 0 and "PASS" in actual_output, "" if actual.returncode == 0 and "PASS" in actual_output else f"exit={actual.returncode}; output={actual_output.strip()[:240]!r}"))
 
     checked_in_lock = json.loads((ROOT / "third_party/upstream-lock.v2.json").read_text(encoding="utf-8"))
     ai4s_source = next(source for source in checked_in_lock["sources"] if source["id"] == "ai4s-research-open-science")

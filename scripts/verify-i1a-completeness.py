@@ -49,7 +49,20 @@ def sha256(path: Path) -> str:
 
 
 def verify(lock: dict, scp: dict) -> None:
-    require(lock.get("status") == "draft", "lock must remain draft until I1-B")
+    # I1-A stage: lock must stay draft (no pretending to be admitted).
+    # After I1-B completes the lock may be active, but only with the full
+    # I1-B evidence: every source gate pass + verified rights.
+    status = lock.get("status")
+    require(status in ("draft", "active"), "lock status must be draft or active")
+    if status == "active":
+        require(
+            all(s.get("source_gate_status") == "pass" for s in lock.get("sources", [])),
+            "active lock requires every source_gate_status=pass (I1-B)",
+        )
+        require(
+            all(s.get("rights_status") == "verified" for s in lock.get("sources", [])),
+            "active lock requires every rights_status=verified (I1-B)",
+        )
     sources = lock.get("sources")
     require(isinstance(sources, list) and len(sources) == 9, "nine sources required")
 
