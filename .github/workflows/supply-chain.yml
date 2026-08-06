@@ -41,8 +41,23 @@ jobs:
         # dependencies — a permanently red check that says nothing.
         run: cargo install cargo-audit --locked --version ^0.22
 
-      - name: Audit Cargo.lock
-        working-directory: agent
+      # M1 single base: the Rust dependency surface lives in the pinned Lumen
+      # tuple, not in this repo. Audit the pin's Cargo.lock.
+      - name: Read pinned Lumen tuple from admission lock
+        working-directory: ${{ github.workspace }}
+        run: |
+          PIN="$(python3 -c "import json; print(json.load(open('docs/science/5.0/core-v0.1.251-admission.lock.json'))['comparison']['lumen_head'])")"
+          echo "LUMEN_PIN=$PIN" >> "$GITHUB_ENV"
+
+      - name: Checkout pinned Lumen (single Rust base)
+        working-directory: ${{ github.workspace }}
+        run: |
+          git clone --quiet --filter=blob:none https://github.com/exergyleizhou-ux/lumen.git .tmp/lumen-pin
+          git -C .tmp/lumen-pin fetch --quiet --depth 1 origin "$LUMEN_PIN"
+          git -C .tmp/lumen-pin checkout --quiet "$LUMEN_PIN"
+
+      - name: Audit pinned Lumen Cargo.lock
+        working-directory: .tmp/lumen-pin/agent
         # Advisories with no fixed version available would otherwise block every
         # PR indefinitely. Any use of --ignore must name the advisory and why.
         run: cargo audit --deny warnings
