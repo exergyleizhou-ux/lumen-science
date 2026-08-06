@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "gate": "SOURCE_INTAKE_ACTIVE_GATE",
+  "phase": "I1-B per-source rights gate",
+  "reviewed_at": "2026-08-06T09:05:00+08:00",
+  "reviewed_by": "machine scan (licenses) + pending human active-lock confirmation",
+  "basis": [
+    "SOURCE_INTAKE_COMPLETENESS_GATE PASS (14-step + SCP/transitive bridge + tree coverage)",
+    "LUMEN_R0_SOURCE_GATE PASS (v2.2.0 tuple 098f7cd4)",
+    "9 of 9 intake-evidence manifests present with root + nested license inventories"
+  ],
+  "sources": [
+    {
+      "source_id": "ai4s-research-open-science",
+      "root_spdx": "MIT",
+      "license_files": ["LICENSE"],
+      "verdict": "acceptable"
+    },
+    {
+      "source_id": "aipoch-open-science",
+      "root_spdx": "Apache-2.0",
+      "license_files": ["LICENSE"],
+      "verdict": "acceptable"
+    },
+    {
+      "source_id": "aurekaresearch-opendde",
+      "root_spdx": "Apache-2.0",
+      "license_files": ["LICENSE"],
+      "verdict": "acceptable"
+    },
+    {
+      "source_id": "exergyleizhou-ux-lumen-science",
+      "root_spdx": "Apache-2.0",
+      "license_files": ["LICENSE"],
+      "verdict": "acceptable"
+    },
+    {
+      "source_id": "exergyleizhou-ux-lumen",
+      "root_spdx": "Apache-2.0",
+      "license_files": ["LICENSE"],
+      "verdict": "acceptable"
+    },
+    {
+      "source_id": "hust-ningkang-lab-bgc-prophet",
+      "root_spdx": "MIT",
+      "license_files": ["LICENSE"],
+      "verdict": "acceptable"
+    },
+    {
+      "source_id": "jvogan-motif",
+      "root_spdx": "MIT",
+      "license_files": ["LICENSE"],
+      "verdict": "acceptable"
+    },
+    {
+      "source_id": "qzzqzzb-openclaudescience",
+      "root_spdx": "MIT",
+      "license_files": ["LICENSE", "LICENSE.txt"],
+      "verdict": "acceptable"
+    },
+    {
+      "source_id": "snap-stanford-biomni",
+      "root_spdx": "Apache-2.0",
+      "license_files": ["LICENSE"],
+      "verdict": "acceptable"
+    }
+  ],
+  "summary": {
+    "total_sources": 9,
+    "acceptable": 9,
+    "copyleft_found": 0,
+    "unknown_license_found": 0,
+    "mechanical_verdict": "PASS — all nine sources carry permissive licenses (MIT/Apache-2.0) with license files inventoried"
+  },
+  "remaining_human_step": "active admission lock: promote core-v0.1.251-admission.lock.json from draft/BLOCKED to active after user confirmation; active lock must never be inferred from draft status"
+}

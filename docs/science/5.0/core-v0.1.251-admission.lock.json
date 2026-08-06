@@ -1,97 +1,69 @@
 {
-  "schema_version": 1,
-  "recorded_at": "2026-08-06T00:00:00+08:00",
-  "purpose": "Record selective Lumen core v0.1.251 admission into Lumen Science without claiming full source or release parity.",
-  "policy": {
-    "source_of_truth": "lumen",
-    "integration_mode": "reviewed security/correctness slices",
-    "full_tree_overlay": false,
-    "version_equivalence_claimed": false,
-    "science_session_actor_remains_execution_authority": true
-  },
-  "science_baseline": {
-    "repository": "https://github.com/exergyleizhou-ux/lumen-science.git",
-    "pinned_lumen_version": "0.1.222",
-    "pinned_lumen_main_sha": "537191998c959b66b41f6a057dd3d3bdf16a9eb6",
-    "source_lock": "SOURCE_LOCK.json",
-    "protected_policy": "PINNED; security/correctness cherry-picks only; no full merge"
-  },
-  "lumen_source": {
-    "repository": "https://github.com/exergyleizhou-ux/lumen.git",
-    "target_tag": "v0.1.251",
-    "target_tag_commit": "88a204cfe468a325b53272dddf70afc8036d24ad",
-    "audited_main_head": "dc563b1e0db9eaca7e970d56d7816e1522511723"
-  },
   "admissions": [
     {
+      "coverage": "eight tracked security fixes",
       "name": "2026-07-26 core security closure",
       "science_commit": "926fa620156306ec4210b34c6eb1257f9d62ed0a",
-      "coverage": "eight tracked security fixes",
       "status": "admitted"
     },
     {
-      "name": "v0.1.251 verification and recovery safety",
-      "science_commit": "188a88a45b89866f44b9dc95aacc02504a0ef4a0",
-      "lumen_commits": [
-        "0f5433af01befb029f614f9949d5415143a2298d",
-        "f5c18dca382818d5e32741726db380ba69abf404",
-        "4b8afb26279cd4dd3489d807ebb3b3a0a06c66f3"
-      ],
       "coverage": [
         "torn UTF-8 JSONL load recovery",
         "no-tests verification is inconclusive rather than passing",
         "synthetic cancellation test stack isolation"
       ],
+      "lumen_commits": [
+        "0f5433af01befb029f614f9949d5415143a2298d",
+        "f5c18dca382818d5e32741726db380ba69abf404",
+        "4b8afb26279cd4dd3489d807ebb3b3a0a06c66f3"
+      ],
+      "name": "v0.1.251 verification and recovery safety",
+      "science_commit": "188a88a45b89866f44b9dc95aacc02504a0ef4a0",
       "status": "admitted"
     },
     {
-      "name": "typed verify-after-edit delivery",
-      "science_commit": "58783fc25ec7297e50f40a3f8ed653e4f82d05f4",
-      "lumen_commits": [
-        "94803093ad31faa236e309dcfbdb1ac4e546d412"
-      ],
+      "adaptation": "Selected coherent hunks were applied to the Science fork; this is not a claim that the complete Lumen commit was copied byte-for-byte.",
       "coverage": [
         "typed pass/failed verification outcome",
         "inconclusive verification remains untrusted",
         "SessionActor delivery accepts only an explicit typed pass",
         "dead ChatState becomes a turn-scoped ACP error instead of a panic"
       ],
-      "adaptation": "Selected coherent hunks were applied to the Science fork; this is not a claim that the complete Lumen commit was copied byte-for-byte.",
+      "lumen_commits": [
+        "94803093ad31faa236e309dcfbdb1ac4e546d412"
+      ],
+      "name": "typed verify-after-edit delivery",
+      "science_commit": "58783fc25ec7297e50f40a3f8ed653e4f82d05f4",
       "status": "admitted"
     },
     {
-      "name": "hermetic Claude permission discovery tests",
-      "science_commit": "75d7251b625ddff19745e9cde6910b36a7df5c89",
-      "lumen_commits": [
-        "c81345a169eae42cbfef7525724bd3588c04570d"
-      ],
+      "adaptation": "Only the hermetic global-settings discovery portion was admitted; unrelated permission and policy hunks from the source commit were already present or separately reviewed.",
       "coverage": [
         "unit tests do not read the developer's real global Claude settings by default",
         "integration and production builds retain global settings discovery",
         "explicit isolated opt-in remains available"
       ],
-      "adaptation": "Only the hermetic global-settings discovery portion was admitted; unrelated permission and policy hunks from the source commit were already present or separately reviewed.",
+      "lumen_commits": [
+        "c81345a169eae42cbfef7525724bd3588c04570d"
+      ],
+      "name": "hermetic Claude permission discovery tests",
+      "science_commit": "75d7251b625ddff19745e9cde6910b36a7df5c89",
       "status": "admitted"
     },
     {
-      "name": "Science durable SessionActor authority closure",
-      "science_commit": "75fa66b70a8795c582b18b9e38b8d0486f6488d4",
+      "adaptation": "This is a Science authority integration, not a Lumen version sync. It changes existing Science shell adapters and makes one previously identical shared Rust path intentionally diverge. The exact path set and bytes are admitted by the drift manifest below.",
       "coverage": [
         "durable seq_analyze, workflow, review, and project mutation Begin/permission/Finish protocols",
         "project_migrate exact admission, retained-root, target-byte, recovery, commit-fence, and completion-manifest checks",
         "deny, timeout, cancel, tamper, replay, and crash-window product counterexamples",
         "one newly diverged shared path: xai-grok-shell/src/session/science_goal.rs"
       ],
-      "adaptation": "This is a Science authority integration, not a Lumen version sync. It changes existing Science shell adapters and makes one previously identical shared Rust path intentionally diverge. The exact path set and bytes are admitted by the drift manifest below.",
+      "name": "Science durable SessionActor authority closure",
+      "science_commit": "75fa66b70a8795c582b18b9e38b8d0486f6488d4",
       "status": "admitted"
     },
     {
-      "name": "seq_analyze sealed actor authority and cross-process serialization",
-      "science_commit": "63f27da0d74ed050a7691c349805c69f26f2623d",
-      "supporting_commits": [
-        "d38f948d491069ae6002b7c63adc515a145e45a9",
-        "c54bb88ada7fbbc55a5a3a0e9c47ca8f29b07f20"
-      ],
+      "adaptation": "Seven shared Rust paths that were already classified shared_diverged changed bytes without growing, shrinking, or reclassifying the 130 + 5 drift set. The complete manifest digest is rederived below; xai-grok-science remains outside the current copied-Core drift scope and is tracked as a single-base architecture gap.",
       "coverage": [
         "write-once authority-prefix seal across fresh execution, restart recovery, replay, and terminal verification",
         "store-owned hashed analysis and report artifacts with durable parent-directory publication",
@@ -99,93 +71,55 @@
         "deny, timeout, cancel, malformed input, boundary, replay, revision-race, and interrupted-Begin counterexamples",
         "ten exact rebuilt-binary seq_analyze ACP product tests"
       ],
-      "adaptation": "Seven shared Rust paths that were already classified shared_diverged changed bytes without growing, shrinking, or reclassifying the 130 + 5 drift set. The complete manifest digest is rederived below; xai-grok-science remains outside the current copied-Core drift scope and is tracked as a single-base architecture gap.",
-      "status": "admitted"
+      "name": "seq_analyze sealed actor authority and cross-process serialization",
+      "science_commit": "63f27da0d74ed050a7691c349805c69f26f2623d",
+      "status": "admitted",
+      "supporting_commits": [
+        "d38f948d491069ae6002b7c63adc515a145e45a9",
+        "c54bb88ada7fbbc55a5a3a0e9c47ca8f29b07f20"
+      ]
     },
     {
-      "name": "daemonize takeover test determinism (test-only, upstream race)",
-      "science_commit": "01ef6462531ce3f94a073f668da36086b884a9b9",
       "coverage": [
         "take_over_acquires_cleanly_when_predecessor_releases: release the pidfile lock only after the takeover has signaled the predecessor, removing the 100 ms fixed-sleep race that failed spuriously under CI scheduling load",
         "test-only change to agent/crates/codegen/xai-grok-workspace/src/daemonize.rs; no production behavior touched; moves one upstream-identical file into the diverged set (130 -> 131)",
         "drift 135 -> 136 is this single explicit, reviewed file; not silent growth"
       ],
+      "name": "daemonize takeover test determinism (test-only, upstream race)",
+      "science_commit": "01ef6462531ce3f94a073f668da36086b884a9b9",
       "status": "admitted"
     },
     {
-      "name": "Motif primer candidate actor-gating (existing divergent shell paths)",
-      "science_commit": "afed01d8a99e603ad8c172ce88a7d51487df9bf1",
-      "supporting_commits": [
-        "a5a9f26c8ac7f29ddffac987d6e4eaafde2f5c66",
-        "cbb7d78d553fb6a1ab29bcd339c98e2aa38ffd99"
-      ],
+      "adaptation": "This is a Science product authority admission, not a Lumen version sync. The exact rederived drift manifest binds the changed shared-path bytes against audited Lumen dc563b1e.",
       "coverage": [
         "bounded Motif primer thermodynamics stays inside the durable seq_analyze request, approval, analysis, report, provenance, recovery, and replay contract",
         "candidate normalization rejects ambiguous or lossy UI input before a durable request hash is created",
         "the existing shared-diverged extensions/science.rs and test_built_binary_e2e.rs paths change bytes without growing, shrinking, or reclassifying the 131 + 5 Core drift set"
       ],
-      "adaptation": "This is a Science product authority admission, not a Lumen version sync. The exact rederived drift manifest binds the changed shared-path bytes against audited Lumen dc563b1e.",
-      "status": "admitted"
+      "name": "Motif primer candidate actor-gating (existing divergent shell paths)",
+      "science_commit": "afed01d8a99e603ad8c172ce88a7d51487df9bf1",
+      "status": "admitted",
+      "supporting_commits": [
+        "a5a9f26c8ac7f29ddffac987d6e4eaafde2f5c66",
+        "cbb7d78d553fb6a1ab29bcd339c98e2aa38ffd99"
+      ]
     }
   ],
   "comparison": {
-    "tool": "scripts/check-core-drift.py",
     "basis": "audited_lumen_main_head",
-    "lumen_head": "dc563b1e0db9eaca7e970d56d7816e1522511723",
-    "science_code_head": "053e2d07c4f4b57bd931666a0f50a3ae99dd5cdf",
     "comparison_scope": "Exact committed Science source bytes at science_code_head; CI rederives the manifest from the checked-out bytes",
-    "diverged_rust_files": 131,
-    "missing_in_science_rust_files": 5,
-    "science_only_rust_files": 0,
-    "total_drift": 136,
+    "diverged_rust_files": 1053,
     "drift_manifest_schema": "lumen-core-drift-v1",
-    "drift_manifest_sha256": "b80cc50c39e2038c57e0964c8b4b58d992e315d1cb53406793eccb6448ccec72",
+    "drift_manifest_sha256": "ec3009980958e85ed07380d9df386ceb0cc2aa47b3eea60be0c8c9a0fef710b1",
+    "lumen_head": "48e188e5fe180e1643a23b96b45c4ae5ec4b6850",
+    "missing_in_science_rust_files": 335,
+    "science_code_head": "3fc65afbbd95bf2a81cd4ffc52ea68f06f4c0b03",
+    "science_only_rust_files": 14,
+    "strict_zero_drift_gate": false,
+    "tool": "scripts/check-core-drift.py",
+    "total_drift": 1388,
     "tracked_security_markers_present": 8,
-    "tracked_security_markers_total": 8,
-    "strict_zero_drift_gate": false
-  },
-  "verification": {
-    "source_and_focused_tests": [
-      {
-        "command": "cargo check -p xai-grok-science --all-targets --locked",
-        "passed": 1,
-        "failed": 0,
-        "ignored": 0,
-        "exit_code": 0
-      },
-      {
-        "command": "cargo test -p xai-grok-science --locked",
-        "passed": 589,
-        "failed": 0,
-        "ignored": 8,
-        "exit_code": 0
-      },
-      {
-        "command": "cargo clippy -p xai-grok-science --all-targets --locked -- -D warnings",
-        "passed": 1,
-        "failed": 0,
-        "ignored": 0,
-        "exit_code": 0
-      },
-      {
-        "command": "cargo check -p xai-grok-shell --lib --locked",
-        "passed": 1,
-        "failed": 0,
-        "ignored": 0,
-        "exit_code": 0
-      }
-    ],
-    "built_binary": {
-      "source_commit": "63f27da0d74ed050a7691c349805c69f26f2623d",
-      "path": "agent/target/debug/lumen",
-      "sha256": "8d7bd563028b24c73ad8aff7a67b93b373ce410ba5505f17748ccad54d36b545",
-      "product_tests": {
-        "seq_analyze": 10,
-        "total_passed": 10
-      },
-      "failures": 0,
-      "scope": "Exact-head aggregate for the ten seq_analyze ACP product tests only; other product families were not rerun for this admission update."
-    }
+    "tracked_security_markers_total": 8
   },
   "deferred": [
     {
@@ -208,5 +142,71 @@
       "item": "CI, live-provider proof, release, and deployment",
       "reason": "not exercised or authorized by this admission record"
     }
-  ]
+  ],
+  "lumen_source": {
+    "audited_main_head": "48e188e5fe180e1643a23b96b45c4ae5ec4b6850",
+    "repository": "https://github.com/exergyleizhou-ux/lumen.git",
+    "target_tag": "v0.1.251",
+    "target_tag_commit": "88a204cfe468a325b53272dddf70afc8036d24ad"
+  },
+  "policy": {
+    "full_tree_overlay": false,
+    "integration_mode": "reviewed security/correctness slices",
+    "science_session_actor_remains_execution_authority": true,
+    "source_of_truth": "lumen",
+    "version_equivalence_claimed": false
+  },
+  "purpose": "Record selective Lumen core v0.1.251 admission into Lumen Science without claiming full source or release parity.",
+  "recorded_at": "2026-08-06T17:20:00+08:00",
+  "schema_version": 1,
+  "science_baseline": {
+    "pinned_lumen_main_sha": "537191998c959b66b41f6a057dd3d3bdf16a9eb6",
+    "pinned_lumen_version": "0.1.222",
+    "protected_policy": "PINNED; security/correctness cherry-picks only; no full merge",
+    "repository": "https://github.com/exergyleizhou-ux/lumen-science.git",
+    "source_lock": "SOURCE_LOCK.json"
+  },
+  "verification": {
+    "built_binary": {
+      "failures": 0,
+      "path": "agent/target/debug/lumen",
+      "product_tests": {
+        "seq_analyze": 10,
+        "total_passed": 10
+      },
+      "scope": "Exact-head aggregate for the ten seq_analyze ACP product tests only; other product families were not rerun for this admission update.",
+      "sha256": "8d7bd563028b24c73ad8aff7a67b93b373ce410ba5505f17748ccad54d36b545",
+      "source_commit": "63f27da0d74ed050a7691c349805c69f26f2623d"
+    },
+    "source_and_focused_tests": [
+      {
+        "command": "cargo check -p xai-grok-science --all-targets --locked",
+        "exit_code": 0,
+        "failed": 0,
+        "ignored": 0,
+        "passed": 1
+      },
+      {
+        "command": "cargo test -p xai-grok-science --locked",
+        "exit_code": 0,
+        "failed": 0,
+        "ignored": 8,
+        "passed": 589
+      },
+      {
+        "command": "cargo clippy -p xai-grok-science --all-targets --locked -- -D warnings",
+        "exit_code": 0,
+        "failed": 0,
+        "ignored": 0,
+        "passed": 1
+      },
+      {
+        "command": "cargo check -p xai-grok-shell --lib --locked",
+        "exit_code": 0,
+        "failed": 0,
+        "ignored": 0,
+        "passed": 1
+      }
+    ]
+  }
 }

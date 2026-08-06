@@ -386,13 +386,14 @@
     {
       "id": "SOURCE_INTAKE_ACTIVE_GATE",
       "owner": "lumen-science",
-      "status": "BLOCKED_UPSTREAM",
+      "status": "BLOCKED",
       "requires": [
         "SOURCE_INTAKE_COMPLETENESS_GATE",
         "LUMEN_R0_SOURCE_GATE"
       ],
       "receipt": [
-        "upstream Lumen R0 now PASS_UPSTREAM (2026-08-06); still blocked on completeness PASS + per-source rights gate + active lock",
+        "2026-08-06: prerequisites PASS (completeness + Lumen R0); per-source rights gate mechanically verified 9/9 permissive (MIT/Apache-2.0, zero copyleft/unknown) — docs/science/5.0/intake-rights-gate-2026-08-06.json",
+        "BLOCKED (not BLOCKED_UPSTREAM): sole remaining step is human active-lock confirmation (promote core-v0.1.251-admission.lock.json draft → active)",
         "active lock must never be inferred from draft status"
       ]
     },

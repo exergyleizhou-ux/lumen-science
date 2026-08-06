@@ -41,7 +41,8 @@
 
 - **G1**：Apple Developer 证书 + Xcode + notarytool 凭据（用户侧）。
 - **X-M1**：science 仓 → lumen 仓的 store 层融合（lumen 单 writer 协作；分支 `science/push-up-seq-v1` 已建）。
-- **I1-B**：8 个源的最终法务/资产裁决（人工审查）。
+- **I1-B**：9/9 许可证机械核验通过（MIT/Apache-2.0，零 copyleft/未知；`intake-rights-gate-2026-08-06.json`）；剩人工法务确认 + active lock 晋升。
+- **X-U**：lumen pin 已刷新 dc563b1e → 48e188e5（v2.2.0 后 main head），drift manifest 如实重算 1388。
 - **K1b**：依赖 X-M1 后的 canonical kairos 接线。
 
 ## 证据
