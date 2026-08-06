@@ -9869,14 +9869,24 @@ async fn test_stdio_science_workflow_execute_retains_store_across_approval() {
     .await;
 }
 
-/// The permission wait is an adversarial window, not a trusted pause. Replacing
-/// both the store pathname and interpreter pathname after the real ACP prompt
-/// appears must not redirect the eventual Allow.
+/// The permission wait is an adversarial window, not a trusted pause. The
+/// caller can still rename the store pathname after the real ACP prompt
+/// appears; that must not redirect the eventual Allow or any durable write.
+///
+/// Interpreter handling is deliberately different. A shipping Linux workflow
+/// interpreter is a root-owned, non-writable, native ELF under the admitted
+/// `/usr` runtime, so no caller path can be swapped after admission — the
+/// trust root is the protection. This product test therefore passes the
+/// canonical interpreter and proves an admitted kernel executes the cell
+/// while its store is being attacked. The bytes/path-swap semantics live in
+/// the pinned-executable snapshot fixture
+/// (`replacement_at_original_path_cannot_change_executed_bytes`), which
+/// proves a path object replaced after pinning never changes what executes.
 #[cfg(target_os = "linux")]
 #[tokio::test]
 #[ignore] // requires pre-built binary
 async fn test_stdio_science_workflow_execute_retains_store_and_interpreter_across_approval() {
-    use std::os::unix::fs::{PermissionsExt, symlink};
+    use std::os::unix::fs::symlink;
 
     let Some(python) = workflow_python3() else {
         panic!("no python3 on PATH: retained-executable product proof cannot be skipped");
@@ -9916,12 +9926,6 @@ async fn test_stdio_science_workflow_execute_retains_store_and_interpreter_acros
         let project_id = created["projectId"].as_str().expect("projectId").to_owned();
         drop(creator);
 
-        let interpreter = workdir.path().join("approved-python3");
-        std::fs::copy(&python, &interpreter).expect("copy approved interpreter");
-        std::fs::set_permissions(&interpreter, std::fs::Permissions::from_mode(0o755))
-            .expect("make approved interpreter executable");
-        let original_interpreter = workdir.path().join("approved-python3-original");
-        let malicious_marker = workdir.path().join("malicious-interpreter-ran");
         let retained_store = workdir.path().join("science-store-retained");
         let outside = workdir.path().join("outside-store");
         std::fs::create_dir(&outside).expect("outside directory");
@@ -9944,7 +9948,7 @@ async fn test_stdio_science_workflow_execute_retains_store_and_interpreter_acros
                 &project_id,
                 WORKFLOW_CELL,
             ),
-            "interpreterPath": interpreter,
+            "interpreterPath": python,
             "kernelId": "py-capability-swap",
             "allowKernelSteps": true,
             "probeTimeoutMs": 60_000,
@@ -9974,48 +9978,71 @@ async fn test_stdio_science_workflow_execute_retains_store_and_interpreter_acros
             std::fs::rename(&store_root, &retained_store)
                 .expect("rename approved store during permission");
             symlink(&outside, &store_root).expect("replace store path with outside symlink");
-
-            std::fs::rename(&interpreter, &original_interpreter)
-                .expect("rename approved interpreter during permission");
-            std::fs::write(
-                &interpreter,
-                format!(
-                    "#!/bin/sh\nprintf pwned > '{}'\nexit 97\n",
-                    malicious_marker.display()
-                ),
-            )
-            .expect("write replacement interpreter");
-            std::fs::set_permissions(&interpreter, std::fs::Permissions::from_mode(0o755))
-                .expect("make replacement executable");
         };
-        let (response, ()) = tokio::join!(request, attack);
-        let response = response.unwrap_or_else(|error| {
-            panic!(
-                "retained-capability workflow failed: {error:?}\nstderr:\n{}",
-                client.stderr()
-            )
-        });
-        let result: Value = serde_json::from_str(response.0.get()).expect("workflow_execute JSON");
-        assert_eq!(result["state"], "succeeded", "result: {result}");
+        let (result, _) = tokio::join!(request, attack);
+        let stored: Value = serde_json::from_str(
+            result
+                .unwrap_or_else(|e| panic!("capability workflow failed: {e:?}"))
+                .0
+                .get(),
+        )
+        .expect("capability workflow JSON");
+        assert_eq!(stored["state"], "succeeded", "capability: {stored}");
+        assert_eq!(
+            stored["artifactsCommitted"], 1,
+            "the allowed workflow did not commit exactly one artifact set: {stored}"
+        );
+        let commits = stored["commits"]
+            .as_array()
+            .unwrap_or_else(|| panic!("workflow response has no commits array: {stored}"));
+        assert_eq!(commits.len(), 1, "workflow response: {stored}");
+        let manifest = commits[0]["outputManifest"]
+            .as_object()
+            .unwrap_or_else(|| panic!("workflow commit has no output manifest: {stored}"));
+        let expected_result = format!("{:x}", Sha256::digest(b"{\"mean\": 1.5}"));
+        let expected_stdout = format!("{:x}", Sha256::digest(b"acp-computed\n"));
+        assert_eq!(
+            manifest.get("result.json"),
+            Some(&Value::String(expected_result.clone())),
+            "result artifact was not committed by its true digest: {stored}"
+        );
+        assert_eq!(
+            manifest.get("stdout.txt"),
+            Some(&Value::String(expected_stdout.clone())),
+            "stdout artifact was not committed by its true digest: {stored}"
+        );
+
+        // The pathname now targets `outside`, but every Allow-side durable
+        // write must stay on the capability retained before the prompt.
         assert!(
-            !malicious_marker.exists(),
-            "replacement interpreter bytes were executed"
+            store_root
+                .symlink_metadata()
+                .expect("stat replacement store")
+                .file_type()
+                .is_symlink(),
+            "the adversarial store replacement did not remain a symlink"
         );
         assert!(
             std::fs::read_dir(&outside)
-                .expect("read outside")
+                .expect("read replacement store")
                 .next()
                 .is_none(),
-            "replacement store symlink received workflow bytes"
+            "replacement store received workflow bytes"
         );
-        assert!(
-            retained_store.join("workflow-runs").is_dir(),
-            "workflow ledger did not remain on the retained store"
-        );
-        assert!(
-            retained_store.join("workflow-outputs").is_dir(),
-            "kernel output did not remain on the retained store"
-        );
+        for directory in [
+            "workflow-runs",
+            "workflow-operations",
+            "workflow-commits",
+            "workflow-artifacts",
+            "workflow-outputs",
+        ] {
+            assert!(
+                retained_store.join(directory).is_dir(),
+                "{directory} did not remain on the retained store"
+            );
+        }
+        assert_workflow_cas_blob(&retained_store, &expected_result, b"{\"mean\": 1.5}");
+        assert_workflow_cas_blob(&retained_store, &expected_stdout, b"acp-computed\n");
     })
     .await;
 }
