@@ -108,16 +108,16 @@
   "comparison": {
     "basis": "audited_lumen_main_head",
     "comparison_scope": "Exact committed Science source bytes at science_code_head; CI rederives the manifest from the checked-out bytes",
-    "diverged_rust_files": 1053,
+    "diverged_rust_files": 1051,
     "drift_manifest_schema": "lumen-core-drift-v1",
-    "drift_manifest_sha256": "d9532b50d2716e39534e1e8107634d488447eb397f02592bd7afca3405499723",
-    "lumen_head": "16ac1d936bcbec069a799fdd1e5941f66cf00744",
+    "drift_manifest_sha256": "c57193d65c99a8bf655c0a23864c0ebe799de7a327d29d5367e22b7312d03029",
+    "lumen_head": "56d9a1f7d06f4185f210fbc1a1556ea0c85360bc",
     "missing_in_science_rust_files": 335,
     "science_code_head": "3fc65afbbd95bf2a81cd4ffc52ea68f06f4c0b03",
     "science_only_rust_files": 14,
     "strict_zero_drift_gate": false,
     "tool": "scripts/check-core-drift.py",
-    "total_drift": 1388,
+    "total_drift": 1386,
     "tracked_security_markers_present": 8,
     "tracked_security_markers_total": 8
   },
@@ -144,7 +144,7 @@
     }
   ],
   "lumen_source": {
-    "audited_main_head": "16ac1d936bcbec069a799fdd1e5941f66cf00744",
+    "audited_main_head": "56d9a1f7d06f4185f210fbc1a1556ea0c85360bc",
     "repository": "https://github.com/exergyleizhou-ux/lumen.git",
     "target_tag": "v0.1.251",
     "target_tag_commit": "88a204cfe468a325b53272dddf70afc8036d24ad"
@@ -157,7 +157,7 @@
     "version_equivalence_claimed": false
   },
   "purpose": "Record selective Lumen core v0.1.251 admission into Lumen Science without claiming full source or release parity.",
-  "recorded_at": "2026-08-06T23:20:00+08:00",
+  "recorded_at": "2026-08-07T00:00:00Z",
   "schema_version": 1,
   "science_baseline": {
     "pinned_lumen_main_sha": "537191998c959b66b41f6a057dd3d3bdf16a9eb6",
