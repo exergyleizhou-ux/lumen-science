@@ -7,7 +7,6 @@ on:
     branches: [main]
     paths:
       - 'packs/science-desktop/**'
-      - 'agent/**'
       - 'docs/science/fusion-sources.lock.json'
       - 'packs/science/skills/registry.json'
       - 'docs/VERSIONING.md'
@@ -16,7 +15,6 @@ on:
     branches: [main]
     paths:
       - 'packs/science-desktop/**'
-      - 'agent/**'
       - 'docs/science/**'
       - '.github/workflows/desktop-ci.yml'
   workflow_dispatch:
@@ -222,19 +220,33 @@ jobs:
       - name: Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      # M1 single base: the engine is the pinned Lumen tuple, not a local copy.
+      - name: Read pinned Lumen tuple from admission lock
+        working-directory: ${{ github.workspace }}
+        run: |
+          PIN="$(python3 -c "import json; print(json.load(open('docs/science/5.0/core-v0.1.251-admission.lock.json'))['comparison']['lumen_head'])")"
+          echo "LUMEN_PIN=$PIN" >> "$GITHUB_ENV"
+
+      - name: Checkout pinned Lumen (single Rust base)
+        working-directory: ${{ github.workspace }}
+        run: |
+          git clone --quiet --filter=blob:none https://github.com/exergyleizhou-ux/lumen.git .tmp/lumen-pin
+          git -C .tmp/lumen-pin fetch --quiet --depth 1 origin "$LUMEN_PIN"
+          git -C .tmp/lumen-pin checkout --quiet "$LUMEN_PIN"
+
       - name: Cache cargo
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            agent/target
-          key: ${{ runner.os }}-cargo-lumen-bin-${{ hashFiles('agent/Cargo.lock') }}
+            .tmp/lumen-pin/agent/target
+          key: ${{ runner.os }}-cargo-lumen-bin-${{ hashFiles('.tmp/lumen-pin/agent/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-lumen-bin-
 
       - name: Build the engine
-        working-directory: agent
+        working-directory: .tmp/lumen-pin/agent
         run: cargo build --bin lumen --locked
 
       # LS5-D8: Python discovery diagnosis on the runner BEFORE Electron starts.
@@ -283,6 +295,7 @@ jobs:
           XAI_API_KEY: live-e2e-ci-key
           GROK_TELEMETRY_ENABLED: 'false'
           GROK_DISABLE_AUTOUPDATER: '1'
+          LUMEN_BINARY: ${{ github.workspace }}/.tmp/lumen-pin/agent/target/debug/lumen
         run: xvfb-run --auto-servernum npm run test:e2e:live
 
       - name: Upload failure traces

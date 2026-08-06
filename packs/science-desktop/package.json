@@ -49,6 +49,7 @@
     "docx-preview": "^0.4.0",
     "electron-log": "^4.4.8",
     "electron-updater": "^6.3.0",
+    "js-yaml": "^4.3.1",
     "lucide-react": "^1.27.0",
     "motion": "^12.42.2",
     "openchemlib": "^9.24.0",

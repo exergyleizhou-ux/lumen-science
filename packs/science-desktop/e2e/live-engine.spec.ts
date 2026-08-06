@@ -29,7 +29,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 const PACK = process.cwd()
-const BINARY = process.env.LUMEN_BINARY ?? path.resolve(PACK, '../../agent/target/debug/lumen')
+const BINARY = process.env.LUMEN_BINARY ?? path.resolve(PACK, '../../../lumen/agent/target/debug/lumen')
 
 let app: ElectronApplication
 let page: Page
