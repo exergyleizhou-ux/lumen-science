@@ -22,7 +22,6 @@ use uuid::Uuid;
 ///
 /// The name is deliberately not derived from a pathname or project id: one
 /// retained store-root capability has exactly one writer domain.
-#[cfg(unix)]
 pub(crate) const PROJECT_WRITE_LOCK_FILE: &str = ".lumen-project-write.lock";
 
 /// Held proof that the project-store writer domain is locked.
@@ -870,9 +869,16 @@ impl PinnedDirectory {
         let mut overlapped: windows_sys::Win32::System::IO::OVERLAPPED = unsafe {
             std::mem::zeroed()
         };
+        #[cfg(unix)]
+        let raw_handle = file.as_raw_fd() as _;
+        #[cfg(windows)]
+        let raw_handle = {
+            use std::os::windows::io::AsRawHandle;
+            file.as_raw_handle() as _
+        };
         let result = unsafe {
             LockFileEx(
-                file.as_raw_fd() as _,
+                raw_handle,
                 LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
                 0,
                 u32::MAX,

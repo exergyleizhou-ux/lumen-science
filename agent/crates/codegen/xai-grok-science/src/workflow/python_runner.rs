@@ -357,6 +357,7 @@ impl StepRunner for PythonLoopRunner {
             "workflow kernel OS sandbox is unavailable on this platform",
         ));
 
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         pinned_command
             .apply_resource_limits(
                 address_space_bytes,
