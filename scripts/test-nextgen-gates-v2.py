@@ -93,10 +93,9 @@ def main() -> int:
     check(
         "a PASS gate cannot depend on an unresolved gate",
         lambda reg: (
-            find(reg["gates"], "SCIENCE_MACOS_GA_GATE").__setitem__("status", "PASS"),
-            find(reg["gates"], "SCIENCE_MACOS_GA_GATE").__setitem__(
-                "receipt", ["signed package + install rollback"]
-            ),
+            find(reg["gates"], "PRODUCT_PROOF_GATE")["requires"].append(
+                "SCIENCE_MACOS_GA_GATE"
+            )
         ),
         "depends on unresolved gate",
     )
