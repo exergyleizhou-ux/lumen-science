@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "status": "active-containment",
-  "upstream_lock_sha256": "da6a26e7040a4b05c434c7919ba3a86e7e70835f3f6f4b526389e27abd479ef3",
+  "upstream_lock_sha256": "6e9aaec506c9b3d3420b4d1b62e79826c13b42e9f4601a12cb3e0d1d1ad6c5ee",
   "purpose": "Every discovered external source-tree entry is either matched by one selected v2 component disposition or held by the explicit default quarantine. This is containment coverage, not per-file rights approval or runnable-capability admission.",
   "default": {
     "disposition": "quarantine",

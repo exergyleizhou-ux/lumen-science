@@ -501,7 +501,7 @@
       "exact_commit": "2f47a9ad84e94b20291a1ad3d6b005ccbd3885f4",
       "archive_sha256": "3dedbe240a5e9d67de9a620f9055975fb5cf718494ad8cb9963bc3243aa959c1",
       "rights_status": "verified",
-      "source_gate_status": "blocked-upstream-r0",
+      "source_gate_status": "pass",
       "root_license": {
         "spdx": "Apache-2.0",
         "path": "agent/LICENSE",
@@ -525,7 +525,8 @@
             "record": "third_party/intake-evidence/exergyleizhou-ux-lumen.json"
           }
         }
-      ]
+      ],
+      "source_gate_receipt": "LUMEN_R0_SOURCE_GATE PASS (V0, 2026-08-06): peeled tags v2.0.0=f51fb902 v2.1.0=3d5d52cf v2.2.0=098f7cd4; release-source-tuple.json; CI 5/5 @7b8f385b; readiness eval_live 20/20; blockers only M5/M6 human gates"
     },
     {
       "id": "exergyleizhou-ux-lumen-science",
@@ -561,8 +562,8 @@
     }
   ],
   "blocked_by": [
-    "I1-A completeness is machine-closed (2026-08-06) but final per-component legal/asset disposition review and AdaptedSourceReceipt population for placed files remain open for I1-B.",
-    "I1-B active admission requires per-source rights gates + active lock; Lumen R0 is PASS (V0 receipts) so the active gate is no longer upstream-blocked."
+    "I1-B active admission pending: 1/9 sources gate=pass (lumen, R0 receipts); 8 sources remain evidence-collected pending final per-component legal/asset disposition review.",
+    "Active lock requires every source rights_status=verified AND source_gate_status=pass; not reached."
   ],
   "transitive_bridge": {
     "manifest_path": "third_party/internscience-scp/VENDOR_MANIFEST.json",
