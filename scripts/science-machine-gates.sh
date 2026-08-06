@@ -221,7 +221,14 @@ ok "external Cargo path dependency anti-regression contract"
 # Audited-head Core drift comparison when that exact Lumen checkout is provided.
 # Local: CORE_DRIFT_UPSTREAM_ROOT=/Users/lei/code/lumen
 # CI: checkout the lock pin into a temp dir and set the same env var.
+# The pinned rev is read from the admission lock (single source of truth),
+# never hard-coded — X-U refreshes move the pin without touching this file.
 if [[ -n "${CORE_DRIFT_UPSTREAM_ROOT:-}" ]]; then
+  LOCK_PIN=$(python3 -c "
+import json
+l=json.load(open('docs/science/5.0/core-v0.1.251-admission.lock.json'))
+print(l['comparison']['lumen_head'])
+")
   python3 scripts/check-core-drift.py \
     --science-root . \
     --upstream-root "$CORE_DRIFT_UPSTREAM_ROOT" \
@@ -229,7 +236,7 @@ if [[ -n "${CORE_DRIFT_UPSTREAM_ROOT:-}" ]]; then
   ok "Core drift audited-head manifest comparison against $CORE_DRIFT_UPSTREAM_ROOT"
   python3 scripts/verify-science-crate-drift.py \
     --upstream-repo "$CORE_DRIFT_UPSTREAM_ROOT" \
-    --upstream-rev dc563b1e0db9eaca7e970d56d7816e1522511723
+    --upstream-rev "$LOCK_PIN"
   ok "duplicated Science crate audited-head inventory comparison"
 else
   echo "WARN  CORE_DRIFT_UPSTREAM_ROOT unset — audited-head Core drift comparison NOT RUN"

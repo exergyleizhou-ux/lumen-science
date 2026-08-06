@@ -351,9 +351,9 @@
       "id": "SINGLE_BASE_GATE",
       "owner": "both",
       "receipt": [
-        "canonical xai-grok-science 0.1.0 in lumen main (kernel absorbed)",
-        "remaining science-only modules not yet in canonical: seqbench.rs, primer_thermo.rs, dossier.rs, skill_quarantine.rs, capability/, features.rs",
-        "lumen-science still carries copied agent/ (66 codegen crates, VERSION 0.1.222) - X-M1 de-copy pending"
+        "X-S1 initial fusion COMPLETE (2026-08-06): full xai-grok-science crate aligned onto canonical Lumen \u2014 lumen PR #135 (science/xs1-store-seq-v1, base deb85fd7); src+fixtures byte parity verified (diff -rq clean); 603 tests green on canonical base",
+        "all science-only modules now in canonical: seqbench, primer_thermo, dossier, skill_quarantine, capability/, features/, project mutation stores, workflow executor/admission",
+        "remaining for SINGLE_BASE PASS: lumen PR #135 merge + science-side de-copy/cutover (M1) \u2014 lumen-science still carries copied agent/"
       ],
       "requires": [],
       "status": "IMPLEMENTING"

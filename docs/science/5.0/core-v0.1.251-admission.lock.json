@@ -111,7 +111,7 @@
     "diverged_rust_files": 1053,
     "drift_manifest_schema": "lumen-core-drift-v1",
     "drift_manifest_sha256": "ec3009980958e85ed07380d9df386ceb0cc2aa47b3eea60be0c8c9a0fef710b1",
-    "lumen_head": "48e188e5fe180e1643a23b96b45c4ae5ec4b6850",
+    "lumen_head": "deb85fd75c77f350fa06a01b826e05a2fd54bd8a",
     "missing_in_science_rust_files": 335,
     "science_code_head": "3fc65afbbd95bf2a81cd4ffc52ea68f06f4c0b03",
     "science_only_rust_files": 14,
@@ -144,7 +144,7 @@
     }
   ],
   "lumen_source": {
-    "audited_main_head": "48e188e5fe180e1643a23b96b45c4ae5ec4b6850",
+    "audited_main_head": "deb85fd75c77f350fa06a01b826e05a2fd54bd8a",
     "repository": "https://github.com/exergyleizhou-ux/lumen.git",
     "target_tag": "v0.1.251",
     "target_tag_commit": "88a204cfe468a325b53272dddf70afc8036d24ad"

@@ -33,14 +33,14 @@
 | 里程碑 | 内容 | 状态 |
 |--------|------|------|
 | A 不再漏水 | S0-A/S0-B/F0-1/F0-2/V0/I1-A | ✅ 完成 |
-| B 第一条单底座能力 | X-C1 + X-S1（parity 冻结 + push-up 分支） | 🔄 进行中（store 融合待 lumen） |
+| B 第一条单底座能力 | X-C1 + X-S1（parity 冻结 + push-up 分支） | 🔄 X-S1 融合完成：lumen PR #135 全 crate 对齐（byte parity + 603 tests）；剩 merge + 删复制 |
 | C 受控科研 Agent 产品面 | S2a corpus + W0-A catalog | ✅ corpus/catalog 完成；W 产品切片待 API |
 | D 可长期使用的 Science 产品 | X-M1 完成 + W 波 + G1 | ⏸ 阻塞（G1 凭据；X-M1 跨仓） |
 
 ## 阻塞与外部依赖
 
 - **G1**：Apple Developer 证书 + Xcode + notarytool 凭据（用户侧）。
-- **X-M1**：science 仓 → lumen 仓的 store 层融合（lumen 单 writer 协作；分支 `science/push-up-seq-v1` 已建）。
+- **X-M1**：推上去已完成（lumen PR #135，`science/xs1-store-seq-v1`，byte parity + 603 tests 绿）；剩 PR merge + science 侧删复制/cutover。
 - ~~I1-B~~：已闭合（9/9 全量采纳 + active lock 晋升，2026-08-06）。
 - **X-U**：lumen pin 已刷新 dc563b1e → 48e188e5（v2.2.0 后 main head），drift manifest 如实重算 1388。
 - **K1b**：依赖 X-M1 后的 canonical kairos 接线。
