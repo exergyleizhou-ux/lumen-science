@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "generator": "scripts/generate-science-status.py",
   "doc": "Machine-generated product status. Derived from the source tree and git only. Prose documents must point here rather than restate status. Regenerate with: python3 scripts/generate-science-status.py",
-  "sourceCommit": "67ed5c7446d2e0c5c9fca56c1be47859106d0135",
-  "sourceCommitEpoch": 1785586659,
-  "sourceCommitIso": "2026-08-01T20:17:39+08:00",
+  "sourceCommit": "13587e4b1cb7a2569811c1b143efde8179fba869",
+  "sourceCommitEpoch": 1785982052,
+  "sourceCommitIso": "2026-08-06T10:07:32+08:00",
   "gateVocabulary": {
     "states": [
       "pass",
@@ -175,7 +175,7 @@
         "usesVerifyTag": false,
         "sourceDateEpochFromCommit": false,
         "sourceDateEpochFromWallClock": false,
-        "lineCount": 704
+        "lineCount": 710
       }
     },
     "desktopCiAllowsTypecheckFailure": false
@@ -229,7 +229,7 @@
         "command": "npm run dist:full && bundle integrity checks",
         "exitCode": 0,
         "sourceAnchor": {
-          "headCommit": "67ed5c7446d2e0c5c9fca56c1be47859106d0135",
+          "headCommit": "13587e4b1cb7a2569811c1b143efde8179fba869",
           "protectedPaths": [
             "packs/science-desktop",
             ".github/workflows/desktop-ci.yml"
@@ -238,17 +238,17 @@
         "github": {
           "repository": "exergyleizhou-ux/lumen-science",
           "workflow": "Desktop CI",
-          "runId": 30699410930,
-          "jobId": 91367614251,
-          "runUrl": "https://github.com/exergyleizhou-ux/lumen-science/actions/runs/30699410930",
-          "pullRequestHeadCommit": "67ed5c7446d2e0c5c9fca56c1be47859106d0135",
-          "testedMergeCandidateCommit": "c7dc2eeaffa2e00baa99071c910103b82e1ef857"
+          "runId": 31064720914,
+          "jobId": 92499935407,
+          "runUrl": "https://github.com/exergyleizhou-ux/lumen-science/actions/runs/31064720914",
+          "pullRequestHeadCommit": "13587e4b1cb7a2569811c1b143efde8179fba869",
+          "testedMergeCandidateCommit": "5f544defacecbb6b49242e1f9cb8a4a67d83ff5c"
         },
         "artifact": {
           "name": "desktop-full-package-provenance",
-          "sha256": "073ca28bd1158017857c78a2435b81ff4da61194ad06c9ea58d3a824d6ea2005",
-          "appExecutableSha256": "1cadd395ec07264693deb570216270eafc2130a44c4ce1553b809545f1e48afb",
-          "appAsarSha256": "1845b50233c1a31199627b9e65e90bf97adbff6306942ce14f579c4252b04071"
+          "sha256": "8abaf5503290869461d023a99230689525e312c365f6b59cb15f7772fd65752a",
+          "appExecutableSha256": "7ab736e3794a67d7fe7b1d86515a63dd5525de049cf566b35841236f6a3bb264",
+          "appAsarSha256": "54880c46e3a82f6c04add87c7dfbcc1b4a9f37a94eec58991e0bb333f9cdf70d"
         },
         "signing": {
           "signature": "adhoc",
