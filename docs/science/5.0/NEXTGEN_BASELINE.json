@@ -44,7 +44,7 @@
     },
     {
       "path": "docs/science/5.0/core-v0.1.251-admission.lock.json",
-      "sha256": "3a3451fe22c8a079d89e33a771cbeec01d622c89fec3bbc6b8d6b08272fe01d3"
+      "sha256": "78cd3b724cd406afaa6565b9dd92e797712a34b01c11e20c0607bfda105b138d"
     },
     {
       "path": "docs/science/5.0/LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-02.md",
@@ -60,7 +60,7 @@
     },
     {
       "path": "docs/science/5.0/NEXTGEN_GATE_REGISTRY_V2.json",
-      "sha256": "9d7f8681df6400a2dba7d09118fdf79902551f12b4607e6e5729b358d21d8986"
+      "sha256": "b2306894d93e995d1d972c185980af3af85f37c9b02d69a1db9cf9834152d25f"
     },
     {
       "path": "docs/science/5.0/PLAN_SUPERSESSION_MAP.md",

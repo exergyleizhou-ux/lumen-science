@@ -33,7 +33,7 @@
 | 里程碑 | 内容 | 状态 |
 |--------|------|------|
 | A 不再漏水 | S0-A/S0-B/F0-1/F0-2/V0/I1-A | ✅ 完成 |
-| B 第一条单底座能力 | X-C1 + X-S1（parity 冻结 + push-up 分支） | 🔄 X-S1 融合完成：lumen PR #135 全 crate 对齐（byte parity + 603 tests）；剩 merge + 删复制 |
+| B 第一条单底座能力 | X-C1 + X-S1（parity 冻结 + push-up 分支） | 🔄 X-S1 已 merge（lumen main 0eb52c10）；science crate 族 zero-drift（94/94 identical，冻结策略）；剩全 agent/ 删复制 |
 | C 受控科研 Agent 产品面 | S2a corpus + W0-A catalog | ✅ corpus/catalog 完成；W 产品切片待 API |
 | D 可长期使用的 Science 产品 | X-M1 完成 + W 波 + G1 | ⏸ 阻塞（G1 凭据；X-M1 跨仓） |
 
