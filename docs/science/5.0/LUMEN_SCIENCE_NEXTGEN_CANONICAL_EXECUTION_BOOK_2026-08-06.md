@@ -94,6 +94,39 @@
 | science-only 模块（canonical 缺的 6 个） | 在 science 仓复制件中：seqbench、primer_thermo、dossier、skill_quarantine、capability、features |
 | 复制 Core | agent/ 66 crates（codegen），与 canonical 2.2 差 4 个 minor 版本线 |
 
+### 1.6 本地资产地图（辩证取用，不重做）
+
+以下资产是此前 Codex / Claude Code 会话的累积成果，全部供后续卡片辩证取用——**先取用，不重写**；取用先对照 §1.4 与九源 intake 纪律：
+
+**A. lumen-science 仓内（主迁移 corpus）：**
+
+| 资产 | 位置（science 仓） | 取用卡 |
+|---|---|---|
+| seq_analyze 安全 oracle（Begin/Allow-only Finish/store-owned artifacts/provenance/replay/tamper 反例） | `xai-grok-science/src/seqbench.rs` + shell 触点 + built-binary 反例 | X-S1 |
+| project migration/recovery（source bundle、retained root、revision/commit fence） | `xai-grok-science/src/project/migration.rs` + mutation 反例 | X-S2 |
+| workflow 执行器族（executor、pinned_executable、python_runner、admission、io、kernel_admission_protocol）——canonical 只有 kernel/package 模型，执行器是 science 独有 | `xai-grok-science/src/workflow/` | X-S1 后随 seq 一并 push-up |
+| review record / evidence dossier（claim 独立复核、dossier 打包） | `review.rs`、`dossier.rs` | X-S2 |
+| skill ZIP quarantine（Begin/Allow/Finish + materialized=false） | `skill_quarantine.rs` + Desktop 侧闭环 | X-S3 / S0-B |
+| Motif 切片（renderers + seqbench 的 motif/ORF/翻译表/引物热力学） | `primer_thermo.rs`、`packs/science/renderers/` | W3 |
+| Biomni 224 descriptors + `query_uniprot` 唯一 admitted fixture | `connectors/`、third_party 审计 | W2 |
+| Open Science classifier/preview + SCP 207 本地文档 | `preview.rs`、`import.rs`、docs/science | W1/W0 |
+| Desktop 全套（sender identity、ACP registry、project/evidence/preview/review/notebook/skills/compute UI、full unsigned package 证据） | `packs/science-desktop/` + `docs/science/status/evidence.v1.json` | S0-B / G1 |
+| 31 条 ACP 路由 / 23 SessionCommand / 26 actor methods / 10 handle methods authority map | `scripts/report-science-authority-map.py` 输出 | X-M1 每族 |
+| 功能分支（Codex/Claude 会话）：`ls5-f0-foundation`、`ls5-kernel-admission-authority`、`ls5-review-record-authority`、`security/sync-core-fixes-20260727`（8 个安全修复） | 本地/远端分支 | 逐族取用前先对比 main |
+| machine guards（core drift、ownership、external path denial、intake verifiers、machine gates） | `scripts/` | 全部卡 |
+
+**B. 仓外参考资产：**
+
+| 资产 | 内容 | 使用纪律 |
+|---|---|---|
+| `/Users/lei/code/lumen-open-science` | aipoch/open-science 本地 clone（blob:none） | 九源 intake 审计对象；不直接搬运 |
+| `/Users/lei/code/魔改版本-claude-code` | claude-code fork + mgcc vs lumen 评测脚本 | 只参考方法与 bench 思路；吸收必须走 license/intake 纪律 |
+| `/Users/lei/code/lumen` | canonical（只读） | 按 X-U pin 消费 |
+
+**取用规则：** ① 先跑对应 guard/inventory 确认资产当前字节；② canonical 已含的部分（§1.3）不重复搬运；③ 受限来源只 clean-room；④ 任何取用都落到 card 的 parity corpus 里，不口头引用。
+
+---
+
 ## 2. 辩证评审：08-02 书 × 2.2 现实
 
 ### 2.1 被证实的判断（继续有效，不改）
