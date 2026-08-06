@@ -77,14 +77,15 @@
     {
       "id": "PLATFORM_API_GATE",
       "owner": "canonical-lumen / lumen-science",
-      "status": "IMPLEMENTING",
+      "status": "PASS",
       "requires": [
         "LUMEN_R0_SOURCE_GATE"
       ],
       "receipt": [
-        "Seam exists: x.ai/science/* (run_csv, import_preview, connector_fetch, ssh_scp_fixture, goal_host_verify) + x.ai/governedTree/* (status, assignmentRecommendation) dispatched via acp_agent.rs:3821 prefix match",
-        "xai-grok-science crate 0.1.0 SCHEMA_VERSION=1 in canonical main",
-        "Missing: versioned method catalog, compatibility manifest, public consumer compile fixture, rollback API revision -> X-C1 card"
+        "X-C1 done (2026-08-06): v1 method catalog (7 methods: 5 x.ai/science/* + 2 x.ai/governedTree/*) + compatibility manifest + consumer compile fixture, pinned to A=098f7cd4 / binary f1aa4061",
+        "catalog negatives 16/16 (unknown method / missing field / unknown field / cross-version / structural drift) driving real validate_request; consumer fixture typechecks strict",
+        "live seam negatives 5/5 against pinned lumen 2.2.0 binary: unknown method -32601, missing field -32602, deny_unknown_fields -32602, governedTree/status real three-node projection",
+        "verifier: scripts/verify-platform-api-v1.py + test-platform-api-v1.py; wired into science-machine-gates.sh"
       ]
     },
     {

@@ -31,6 +31,13 @@ python3 scripts/verify-nextgen-gates-v2.py || fail "granular gate registry v2"
 python3 scripts/test-nextgen-gates-v2.py || fail "granular gate registry tamper corpus"
 ok "granular gate registry v2 (receipt-backed)"
 
+# X-C1: the versioned platform API v1 catalog + compatibility manifest pin
+# the 7-method ACP seam to the canonical tuple; consumer-side negatives and
+# the strict compile fixture must stay green.
+python3 scripts/verify-platform-api-v1.py || fail "platform API v1 catalog + manifest"
+python3 scripts/test-platform-api-v1.py || fail "platform API v1 negatives + fixture"
+ok "platform API v1 contract (7 methods, pinned tuple)"
+
 # v2 is deliberately a draft intake lock, so the verifier itself returns 2.
 # Its focused tests prove that draft status cannot be mistaken for a product
 # admission and that every selected source path is present in its exact tree.

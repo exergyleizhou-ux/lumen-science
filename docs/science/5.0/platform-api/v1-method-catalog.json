@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "api_version": "v1",
+  "recorded_at": "2026-08-06T00:00:00+08:00",
+  "purpose": "X-C1 versioned method catalog for the canonical Lumen 2.2 ACP science seam. Baseline = the 7 methods actually dispatched by canonical lumen A=098f7cd4 (extensions/science.rs + extensions/governed_tree.rs). Anything else is unknown and must fail closed. Params follow the canonical serde definitions: all structs use deny_unknown_fields, so unknown fields are rejected by the engine itself.",
+  "composition": {
+    "lumen_core_source_tuple_ref": "LumenCoreSourceTupleV1 (A=098f7cd4, B=af2857a2, tag v2.2.0 -> A)",
+    "binary_sha256": "sha256:f1aa406131f9db4b30f636770386738b289a5bcd65a695e7aac912f699073564",
+    "dispatch": "xai-grok-shell/src/agent/mvp_agent/acp_agent.rs prefix match: s.starts_with(\"x.ai/science/\") -> extensions::science::handle; governedTree methods -> extensions::governed_tree::handle"
+  },
+  "methods": [
+    {
+      "method": "x.ai/science/run_csv",
+      "namespace": "x.ai/science/",
+      "side_effect_class": "actor-gated-run",
+      "approval": "production-session-permission",
+      "required_fields": ["sessionId", "projectId", "ownerId", "storeRoot", "artifactRoot", "fixturePath"],
+      "optional_fields": ["approvalTimeoutMs"],
+      "unknown_field_policy": "reject (deny_unknown_fields)",
+      "status": "v1-baseline"
+    },
+    {
+      "method": "x.ai/science/import_preview",
+      "namespace": "x.ai/science/",
+      "side_effect_class": "read-only",
+      "approval": "none",
+      "required_fields": ["sessionId", "projectId", "ownerId", "storeRoot", "artifactRoot", "sourcePath"],
+      "optional_fields": ["approvalTimeoutMs"],
+      "unknown_field_policy": "reject (deny_unknown_fields)",
+      "status": "v1-baseline"
+    },
+    {
+      "method": "x.ai/science/connector_fetch",
+      "namespace": "x.ai/science/",
+      "side_effect_class": "actor-gated-run",
+      "approval": "production-session-permission",
+      "required_fields": ["sessionId", "projectId", "ownerId", "storeRoot", "artifactRoot", "connectorId", "query", "fixturePaths"],
+      "optional_fields": ["maxResults", "approvalTimeoutMs"],
+      "unknown_field_policy": "reject (deny_unknown_fields)",
+      "status": "v1-baseline"
+    },
+    {
+      "method": "x.ai/science/ssh_scp_fixture",
+      "namespace": "x.ai/science/",
+      "side_effect_class": "actor-gated-run (fixture-only)",
+      "approval": "production-session-permission",
+      "required_fields": ["sessionId", "projectId", "ownerId", "storeRoot", "artifactRoot", "port", "hostKeySha256", "user", "identityFile", "knownHostsFile", "sshConfigFile", "direction", "localPath", "remotePath"],
+      "optional_fields": ["approvalTimeoutMs", "transportTimeoutMs", "cancelAfterMs"],
+      "unknown_field_policy": "reject (deny_unknown_fields)",
+      "status": "v1-baseline"
+    },
+    {
+      "method": "x.ai/science/goal_host_verify",
+      "namespace": "x.ai/science/",
+      "side_effect_class": "read-only (host verification projection)",
+      "approval": "none",
+      "required_fields": ["sessionId", "storeRoot", "runId"],
+      "optional_fields": [],
+      "unknown_field_policy": "reject (deny_unknown_fields)",
+      "status": "v1-baseline"
+    },
+    {
+      "method": "x.ai/governedTree/status",
+      "namespace": "x.ai/governedTree/",
+      "side_effect_class": "read-only",
+      "approval": "none",
+      "required_fields": [],
+      "optional_fields": [],
+      "unknown_field_policy": "reject",
+      "status": "v1-baseline"
+    },
+    {
+      "method": "x.ai/governedTree/assignmentRecommendation",
+      "namespace": "x.ai/governedTree/",
+      "side_effect_class": "read-only",
+      "approval": "none",
+      "required_fields": [],
+      "optional_fields": [],
+      "unknown_field_policy": "reject",
+      "status": "v1-baseline"
+    }
+  ],
+  "negative_contract": [
+    "unknown method -> ACP method_not_found / registry rejection, never attempted",
+    "missing required field -> invalid_params (serde deny_unknown_fields + parse_params)",
+    "unknown field -> invalid_params (deny_unknown_fields)",
+    "forged ownerId / sessionId not owned by the SessionActor -> session-not-found / ownership rejection",
+    "extension may never Approve/Finish or set terminal; only the SessionActor transitions state",
+    "adapter returns bytes + bounded metadata only; caller-supplied hash/path/terminal are ignored"
+  ]
+}

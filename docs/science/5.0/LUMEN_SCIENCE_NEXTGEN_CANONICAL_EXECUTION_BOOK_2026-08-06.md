@@ -239,7 +239,7 @@ flowchart TD
 | SKILL_LIFECYCLE_AUTHORITY_GATE | Science | FAILED | **PASS** | S0-B 落地：四通道 typed fail-close（零 service 调用、零 reload）、真实注册负例（字节不变 + forced 不重生）、纯函数 7 测、service 152/unit 全绿（2026-08-06；本机 authority live probe 环境性 SKIP 详见 registry receipt） |
 | P0_NR_SAFETY_GATE | Lumen | UNVERIFIED_COMMITTED | **PASS_UPSTREAM** | S8：no_replay_policy 3 counting-server 测、FULL_AUDIT_GATE 六 deny reason、s8_sealed_retry_live 5 测（v2.0.0 起） |
 | LUMEN_R0_SOURCE_GATE | Lumen | BLOCKED_UPSTREAM | **PASS_UPSTREAM** | v2.0.0→f51fb902 / v2.1.0→3d5d52cf / v2.2.0→098f7cd4（peeled tag）；B=af2857a2；CI 5/5 @7b8f385b；release 19 assets；readiness 仅 M5/M6 blocker |
-| PLATFORM_API_GATE | Lumen | BLOCKED_CONTRACT | **IMPLEMENTING** | 接缝存在（`x.ai/science/*` + `x.ai/governedTree/*` + xai-grok-science 0.1.0）；缺版本化 contract / compat manifest / consumer fixture → X-C1 |
+| PLATFORM_API_GATE | Lumen | BLOCKED_CONTRACT | **PASS** | X-C1 落地：v1 方法目录（7 方法）+ compat manifest + consumer fixture（strict 编译过）+ catalog 负例 16/16 + 真实 seam 负例 5/5（pin binary：未知方法 -32601 / 缺字段 -32602 / deny_unknown_fields / governedTree 真实投影） |
 | TASKTREE_GATE | Lumen | PARTIAL_UPSTREAM | **PASS_UPSTREAM** | TaskTreeLifecycle JSONL + depth 上限 + governedTree preview + resume/orphan + assignmentRecommendation |
 | CAPABILITY_GRANT_GATE | Lumen | BLOCKED_CONTRACT | **PASS_UPSTREAM** | CapabilityGrantV1 TTL/revoke + DispatchPermitV1 + RootBypassPermission + child 继承恒拒 |
 | TOOL_CONTRACT_GATE | Lumen | BLOCKED_CONTRACT | **PASS_UPSTREAM** | authorize_tool_dispatch + clamp_tool_result_text + TOOL_CONTRACT_DISPATCH_GATE |
@@ -395,7 +395,7 @@ I1-A completeness 现在即可做（不被任何上游阻塞），14 步 + SCP/t
 | S0 Science P0 clean exact-head | 10 | 0 | **10** | S0-A（PR #28 全绿）+ S0-B（skill 直写封死）均完成（2026-08-06） |
 | I1 nine-source admitted intake | 8 | 0 | **0** | v2 lock draft |
 | L0 canonical Lumen source gate | 12 | 0 | **12** | v2.2.0 tuple 收据（§1.1），本会话独立核验 |
-| C1 public governance API | 12 | 0 | **0** | IMPLEMENTING；X-C1 未完成 |
+| C1 public governance API | 12 | 0 | **12** | X-C1 完成（2026-08-06） |
 | C2–C7 governed autonomy foundation | 15 | 0 | **0** | lumen 侧全交付（PASS_UPSTREAM），Science receipt 待 V0 |
 | S2 three-level Science product proof | 10 | 0 | **0** | corpus 未建 |
 | K1 managed long-run/recovery | 10 | 0 | **0** | lumen 侧已交付，Science receipt 待 V0 |

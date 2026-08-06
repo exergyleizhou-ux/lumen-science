@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "api_version": "v1",
+  "recorded_at": "2026-08-06T00:00:00+08:00",
+  "purpose": "X-C1 compatibility manifest for the canonical Lumen science ACP seam. Binds the method catalog to the pinned canonical source tuple and defines the compatibility rules consumers must obey. N/N-1 read compatibility: a v1 consumer may read responses produced by the pinned v2.2.0 engine; writes use only the current catalog schema. Unknown/new authority fields are rejected (deny_unknown_fields), never silently dropped.",
+  "catalog_ref": {
+    "path": "docs/science/5.0/platform-api/v1-method-catalog.json",
+    "api_version": "v1"
+  },
+  "composition": {
+    "lumen_core_source_tuple": {
+      "source_commit_a": "098f7cd424c1015bfe0d1cbd88c96570b36064ca",
+      "evidence_commit_b": "af2857a21ec4b1c5655d308231b89ba81596c4fd",
+      "tag_ref": "v2.2.0",
+      "tag_commit": "098f7cd424c1015bfe0d1cbd88c96570b36064ca"
+    },
+    "platform_api_receipt": {
+      "name": "SciencePlatformApiReceiptV1",
+      "catalog_hash_sha256": "set-by-verifier",
+      "compat_manifest_sha256": "set-by-verifier",
+      "consumer_fixture_ref": "docs/science/5.0/platform-api/consumer-fixture/consumer.ts"
+    }
+  },
+  "rules": {
+    "read_compat": "read current; N-1 read compatibility only (v1 consumer vs pinned v2.2.0 engine)",
+    "write_compat": "write current schema only",
+    "unknown_field_policy": "reject — canonical params structs use serde deny_unknown_fields; consumers must not send fields absent from the catalog",
+    "unknown_method_policy": "reject — consumer registry and engine both fail closed",
+    "deprecation": "any v1 method removal requires a migration fixture plus one release-cycle notice in this manifest before removal",
+    "rollback": "composition rollback = previous LumenCoreSourceTupleV1 + previous catalog hash; API revision recorded per change"
+  },
+  "deprecations": []
+}
