@@ -6,7 +6,7 @@
  "feature_completion_claimed": false,
  "top_level_gate_pass_count": 0,
  "book_path": "docs/science/5.0/LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-06.md",
- "book_sha256": "6681311df0d92bfb915eaf86ee4f6816c61872b4e2d6fcb18e0a221d028f8e7b",
+ "book_sha256": "5c60dd33a101208375992e9ba3f02cc241ec24118dea7192b06799ba4a025671",
  "pointer_files": [
   "docs/science/5.0/README.md",
   "docs/science/5.0/PLAN_SUPERSESSION_MAP.md"

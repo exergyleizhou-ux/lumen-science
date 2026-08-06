@@ -333,6 +333,7 @@ I1-A completeness 现在即可做（不被任何上游阻塞），14 步 + SCP/t
 | F0-2 | Science | Desktop authority lint（mutation/forced/reload 扫描 + 注册负例） | F0-1 | 工具 |
 | V0 | Science | 2.2 全部上游收据核验，PASS_UPSTREAM→PASS | F0-1 | 核验 |
 | X-U | Science | 底座更新生命周期：新 lumen release → 核验 tuple → 更新 pin 记录 → 回归 → draft PR | 触发条件（§5 X-U） | 升级卡 |
+| S0-C | Science | Desktop electron 安全升级（41.7.1→41.10.x，GHSA-r4w5-6pfg-jxp5 / GHSA-9f4c-93c8-jc8g）；前置 = CI node 20→22（electron 41.10 安装器 ESM-only）；fast-uri/hono 已在本日修复 | 独立安全卡 | 升级卡 |
 | I1-A | Science | 九源 completeness（14 步 + bridge + tree coverage） | 无 | 证据 |
 | X-C1 | Both | ACP 接缝版本化合同 + compat manifest + consumer fixture | V0 | 合同+代码 |
 | X-S1 | Both | seqbench/primer_thermo push-up + `x.ai/science/seq_analyze` + parity + cutover | X-C1 | 跨仓迁移 |
