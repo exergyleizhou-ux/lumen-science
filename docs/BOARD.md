@@ -1,7 +1,7 @@
 # Lumen Science 看板（NextGen 执行）
 
 > **更新规则：** 里程碑时更新（gate 翻转/进度变化）。无心跳 monitor。
-> 上次刷新：**2026-08-06**（北京时间）— K1b managed-run proof 闭合，77/100
+> 上次刷新：**2026-08-07**（北京时间）— M1 单底座 de-copy 闭合，90/100
 > 权威进度：`docs/science/5.0/LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-06.md` §40；gate 真值：`docs/science/5.0/NEXTGEN_GATE_REGISTRY_V2.json`
 
 ---
@@ -10,7 +10,7 @@
 
 | 项 | 完成度 | 状态 |
 |----|--------|------|
-| **正式进度（书 §40 九项）** | **77 / 100** | S0 10 + L0 12 + C1 12 + C2–C7 15 + S2 10 + I1 8 + K1 10 |
+| **正式进度（书 §40 九项）** | **90 / 100** | S0 10 + L0 12 + C1 12 + C2–C7 15 + S2 10 + I1 8 + K1 10 + M1 13 |
 | 机器门 | 22 项 | 全绿（exit 0） |
 | PR #28 CI | 全绿（历次 head） | 最新轮验证中 |
 
@@ -25,7 +25,7 @@
 | S2 三层科研 Agent 证明 | 10 | ✅ 10 | S2a 五类场景语料全绿（pin binary） |
 | I1 九源审查 | 8 | ✅ 8 | 九源全量采纳（资产方授权）；upstream-lock active；rights gate 9/9 |
 | K1 长期任务运行 | 10 | ✅ 10 | K1b managed-run proof：restart/reprompt/resume/kill/replay 的 built-binary E4 证据（X-S1 融合后） |
-| M1 单底座 | 13 | ⏳ 0 | parity 冻结 + push-up 分支已备；store 融合待 lumen 协作 |
+| M1 单底座 | 13 | ✅ 13 | agent/ 复制件已删；CI/机器门全部指向 pinned lumen tuple；SINGLE_BASE_GATE PASS（lumen 1f66a692） |
 | G1 macOS 正式发布 | 10 | ⏳ 0 | **硬 blocker：无 Apple 签名证书/Xcode/公证凭据** |
 
 ## 里程碑
