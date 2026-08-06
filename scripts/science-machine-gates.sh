@@ -38,6 +38,12 @@ python3 scripts/verify-platform-api-v1.py || fail "platform API v1 catalog + man
 python3 scripts/test-platform-api-v1.py || fail "platform API v1 negatives + fixture"
 ok "platform API v1 contract (7 methods, pinned tuple)"
 
+# I1-A: nine-source intake ledger closure — coverage, exact-one dispositions,
+# adapted-source receipts and the transitive bridge must stay verifiable.
+python3 scripts/verify-i1a-completeness.py || fail "I1-A nine-source completeness"
+python3 scripts/test-i1a-completeness.py || fail "I1-A completeness tamper corpus"
+ok "I1-A nine-source completeness (draft lock; active admission is a later gate)"
+
 # v2 is deliberately a draft intake lock, so the verifier itself returns 2.
 # Its focused tests prove that draft status cannot be mistaken for a product
 # admission and that every selected source path is present in its exact tree.

@@ -1,11 +1,25 @@
 {
-  "schema_version": 1,
-  "source_id": "exergyleizhou-ux-lumen-science",
-  "exact_commit": "41ec8cd5e569d6f87babf4911b3a330444352e1e",
-  "tree_sha": "5f763cca6799ead8f8e2acbe4c1bfa05eab2b542",
-  "archive_sha256": "2dcd95b1932733c8db74a9585c03c0f3c648dc49410ba560c7d81ac237718636",
-  "root_license": {"spdx": "Apache-2.0", "path": "agent/LICENSE", "sha256": "116f7778b9802e569b7fa3a532b17bd80eb13c67837def01eed093d4ea472f28"},
-  "nested_license_inventory": [["agent/LICENSE", "116f7778b9802e569b7fa3a532b17bd80eb13c67837def01eed093d4ea472f28"]],
-  "runtime_admission": "none",
-  "source_gate_status": "evidence-collected"
+ "schema_version": 1,
+ "source_id": "exergyleizhou-ux-lumen-science",
+ "exact_commit": "41ec8cd5e569d6f87babf4911b3a330444352e1e",
+ "tree_sha": "5f763cca6799ead8f8e2acbe4c1bfa05eab2b542",
+ "archive_sha256": "2dcd95b1932733c8db74a9585c03c0f3c648dc49410ba560c7d81ac237718636",
+ "root_license": {
+  "spdx": "Apache-2.0",
+  "path": "agent/LICENSE",
+  "sha256": "116f7778b9802e569b7fa3a532b17bd80eb13c67837def01eed093d4ea472f28"
+ },
+ "nested_license_inventory": [
+  [
+   "agent/LICENSE",
+   "116f7778b9802e569b7fa3a532b17bd80eb13c67837def01eed093d4ea472f28"
+  ]
+ ],
+ "runtime_admission": "none",
+ "source_gate_status": "evidence-collected",
+ "tree_inventory": {
+  "path": "third_party/intake-inventories/exergyleizhou-ux-lumen-science-41ec8cd5-tree.json",
+  "sha256": "99e5d2cdc993f7f71fddd49b6f82f694740a9ab44edde553542489770019039f",
+  "entry_count": 5312
+ }
 }

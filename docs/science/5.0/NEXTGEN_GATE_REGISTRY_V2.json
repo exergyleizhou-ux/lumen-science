@@ -371,11 +371,12 @@
     {
       "id": "SOURCE_INTAKE_COMPLETENESS_GATE",
       "owner": "lumen-science",
-      "status": "IMPLEMENTING",
+      "status": "PASS",
       "requires": [],
       "receipt": [
-        "third_party/upstream-lock.v2.json status=draft, 9 sources pinned",
-        "I1-A 14-step per-source completeness, transitive bridge, SourceTreeCoverageV1, destination receipts not yet closed"
+        "I1-A closed (2026-08-06): 9/9 source tree inventories (12191 entries) with per-entry disposition; 0 double-dispositions; exact-one component dispositions in vocabulary; transitive bridge (SCP vendor manifest) hash-referenced from the lock root; adapted_source_receipts array verifiable (currently empty = no placed adapt files, honest)",
+        "verify-i1a-completeness.py + test-i1a-completeness.py (8/8 tamper) wired into science-machine-gates.sh",
+        "lock remains draft/BLOCKED by design; SOURCE_INTAKE_ACTIVE_GATE untouched"
       ]
     },
     {
