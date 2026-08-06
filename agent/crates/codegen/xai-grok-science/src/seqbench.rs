@@ -6354,3 +6354,34 @@ mod protocol_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod parity_corpus {
+    use super::*;
+
+    /// X-M1 parity oracle (frozen 2026-08-06 from the science-repo copy,
+    /// xai-grok-science 0.1.0 / seqbench TOOL_VERSION 1.6.0). The same bytes
+    /// must produce the same request digest and the same analysis JSON digest
+    /// after the module is pushed into canonical lumen; this test is the
+    /// migration's byte/semantic parity witness.
+    #[test]
+    fn seq_analyze_parity_hashes_are_frozen() {
+        let fasta = ">seq1 demo record\nACGTACGTACGT\n>seq2\nGGGCCCAAATTT\n";
+        let records = parse_fasta(fasta).expect("parse frozen fixture");
+        assert_eq!(records.len(), 2);
+        let options = SeqAnalyzeOptions::default();
+        let request_hash = request_sha256("fixtures/parity-demo.fasta", fasta.as_bytes(), &options)
+            .expect("request digest");
+        let analysis = analyze(&records, fasta.as_bytes());
+        let analysis_json = serde_json::to_string(&analysis).expect("analysis json");
+        let analysis_hash = format!("{:x}", Sha256::digest(analysis_json.as_bytes()));
+
+        // Frozen values computed from the science-repo copy on 2026-08-06.
+        assert_eq!(request_hash, "82cdd918a8024afd2577eb53a3c74e7ef2a68611a495d8bc9650737d27a2b760");
+        assert_eq!(analysis_hash, "36cfe71e27fbe4c48d928108e2857b710529036c9eea065855920ec65b64a3b0");
+        assert_eq!(analysis.schema_version, 7);
+        assert_eq!(analysis.tool_version, TOOL_VERSION);
+        assert_eq!(TOOL_VERSION, "1.6.0");
+        assert_eq!(MOTIF_COMMIT, "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0");
+    }
+}
