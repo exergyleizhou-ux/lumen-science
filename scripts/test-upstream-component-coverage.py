@@ -27,8 +27,8 @@ def main() -> int:
     overlap = MODULE.report(conflicting)
     results = [
         (
-            "checked-in report distinguishes selected coverage from the full seven-source tree inventory",
-            checked_in["tree_entries"]["external_scanned"] == 3139
+            "checked-in report distinguishes selected coverage from the full nine-source tree inventory",
+            checked_in["tree_entries"]["external_scanned"] == 12191
             and checked_in["tree_entries"]["unclassified_by_selected_components"] > 0,
         ),
         (
