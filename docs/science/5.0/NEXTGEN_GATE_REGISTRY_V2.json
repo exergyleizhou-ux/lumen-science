@@ -17,11 +17,13 @@
     {
       "id": "SCIENCE_PR_CI_GATE",
       "owner": "lumen-science",
-      "status": "FAILED",
+      "status": "PASS",
       "requires": [],
       "receipt": [
-        "PR #28 check-run 'Rust xai-grok-science (test + clippy)' FAILURE @2026-08-02T05:59:13Z (Linux retained-interpreter product test, /tmp fixture vs /usr trust root)",
-        "S0-A open: branch ls5-core-v0.1.251-sync HEAD 11ec961"
+        "exact-head CI green on PR #28 head 1d3fd7dda778ae8b0f173e8a01689711fe2f170b (run 31066618159): 26 SUCCESS + 1 SKIPPED (Release build, main-only by design)",
+        "S0-A: test_stdio_science_workflow_execute_retains_store_and_interpreter_across_approval passes on Linux with canonical /usr interpreter (run 31066618159 job 92507088176); pinned-executable swap fixture replacement_at_original_path_cannot_change_executed_bytes ok; science lib 619/0/8",
+        "Machine honesty gates / npm audit + licenses / Desktop macOS full package all SUCCESS on same head",
+        "observed 2026-08-06 by monitor + pr statusCheckRollup"
       ]
     },
     {

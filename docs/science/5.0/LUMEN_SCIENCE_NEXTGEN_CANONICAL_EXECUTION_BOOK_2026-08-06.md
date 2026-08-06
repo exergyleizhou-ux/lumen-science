@@ -120,7 +120,7 @@
 | 资产 | 内容 | 使用纪律 |
 |---|---|---|
 | `/Users/lei/code/lumen-open-science` | aipoch/open-science 本地 clone（blob:none） | 九源 intake 审计对象；不直接搬运 |
-| `/Users/lei/code/魔改版本-claude-code` | claude-code fork + mgcc vs lumen 评测脚本 | 只参考方法与 bench 思路；吸收必须走 license/intake 纪律 |
+| `/Users/lei/code/魔改版本-claude-code` | claude-code fork + mgcc vs lumen 评测脚本；**活跃开发中**（claudecode/claudescience 方向持续改动） | 只参考方法与 bench 思路；**取用前必须重新快照**（内容随时变化）；吸收必须走 license/intake 纪律 |
 | `/Users/lei/code/lumen` | canonical（只读） | 按 X-U pin 消费 |
 
 **取用规则：** ① 先跑对应 guard/inventory 确认资产当前字节；② canonical 已含的部分（§1.3）不重复搬运；③ 受限来源只 clean-room；④ 任何取用都落到 card 的 parity corpus 里，不口头引用。
@@ -235,7 +235,7 @@ flowchart TD
 
 | Gate | Owner | 08-02 状态 | 08-06 状态 | Receipt（exact 引用） |
 |---|---|---|---|---|
-| SCIENCE_PR_CI_GATE | Science | FAILED | **FAILED** | PR #28 "Rust xai-grok-science (test + clippy)" FAILURE @2026-08-02T05:59:13Z |
+| SCIENCE_PR_CI_GATE | Science | FAILED | **PASS** | exact-head CI 绿 @1d3fd7d（run 31066618159：26 SUCCESS + 1 SKIPPED main-only）；S0-A 产品测试 + swap fixture + lib 619/0/8 全过（2026-08-06 观测） |
 | SKILL_LIFECYCLE_AUTHORITY_GATE | Science | FAILED | **FAILED** | packs/science-desktop settings/ipc.ts 426–445 直连 mutation |
 | P0_NR_SAFETY_GATE | Lumen | UNVERIFIED_COMMITTED | **PASS_UPSTREAM** | S8：no_replay_policy 3 counting-server 测、FULL_AUDIT_GATE 六 deny reason、s8_sealed_retry_live 5 测（v2.0.0 起） |
 | LUMEN_R0_SOURCE_GATE | Lumen | BLOCKED_UPSTREAM | **PASS_UPSTREAM** | v2.0.0→f51fb902 / v2.1.0→3d5d52cf / v2.2.0→098f7cd4（peeled tag）；B=af2857a2；CI 5/5 @7b8f385b；release 19 assets；readiness 仅 M5/M6 blocker |
