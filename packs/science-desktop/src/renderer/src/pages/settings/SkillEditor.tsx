@@ -478,7 +478,9 @@ const SkillEditLoader = ({ skillId, onDone }: SkillEditLoaderProps): React.JSX.E
       initial={draft}
       onCancel={onDone}
       onSave={async (next) => {
-        await updateSkill({
+        // S0-B: updateSkill resolves false on the typed fail-closed outcome;
+        // stay on the editor (banner shows) instead of calling onDone on a fake success.
+        const ok = await updateSkill({
           id: next.id ?? skillId,
           name: next.name,
           description: next.description,
@@ -486,6 +488,7 @@ const SkillEditLoader = ({ skillId, onDone }: SkillEditLoaderProps): React.JSX.E
           metadata: next.metadata,
           references: next.references
         })
+        if (!ok) return
         onDone()
       }}
     />

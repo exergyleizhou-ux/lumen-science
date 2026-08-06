@@ -271,13 +271,16 @@ const SkillUploadView = ({
 
     for (const candidate of markdowns) {
       try {
-        await createSkill({
+        // S0-B: createSkill resolves false on the typed fail-closed outcome
+        // (counts as failed, never as imported).
+        const ok = await createSkill({
           name: candidate.name,
           description: candidate.description,
           metadata: candidate.metadata,
           body: candidate.body
         })
-        imported += 1
+        if (ok) imported += 1
+        else failed += 1
       } catch {
         failed += 1
       }

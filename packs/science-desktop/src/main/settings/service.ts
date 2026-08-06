@@ -185,6 +185,7 @@ import { getConnectorTools } from '../connectors/registry'
 import { renderConnectorInstructions } from '../connectors/skill-doc'
 import { syncConnectorSkillDocs } from '../connectors/provision'
 import { SkillRegistry, type BundledSkill } from '../skills/registry'
+import { resolveEnabledSkillIds } from './skill-resolution'
 import { SAFE_SLUG, UserSkillRepository } from '../skills/user-skill-repository'
 import { netFetch, netFetchStandard } from '../skills/net-fetch'
 import { decodeBoundedBase64, SKILL_IMPORT_LIMITS } from '../skills/import-limits'
@@ -900,11 +901,13 @@ class SettingsService {
 
   // Returns the subset of forced ids that are currently disabled in settings — i.e. the picks that need
   // a respawn to materialize. Enabled picks are already present and need no reconnect.
-  async skillsNeedingForceLoad(forcedIds: string[]): Promise<string[]> {
-    const settings = await this.repository.getSettings()
-    const disabled = new Set(settings.disabledSkillIds ?? [])
-
-    return forcedIds.filter((id) => disabled.has(id))
+  //
+  // S0-B: task-level forced activation is fail-closed, so no disabled skill can
+  // ever be force-materialized; this query therefore always returns an empty
+  // list. It stays behind the same typed contract so a future governed
+  // Skill Revision API can re-open it per actor-approved revision.
+  async skillsNeedingForceLoad(_forcedIds: string[]): Promise<string[]> {
+    return []
   }
 
   // Resolves picker ids to the names the agent's Skill tool accepts. Bundled skills use their
@@ -2704,17 +2707,23 @@ class SettingsService {
   }
 
   // Materializes the enabled skill set into opencode's isolated config dir (same skills/<name>/SKILL.md
-  // layout Claude uses), so opencode's native skill tool discovers them. A turn-forced skill overrides
-  // its disabled state, mirroring the Claude provisioning path.
+  // layout Claude uses), so opencode's native skill tool discovers them.
+  //
+  // S0-B: `forcedSkillIds` can no longer resurrect a disabled skill. The
+  // enabled/disabled split comes from the fail-closed resolver, which accepts
+  // no forced input at all.
   private async materializeAgentSkills(
     settings: StoredSettings,
     configRoot: string,
-    forcedSkillIds: ReadonlySet<string>
+    _forcedSkillIds: ReadonlySet<string>
   ): Promise<void> {
-    const disabled = new Set(
-      (settings.disabledSkillIds ?? []).filter((id) => !forcedSkillIds.has(id))
-    )
-    const enabled = (await this.skillCatalog()).filter((skill) => !disabled.has(skill.id))
+    const catalog = await this.skillCatalog()
+    const resolution = resolveEnabledSkillIds({
+      disabledSkillIds: settings.disabledSkillIds ?? [],
+      catalogIds: new Set(catalog.map((skill) => skill.id)),
+    })
+    const enabledIds = new Set(resolution.enabledIds)
+    const enabled = catalog.filter((skill) => enabledIds.has(skill.id))
 
     await new ClaudeCodeSkillMaterializer().sync(configRoot, enabled)
 
@@ -2728,15 +2737,20 @@ class SettingsService {
 
   private async provisionClaudeRuntimeConfig(
     settings: StoredSettings,
-    forcedSkillIds: ReadonlySet<string> = new Set()
+    _forcedSkillIds: ReadonlySet<string> = new Set()
   ): Promise<string> {
     const configDir = getAppClaudeConfigDir(this.storageRoot)
-    const disabledSkillIds = (settings.disabledSkillIds ?? []).filter(
-      (id) => !forcedSkillIds.has(id)
-    )
+    const catalog = await this.skillCatalog()
+    // S0-B: same fail-closed resolver as materializeAgentSkills — forced ids
+    // cannot resurrect disabled/unknown/revoked skills.
+    const resolution = resolveEnabledSkillIds({
+      disabledSkillIds: settings.disabledSkillIds ?? [],
+      catalogIds: new Set(catalog.map((skill) => skill.id)),
+    })
+    const disabledSkillIds = resolution.disabledIds
 
     await provisionAppClaudeConfigDir(configDir, {
-      skills: await this.skillCatalog(),
+      skills: catalog,
       disabledSkillIds
     })
 

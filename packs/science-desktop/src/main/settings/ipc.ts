@@ -12,9 +12,7 @@ import {
   type ReasoningEffort,
   type SetAppIconVariantRequest,
   type SettingsSnapshot,
-  type CreateSkillRequest,
   type DeleteProviderRequest,
-  type DeleteSkillRequest,
   type PreviewSkillZipRequest,
   type PreviewGitHubSkillRequest,
   type ScanRepoRequest,
@@ -36,13 +34,12 @@ import {
   type SetClosePreferenceRequest,
   type SetNotificationsEnabledRequest,
   type SetReasoningEffortRequest,
-  type SetSkillEnabledRequest,
   type SetToolPermissionRequest,
-  type UpdateSkillRequest,
   type UpsertProviderRequest,
   type ValidateProviderRequest
 } from '../../shared/settings'
 import { createDefaultSettingsService, SettingsService } from './service'
+import { skillAuthorityError } from '../../shared/skill-authority'
 import { createLogger } from '../logger'
 import { broadcastToRenderers } from '../renderer-broadcast'
 
@@ -87,7 +84,7 @@ const registerSettingsIpcHandlers = ({
   onActiveProviderChanged,
   onAgentFrameworkChanged,
   onReasoningEffortChanged,
-  onSkillsChanged,
+  onSkillsChanged: _onSkillsChanged,
   onConnectorsChanged,
   onAppIconVariantChanged,
   listAppIconPreviews
@@ -422,29 +419,20 @@ const registerSettingsIpcHandlers = ({
 
   ipcMain.handle('settings:list-skills', () => service.listSkills())
   ipcMain.handle('settings:get-skill-detail', (_event, id: string) => service.getSkillDetail(id))
-  ipcMain.handle('settings:set-skill-enabled', async (_event, request: SetSkillEnabledRequest) => {
-    const skills = await service.setSkillEnabled(request)
-
-    // A toggle takes effect on the next reconnect: the runtime re-provisions (re-materializes) the
-    // config dir and resumes the open session with full context on its next message.
-    onSkillsChanged?.()
-
-    return skills
+  ipcMain.handle('settings:set-skill-enabled', async () => {
+    // S0-B: shipping skill mutation fails closed until the governed Skill
+    // Revision API ships (X-M1). No service call, no runtime reload callback —
+    // the legacy mutable store is unreachable from this channel.
+    throw skillAuthorityError()
   })
-  ipcMain.handle('settings:create-skill', async (_event, request: CreateSkillRequest) => {
-    const skills = await service.createSkill(request)
-    onSkillsChanged?.()
-    return skills
+  ipcMain.handle('settings:create-skill', async () => {
+    throw skillAuthorityError()
   })
-  ipcMain.handle('settings:update-skill', async (_event, request: UpdateSkillRequest) => {
-    const skills = await service.updateSkill(request)
-    onSkillsChanged?.()
-    return skills
+  ipcMain.handle('settings:update-skill', async () => {
+    throw skillAuthorityError()
   })
-  ipcMain.handle('settings:delete-skill', async (_event, request: DeleteSkillRequest) => {
-    const skills = await service.deleteSkill(request)
-    onSkillsChanged?.()
-    return skills
+  ipcMain.handle('settings:delete-skill', async () => {
+    throw skillAuthorityError()
   })
   // A GitHub URL is untrusted executable instruction content, not a UI preference.
   // Do not delegate it to SettingsService: that legacy method writes directly into

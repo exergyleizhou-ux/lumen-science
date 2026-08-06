@@ -510,49 +510,34 @@ describe('settings IPC handlers', () => {
     expect(onActiveProviderChanged).not.toHaveBeenCalled()
   })
 
-  it('registers skill channels and fires onSkillsChanged after set-skill-enabled', async () => {
+  it('S0-B: the four shipping skill-mutation channels fail closed with typed error, no service call, no reload', async () => {
     handlers.clear()
     const service = createFakeService()
     const onSkillsChanged = vi.fn()
     registerSettingsIpcHandlers({ service: asService(service), onSkillsChanged })
 
+    // Read-only surface stays intact.
     await invoke('settings:list-skills')
     expect(service.listSkills).toHaveBeenCalledTimes(1)
-
     await invoke('settings:get-skill-detail', 'demo')
     expect(service.getSkillDetail).toHaveBeenCalledWith('demo')
 
-    await invoke('settings:set-skill-enabled', { id: 'demo', enabled: false })
-    expect(service.setSkillEnabled).toHaveBeenCalledWith({ id: 'demo', enabled: false })
-    expect(onSkillsChanged).toHaveBeenCalledTimes(1)
-  })
+    // Each mutation channel rejects with the typed fail-closed outcome.
+    for (const [channel, payload] of [
+      ['settings:set-skill-enabled', { id: 'demo', enabled: false }],
+      ['settings:create-skill', { name: 'S', description: 'd', body: 'b' }],
+      ['settings:update-skill', { id: 'personal-s', name: 'S', description: 'd', body: 'b2' }],
+      ['settings:delete-skill', { id: 'personal-s' }]
+    ] as const) {
+      await expect(invoke(channel, payload)).rejects.toThrow(/SKILL_AUTHORITY_UNAVAILABLE/)
+    }
 
-  it('routes create/update/delete skill channels and fires onSkillsChanged', async () => {
-    handlers.clear()
-    const service = createFakeService()
-    const onSkillsChanged = vi.fn()
-    registerSettingsIpcHandlers({ service: asService(service), onSkillsChanged })
-
-    await invoke('settings:create-skill', { name: 'S', description: 'd', body: 'b' })
-    expect(service.createSkill).toHaveBeenCalledWith({ name: 'S', description: 'd', body: 'b' })
-
-    await invoke('settings:update-skill', {
-      id: 'personal-s',
-      name: 'S',
-      description: 'd',
-      body: 'b2'
-    })
-    expect(service.updateSkill).toHaveBeenCalledWith({
-      id: 'personal-s',
-      name: 'S',
-      description: 'd',
-      body: 'b2'
-    })
-
-    await invoke('settings:delete-skill', { id: 'personal-s' })
-    expect(service.deleteSkill).toHaveBeenCalledWith({ id: 'personal-s' })
-
-    expect(onSkillsChanged).toHaveBeenCalledTimes(3)
+    // Zero side effects: no mutation service method was reached, no reload fired.
+    expect(service.setSkillEnabled).not.toHaveBeenCalled()
+    expect(service.createSkill).not.toHaveBeenCalled()
+    expect(service.updateSkill).not.toHaveBeenCalled()
+    expect(service.deleteSkill).not.toHaveBeenCalled()
+    expect(onSkillsChanged).not.toHaveBeenCalled()
   })
 
   it('does not register ZIP mutation handlers on the legacy SettingsService authority', () => {

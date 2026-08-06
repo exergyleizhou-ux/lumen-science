@@ -941,6 +941,31 @@ describe('settings store: refreshProviderModels', () => {
     expect(api.setSkillEnabled).toHaveBeenCalledWith({ id: 'demo', enabled: false })
     expect(useSettingsStore.getState().skills[0].enabled).toBe(false)
   })
+
+  it('S0-B: a shipping skill mutation resolves false and surfaces the migration-required state on typed fail-close', async () => {
+    useSettingsStore.setState({ skills: [], skillMutationBlocked: false })
+    api.setSkillEnabled.mockRejectedValue(
+      new Error(
+        'SKILL_AUTHORITY_UNAVAILABLE: Skill mutation is disabled until the governed Skill Revision API ships (X-M1).'
+      )
+    )
+
+    const ok = await useSettingsStore.getState().setSkillEnabled('demo', true)
+
+    expect(ok).toBe(false)
+    expect(useSettingsStore.getState().skillMutationBlocked).toBe(true)
+    expect(useSettingsStore.getState().skills).toEqual([])
+  })
+
+  it('S0-B: a successful mutation clears the migration-required state', async () => {
+    useSettingsStore.setState({ skills: [], skillMutationBlocked: true })
+    api.setSkillEnabled.mockResolvedValue([])
+
+    const ok = await useSettingsStore.getState().setSkillEnabled('demo', false)
+
+    expect(ok).toBe(true)
+    expect(useSettingsStore.getState().skillMutationBlocked).toBe(false)
+  })
 })
 
 describe('settings store: openSettingsToSkill', () => {
