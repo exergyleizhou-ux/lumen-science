@@ -1,84 +1,84 @@
 {
- "canonical_lumen_observation": {
-  "divergence_from_origin_main": {
-   "ahead": 0,
-   "behind": 1
+  "canonical_lumen_observation": {
+    "divergence_from_origin_main": {
+      "ahead": 0,
+      "behind": 1
+    },
+    "local_branch": "main",
+    "local_head": "7b8f385b183825f81b2497572b0e44e8d3eea7d4",
+    "nextgen_execution_book_tracked": true,
+    "observation_only": true,
+    "origin_main": "79a5c2d966e6591a2a8a5dd077ccc3a8d9eb29af",
+    "pin_eligible": true,
+    "r0_receipt": {
+      "ci_green": "5/5 SUCCESS on 7b8f385b183825f81b2497572b0e44e8d3eea7d4 (version-check / regenerate / Lumen crates+clippy / Offline gates / Expert v2 gate); release v2.2.0 19 assets non-draft; readiness automated gates all PASS (only M5/M6 human gates pending)",
+      "evidence_commit_b": "af2857a21ec4b1c5655d308231b89ba81596c4fd",
+      "observed_at": "2026-08-06T00:00:00+08:00",
+      "release_tags": [
+        "v2.0.0",
+        "v2.1.0",
+        "v2.2.0"
+      ],
+      "source_commit_a": "098f7cd424c1015bfe0d1cbd88c96570b36064ca"
+    },
+    "reason": "Canonical Lumen main is a released line: v2.0.0/v2.1.0/v2.2.0 signed tags all point to their source A commits, evidence B and readiness artifacts committed, CI green, release v2.2.0 published with 19 assets. The 2026-08-02 observation (dirty sync branch, no R0) is superseded. Science still consumes read-only; pin consumption requires V0 verification and X-C1 contract.",
+    "repository": "https://github.com/exergyleizhou-ux/lumen.git",
+    "tracked_or_untracked_file_count": 0
   },
-  "local_branch": "main",
-  "local_head": "7b8f385b183825f81b2497572b0e44e8d3eea7d4",
-  "nextgen_execution_book_tracked": true,
-  "observation_only": true,
-  "origin_main": "79a5c2d966e6591a2a8a5dd077ccc3a8d9eb29af",
-  "pin_eligible": true,
-  "r0_receipt": {
-   "ci_green": "5/5 SUCCESS on 7b8f385b183825f81b2497572b0e44e8d3eea7d4 (version-check / regenerate / Lumen crates+clippy / Offline gates / Expert v2 gate); release v2.2.0 19 assets non-draft; readiness automated gates all PASS (only M5/M6 human gates pending)",
-   "evidence_commit_b": "af2857a21ec4b1c5655d308231b89ba81596c4fd",
-   "observed_at": "2026-08-06T00:00:00+08:00",
-   "release_tags": [
-    "v2.0.0",
-    "v2.1.0",
-    "v2.2.0"
-   ],
-   "source_commit_a": "098f7cd424c1015bfe0d1cbd88c96570b36064ca"
+  "plan_inputs": [
+    {
+      "path": "docs/science/5.0/LUMEN_SCIENCE_NEXTGEN_FINAL_EXECUTION_BOOK_2026-08-01.md",
+      "sha256": "4a5b520ceded241b2e24fc126aa593d0c7efd469f9d932b89e1e57b48bc0d69c"
+    },
+    {
+      "path": "docs/science/5.0/EXTREME_ADOPTION_SINGLE_BASE_EXECUTION_PLAN_2026-08-01.md",
+      "sha256": "a0b6226eb1531635206199faeb34c142cab1be49c78e3d4593ec1c11ac5e8a44"
+    },
+    {
+      "path": "docs/science/5.0/NEXT_GENERATION_AUTONOMY_CONTROL_PLANE_EXECUTION_PLAN_2026-08-01.md",
+      "sha256": "02f24d9484f405e5fadf4fca3433925f9cc8c0f9fdf5c823d2551f245103c373"
+    },
+    {
+      "path": "docs/science/5.0/ecosystem-admission.lock.json",
+      "sha256": "e21d818009398859cc7999f170e01b2def297402ca36c5b57b32ecb287e5124d"
+    },
+    {
+      "path": "docs/science/5.0/core-v0.1.251-admission.lock.json",
+      "sha256": "19980e184d7bae075342d8b6c68a8a803b40e6c4ce7d1c8cb712f0196bb151e6"
+    },
+    {
+      "path": "docs/science/5.0/LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-02.md",
+      "sha256": "4a52a3c5ae3c829e2fb2c0d29df20378790ac79358a4c680c1cd9c5dd1e0ff70"
+    },
+    {
+      "path": "docs/science/5.0/LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-06.md",
+      "sha256": "f5b6a2efd2e9b330728845474b5fa3a2821d436077805510bc614a781eba1a4b"
+    },
+    {
+      "path": "docs/science/5.0/NEXTGEN_GATE_REGISTRY.json",
+      "sha256": "5158bd10448fc7d8ae4589b7fbb0710876b087274c4cdbe67dbf2240d0936fd1"
+    },
+    {
+      "path": "docs/science/5.0/NEXTGEN_GATE_REGISTRY_V2.json",
+      "sha256": "d09ac3c6f1c65348c1117a32fd48eac79e774bb2fc51cc4c92d479ff87433bab"
+    },
+    {
+      "path": "docs/science/5.0/PLAN_SUPERSESSION_MAP.md",
+      "sha256": "97d5dc9e79536149295759298ba01c62b12bad1ab2740d3b64612f239de88a96"
+    }
+  ],
+  "purpose": "Machine-readable F0 snapshot for the NextGen plan (2026-08-06 dialectical revision). It records an auditable starting point; it does not claim a runnable extension, a green CI, or a consumable Lumen Core beyond the recorded R0 receipts.",
+  "recorded_at": "2026-08-06T00:00:00+08:00",
+  "schema_version": 1,
+  "science": {
+    "branch": "ls5-core-v0.1.251-sync",
+    "divergence": {
+      "ahead": 149,
+      "behind": 1
+    },
+    "repository": "https://github.com/exergyleizhou-ux/lumen-science.git",
+    "source_commit": "11ec96178d0b4d7ee7b24f27ec6034b5e2d0aaf8",
+    "upstream": "origin/ls5-core-v0.1.251-sync"
   },
-  "reason": "Canonical Lumen main is a released line: v2.0.0/v2.1.0/v2.2.0 signed tags all point to their source A commits, evidence B and readiness artifacts committed, CI green, release v2.2.0 published with 19 assets. The 2026-08-02 observation (dirty sync branch, no R0) is superseded. Science still consumes read-only; pin consumption requires V0 verification and X-C1 contract.",
-  "repository": "https://github.com/exergyleizhou-ux/lumen.git",
-  "tracked_or_untracked_file_count": 0
- },
- "plan_inputs": [
-  {
-   "path": "docs/science/5.0/LUMEN_SCIENCE_NEXTGEN_FINAL_EXECUTION_BOOK_2026-08-01.md",
-   "sha256": "4a5b520ceded241b2e24fc126aa593d0c7efd469f9d932b89e1e57b48bc0d69c"
-  },
-  {
-   "path": "docs/science/5.0/EXTREME_ADOPTION_SINGLE_BASE_EXECUTION_PLAN_2026-08-01.md",
-   "sha256": "a0b6226eb1531635206199faeb34c142cab1be49c78e3d4593ec1c11ac5e8a44"
-  },
-  {
-   "path": "docs/science/5.0/NEXT_GENERATION_AUTONOMY_CONTROL_PLANE_EXECUTION_PLAN_2026-08-01.md",
-   "sha256": "02f24d9484f405e5fadf4fca3433925f9cc8c0f9fdf5c823d2551f245103c373"
-  },
-  {
-   "path": "docs/science/5.0/ecosystem-admission.lock.json",
-   "sha256": "e21d818009398859cc7999f170e01b2def297402ca36c5b57b32ecb287e5124d"
-  },
-  {
-   "path": "docs/science/5.0/core-v0.1.251-admission.lock.json",
-   "sha256": "cb9e979ac3d7bc0d0f4c0a76159285ae0db2f395d64d372bbc8642a089a7599e"
-  },
-  {
-   "path": "docs/science/5.0/LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-02.md",
-   "sha256": "4a52a3c5ae3c829e2fb2c0d29df20378790ac79358a4c680c1cd9c5dd1e0ff70"
-  },
-  {
-   "path": "docs/science/5.0/LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-06.md",
-   "sha256": "f5b6a2efd2e9b330728845474b5fa3a2821d436077805510bc614a781eba1a4b"
-  },
-  {
-   "path": "docs/science/5.0/NEXTGEN_GATE_REGISTRY.json",
-   "sha256": "5158bd10448fc7d8ae4589b7fbb0710876b087274c4cdbe67dbf2240d0936fd1"
-  },
-  {
-   "path": "docs/science/5.0/NEXTGEN_GATE_REGISTRY_V2.json",
-   "sha256": "d09ac3c6f1c65348c1117a32fd48eac79e774bb2fc51cc4c92d479ff87433bab"
-  },
-  {
-   "path": "docs/science/5.0/PLAN_SUPERSESSION_MAP.md",
-   "sha256": "97d5dc9e79536149295759298ba01c62b12bad1ab2740d3b64612f239de88a96"
-  }
- ],
- "purpose": "Machine-readable F0 snapshot for the NextGen plan (2026-08-06 dialectical revision). It records an auditable starting point; it does not claim a runnable extension, a green CI, or a consumable Lumen Core beyond the recorded R0 receipts.",
- "recorded_at": "2026-08-06T00:00:00+08:00",
- "schema_version": 1,
- "science": {
-  "branch": "ls5-core-v0.1.251-sync",
-  "divergence": {
-   "ahead": 149,
-   "behind": 1
-  },
-  "repository": "https://github.com/exergyleizhou-ux/lumen-science.git",
-  "source_commit": "11ec96178d0b4d7ee7b24f27ec6034b5e2d0aaf8",
-  "upstream": "origin/ls5-core-v0.1.251-sync"
- },
- "status": "historical_snapshot"
+  "status": "historical_snapshot"
 }
