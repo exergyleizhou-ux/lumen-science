@@ -267,9 +267,9 @@ jobs:
         run: |
           set -euo pipefail
           tests=(
-            session::acp_session_impl::science::workflow_authority_failure_tests::undelivered_begin_interrupts_pending_approval_without_probe_or_execution
-            session::acp_session_impl::science::workflow_authority_failure_tests::terminal_replay_rejects_missing_duplicate_nonfinal_or_tampered_finish_event
-            session::acp_session_impl::science::workflow_authority_failure_tests::recoverable_finish_event_failure_rolls_back_before_failed_terminal
+            session::acp_session::science::workflow_authority_failure_tests::undelivered_begin_interrupts_pending_approval_without_probe_or_execution
+            session::acp_session::science::workflow_authority_failure_tests::terminal_replay_rejects_missing_duplicate_nonfinal_or_tampered_finish_event
+            session::acp_session::science::workflow_authority_failure_tests::recoverable_finish_event_failure_rolls_back_before_failed_terminal
           )
           for test_name in "${tests[@]}"; do
             output="$(
