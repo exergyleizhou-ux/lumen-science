@@ -1,7 +1,7 @@
 {
   "name": "lumen-science-desktop",
   "productName": "Lumen Science Desktop",
-  "version": "1.1.0-dev",
+  "version": "1.2.0-dev",
   "description": "Lumen Science Desktop — auditable scientific workbench powered by Rust Lumen SessionActor. Desktop UI adapted from Open Science (Apache-2.0).",
   "main": "./out/main/index.js",
   "author": "exergyleizhou-ux",
