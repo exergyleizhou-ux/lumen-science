@@ -323,7 +323,8 @@
    "owner": "canonical-lumen",
    "receipt": [
     "V0 Science-side verification 2026-08-06 (Grok Build): source spot check on canonical v2.2.0 tree A=098f7cd4 + CI 5/5 @7b8f385b + readiness/eval receipts; detail in SCRATCH v0-receipts.log",
-    "spot-check symbols: ReleaseSourceTupleV1 + RELEASE_TUPLE_GATE (source != evidence, tag points to source A, binary/lock sha256 required)"
+    "spot-check symbols: ReleaseSourceTupleV1 + RELEASE_TUPLE_GATE (source != evidence, tag points to source A, binary/lock sha256 required)",
+    "lumen v2.3.0 signed release published 2026-08-07 (bfb381fe): 4 platform binaries + minisig + SPDX SBOMs + manifest + pubkey, non-draft, non-prerelease"
    ],
    "requires": [],
    "status": "PASS",
