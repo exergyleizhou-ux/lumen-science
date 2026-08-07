@@ -1,7 +1,7 @@
 # Lumen Science 看板（NextGen 执行）
 
 > **更新规则：** 里程碑时更新（gate 翻转/进度变化）。无心跳 monitor。
-> 上次刷新：**2026-08-07**（北京时间）— M1 单底座 de-copy 闭合，90/100
+> 上次刷新：**2026-08-07**（北京时间）— science-ci 全绿（allexport E2BIG 修复闭合），90/100
 > 权威进度：`docs/science/5.0/LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-06.md` §40；gate 真值：`docs/science/5.0/NEXTGEN_GATE_REGISTRY_V2.json`
 
 ---
@@ -12,7 +12,7 @@
 |----|--------|------|
 | **正式进度（书 §40 九项）** | **90 / 100** | S0 10 + L0 12 + C1 12 + C2–C7 15 + S2 10 + I1 8 + K1 10 + M1 13 |
 | 机器门 | 22 项 | 全绿（exit 0） |
-| PR #28 CI | 全绿（历次 head） | 最新轮验证中 |
+| PR #28 CI | 全绿 | 最新 head（b5887f3，pin ff4456b3）全绿：11/11 job success
 
 ## 九项 gate
 
@@ -53,4 +53,4 @@
 
 ## 一句话
 
-**77/100：漏水全止、底座核验、接口正式化、九源全量采纳、managed-run 证明全部落地；剩余 23 分卡在 M1 全 agent/ 删复制（65 复制 crate）与 Apple 凭据（G1）上。**
+**90/100：九项 gate 中八项闭合，PR #28 science-ci 全绿（含 allexport E2BIG 修复，pin ff4456b3）；剩余 10 分全部卡在 G1——需要 Apple 签名证书/公证凭据（用户侧 blocker）。**
