@@ -111,7 +111,7 @@
     "diverged_rust_files": 1051,
     "drift_manifest_schema": "lumen-core-drift-v1",
     "drift_manifest_sha256": "c57193d65c99a8bf655c0a23864c0ebe799de7a327d29d5367e22b7312d03029",
-    "lumen_head": "ff4456b345b3afcbf254786d4ad9d0aa5f964464",
+    "lumen_head": "a695dec511c41a23d14355f689b4a759750705ee",
     "missing_in_science_rust_files": 335,
     "science_code_head": "3fc65afbbd95bf2a81cd4ffc52ea68f06f4c0b03",
     "science_only_rust_files": 14,
@@ -144,7 +144,7 @@
     }
   ],
   "lumen_source": {
-    "audited_main_head": "ff4456b345b3afcbf254786d4ad9d0aa5f964464",
+    "audited_main_head": "a695dec511c41a23d14355f689b4a759750705ee",
     "repository": "https://github.com/exergyleizhou-ux/lumen.git",
     "target_tag": "v0.1.251",
     "target_tag_commit": "88a204cfe468a325b53272dddf70afc8036d24ad"
@@ -157,7 +157,7 @@
     "version_equivalence_claimed": false
   },
   "purpose": "Record selective Lumen core v0.1.251 admission into Lumen Science without claiming full source or release parity.",
-  "recorded_at": "2026-08-07T06:08:58Z",
+  "recorded_at": "2026-08-07T07:12:53Z",
   "schema_version": 1,
   "science_baseline": {
     "pinned_lumen_main_sha": "537191998c959b66b41f6a057dd3d3bdf16a9eb6",
