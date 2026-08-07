@@ -134,7 +134,7 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
     ? join(process.resourcesPath, 'science', 'fixtures', 'connector_uniprot_search.json')
     : join(
         __dirname,
-        '../../../../agent/crates/codegen/xai-grok-science/fixtures/connector_uniprot_search.json',
+        '../../fixtures/connector_uniprot_search.json',
       )
   const biomniUniprotFixtureBase64 = (
     await readFile(biomniUniprotFixturePath)

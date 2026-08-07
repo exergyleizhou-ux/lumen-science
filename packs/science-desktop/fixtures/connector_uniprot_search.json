@@ -1,0 +1,28 @@
+{
+  "results": [
+    {
+      "entryType": "UniProtKB reviewed (Swiss-Prot)",
+      "primaryAccession": "P01308",
+      "uniProtkbId": "INS_HUMAN",
+      "proteinDescription": {
+        "recommendedName": {
+          "fullName": {
+            "value": "Insulin"
+          }
+        }
+      },
+      "genes": [
+        {
+          "geneName": {
+            "value": "INS"
+          }
+        }
+      ],
+      "organism": {
+        "scientificName": "Homo sapiens",
+        "taxonId": 9606
+      }
+    }
+  ],
+  "totalResults": 1
+}
