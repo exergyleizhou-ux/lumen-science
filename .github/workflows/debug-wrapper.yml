@@ -1,0 +1,23 @@
+name: Debug shell wrapper
+
+on:
+  workflow_dispatch:
+
+jobs:
+  repro:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dump runner env and reproduce wrapper
+        run: |
+          echo "=== export -p (sanitized) ==="
+          builtin export -p | command grep -viE '_proxy=' | head -50
+          echo "=== bash version ==="
+          bash --version | head -1
+          echo "=== snapshot env vars section ==="
+          export -p | command grep -viE '_proxy=|GROK_SANDBOX|GROK_AGENT=|SUDO_ASKPASS|GROK_ASKPASS|ELECTRON_RUN_AS_NODE|SSH_AUTH_SOCK|DBUS_SESSION_BUS_ADDRESS|XDG_RUNTIME_DIR|WAYLAND_DISPLAY|GPG_TTY' | command base64 -w0
+          echo ""
+          echo "=== raw wrapper attempt ==="
+          set +e
+          bash -c 'snap=""; builtin shopt -s extglob; builtin eval -- "$snap"; echo INNER_EXIT=$?; __grok_user_cmd="set -a"; builtin declare +x __grok_user_cmd 2>/dev/null; builtin set --; builtin eval "$__grok_user_cmd" 2>&1; COMMAND_EXIT_CODE=$?; echo "WRAPPER_EXIT=$COMMAND_EXIT_CODE"'
+          set -e
