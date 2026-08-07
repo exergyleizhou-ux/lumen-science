@@ -26,7 +26,7 @@
 | I1 九源审查 | 8 | ✅ 8 | 九源全量采纳（资产方授权）；upstream-lock active；rights gate 9/9 |
 | K1 长期任务运行 | 10 | ✅ 10 | K1b managed-run proof：restart/reprompt/resume/kill/replay 的 built-binary E4 证据（X-S1 融合后） |
 | M1 单底座 | 13 | ✅ 13 | agent/ 复制件已删；CI/机器门全部指向 pinned lumen tuple；SINGLE_BASE_GATE PASS（lumen 1f66a692） |
-| G1 macOS 正式发布 | 10 | ⏳ 0 | **硬 blocker：无 Apple 签名证书/Xcode/公证凭据** |
+| G1 macOS 正式发布 | ⏸ 暂缓 | **用户决定本地使用、不对外分发（2026-08-07）**；签名/公证凭据就绪后按 `G1_MACOS_RELEASE_HANDOFF.md` 一键完成 |
 
 ## 里程碑
 
@@ -53,4 +53,4 @@
 
 ## 一句话
 
-**90/100：九项 gate 中八项闭合，最终 head science-ci 全绿（pin a695dec5 = v2.3.1 source）；剩余 10 分全部卡在 G1——需要 Apple 签名证书/公证凭据（用户侧 blocker），交接清单见 `docs/science/5.0/G1_MACOS_RELEASE_HANDOFF.md`。**
+**计划内九项 gate 八项闭合、最终 head science-ci 全绿、v2.3.1 已发布、本地环境就绪（lumen 2.3.1 + 桌面端全测试绿）。G1 签名发布按用户决定暂缓（本地使用，不对外分发）——凭据就绪后可一键补完。**
