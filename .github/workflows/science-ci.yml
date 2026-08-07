@@ -24,15 +24,16 @@ on:
       - 'docs/science/5.0/PLAN_SUPERSESSION_MAP.md'
       - 'docs/science/5.0/README.md'
       - 'docs/science/fusion-sources.lock.json'
+      - 'packs/science-desktop/**'
+      - '.github/workflows/science-ci.yml'
       - 'VERSION'
       - 'packs/science/VERSION'
+  # No path filters on pull_request: the M1 de-copy showed that narrow
+  # filters silently skip runs for commits touching only workflows,
+  # desktop packs, or docs — the exact commits that need CI most. Every
+  # branch commit re-runs the full gate set (concurrency serializes).
   pull_request:
     branches: [main]
-    paths:
-      - 'packs/science/**'
-      - 'scripts/**'
-      - 'docs/science/**'
-      - 'packs/science/VERSION'
   workflow_dispatch:
 
 concurrency:
