@@ -17,8 +17,18 @@ functions, and aliases look like INSIDE the wrapper.
 """
 import base64
 import os
+import signal
 import subprocess
 import sys
+import time
+
+
+def _deadline_alarm(signum, frame):
+    raise TimeoutError("overall repro deadline exceeded")
+
+
+signal.signal(signal.SIGALRM, _deadline_alarm)
+signal.alarm(240)
 
 # --- Exact text of DUMP_BASH_STATE_SCRIPT from shell_state.rs (verbatim) ---
 DUMP = r'''
@@ -146,52 +156,86 @@ def parse_snapshot(snapshot):
 
 
 def run_wrapper(user_cmd, snapshot, label):
-    """Run the exact wrapper with fd 3 = snapshot pipe, fd 4 = dump pipe."""
+    """Run the exact wrapper with fd 3 = snapshot pipe, fd 4 = dump pipe.
+
+    Mirrors the Rust flow: spawn the child FIRST, then write the snapshot
+    (so snapshots larger than the 64KB pipe buffer cannot deadlock), then
+    read the dump until the END marker with a bounded deadline.
+    """
     wrapper = f"{DUMP} {WRAPPER_BODY}"
     r_in, w_in = os.pipe()
     r_out, w_out = os.pipe()
-    # The wrapper hardcodes <&3 / >&4: dup2 the pipe ends onto exactly 3 and 4
-    # (Python pass_fds alone does not renumber), then hand 3/4 to the child.
-    os.dup2(r_in, 3)
-    os.dup2(w_out, 4)
-    os.close(r_in)
-    os.close(w_out)
-    os.write(w_in, snapshot.encode())
-    os.close(w_in)
+    # The wrapper hardcodes <&3 / >&4. Like the Rust fd_mappings (which dup2
+    # in the post-fork pre-exec child), renumber INSIDE the child via
+    # preexec_fn so concurrent invocations cannot clobber each other's fds.
+    def _map_fds():
+        os.dup2(r_in, 3)
+        os.dup2(w_out, 4)
+
     proc = subprocess.Popen(
         ["bash", "-O", "extglob", "-c", wrapper, "--", user_cmd],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        pass_fds=(3, 4),
+        pass_fds=(r_in, w_out, 3, 4),  # 3/4: preexec dup2s them; keep them out of close_fds
+        preexec_fn=_map_fds,
     )
+    os.close(r_in)
+    os.close(w_out)
+    os.write(w_in, snapshot.encode())
+    os.close(w_in)
     stdout, stderr = proc.communicate(timeout=120)
-    # drain dump pipe (should already be closed by child exit)
+    # Drain fd 4 until END marker or deadline (a backgrounded grandchild may
+    # keep the write end open forever; the Rust reader has the same guard).
     dump_data = b""
-    try:
-        os.set_blocking(r_out, False)
-        while True:
+    deadline = time.time() + 10
+    while time.time() < deadline and END_MARKER not in dump_data.decode(errors="replace"):
+        try:
             chunk = os.read(r_out, 65536)
             if not chunk:
                 break
             dump_data += chunk
-    except OSError:
-        pass
+        except BlockingIOError:
+            time.sleep(0.05)
+        except OSError:
+            break
     os.close(r_out)
-    print(f"=== {label}: exit={proc.returncode}")
+    print(f"=== {label}: exit={proc.returncode}", flush=True)
     if stdout:
-        print("stdout:", stdout[:2000].decode(errors="replace"))
+        print("stdout:", stdout[:2000].decode(errors="replace"), flush=True)
     if stderr:
-        print("stderr:", stderr[:2000].decode(errors="replace"))
+        print("stderr:", stderr[:2000].decode(errors="replace"), flush=True)
     return proc.returncode, dump_data
 
 
+def run_parallel(user_cmd, snapshot, count, label):
+    """Spawn `count` concurrent wrapper invocations (mimics tokio test parallelism)."""
+    import threading
+
+    results = []
+    lock = threading.Lock()
+
+    def worker(i):
+        code, _ = run_wrapper(user_cmd, snapshot, f"PAR{i}")
+        with lock:
+            results.append(code)
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(count)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=180)
+    from collections import Counter
+
+    print(f"=== {label}: {count} concurrent -> {dict(Counter(results))}", flush=True)
+
+
 def main():
-    print(f"bash: {subprocess.run(['bash', '--version'], capture_output=True, text=True).stdout.splitlines()[0]}")
+    print(f"bash: {subprocess.run(['bash', '--version'], capture_output=True, text=True).stdout.splitlines()[0]}", flush=True)
     snapshot = run_init()
-    print("snapshot bytes:", len(snapshot))
+    print("snapshot bytes:", len(snapshot), flush=True)
     pwd, sections = parse_snapshot(snapshot)
-    print("PWD:", pwd)
+    print("PWD:", pwd, flush=True)
     # Rust parse_dump strips the first ($PWD) line from the replayable snapshot;
     # mirror that exactly (snapshot here starts with "\n" + PWD + "\n" + sections).
     body = snapshot[1:]  # drop the newline that ends the START marker line
@@ -218,6 +262,16 @@ def main():
             "echo ALIAS_TABLE; builtin alias -p | command head -60; echo DIAG_DONE")
     code2, _ = run_wrapper(diag, replay_snapshot, "DIAGNOSTIC inside wrapper")
     print("DIAG_EXIT:", code2)
+
+    # Parallel pressure: 16 concurrent wrappers, 2 rounds (mimics the tokio
+    # multi-threaded test harness where 3000+ tests spawn shells concurrently).
+    for round_no in (1, 2):
+        run_parallel("set -a", replay_snapshot, 16, f"PARALLEL round {round_no}")
+
+    # Isolation: wrapper with an empty snapshot (is the failure in the
+    # snapshot replay or the wrapper itself?)
+    code3, _ = run_wrapper("set -a", "\n", "EMPTY-SNAPSHOT set -a")
+    print("EMPTY_SNAPSHOT_EXIT:", code3)
     sys.exit(0 if code == 0 else 1)
 
 
