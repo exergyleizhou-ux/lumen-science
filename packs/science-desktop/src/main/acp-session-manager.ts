@@ -248,58 +248,84 @@ export class AcpSessionManager {
     })
     this.transport = transport
 
-    const timeoutMs = this.opts.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS
-    const deadline = Date.now() + timeoutMs
-    const remaining = (): number => Math.max(1, deadline - Date.now())
+    // Each step gets its own full budget. A shared 60s pool was the defect:
+    // under system load, initialize + authenticate could consume the whole
+    // budget and leave session/new ~1ms, which surfaced as
+    // LUMEN_ACP_REQUEST_TIMEOUT and a permanently unavailable engine. Slow
+    // steps now each wait their own handshakeTimeoutMs; the normal path
+    // (~2.5s) is unaffected.
+    const stepTimeoutMs = this.opts.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS
 
-    const initResult = (await transport.request(
-      'initialize',
-      {
-        protocolVersion: ACP_PROTOCOL_VERSION,
-        clientCapabilities: {
-          fs: { readTextFile: false, writeTextFile: false },
-          terminal: false,
-        },
-        _meta: {
-          startupHints: {
-            nonInteractive: true,
-            skipGitStatus: true,
-            skipProjectLayout: true,
+    let initResult: { authMethods?: Array<{ id?: unknown }>; _meta?: Record<string, unknown> } | null =
+      null
+    try {
+      initResult = (await transport.request(
+        'initialize',
+        {
+          protocolVersion: ACP_PROTOCOL_VERSION,
+          clientCapabilities: {
+            fs: { readTextFile: false, writeTextFile: false },
+            terminal: false,
           },
-          clientType: this.opts.clientType ?? 'lumen-science-desktop',
-          clientVersion: this.opts.clientVersion ?? '0.0.0-dev',
+          _meta: {
+            startupHints: {
+              nonInteractive: true,
+              skipGitStatus: true,
+              skipProjectLayout: true,
+            },
+            clientType: this.opts.clientType ?? 'lumen-science-desktop',
+            clientVersion: this.opts.clientVersion ?? '0.0.0-dev',
+          },
         },
-      },
-      { timeoutMs: remaining() },
-    )) as { authMethods?: Array<{ id?: unknown }>; _meta?: Record<string, unknown> } | null
+        { timeoutMs: stepTimeoutMs },
+      )) as { authMethods?: Array<{ id?: unknown }>; _meta?: Record<string, unknown> } | null
 
-    const authMethodId = pickAuthMethod(initResult)
-    if (authMethodId) {
-      await transport.request(
-        'authenticate',
-        { methodId: authMethodId, _meta: { headless: true } },
-        { timeoutMs: remaining() },
-      )
+      const authMethodId = pickAuthMethod(initResult)
+      if (authMethodId) {
+        await transport.request(
+          'authenticate',
+          { methodId: authMethodId, _meta: { headless: true } },
+          { timeoutMs: stepTimeoutMs },
+        )
+      }
+
+      const sessionResult = (await transport.request(
+        'session/new',
+        { cwd: this.opts.cwd, mcpServers: [] },
+        { timeoutMs: stepTimeoutMs },
+      )) as { sessionId?: unknown } | null
+
+      const sessionId = sessionResult?.sessionId
+      if (typeof sessionId !== 'string' || sessionId === '') {
+        throw new Error('session/new returned no sessionId')
+      }
+      this.sessionId = sessionId
+      this.opts.log?.info('lumen acp session established', {
+        binaryPath: binary.binaryPath,
+        binaryHash: binary.sha256,
+        source: binary.source,
+        sessionId,
+      })
+      return { transport, sessionId, binary }
+    } catch (error: unknown) {
+      // A failed handshake must not leak the child: the pre-fix behavior left
+      // the spawned `lumen agent stdio` running forever (silent, unresponsive,
+      // holding a CPU turn), and a retry then spawned a second one. Close the
+      // transport and stop the process before propagating, so the manager can
+      // be started again cleanly. Cleanup errors must not mask the original
+      // failure.
+      try {
+        transport.close(`handshake failed: ${error instanceof Error ? error.message : String(error)}`)
+      } catch {
+        // Close is best-effort; the process stop below is the real cleanup.
+      }
+      try {
+        await processManager.stop()
+      } catch {
+        // The child may already be gone; the original error is what matters.
+      }
+      throw error
     }
-
-    const sessionResult = (await transport.request(
-      'session/new',
-      { cwd: this.opts.cwd, mcpServers: [] },
-      { timeoutMs: remaining() },
-    )) as { sessionId?: unknown } | null
-
-    const sessionId = sessionResult?.sessionId
-    if (typeof sessionId !== 'string' || sessionId === '') {
-      throw new Error('session/new returned no sessionId')
-    }
-    this.sessionId = sessionId
-    this.opts.log?.info('lumen acp session established', {
-      binaryPath: binary.binaryPath,
-      binaryHash: binary.sha256,
-      source: binary.source,
-      sessionId,
-    })
-    return { transport, sessionId, binary }
   }
 
   private markUnavailable(reason: string): void {

@@ -154,9 +154,45 @@ export function getLumenEngineState(): EngineState {
   return manager?.getState() ?? lastState
 }
 
-/** Spawn the engine and complete the ACP handshake. Rejects on failure. */
+/**
+ * Spawn the engine and complete the ACP handshake. Rejects on failure.
+ *
+ * Unlike the manager (which deliberately does not self-retry so a crash loop
+ * stays visible), the bridge retries transient failures a bounded number of
+ * times with backoff. The failure mode this guards against is real: on
+ * 2026-08-07 a loaded machine (load ~5, three stale TUI processes spinning)
+ * made `initialize`+`authenticate` exceed the old shared 60s budget, so
+ * `session/new` got ~1ms, the engine went `unavailable`, and stayed that way
+ * until the app was manually restarted. A retry after a few seconds lets the
+ * cold start finish. A genuinely broken binary still surfaces after
+ * START_RETRY_ATTEMPTS — the failure is bounded, logged, and visible.
+ */
+const START_RETRY_ATTEMPTS = 3
+const START_RETRY_BACKOFF_MS = [2_000, 8_000, 24_000] as const
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 export async function startLumen(): Promise<void> {
-  await ensureManager().start()
+  let lastError: unknown
+  for (let attempt = 1; attempt <= START_RETRY_ATTEMPTS; attempt++) {
+    try {
+      await ensureManager().start()
+      return
+    } catch (error: unknown) {
+      lastError = error
+      if (attempt < START_RETRY_ATTEMPTS) {
+        const backoff = START_RETRY_BACKOFF_MS[attempt - 1]
+        console.warn(
+          `[lumen] engine handshake failed (attempt ${attempt}/${START_RETRY_ATTEMPTS}), ` +
+            `retrying in ${backoff}ms: ${error instanceof Error ? error.message : String(error)}`,
+        )
+        await sleep(backoff)
+      }
+    }
+  }
+  throw lastError
 }
 
 /** Graceful shutdown: close the transport, SIGTERM, then SIGKILL. */
