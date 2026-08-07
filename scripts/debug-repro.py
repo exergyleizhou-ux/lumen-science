@@ -48,13 +48,12 @@ snapshot = "\n".join(lines[2:-1]) + "\n"
 open("/tmp/snapshot.txt", "w").write(snapshot)
 print("snapshot lines:", len(snapshot.splitlines()))
 print("=== env vars section (decoded) ===")
-# decode the ENV_VARS section for inspection
 start = snapshot.find("grok_snap_ENV_VARS_B64=$(command base64 -d <<'GROK_SNAP_EOF_ENV_VARS_B64'")
 if start >= 0:
-    end = snapshot.find("GROK_SNAP_EOF_ENV_VARS_B64", start)
-    b64 = snapshot[start:end].splitlines()[-1]
+    after = snapshot[start:]
+    b64 = after.splitlines()[1]
     import base64
-    print(base64.b64decode(b64).decode())
+    print(base64.b64decode(b64).decode(errors="replace"))
 
 WRAPPER = ('snap=$(command cat <&3) && builtin shopt -s extglob && builtin eval -- "$snap" && '
            '{ builtin set +u 2>/dev/null || true; '
