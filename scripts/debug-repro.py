@@ -234,39 +234,72 @@ def main():
     print(f"bash: {subprocess.run(['bash', '--version'], capture_output=True, text=True).stdout.splitlines()[0]}", flush=True)
     snapshot = run_init()
     print("snapshot bytes:", len(snapshot), flush=True)
+    print("snapshot lines:", snapshot.count("\n") + 1, flush=True)
     pwd, sections = parse_snapshot(snapshot)
-    print("PWD:", pwd, flush=True)
+    print("PWD:", repr(pwd), flush=True)
     # Rust parse_dump strips the first ($PWD) line from the replayable snapshot;
     # mirror that exactly (snapshot here starts with "\n" + PWD + "\n" + sections).
     body = snapshot[1:]  # drop the newline that ends the START marker line
     newline_pos = body.find("\n")  # end of the PWD line
     replay_snapshot = body[newline_pos:]  # includes leading \n, like Rust `rest`
-    print("replay snapshot bytes:", len(replay_snapshot))
-    print("ENV section:\n" + sections.get("ENV_VARS_B64", "<missing>"))
-    print("POSIX_OPTS section:\n" + sections.get("POSIX_OPTS_B64", "<missing>"))
-    print("BASH_OPTS section:\n" + sections.get("BASH_OPTS_B64", "<missing>"))
-    funcs = sections.get("FUNCTIONS_B64", "")
-    print("FUNCTIONS section (names only):")
-    for line in funcs.splitlines():
-        if line and not line.startswith((" ", "\t", "}")):
-            print("  ", line)
-    print("ALIASES section (full):")
-    print(sections.get("ALIASES_B64", "<missing>"))
+    print("replay snapshot bytes:", len(replay_snapshot), flush=True)
+    print("replay snapshot lines:", replay_snapshot.count("\n") + 1, flush=True)
+    open("/tmp/snapshot_raw.txt", "w").write(replay_snapshot)
+    snap_lines = replay_snapshot.split("\n")
+    print("--- raw snapshot lines 2040-2060 ---", flush=True)
+    for i in range(2039, min(2060, len(snap_lines))):
+        line = snap_lines[i]
+        print(f"{i + 1}: {line[:120]}{'...' if len(line) > 120 else ''}", flush=True)
+    print("--- end raw window ---", flush=True)
+
+    for name in ("ENV_VARS_B64", "POSIX_OPTS_B64", "BASH_OPTS_B64", "FUNCTIONS_B64", "ALIASES_B64"):
+        size = len(sections.get(name, ""))
+        print(f"section {name}: {size} bytes decoded", flush=True)
 
     # Reproduction: the exact failing command
     code, _ = run_wrapper("set -a", replay_snapshot, "REPRO set -a")
     print("REPRO_EXIT:", code)
 
-    # Diagnostic: what does `set` resolve to inside the wrapper?
-    diag = ("builtin type -a set; echo FUNC_NAMES; builtin declare -F | command head -60; "
-            "echo ALIAS_TABLE; builtin alias -p | command head -60; echo DIAG_DONE")
+    # Bisect: which section replay flips the exit to 126? Split the snapshot
+    # into per-section blocks: `grok_snap_X=...` through its `eval ...` line.
+    blocks = {}  # section name -> block text (includes trailing newline)
+    order = ["ENV_VARS_B64", "POSIX_OPTS_B64", "BASH_OPTS_B64", "FUNCTIONS_B64", "ALIASES_B64"]
+    current = None
+    buf = []
+    for line in snap_lines:
+        if line.startswith("grok_snap_"):
+            if current:
+                blocks[current] = "\n".join(buf) + "\n"
+            current = line[len("grok_snap_"):].split("=")[0]
+            buf = [line]
+        elif line.startswith("eval ") and current:
+            buf.append(line)
+            blocks[current] = "\n".join(buf) + "\n"
+            current = None
+            buf = []
+        elif current is not None:
+            buf.append(line)
+    if current:
+        blocks[current] = "\n".join(buf) + "\n"
+    print("bisect blocks found:", {k: len(v) for k, v in blocks.items()}, flush=True)
+    kept = []
+    for i in range(1, len(order) + 1):
+        kept.append(order[i - 1])
+        partial = "\n".join(blocks[k] for k in kept if k in blocks) + "\n"
+        c, _ = run_wrapper("set -a", partial, f"BISECT +{order[i - 1].split('_')[0]}")
+        print(f"BISECT[{i}/{len(order)}] keep={[k.split('_')[0] for k in kept]} -> exit {c}", flush=True)
+
+    # Environment size INSIDE the wrapper after replay (the E2BIG suspect)
+    probe = ("builtin export -p | command wc -c; echo EXPORT_BYTES_DONE; "
+             "builtin declare -F | command wc -l; echo FUNC_COUNT_DONE; set -a")
+    code4, dump4 = run_wrapper(probe, replay_snapshot, "PROBE env size then set -a")
+    print("PROBE_EXIT:", code4, flush=True)
+    print("PROBE dump head:", dump4[:400].decode(errors="replace"), flush=True)
+
+    # Diagnostic: what does `set` resolve to inside the wrapper? (small command)
+    diag = "builtin type -a set; echo DIAG_DONE"
     code2, _ = run_wrapper(diag, replay_snapshot, "DIAGNOSTIC inside wrapper")
     print("DIAG_EXIT:", code2)
-
-    # Parallel pressure: 16 concurrent wrappers, 2 rounds (mimics the tokio
-    # multi-threaded test harness where 3000+ tests spawn shells concurrently).
-    for round_no in (1, 2):
-        run_parallel("set -a", replay_snapshot, 16, f"PARALLEL round {round_no}")
 
     # Isolation: wrapper with an empty snapshot (is the failure in the
     # snapshot replay or the wrapper itself?)
