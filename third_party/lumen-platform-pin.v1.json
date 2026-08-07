@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "status": "draft",
+  "repository": "https://github.com/exergyleizhou-ux/lumen.git",
+  "consumer": "lumen-science",
+  "blocked_by": [
+    "LUMEN_R0_SOURCE_GATE has no clean, immutable source/lock/binary/CI evidence yet.",
+    "PLATFORM_API_GATE has no versioned public extension contract or compatibility fixture yet."
+  ],
+  "non_claims": [
+    "This draft is not a source pin.",
+    "This draft does not authorize Science to import Lumen private modules.",
+    "This draft does not prove a rebuilt Science binary, CI, release, or live operation."
+  ]
+}

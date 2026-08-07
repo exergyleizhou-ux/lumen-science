@@ -7,7 +7,6 @@ on:
     branches: [main]
     paths:
       - 'packs/science-desktop/**'
-      - 'agent/**'
       - 'docs/science/fusion-sources.lock.json'
       - 'packs/science/skills/registry.json'
       - 'docs/VERSIONING.md'
@@ -16,7 +15,6 @@ on:
     branches: [main]
     paths:
       - 'packs/science-desktop/**'
-      - 'agent/**'
       - 'docs/science/**'
       - '.github/workflows/desktop-ci.yml'
   workflow_dispatch:
@@ -42,7 +40,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: packs/science-desktop/package-lock.json
 
@@ -90,11 +88,74 @@ jobs:
       - name: Builder config sanity (no aipoch feed, adhoc-sign exists)
         run: |
           test -f build/adhoc-sign.cjs
-          ! grep -q 'statics.aipoch.com' electron-builder.yml
-          ! grep -q 'executableName: open-science' electron-builder.yml
-          ! grep -q 'artifactName: aipoch-' electron-builder.yml
-          ! grep -q 'from: cli$' electron-builder.yml
-          ! grep -q 'packages/open-science' electron-builder.yml
+          for forbidden in \
+            'statics.aipoch.com' \
+            'executableName: open-science' \
+            'artifactName: aipoch-' \
+            'from: cli$' \
+            'packages/open-science'; do
+            if grep -q "$forbidden" electron-builder.yml; then
+              echo "FAIL: forbidden legacy builder setting: $forbidden" >&2
+              exit 1
+            fi
+          done
+
+  # A real renderer build is deliberately distinct from the pack-dir smoke
+  # shell.  This job produces no installer and makes no signing/notarization
+  # claim: it proves only that this exact source revision can assemble the full
+  # macOS app bundle and that the bundle has the expected sealed inputs.
+  full-package:
+    name: Desktop macOS full package (unsigned)
+    runs-on: macos-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: packs/science-desktop
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: packs/science-desktop/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build full renderer and unsigned macOS app
+        run: npm run dist:full
+
+      - name: Verify full app contents and write provenance
+        run: |
+          set -euo pipefail
+          app_path="$(find dist -maxdepth 2 -type d -name 'Lumen Science Desktop.app' -print -quit)"
+          test -n "$app_path"
+          test -f "$app_path/Contents/MacOS/Lumen Science Desktop"
+          test -f "$app_path/Contents/Resources/app.asar"
+          test -f out/main/index.js
+          test -f out/preload/index.js
+          test -f out/renderer/index.html
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app_path/Contents/Info.plist")" = 'com.exergyleizhou-ux.lumen-science-desktop'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$app_path/Contents/Info.plist")" = 'Lumen Science Desktop'
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+          {
+            echo "source_sha=${GITHUB_SHA}"
+            echo "app_path=${app_path}"
+            echo "bundle_id=$( /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app_path/Contents/Info.plist" )"
+            echo "display_name=$( /usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$app_path/Contents/Info.plist" )"
+            shasum -a 256 "$app_path/Contents/MacOS/Lumen Science Desktop"
+            shasum -a 256 "$app_path/Contents/Resources/app.asar"
+            codesign -dv --verbose=2 "$app_path" 2>&1
+          } >"$RUNNER_TEMP/desktop-full-package-provenance.txt"
+
+      - name: Upload unsigned package provenance
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: desktop-full-package-provenance
+          path: ${{ runner.temp }}/desktop-full-package-provenance.txt
+          retention-days: 14
 
   # The engine-less E2E launches the REAL built app. Every suite above checks a
   # module in isolation; none of them opens a window, which is how this pack
@@ -118,7 +179,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
@@ -159,25 +220,59 @@ jobs:
       - name: Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      # M1 single base: the engine is the pinned Lumen tuple, not a local copy.
+      - name: Read pinned Lumen tuple from admission lock
+        working-directory: ${{ github.workspace }}
+        run: |
+          PIN="$(python3 -c "import json; print(json.load(open('docs/science/5.0/core-v0.1.251-admission.lock.json'))['comparison']['lumen_head'])")"
+          echo "LUMEN_PIN=$PIN" >> "$GITHUB_ENV"
+
+      - name: Checkout pinned Lumen (single Rust base)
+        working-directory: ${{ github.workspace }}
+        run: |
+          git clone --quiet --filter=blob:none https://github.com/exergyleizhou-ux/lumen.git .tmp/lumen-pin
+          git -C .tmp/lumen-pin fetch --quiet --depth 1 origin "$LUMEN_PIN"
+          git -C .tmp/lumen-pin checkout --quiet "$LUMEN_PIN"
+
       - name: Cache cargo
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            agent/target
-          key: ${{ runner.os }}-cargo-lumen-bin-${{ hashFiles('agent/Cargo.lock') }}
+            .tmp/lumen-pin/agent/target
+          key: ${{ runner.os }}-cargo-lumen-bin-${{ hashFiles('.tmp/lumen-pin/agent/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-lumen-bin-
 
       - name: Build the engine
-        working-directory: agent
+        working-directory: .tmp/lumen-pin/agent
         run: cargo build --bin lumen --locked
+
+      # LS5-D8: Python discovery diagnosis on the runner BEFORE Electron starts.
+      # This is a read-only diagnostic, not a production fix. It proves whether
+      # the runner has a Python the Electron app CAN discover. Must NOT be used
+      # to paper over a real discovery failure.
+      - name: Runner Python diagnosis (read-only)
+        run: |
+          set +e
+          echo "=== runner python facts ==="
+          command -v python3 || echo "no python3 on PATH"
+          python3 --version 2>&1 || echo "python3 --version failed"
+          realpath "$(command -v python3 2>/dev/null)" 2>/dev/null || echo "cannot canonicalize"
+          which python3 2>/dev/null || echo "which failed"
+          ls -la /usr/bin/python3* 2>/dev/null || echo "no /usr/bin/python3*"
+          ls -la /usr/bin/python3 2>/dev/null || echo "no /usr/bin/python3"
+          file /usr/bin/python3 2>/dev/null || echo "cannot file python3"
+          echo "uname: $(uname -a)"
+          echo "PATH=$PATH"
+          set -e
+          exit 0
 
       - name: Setup Node
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install dependencies
         working-directory: packs/science-desktop
@@ -187,6 +282,11 @@ jobs:
         working-directory: packs/science-desktop
         run: npx playwright install-deps chromium
 
+      - name: Environment discovery production smoke
+        working-directory: packs/science-desktop
+        run: |
+          npx tsx scripts/test-environment-smoke.mts
+
       - name: Live E2E under a virtual display
         working-directory: packs/science-desktop
         env:
@@ -195,6 +295,7 @@ jobs:
           XAI_API_KEY: live-e2e-ci-key
           GROK_TELEMETRY_ENABLED: 'false'
           GROK_DISABLE_AUTOUPDATER: '1'
+          LUMEN_BINARY: ${{ github.workspace }}/.tmp/lumen-pin/agent/target/debug/lumen
         run: xvfb-run --auto-servernum npm run test:e2e:live
 
       - name: Upload failure traces

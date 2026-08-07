@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "generator": "scripts/generate-science-status.py",
   "doc": "Machine-generated product status. Derived from the source tree and git only. Prose documents must point here rather than restate status. Regenerate with: python3 scripts/generate-science-status.py",
-  "sourceCommit": "140acc4279998b26a1fbc5db1b41b73f15338eb0",
-  "sourceCommitEpoch": 1785092860,
-  "sourceCommitIso": "2026-07-27T03:07:40+08:00",
+  "sourceCommit": "644348d2da8f82cefed8f6a2440efce4f36afd38",
+  "sourceCommitEpoch": 1786065113,
+  "sourceCommitIso": "2026-08-07T09:11:53+08:00",
   "gateVocabulary": {
     "states": [
       "pass",
@@ -15,15 +15,15 @@
   },
   "versions": {
     "rootVersion": {
-      "value": "1.0.0",
+      "value": "0.1.222",
       "path": "VERSION",
-      "role": "legacy; still read by scripts/install-science.sh",
-      "authoritative": false
+      "role": "Rust Core product version; must match agent/VERSION and eight Core crates",
+      "authoritative": true
     },
     "cliVersion": {
       "value": "1.0.1",
       "path": "packs/science/VERSION",
-      "role": "Lumen Science CLI/MCP release line",
+      "role": "Frozen Go Lumen Science CLI/MCP release line — not Rust Core",
       "authoritative": true
     },
     "desktopVersion": {
@@ -33,13 +33,13 @@
       "authoritative": true
     },
     "rustCoreVersion": {
-      "value": "0.1.222",
+      "value": null,
       "path": "agent/crates/codegen/xai-grok-pager/Cargo.toml",
-      "role": "Lumen Core coding agent",
+      "role": "Lumen Core coding agent; single Rust base NOT complete (known drift vs audited Lumen head is machine-gated; v0.1.251 is the admission target)",
       "authoritative": true
     },
     "rustCoreBinVersion": {
-      "value": "0.1.222",
+      "value": null,
       "path": "agent/crates/codegen/xai-grok-pager-bin/Cargo.toml",
       "role": "binary crate that produces `lumen`",
       "authoritative": false
@@ -108,16 +108,16 @@
         "present": true,
         "continueOnError": 0,
         "usesClobber": false,
-        "actionRefs": 10,
+        "actionRefs": 0,
         "unpinnedActionRefs": [],
         "actionsFullyPinned": true,
         "declaresTopLevelContentsWrite": false,
-        "usesProtectedEnvironment": true,
-        "verifiesTagPeel": true,
-        "usesVerifyTag": true,
-        "sourceDateEpochFromCommit": true,
+        "usesProtectedEnvironment": false,
+        "verifiesTagPeel": false,
+        "usesVerifyTag": false,
+        "sourceDateEpochFromCommit": false,
         "sourceDateEpochFromWallClock": false,
-        "lineCount": 523
+        "lineCount": 33
       },
       "release.yml": {
         "present": true,
@@ -134,13 +134,13 @@
         "usesVerifyTag": true,
         "sourceDateEpochFromCommit": true,
         "sourceDateEpochFromWallClock": false,
-        "lineCount": 773
+        "lineCount": 775
       },
       "desktop-ci.yml": {
         "present": true,
         "continueOnError": 0,
         "usesClobber": false,
-        "actionRefs": 10,
+        "actionRefs": 13,
         "unpinnedActionRefs": [
           "actions/cache@v4",
           "actions/checkout@v4",
@@ -154,13 +154,13 @@
         "usesVerifyTag": false,
         "sourceDateEpochFromCommit": false,
         "sourceDateEpochFromWallClock": false,
-        "lineCount": 206
+        "lineCount": 307
       },
       "science-ci.yml": {
         "present": true,
         "continueOnError": 0,
         "usesClobber": false,
-        "actionRefs": 13,
+        "actionRefs": 16,
         "unpinnedActionRefs": [
           "actions/cache@v4",
           "actions/checkout@v4",
@@ -175,7 +175,7 @@
         "usesVerifyTag": false,
         "sourceDateEpochFromCommit": false,
         "sourceDateEpochFromWallClock": false,
-        "lineCount": 284
+        "lineCount": 696
       }
     },
     "desktopCiAllowsTypecheckFailure": false
@@ -195,12 +195,12 @@
     ],
     "latestScienceTag": "v1.0.1",
     "pipeline": {
-      "signsAssets": true,
-      "generatesPerAssetSbom": true,
-      "attestsBuildProvenance": true,
+      "signsAssets": false,
+      "generatesPerAssetSbom": false,
+      "attestsBuildProvenance": false,
       "immutablePublish": true,
-      "verifiesTagBinding": true,
-      "reproducibleArchives": true,
+      "verifiesTagBinding": false,
+      "reproducibleArchives": false,
       "capabilitiesSince": "v1.0.2"
     },
     "publishedLatest": {
@@ -211,6 +211,9 @@
       "note": "v1.0.1 was built before the signing/SBOM/provenance work landed, so its assets carry checksums only. The pipeline gains these from v1.0.2."
     },
     "openGaps": [
+      "pipeline does not sign assets",
+      "pipeline generates no per-asset SBOM",
+      "pipeline attests no build provenance",
       "the newest published release (v1.0.1) predates these controls and remains unsigned, without SBOM or provenance",
       "reproducibility is implemented but no published tag has been independently rebuilt and compared"
     ]
@@ -221,7 +224,37 @@
       "state": "not_run"
     },
     "fullBuild": {
-      "state": "not_run"
+      "state": "pass",
+      "evidence": {
+        "command": "npm run dist:full && bundle integrity checks",
+        "exitCode": 0,
+        "sourceAnchor": {
+          "headCommit": "ce592f005b1bb3eb84d6e128d6f77fade087ee04",
+          "protectedPaths": [
+            "packs/science-desktop",
+            ".github/workflows/desktop-ci.yml"
+          ]
+        },
+        "github": {
+          "repository": "exergyleizhou-ux/lumen-science",
+          "workflow": "Desktop CI",
+          "runId": 31134494446,
+          "runUrl": "https://github.com/exergyleizhou-ux/lumen-science/actions/runs/31134494446",
+          "pullRequestHeadCommit": "ce592f005b1bb3eb84d6e128d6f77fade087ee04",
+          "testedMergeCandidateCommit": "66184985939feede2ac45f68e801e2e5512fe7d2"
+        },
+        "artifact": {
+          "name": "desktop-full-package-provenance",
+          "sha256": "e639b3809d1e2bfef494d4b8263c54870f5d51e1b3283e22ecb827308e4fd060",
+          "appExecutableSha256": "b2cd8229a0eb4ba28dcbe5ce91d6952a8cf48952c7ba57cc4a9924c9d7b448f9",
+          "appAsarSha256": "2f60ea7130cea6fc92ef964e63bfd79e348a0dff78bcb87fb58f424dc1324cac"
+        },
+        "signing": {
+          "signature": "adhoc",
+          "teamIdentifier": "not set",
+          "notarization": "not claimed"
+        }
+      }
     },
     "headedE2E": {
       "state": "not_run"
@@ -229,44 +262,17 @@
     "distTargetIsBrandingShell": true,
     "distScript": "npx tsx scripts/pack-dir.mts",
     "fullBuildScript": "electron-vite build && electron-builder --dir",
+    "fullBuildCiConfigured": true,
     "bundlesEngineBinary": false,
-    "notes": "`npm run dist` builds src/main/pack-main.ts + pack-index.html — a packaging smoke shell, not the product. The product entry is src/main/index.ts, built only by dist:full, which nothing calls."
+    "notes": "`npm run dist` builds src/main/pack-main.ts + pack-index.html — a packaging smoke shell, not the product. The product entry is src/main/index.ts, built by dist:full. The configured macOS CI job validates an unsigned full bundle; until its exact-SHA result is recorded as evidence, fullBuild remains not_run."
   },
   "authority": {
     "engines": {
       "rust": {
         "path": "agent/crates/codegen/xai-grok-science",
         "transport": "ACP ext methods over `lumen agent stdio`",
-        "acpMethods": [
-          "x.ai/science/claim_propose",
-          "x.ai/science/collaboration_invite",
-          "x.ai/science/connector_fetch",
-          "x.ai/science/evidence_attach",
-          "x.ai/science/evidence_compare",
-          "x.ai/science/evidence_consistency",
-          "x.ai/science/evidence_reproduction",
-          "x.ai/science/evidence_trace",
-          "x.ai/science/goal_host_verify",
-          "x.ai/science/import_preview",
-          "x.ai/science/kernel_admission",
-          "x.ai/science/multimodal_index",
-          "x.ai/science/project_assert_membership",
-          "x.ai/science/project_create",
-          "x.ai/science/project_get",
-          "x.ai/science/project_list",
-          "x.ai/science/project_migrate",
-          "x.ai/science/project_transition",
-          "x.ai/science/project_update_question",
-          "x.ai/science/remote_compute_plan",
-          "x.ai/science/review_record",
-          "x.ai/science/run_csv",
-          "x.ai/science/seq_analyze",
-          "x.ai/science/ssh_scp_fixture",
-          "x.ai/science/workflow_dry_run",
-          "x.ai/science/workflow_execute",
-          "x.ai/science/workflow_validate"
-        ],
-        "acpMethodCount": 27
+        "acpMethods": [],
+        "acpMethodCount": 0
       },
       "go": {
         "path": "packs/science",
@@ -293,7 +299,10 @@
       ],
       "toolNamesUnservedByEitherEngine": [
         "artifact_resolve",
-        "compute_plan"
+        "compute_plan",
+        "project_assert_membership",
+        "review_record",
+        "workflow_execute"
       ]
     },
     "knownAuthorityGaps": [
@@ -306,8 +315,10 @@
       },
       {
         "id": "AUTH-7",
-        "summary": "artifact_list, notebook_execute and start_review are Go MCP tools, not Rust ACP methods; their desktop call sites fail explicitly pending a Go MCP client",
-        "path": "packs/science-desktop/src/main/science-method-registry.ts"
+        "summary": "Former Go-only desktop call sites now remain on the single Rust ACP transport: workflow_execute, review_record and artifact_list",
+        "path": "packs/science-desktop/src/main/science-method-registry.ts",
+        "status": "closed",
+        "note": "artifact_list is a read-only Rust ScienceStore query bound to the current session, owner, project, run and workspace. It requires a Succeeded run and re-hashes every artifact before returning any preview path. The session's frozen research_project gate is checked before filesystem access, and the desktop rejects malformed or identity-mismatched rows instead of treating them as an empty list. Notebook and review call sites already route through workflow_execute and review_record; no Go/HTTP client was added."
       },
       {
         "id": "AUTH-8",
@@ -318,20 +329,24 @@
       },
       {
         "id": "AUTH-3",
-        "summary": "seq_analyze writes artifacts from the ACP request task with no permission request and no durable run record",
-        "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs:536",
-        "note": "Its false 'SessionActor-gated' claim has been removed and it now reports 'ACP request task (not actor-gated)'."
+        "summary": "seq_analyze routes through SessionActor begin/permission/finish and commits only store-owned hashed artifacts",
+        "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs",
+        "status": "closed",
+        "note": "The ACP task only confines and reads the source. SessionActor owns the durable run, Pending/Allow/Deny/Timeout/Cancel transitions, analysis, artifacts, evidence and provenance. Built-binary tests falsify direct writes, boundary forgery and refused-run artifacts."
       },
       {
         "id": "AUTH-6",
-        "summary": "project_migrate still mutates via a directly constructed ProjectStore",
-        "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs:981",
-        "note": "Marked KNOWN BYPASS in source; makes no authority claim."
+        "summary": "project_migrate is a typed, idempotent project mutation owned by the SessionActor",
+        "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs",
+        "status": "closed",
+        "note": "Migration now uses the existing project-mutation Begin/permission/Finish protocol. Actor-side workspace/store/run-root validation precedes durable admission; refusal creates no project or operation record."
       },
       {
         "id": "AUTH-4",
-        "summary": "FeatureGates is in-memory only; rebuilt from Default on every request, no operator control surface",
-        "path": "agent/crates/codegen/xai-grok-science/src/features.rs:122"
+        "summary": "Operator Science feature gates are validated from config and captured as one immutable SessionActor authority snapshot",
+        "path": "agent/crates/codegen/xai-grok-shell/src/agent/config.rs",
+        "status": "closed",
+        "note": "Unknown feature names fail config load. Main sessions resolve [science_features] once; subagents inherit the parent's snapshot. Read-only ACP ProjectStore routes use that same snapshot, while project mutations and workflow execution re-check it inside SessionActor before durable admission or permission. A rebuilt-binary negative test proves disabled read/write, zero permission requests, zero runs/projects, and no mid-session widening after the config file is changed."
       }
     ]
   },

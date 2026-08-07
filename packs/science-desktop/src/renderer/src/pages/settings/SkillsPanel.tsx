@@ -55,6 +55,7 @@ const SkillsPanel = ({ view, onNavigate }: SkillsPanelProps): React.JSX.Element 
   const setSkillEnabled = useSettingsStore((state) => state.setSkillEnabled)
   const createSkill = useSettingsStore((state) => state.createSkill)
   const deleteSkill = useSettingsStore((state) => state.deleteSkill)
+  const skillMutationBlocked = useSettingsStore((state) => state.skillMutationBlocked)
   // The "From your agent home" entry scans the active agent's global skills directory on disk.
   // Claude resolves to `~/.claude/skills/` and Codex to `~/.codex/skills/`; opencode reads
   // skills per-project (no global convention) so the entry is hidden for that framework.
@@ -91,13 +92,16 @@ const SkillsPanel = ({ view, onNavigate }: SkillsPanelProps): React.JSX.Element 
         initial={{ name: '', description: '', body: '' }}
         onCancel={() => onNavigate({ kind: 'list' })}
         onSave={async (draft) => {
-          await createSkill({
+          // S0-B: createSkill resolves false on the typed fail-closed outcome;
+          // stay on the editor (banner shows) instead of navigating to a fake success.
+          const ok = await createSkill({
             name: draft.name,
             description: draft.description,
             body: draft.body,
             slug: draft.slug,
             references: draft.references
           })
+          if (!ok) return
           onNavigate({ kind: 'list' })
         }}
       />
@@ -125,6 +129,16 @@ const SkillsPanel = ({ view, onNavigate }: SkillsPanelProps): React.JSX.Element 
 
   return (
     <div className="p-5">
+      {skillMutationBlocked && (
+        <div
+          role="alert"
+          className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+        >
+          Skill mutation is locked: waiting for the governed Skill Revision API (X-M1).
+          Read-only browse, preview, and the actor-gated ZIP quarantine import stay available;
+          existing user skills are not deleted or hidden.
+        </div>
+      )}
       <div className="mb-4 flex items-center gap-2">
         <Select value={filter} onValueChange={(value) => setFilter(value as SourceFilter)}>
           <SelectTrigger aria-label="Filter skills by source" className="w-36">

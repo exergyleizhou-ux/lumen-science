@@ -1,11 +1,25 @@
-# Exact historical fingerprints reviewed 2026-07-16. Each finding is a
-# synthetic test/redaction fixture; do not replace these with path/rule globs.
-aa3f68b158d150350a3513649461d8b6479414a1:packs/science/gui/api_profiles_test.go:generic-api-key:127
-853a3053b6616858fc32c132094e94a650e2276a:agent/crates/codegen/xai-grok-secrets/src/sanitizer.rs:generic-api-key:389
-853a3053b6616858fc32c132094e94a650e2276a:agent/crates/codegen/xai-grok-secrets/src/sanitizer.rs:jwt:457
-853a3053b6616858fc32c132094e94a650e2276a:agent/crates/codegen/xai-grok-shell/tests/test_built_binary_e2e.rs:generic-api-key:1173
-853a3053b6616858fc32c132094e94a650e2276a:agent/crates/codegen/xai-grok-telemetry/src/external/tests.rs:generic-api-key:532
-853a3053b6616858fc32c132094e94a650e2276a:agent/crates/codegen/xai-grok-telemetry/src/otel_layer/redact.rs:generic-api-key:513
-853a3053b6616858fc32c132094e94a650e2276a:agent/crates/codegen/xai-grok-tools/src/implementations/web_search/types.rs:generic-api-key:79
-853a3053b6616858fc32c132094e94a650e2276a:agent/crates/codegen/xai-grok-workspace/src/hub_auth.rs:generic-api-key:255
-853a3053b6616858fc32c132094e94a650e2276a:agent/crates/codegen/xai-grok-workspace/src/hub_auth.rs:generic-api-key:301
+# Exact historical fingerprints reviewed 2026-07-28. These are synthetic
+# secret-redaction/auth fixtures, a content hash in a release lock, or the
+# minified keyboard-shortcut table in the licensed Motif snapshot. Keep this
+# list fingerprint-specific: never replace it with path/rule globs.
+a42fb2e96c08d9392b9e7685e4e925f0d5c55991:docs/science/5.0/v1-release-baseline.lock.json:generic-api-key:8
+f4ce1ccfd4ac067cf6b5e4e03120835aea710293:third_party/motif/assets/motif-B8VYA8hM.js:generic-api-key:1199
+f4ce1ccfd4ac067cf6b5e4e03120835aea710293:packs/science/renderers/static/motif-full.html:generic-api-key:1211
+f4ce1ccfd4ac067cf6b5e4e03120835aea710293:third_party/motif/dist/motif-artifact.html:generic-api-key:1211
+f4ce1ccfd4ac067cf6b5e4e03120835aea710293:third_party/motif/dist/motif-template.html:generic-api-key:1211
+38c5106298aed4047cc54522c70f5cf76af81fd5:agent/crates/codegen/xai-grok-secrets/src/sanitizer.rs:generic-api-key:389
+38c5106298aed4047cc54522c70f5cf76af81fd5:agent/crates/codegen/xai-grok-secrets/src/sanitizer.rs:jwt:457
+38c5106298aed4047cc54522c70f5cf76af81fd5:agent/crates/codegen/xai-grok-shell/src/session/acp_session_impl/expert.rs:github-pat:1860
+38c5106298aed4047cc54522c70f5cf76af81fd5:agent/crates/codegen/xai-grok-shell/src/session/acp_session_impl/expert.rs:generic-api-key:1862
+38c5106298aed4047cc54522c70f5cf76af81fd5:agent/crates/codegen/xai-grok-shell/src/session/expert.rs:github-pat:2063
+38c5106298aed4047cc54522c70f5cf76af81fd5:agent/crates/codegen/xai-grok-shell/src/session/expert.rs:aws-access-token:2065
+38c5106298aed4047cc54522c70f5cf76af81fd5:agent/crates/codegen/xai-grok-shell/src/session/expert.rs:generic-api-key:2066
+38c5106298aed4047cc54522c70f5cf76af81fd5:agent/crates/codegen/xai-grok-shell/src/session/expert.rs:generic-api-key:2068
+38c5106298aed4047cc54522c70f5cf76af81fd5:agent/crates/codegen/xai-grok-shell/tests/test_built_binary_e2e.rs:generic-api-key:1866
+38c5106298aed4047cc54522c70f5cf76af81fd5:agent/crates/codegen/xai-grok-telemetry/src/external/tests.rs:generic-api-key:532
+38c5106298aed4047cc54522c70f5cf76af81fd5:agent/crates/codegen/xai-grok-telemetry/src/otel_layer/redact.rs:generic-api-key:513
+38c5106298aed4047cc54522c70f5cf76af81fd5:agent/crates/codegen/xai-grok-tools/src/implementations/web_search/types.rs:generic-api-key:79
+38c5106298aed4047cc54522c70f5cf76af81fd5:agent/crates/codegen/xai-grok-workspace/src/hub_auth.rs:generic-api-key:255
+38c5106298aed4047cc54522c70f5cf76af81fd5:agent/crates/codegen/xai-grok-workspace/src/hub_auth.rs:generic-api-key:301
+38c5106298aed4047cc54522c70f5cf76af81fd5:packs/science/gui/api_profiles_test.go:generic-api-key:127
+38c5106298aed4047cc54522c70f5cf76af81fd5:scripts/smoke-deepseek-v4-e0.sh:generic-api-key:47

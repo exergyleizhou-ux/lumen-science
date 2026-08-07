@@ -5,6 +5,8 @@
  */
 import { strictEqual, ok } from 'node:assert/strict'
 import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import {
   planNotebookCell,
   assertNotebookExecuteAccess,
@@ -12,10 +14,7 @@ import {
   hashNotebookCode,
 } from '../src/main/files/notebook-plan.js'
 import { createNotebookService } from '../src/main/files/notebook-service.js'
-import {
-  setTrustedPreviewContext,
-  clearTrustedPreviewContext,
-} from '../src/main/files/session-identity.js'
+import type { TrustedPreviewContext } from '../src/main/files/session-identity.js'
 import {
   registerScienceIpcHandlers,
   type IpcMainLike,
@@ -43,6 +42,10 @@ const safeHandle: SafeHandleFn = (ipc, ch, h) => {
 }
 
 async function run() {
+  const OUTPUT_SHA = 'a'.repeat(64)
+  const FAILED_OUTPUT_SHA = 'b'.repeat(64)
+  const SOURCE_RUN_ID = 'notebook-source-run-1'
+
   // ── Pure plan ────────────────────────────────────────────────
   const bad = planNotebookCell({ language: 'python', code: '' })
   await test('plan rejects empty code', () => {
@@ -70,8 +73,7 @@ async function run() {
     strictEqual(p.codeHash, hashNotebookCode('print(1+1)\n'))
   })
 
-  clearTrustedPreviewContext()
-  const livePlan = planNotebookCell({ language: 'python', code: 'x=1\n' }) as {
+    const livePlan = planNotebookCell({ language: 'python', code: 'x=1\n' }) as {
     dryRun: boolean
     tool: string
     authority: string
@@ -84,8 +86,7 @@ async function run() {
     ok(!a.ok)
   })
 
-  setTrustedPreviewContext({ ownerId: 'o1', projectId: 'p1' })
-  await test('execute access ok with session', () => {
+    await test('execute access ok with session', () => {
     const a = assertNotebookExecuteAccess(
       {
         planId: 'p',
@@ -117,7 +118,34 @@ async function run() {
       acpCalls++
       strictEqual(tool, 'workflow_execute')
       seenArgs.push(args)
-      return { state: 'succeeded', operationId: args.operationId }
+      const source = (
+        args.workflowSpec as { steps?: { notebook_cell?: string }[] } | undefined
+      )?.steps?.[0]?.notebook_cell
+      if (source?.includes('failed-run')) {
+        return {
+          state: 'failed',
+          runId: 'failed-source-run',
+          commits: [
+            {
+              stepId: 'failed-step',
+              committedByAttempt: 'attempt-1',
+              outputManifest: { 'stdout.txt': FAILED_OUTPUT_SHA },
+            },
+          ],
+        }
+      }
+      return {
+        state: 'succeeded',
+        operationId: args.operationId,
+        runId: SOURCE_RUN_ID,
+        commits: [
+          {
+            stepId: 'cell-step',
+            committedByAttempt: 'attempt-1',
+            outputManifest: { 'stdout.txt': OUTPUT_SHA },
+          },
+        ],
+      }
     },
     resolveInterpreter: async () => ({ ok: true, interpreterPath: '/usr/bin/python3' }),
     defaultOwnerId: 'o1',
@@ -131,15 +159,13 @@ async function run() {
     strictEqual(acpCalls, 0)
   })
 
-  clearTrustedPreviewContext()
-  const noSess = await svc.execute({ language: 'python', code: 'print(1)\n' })
+    const noSess = await svc.execute({ language: 'python', code: 'print(1)\n' }, null)
   await test('service execute fails without session', () => {
     ok(noSess && (noSess as { ok?: boolean }).ok === false)
     strictEqual(acpCalls, 0)
   })
 
-  setTrustedPreviewContext({ ownerId: 'o1', projectId: 'p1' })
-  const exec = await svc.execute({ language: 'python', code: 'print(2)\n' })
+    const exec = await svc.execute({ language: 'python', code: 'print(2)\n' }, { ownerId: 'o1', projectId: 'p1' })
   await test('service execute via ACP', () => {
     ok((exec as { ok?: boolean }).ok, JSON.stringify(exec))
     strictEqual(acpCalls, 1)
@@ -178,7 +204,7 @@ async function run() {
       acpCall: async () => ({ state: 'denied' }),
       resolveInterpreter: async () => ({ ok: true, interpreterPath: '/usr/bin/python3' }),
     })
-    await failing.execute({ language: 'python', code: 'print(3)\n' })
+    await failing.execute({ language: 'python', code: 'print(3)\n' }, { ownerId: 'o1', projectId: 'p1' })
     strictEqual(failing.history()[0]?.ok, false)
   })
 
@@ -191,7 +217,7 @@ async function run() {
       },
       resolveInterpreter: async () => ({ ok: false, reason: 'no runnable Python' }),
     })
-    const out = (await bare.execute({ language: 'python', code: 'print(4)\n' })) as {
+    const out = (await bare.execute({ language: 'python', code: 'print(4)\n' }, { ownerId: 'o1', projectId: 'p1' })) as {
       ok?: boolean
       reason?: string
     }
@@ -200,7 +226,7 @@ async function run() {
     strictEqual(called, 0)
   })
 
-  const ipynb = svc.exportIpynb()
+  const ipynb = svc.exportIpynb({ ownerId: 'o1', projectId: 'p1' })
   await test('export ipynb projection', () => {
     ok(!('ok' in ipynb && (ipynb as { ok: boolean }).ok === false))
     const nb = ipynb as { nbformat: number; cells: unknown[] }
@@ -238,11 +264,13 @@ async function run() {
     },
   }
   const catalog = new LocalProjectCatalog()
-  clearTrustedPreviewContext()
-  registerScienceIpcHandlers(ipc, {
+  const previewStore = new AcpPreviewStore()
+  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'notebook-ipc-'))
+    registerScienceIpcHandlers(ipc, {
     safeHandle,
     getLumenBinaryHash: () => 'h',
-    previewStore: new AcpPreviewStore(),
+    previewStore,
+    workspaceRoot,
     assertMembership: createOfflineCatalogMembershipAsserter({ catalog }),
     projectCatalog: catalog,
     // Creation is an engine mutation now; this suite is about the notebook, so
@@ -268,21 +296,36 @@ async function run() {
     ok(dryRes.ok)
   })
 
-  // create+open project then execute
+  // create+open project then execute (sender-bound identity)
+  const senderEvt = { sender: { id: 1, on() {} } }
   const create = handlers.get('files:create-ui-project')!
-  const created = await create({}, { name: 'nb-proj' })
+  const created = await create(senderEvt, { name: 'nb-proj' })
   const open = handlers.get('files:open-ui-project')!
-  await open({}, { projectId: created.project.id, ownerId: 'local-user' })
-  // re-bind trust for our svc which uses global identity — open set it for local-user
-  // defaultOwner is local-user but catalog owner is local-user; hybrid ok
-  setTrustedPreviewContext({
-    ownerId: created.project.ownerId,
-    projectId: created.project.id,
-  })
+  await open(senderEvt, { projectId: created.project.id, ownerId: 'local-user' })
   const exH = handlers.get('notebook:execute-cell')!
-  const exRes = await exH({}, { language: 'python', code: 'print(9)\n' })
+  const exRes = await exH(senderEvt, { language: 'python', code: 'print(9)\n' })
   await test('ipc execute after project open', () => {
     ok(exRes.ok, JSON.stringify(exRes))
+    strictEqual(exRes.sourceRunId, SOURCE_RUN_ID)
+    strictEqual(exRes.artifactsSeeded, 1)
+  })
+
+  await test('ipc binds seeded notebook evidence to the succeeded source run', async () => {
+    const record = await previewStore.resolveById(OUTPUT_SHA)
+    ok(record)
+    strictEqual(record?.runId, SOURCE_RUN_ID)
+    strictEqual(record?.ownerId, 'local-user')
+    strictEqual(record?.projectId, created.project.id)
+  })
+
+  const failedRes = await exH(senderEvt, {
+    language: 'python',
+    code: 'print("failed-run")\n',
+  })
+  await test('ipc never exposes or seeds evidence from a failed source run', async () => {
+    strictEqual(failedRes.sourceRunId, undefined)
+    strictEqual(failedRes.artifactsSeeded, 0)
+    strictEqual(await previewStore.resolveById(FAILED_OUTPUT_SHA), null)
   })
 
   console.log(`\n${failures === 0 ? 'ALL TESTS PASSED' : `${failures} TESTS FAILED`}`)

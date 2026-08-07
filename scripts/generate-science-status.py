@@ -42,6 +42,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT_PATH = ROOT / "docs" / "science" / "status" / "current.json"
+STATUS_EVIDENCE_PATH = ROOT / "docs" / "science" / "status" / "evidence.v1.json"
 
 SCHEMA_VERSION = 1
 
@@ -84,6 +85,83 @@ def read_json(rel: str) -> Any | None:
         return json.loads(raw)
     except json.JSONDecodeError as exc:
         raise StatusError(f"{rel} is not valid JSON: {exc}") from exc
+
+
+def merge_evidence(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Merge only the gate-shaped evidence surface.
+
+    The checked-in receipt is the default.  ``--evidence`` is intentionally an
+    overlay for a CI-produced result, not a replacement that could silently
+    discard another already-reviewed receipt.
+    """
+    merged = dict(base)
+    for section, values in override.items():
+        if isinstance(values, dict) and isinstance(merged.get(section), dict):
+            merged[section] = {**merged[section], **values}
+        else:
+            merged[section] = values
+    return merged
+
+
+def load_status_evidence(path: Path) -> dict[str, Any]:
+    """Load durable CI receipts and reject stale Desktop product evidence.
+
+    A completed GitHub check is useful only for the source it built.  The
+    full-package receipt therefore anchors a PR head and refuses to remain
+    passing once either the Desktop sources or its packaging workflow changes.
+    Documentation-only commits may retain the receipt.
+    """
+    if not path.is_file():
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise StatusError(f"cannot read status evidence {path}: {exc}") from exc
+    if not isinstance(value, dict) or value.get("schema_version") != 1:
+        raise StatusError("status evidence must be a schema_version=1 object")
+    gates = value.get("gates")
+    if not isinstance(gates, dict):
+        raise StatusError("status evidence is missing gates")
+
+    desktop = gates.get("desktop")
+    if not isinstance(desktop, dict):
+        raise StatusError("status evidence is missing desktop gates")
+    full_build = desktop.get("fullBuild")
+    if not isinstance(full_build, dict) or full_build.get("state") != PASS:
+        raise StatusError("status evidence must record an evidenced desktop fullBuild pass")
+    receipt = full_build.get("evidence")
+    if not isinstance(receipt, dict) or not receipt.get("command") or receipt.get("exitCode") != 0:
+        raise StatusError("desktop fullBuild receipt must name a successful command")
+    anchor = receipt.get("sourceAnchor")
+    if not isinstance(anchor, dict):
+        raise StatusError("desktop fullBuild receipt is missing sourceAnchor")
+    head = anchor.get("headCommit")
+    paths = anchor.get("protectedPaths")
+    if not isinstance(head, str) or re.fullmatch(r"[0-9a-f]{40}", head) is None:
+        raise StatusError("desktop fullBuild sourceAnchor.headCommit is malformed")
+    if paths != ["packs/science-desktop", ".github/workflows/desktop-ci.yml"]:
+        raise StatusError("desktop fullBuild sourceAnchor protectedPaths is unsupported")
+    ancestor = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", head, "HEAD"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if ancestor.returncode != 0:
+        raise StatusError("desktop fullBuild evidence head is not an ancestor of this source")
+    changed = subprocess.run(
+        ["git", "diff", "--quiet", f"{head}..HEAD", "--", *paths],
+        cwd=ROOT,
+        check=False,
+    )
+    if changed.returncode == 1:
+        raise StatusError(
+            "desktop fullBuild evidence is stale because a protected Desktop source or workflow changed"
+        )
+    if changed.returncode not in (0, 1):
+        raise StatusError("could not compare desktop fullBuild source anchor")
+    return gates
 
 
 def emit_gate(state: str, evidence: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -141,13 +219,13 @@ def collect_versions() -> dict[str, Any]:
         "rootVersion": {
             "value": root_version,
             "path": "VERSION",
-            "role": "legacy; still read by scripts/install-science.sh",
-            "authoritative": False,
+            "role": "Rust Core product version; must match agent/VERSION and eight Core crates",
+            "authoritative": True,
         },
         "cliVersion": {
             "value": cli_version,
             "path": "packs/science/VERSION",
-            "role": "Lumen Science CLI/MCP release line",
+            "role": "Frozen Go Lumen Science CLI/MCP release line — not Rust Core",
             "authoritative": True,
         },
         "desktopVersion": {
@@ -159,7 +237,7 @@ def collect_versions() -> dict[str, Any]:
         "rustCoreVersion": {
             "value": pager,
             "path": "agent/crates/codegen/xai-grok-pager/Cargo.toml",
-            "role": "Lumen Core coding agent",
+            "role": "Lumen Core coding agent; single Rust base NOT complete (known drift vs audited Lumen head is machine-gated; v0.1.251 is the admission target)",
             "authoritative": True,
         },
         "rustCoreBinVersion": {
@@ -472,11 +550,21 @@ def collect_authority() -> dict[str, Any]:
             {
                 "id": "AUTH-7",
                 "summary": (
-                    "artifact_list, notebook_execute and start_review are Go MCP tools, "
-                    "not Rust ACP methods; their desktop call sites fail explicitly "
-                    "pending a Go MCP client"
+                    "Former Go-only desktop call sites now remain on the single Rust "
+                    "ACP transport: workflow_execute, review_record and artifact_list"
                 ),
                 "path": "packs/science-desktop/src/main/science-method-registry.ts",
+                "status": "closed",
+                "note": (
+                    "artifact_list is a read-only Rust ScienceStore query bound to the "
+                    "current session, owner, project, run and workspace. It requires a "
+                    "Succeeded run and re-hashes every artifact before returning any "
+                    "preview path. The session's frozen research_project gate is checked "
+                    "before filesystem access, and the desktop rejects malformed or "
+                    "identity-mismatched rows instead of treating them as an empty list. "
+                    "Notebook and review call sites already route through workflow_execute "
+                    "and review_record; no Go/HTTP client was added."
+                ),
             },
             {
                 "id": "AUTH-8",
@@ -497,25 +585,51 @@ def collect_authority() -> dict[str, Any]:
             {
                 "id": "AUTH-3",
                 "summary": (
-                    "seq_analyze writes artifacts from the ACP request task with no "
-                    "permission request and no durable run record"
+                    "seq_analyze routes through SessionActor begin/permission/finish "
+                    "and commits only store-owned hashed artifacts"
                 ),
-                "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs:536",
+                "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs",
+                "status": "closed",
                 "note": (
-                    "Its false 'SessionActor-gated' claim has been removed and it now "
-                    "reports 'ACP request task (not actor-gated)'."
+                    "The ACP task only confines and reads the source. SessionActor owns "
+                    "the durable run, Pending/Allow/Deny/Timeout/Cancel transitions, "
+                    "analysis, artifacts, evidence and provenance. Built-binary tests "
+                    "falsify direct writes, boundary forgery and refused-run artifacts."
                 ),
             },
             {
                 "id": "AUTH-6",
-                "summary": "project_migrate still mutates via a directly constructed ProjectStore",
-                "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs:981",
-                "note": "Marked KNOWN BYPASS in source; makes no authority claim.",
+                "summary": (
+                    "project_migrate is a typed, idempotent project mutation owned by "
+                    "the SessionActor"
+                ),
+                "path": "agent/crates/codegen/xai-grok-shell/src/extensions/science.rs",
+                "status": "closed",
+                "note": (
+                    "Migration now uses the existing project-mutation Begin/permission/"
+                    "Finish protocol. Actor-side workspace/store/run-root validation "
+                    "precedes durable admission; refusal creates no project or operation "
+                    "record."
+                ),
             },
             {
                 "id": "AUTH-4",
-                "summary": "FeatureGates is in-memory only; rebuilt from Default on every request, no operator control surface",
-                "path": "agent/crates/codegen/xai-grok-science/src/features.rs:122",
+                "summary": (
+                    "Operator Science feature gates are validated from config and "
+                    "captured as one immutable SessionActor authority snapshot"
+                ),
+                "path": "agent/crates/codegen/xai-grok-shell/src/agent/config.rs",
+                "status": "closed",
+                "note": (
+                    "Unknown feature names fail config load. Main sessions resolve "
+                    "[science_features] once; subagents inherit the parent's snapshot. "
+                    "Read-only ACP ProjectStore routes use that same snapshot, while "
+                    "project mutations and workflow execution re-check it inside "
+                    "SessionActor before durable admission or permission. A rebuilt-"
+                    "binary negative test proves disabled read/write, zero permission "
+                    "requests, zero runs/projects, and no mid-session widening after "
+                    "the config file is changed."
+                ),
             },
         ],
     }
@@ -639,6 +753,7 @@ def collect_desktop(evidence: dict[str, Any]) -> dict[str, Any]:
     pkg = read_json("packs/science-desktop/package.json") or {}
     scripts = pkg.get("scripts", {})
     desktop_evidence = evidence.get("desktop", {})
+    desktop_ci = read_text(".github/workflows/desktop-ci.yml") or ""
 
     def gate(name: str) -> dict[str, Any]:
         record = desktop_evidence.get(name)
@@ -648,6 +763,11 @@ def collect_desktop(evidence: dict[str, Any]) -> dict[str, Any]:
         return emit_gate(state, record.get("evidence"))
 
     dist_script = scripts.get("dist", "")
+    full_build_ci_configured = (
+        "npm run dist:full" in desktop_ci
+        and "Desktop macOS full package (unsigned)" in desktop_ci
+        and "codesign --verify --deep --strict" in desktop_ci
+    )
     return {
         "version": pkg.get("version"),
         "typecheck": gate("typecheck"),
@@ -656,11 +776,14 @@ def collect_desktop(evidence: dict[str, Any]) -> dict[str, Any]:
         "distTargetIsBrandingShell": "pack-dir" in dist_script,
         "distScript": dist_script,
         "fullBuildScript": scripts.get("dist:full"),
+        "fullBuildCiConfigured": full_build_ci_configured,
         "bundlesEngineBinary": False,
         "notes": (
             "`npm run dist` builds src/main/pack-main.ts + pack-index.html — a "
             "packaging smoke shell, not the product. The product entry is "
-            "src/main/index.ts, built only by dist:full, which nothing calls."
+            "src/main/index.ts, built by dist:full. The configured macOS CI "
+            "job validates an unsigned full bundle; until its exact-SHA result "
+            "is recorded as evidence, fullBuild remains not_run."
         ),
     }
 
@@ -723,18 +846,30 @@ def main() -> int:
     parser.add_argument(
         "--evidence",
         type=Path,
-        help="JSON file of real gate results produced by CI; absent gates are not_run",
+        help="JSON file of real gate results produced by CI; overlays checked-in status evidence",
     )
     parser.add_argument("--stdout", action="store_true", help="print instead of writing")
     parser.add_argument("--out", type=Path, default=OUT_PATH)
     args = parser.parse_args()
 
-    evidence: dict[str, Any] = {}
+    try:
+        evidence = load_status_evidence(STATUS_EVIDENCE_PATH)
+    except StatusError as exc:
+        print(f"FAIL: {exc}", file=sys.stderr)
+        return 2
     if args.evidence:
         if not args.evidence.is_file():
             print(f"FAIL: evidence file not found: {args.evidence}", file=sys.stderr)
             return 2
-        evidence = json.loads(args.evidence.read_text(encoding="utf-8"))
+        try:
+            supplied = json.loads(args.evidence.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            print(f"FAIL: evidence file is not valid JSON: {exc}", file=sys.stderr)
+            return 2
+        if not isinstance(supplied, dict):
+            print("FAIL: evidence file root must be an object", file=sys.stderr)
+            return 2
+        evidence = merge_evidence(evidence, supplied)
 
     try:
         status = build_status(evidence)

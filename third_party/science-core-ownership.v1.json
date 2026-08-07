@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "status": "enforced",
+  "scope": "Copied Rust Core authority surface in Lumen Science, frozen until a public canonical-Lumen platform port replaces it.",
+  "authority_map_sha256": "a7c95074c9df030a015981b14b4d35acd515056923ec91c0d6083d1fa5e30860",
+  "non_claims": [
+    "This is not a canonical Lumen source pin or public API contract.",
+    "This does not prove that the copied Core is safe, current, tested, or releasable.",
+    "Any intentional authority-surface change requires an explicit ownership-lock review."
+  ],
+  "migration_rule": "New Science authority must not expand copied Core; migrate through a versioned public Lumen platform port after PLATFORM_API_GATE passes."
+}

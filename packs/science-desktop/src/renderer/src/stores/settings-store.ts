@@ -19,6 +19,7 @@ import {
 import type { PackageMirror } from '../../../shared/mirror'
 import type { CloseActionPreference } from '../../../shared/window-controls'
 import { isMirrorConfigured } from '../pages/settings/mirror-view'
+import { isSkillAuthorityUnavailable } from '../../../shared/skill-authority'
 import type { SettingsPanelId } from '../pages/settings/settings-navigation'
 import type {
   ClaudeDetectResult,
@@ -50,6 +51,7 @@ import type {
   ImportSkillResult,
   ImportSkillZipBatchResult,
   SkillBundlePreviewResult,
+  SkillImportPreviewContent,
   ScanRepoResult,
   UpsertProviderRequest,
   ValidateProviderRequest,
@@ -106,6 +108,11 @@ type SettingsStoreData = {
   onboardingCompletedAt: number | undefined
   // Bundled skills with their enabled state, loaded lazily when the Skills panel opens.
   skills: SkillView[]
+  // S0-B: true once a shipping skill-mutation action (enable/create/update/delete)
+  // hit the typed fail-closed outcome. The UI must show the "waiting for the
+  // governed Skill Revision API" state instead of a fake success. Read-only
+  // browse/preview/quarantine stay available regardless.
+  skillMutationBlocked: boolean
   // Bundled connectors with their enabled/auto-allow state, loaded lazily when the Connectors panel opens.
   connectors: ConnectorView[]
   // User-added custom MCP servers, reconciled alongside the connectors list.
@@ -240,14 +247,14 @@ type SettingsStore = SettingsStoreData & {
   consumePendingSkill: () => void
   // Loads the bundled-skill list (enabled state included) from the main process.
   loadSkills: () => Promise<void>
-  // Toggles one skill; optimistic, then reconciled with the authoritative list from main.
-  setSkillEnabled: (id: string, enabled: boolean) => Promise<void>
-  // Creates a personal skill, returning its refreshed list.
-  createSkill: (request: CreateSkillRequest) => Promise<void>
-  // Updates a personal skill in place.
-  updateSkill: (request: UpdateSkillRequest) => Promise<void>
-  // Deletes a personal or imported skill.
-  deleteSkill: (id: string) => Promise<void>
+  // Toggles one skill; resolves false when the S0-B fail-closed outcome applies.
+  setSkillEnabled: (id: string, enabled: boolean) => Promise<boolean>
+  // Creates a personal skill; resolves false when the S0-B fail-closed outcome applies.
+  createSkill: (request: CreateSkillRequest) => Promise<boolean>
+  // Updates a personal skill in place; resolves false on the S0-B fail-closed outcome.
+  updateSkill: (request: UpdateSkillRequest) => Promise<boolean>
+  // Deletes a personal or imported skill; resolves false on the S0-B fail-closed outcome.
+  deleteSkill: (id: string) => Promise<boolean>
   // Imports a skill from a public GitHub URL, returning the import outcome.
   importSkill: (url: string) => Promise<ImportSkillResult>
   // Imports a skill from an uploaded .zip / .skill bundle (base64), returning the outcome.
@@ -266,6 +273,8 @@ type SettingsStore = SettingsStoreData & {
   // Parses an uploaded bundle without importing it, for a confirm-before-import preview. Returns the
   // importable skills plus any the bundle contained that were skipped and why.
   previewSkillZip: (dataBase64: string) => Promise<SkillBundlePreviewResult>
+  // Lazily fetches one scanned GitHub candidate's bounded SKILL.md preview without importing.
+  previewGitHubSkill: (url: string) => Promise<SkillImportPreviewContent>
   // Scans a GitHub repo for importable skill directories (does not mutate state).
   scanRepoSkills: (repo: string) => Promise<ScanRepoResult>
   // Lists the skills under the user's machine-level Claude config (~/.claude/skills/) for the
@@ -341,6 +350,7 @@ export const createInitialSettingsState = (): SettingsStoreData => ({
   codexManaged: false,
   onboardingCompletedAt: undefined,
   skills: [],
+  skillMutationBlocked: false,
   connectors: [],
   customServers: [],
   pendingApprovals: [],
@@ -1052,28 +1062,66 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     set({ skills })
   },
 
-  // Optimistically flips the toggle, then reconciles with the authoritative list from main.
-  setSkillEnabled: async (id, enabled) => {
-    set((state) => ({
-      skills: state.skills.map((skill) => (skill.id === id ? { ...skill, enabled } : skill))
-    }))
-    const skills = await window.api.settings.setSkillEnabled({ id, enabled })
-    set({ skills })
+  // S0-B: the four shipping skill-mutation actions fail closed at the IPC
+  // boundary. They never mutate the legacy store, never trigger a runtime
+  // reload, and never report a fake success: the renderer surfaces the typed
+  // "waiting for governed Skill Revision API" state instead. Each action
+  // resolves `true` on success and `false` when the typed fail-closed outcome
+  // was applied, so callers must not navigate/flash success on `false`.
+  setSkillEnabled: async (id, enabled): Promise<boolean> => {
+    try {
+      const skills = await window.api.settings.setSkillEnabled({ id, enabled })
+      set({ skills, skillMutationBlocked: false })
+      return true
+    } catch (error) {
+      if (isSkillAuthorityUnavailable(error)) {
+        set({ skillMutationBlocked: true })
+        return false
+      }
+      throw error
+    }
   },
 
-  createSkill: async (request) => {
-    const skills = await window.api.settings.createSkill(request)
-    set({ skills })
+  createSkill: async (request): Promise<boolean> => {
+    try {
+      const skills = await window.api.settings.createSkill(request)
+      set({ skills, skillMutationBlocked: false })
+      return true
+    } catch (error) {
+      if (isSkillAuthorityUnavailable(error)) {
+        set({ skillMutationBlocked: true })
+        return false
+      }
+      throw error
+    }
   },
 
-  updateSkill: async (request) => {
-    const skills = await window.api.settings.updateSkill(request)
-    set({ skills })
+  updateSkill: async (request): Promise<boolean> => {
+    try {
+      const skills = await window.api.settings.updateSkill(request)
+      set({ skills, skillMutationBlocked: false })
+      return true
+    } catch (error) {
+      if (isSkillAuthorityUnavailable(error)) {
+        set({ skillMutationBlocked: true })
+        return false
+      }
+      throw error
+    }
   },
 
-  deleteSkill: async (id) => {
-    const skills = await window.api.settings.deleteSkill({ id })
-    set({ skills })
+  deleteSkill: async (id): Promise<boolean> => {
+    try {
+      const skills = await window.api.settings.deleteSkill({ id })
+      set({ skills, skillMutationBlocked: false })
+      return true
+    } catch (error) {
+      if (isSkillAuthorityUnavailable(error)) {
+        set({ skillMutationBlocked: true })
+        return false
+      }
+      throw error
+    }
   },
 
   importSkill: async (url) => {
@@ -1088,17 +1136,21 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       subPath: opts?.subPath,
       replaceId: opts?.replaceId
     })
-    set({ skills: result.skills })
+    if (result.status !== 'quarantined') set({ skills: result.skills })
     return result
   },
 
   importSkillZipBatch: async (dataBase64, items) => {
     const result = await window.api.settings.importSkillZipBatch({ dataBase64, items })
-    set({ skills: result.skills })
+    if (!result.results.some((item) => item.status === 'quarantined')) {
+      set({ skills: result.skills })
+    }
     return result
   },
 
   previewSkillZip: async (dataBase64) => window.api.settings.previewSkillZip({ dataBase64 }),
+
+  previewGitHubSkill: async (url) => window.api.settings.previewGitHubSkill({ url }),
 
   scanRepoSkills: async (repo) => window.api.settings.scanRepoSkills({ repo }),
 

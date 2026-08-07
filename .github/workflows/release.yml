@@ -13,8 +13,10 @@ permissions:
   contents: read
 
 jobs:
-  # Science CLI tags (v1.x matching packs/science/VERSION) use science-release.yml.
-  # Core agent release requires VERSION == xai-grok-pager Cargo version.
+  # Legacy Science CLI tags are classified only to keep this repository from
+  # accidentally publishing a Rust Core release under the retired Go v1 line.
+  # science-release.yml is frozen and cannot publish another independent
+  # execution product. Core releases require VERSION == pager Cargo version.
   classify:
     name: Classify tag (core vs science)
     runs-on: ubuntu-24.04
@@ -29,7 +31,7 @@ jobs:
           SCI="$(tr -d '[:space:]' < packs/science/VERSION 2>/dev/null || echo '')"
           if [[ -n "$SCI" && "$TAG" == "v${SCI}" ]]; then
             echo "kind=science" >> "$GITHUB_OUTPUT"
-            echo "Science-only tag ${TAG} — Core Release will no-op; see Science Release workflow."
+            echo "Retired Science-only tag ${TAG} — no release workflow may publish it."
             exit 0
           fi
           # Also treat pure v1.* science line as science when science VERSION is 1.x

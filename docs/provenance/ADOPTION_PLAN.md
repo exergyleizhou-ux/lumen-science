@@ -139,26 +139,28 @@ harvest,状态 machine — and drive it from ours. Do not take the broker.
 change. As an adapter it may propose; the actor records. Their independence
 model (author ≠ reviewer) is worth copying as a *rule*, not as a runtime.
 
-### A correction: the three unserved tools
+### A correction resolved: the three formerly unserved call sites
 
-`artifact_list`, `notebook_execute` and `start_review` are Go MCP tools, and the
-desktop's method registry refuses them (AUTH-7). The obvious fix — give the
-desktop an HTTP client for the Go bridge — is wrong, and worth writing down
-before someone does it.
+The upstream names `artifact_list`, `notebook_execute` and `start_review`
+originated as Go MCP tools. Giving the desktop an HTTP client for that Go bridge
+would still be wrong:
 
 It would give the desktop two engines to talk to. That is the two-authority
 shape this branch spent forty commits removing, only with the second authority
 reached over a different transport. Nothing about it being Go rather than
 TypeScript makes it safe.
 
-Under the rule at the top of this document, the Go pack EXECUTES: it holds real
-science capability and no authority. So it belongs behind the actor, invoked by
-Rust as a typed adapter, exactly like `PythonLoopRunner` drives the exec-loop.
-The desktop keeps one transport and one authority.
+The call sites now stay on the one Rust ACP transport. Notebook execution maps
+to the actor-owned `workflow_execute` route, review submission maps to
+`review_record`, and `artifact_list` is a Rust read-only query over
+`ScienceStore`. The list query binds the current session, owner, project, run
+and workspace, requires a Succeeded run, and reopens every artifact to verify
+its byte length and SHA-256 before exposing a preview path. It creates no run,
+asks no permission and writes no directory.
 
-Until that routing exists those three call sites fail explicitly, which is the
-honest state: the capability is unreachable, and saying so is better than
-reaching it by a path that dissolves the invariant.
+The Go pack still has no authority. Capability that is adopted from it belongs
+behind the actor as a typed adapter, exactly like `PythonLoopRunner` drives the
+exec-loop. The desktop keeps one transport and one authority.
 
 ### Never
 

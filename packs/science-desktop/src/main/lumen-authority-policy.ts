@@ -51,6 +51,10 @@ const ALLOWED_CHANNELS = new Set<string>([
   // Settings (persisted UI preferences only)
   'settings:get',
   'settings:set',
+  // Uploaded bundles enter a main-owned ingress and are captured, approved
+  // and persisted only by the Rust SessionActor quarantine route.
+  'settings:import-skill-zip',
+  'settings:import-skill-zip-batch',
   // Native dialogs
   'dialog:open-file',
   'dialog:save-file',
@@ -90,13 +94,14 @@ const ALLOWED_CHANNELS = new Set<string>([
   'review:history',
   'review:latest',
   'review:export-dossier',
-  // OSF-5 Skills — quarantine import; single-skill admit; no bulk auto-approve
+  // OSF-5 Skills — catalog projections only. ZIP mutation enters through the
+  // actor-gated settings import channels above; legacy local import/admit/reject
+  // channels are deliberately absent.
   'skills:list',
-  'skills:import',
-  'skills:admit',
-  'skills:reject',
   'skills:quarantine-list',
   'skills:bulk-admit',
+  // Admitted ecosystem capability (Biomni UniProt): sender-bound identity only.
+  'skills:run-capability',
   // OSF-6 Remote Compute — dry-run plan only; no desktop SSH/SCP
   'compute:plan',
   'compute:submit-plan',

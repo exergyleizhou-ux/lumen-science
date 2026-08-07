@@ -63,7 +63,10 @@ type FakeSettingsService = Record<
   | 'createSkill'
   | 'updateSkill'
   | 'deleteSkill'
+  | 'importSkill'
+  | 'importAgentHomeSkill'
   | 'importSkillZipBatch'
+  | 'previewGitHubSkill'
   | 'setConnectorEnabled',
   ReturnType<typeof vi.fn>
 >
@@ -140,10 +143,14 @@ const createFakeService = (): FakeSettingsService => ({
   createSkill: vi.fn().mockResolvedValue([]),
   updateSkill: vi.fn().mockResolvedValue([]),
   deleteSkill: vi.fn().mockResolvedValue([]),
+  importSkill: vi.fn().mockResolvedValue({ status: 'imported', id: 'imported-demo', skills: [] }),
+  importAgentHomeSkill: vi
+    .fn()
+    .mockResolvedValue({ status: 'imported', id: 'imported-demo', skills: [] }),
   importSkillZipBatch: vi.fn().mockResolvedValue({ results: [], skills: [] }),
+  previewGitHubSkill: vi.fn().mockResolvedValue({ name: 'GitHub preview' }),
   setConnectorEnabled: vi.fn().mockResolvedValue({ connectors: [] })
 })
-
 // Adapts the spy bag into the SettingsService shape the registration function expects.
 const asService = (fake: FakeSettingsService): SettingsService => fake as unknown as SettingsService
 
@@ -503,70 +510,76 @@ describe('settings IPC handlers', () => {
     expect(onActiveProviderChanged).not.toHaveBeenCalled()
   })
 
-  it('registers skill channels and fires onSkillsChanged after set-skill-enabled', async () => {
+  it('S0-B: the four shipping skill-mutation channels fail closed with typed error, no service call, no reload', async () => {
     handlers.clear()
     const service = createFakeService()
     const onSkillsChanged = vi.fn()
     registerSettingsIpcHandlers({ service: asService(service), onSkillsChanged })
 
+    // Read-only surface stays intact.
     await invoke('settings:list-skills')
     expect(service.listSkills).toHaveBeenCalledTimes(1)
-
     await invoke('settings:get-skill-detail', 'demo')
     expect(service.getSkillDetail).toHaveBeenCalledWith('demo')
 
-    await invoke('settings:set-skill-enabled', { id: 'demo', enabled: false })
-    expect(service.setSkillEnabled).toHaveBeenCalledWith({ id: 'demo', enabled: false })
-    expect(onSkillsChanged).toHaveBeenCalledTimes(1)
-  })
-
-  it('routes create/update/delete skill channels and fires onSkillsChanged', async () => {
-    handlers.clear()
-    const service = createFakeService()
-    const onSkillsChanged = vi.fn()
-    registerSettingsIpcHandlers({ service: asService(service), onSkillsChanged })
-
-    await invoke('settings:create-skill', { name: 'S', description: 'd', body: 'b' })
-    expect(service.createSkill).toHaveBeenCalledWith({ name: 'S', description: 'd', body: 'b' })
-
-    await invoke('settings:update-skill', {
-      id: 'personal-s',
-      name: 'S',
-      description: 'd',
-      body: 'b2'
-    })
-    expect(service.updateSkill).toHaveBeenCalledWith({
-      id: 'personal-s',
-      name: 'S',
-      description: 'd',
-      body: 'b2'
-    })
-
-    await invoke('settings:delete-skill', { id: 'personal-s' })
-    expect(service.deleteSkill).toHaveBeenCalledWith({ id: 'personal-s' })
-
-    expect(onSkillsChanged).toHaveBeenCalledTimes(3)
-  })
-
-  it('routes import-skill-zip-batch to the service, forwards its result, and fires onSkillsChanged', async () => {
-    handlers.clear()
-    const service = createFakeService()
-    const onSkillsChanged = vi.fn()
-    const result = {
-      results: [{ subPath: 'a', status: 'imported' as const, id: 'imported-a' }],
-      skills: []
+    // Each mutation channel rejects with the typed fail-closed outcome.
+    for (const [channel, payload] of [
+      ['settings:set-skill-enabled', { id: 'demo', enabled: false }],
+      ['settings:create-skill', { name: 'S', description: 'd', body: 'b' }],
+      ['settings:update-skill', { id: 'personal-s', name: 'S', description: 'd', body: 'b2' }],
+      ['settings:delete-skill', { id: 'personal-s' }]
+    ] as const) {
+      await expect(invoke(channel, payload)).rejects.toThrow(/SKILL_AUTHORITY_UNAVAILABLE/)
     }
-    service.importSkillZipBatch.mockResolvedValue(result)
+
+    // Zero side effects: no mutation service method was reached, no reload fired.
+    expect(service.setSkillEnabled).not.toHaveBeenCalled()
+    expect(service.createSkill).not.toHaveBeenCalled()
+    expect(service.updateSkill).not.toHaveBeenCalled()
+    expect(service.deleteSkill).not.toHaveBeenCalled()
+    expect(onSkillsChanged).not.toHaveBeenCalled()
+  })
+
+  it('does not register ZIP mutation handlers on the legacy SettingsService authority', () => {
+    handlers.clear()
+    const service = createFakeService()
+    const onSkillsChanged = vi.fn()
     registerSettingsIpcHandlers({ service: asService(service), onSkillsChanged })
 
-    expect(handlers.has('settings:import-skill-zip-batch')).toBe(true)
+    expect(handlers.has('settings:import-skill-zip')).toBe(false)
+    expect(handlers.has('settings:import-skill-zip-batch')).toBe(false)
+    expect(onSkillsChanged).not.toHaveBeenCalled()
+  })
 
-    const request = { dataBase64: 'YmFzZTY0', items: [{ subPath: 'a' }] }
-    const forwarded = await invoke('settings:import-skill-zip-batch', request)
+  it('fails GitHub and agent-home mutations closed without writing or reloading skills', async () => {
+    handlers.clear()
+    const service = createFakeService()
+    const onSkillsChanged = vi.fn()
+    registerSettingsIpcHandlers({ service: asService(service), onSkillsChanged })
 
-    expect(service.importSkillZipBatch).toHaveBeenCalledWith(request)
-    expect(forwarded).toBe(result)
-    expect(onSkillsChanged).toHaveBeenCalledTimes(1)
+    await expect(
+      invoke('settings:import-skill', { url: 'https://github.com/acme/skills/tree/main/demo' })
+    ).rejects.toThrow(/actor-gated bundle quarantine/i)
+    await expect(invoke('settings:import-agent-home-skill', { slug: 'demo' })).rejects.toThrow(
+      /actor-gated quarantine/i
+    )
+
+    expect(service.importSkill).not.toHaveBeenCalled()
+    expect(service.importAgentHomeSkill).not.toHaveBeenCalled()
+    expect(onSkillsChanged).not.toHaveBeenCalled()
+  })
+
+  it('routes GitHub preview read-only without firing skills-changed', async () => {
+    handlers.clear()
+    const service = createFakeService()
+    const onSkillsChanged = vi.fn()
+    registerSettingsIpcHandlers({ service: asService(service), onSkillsChanged })
+    const request = { url: 'https://github.com/acme/skills/tree/main/foo' }
+
+    await invoke('settings:preview-github-skill', request)
+
+    expect(service.previewGitHubSkill).toHaveBeenCalledWith(request)
+    expect(onSkillsChanged).not.toHaveBeenCalled()
   })
 
   it('registers the OpenCode / framework-switch channels', () => {

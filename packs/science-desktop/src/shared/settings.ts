@@ -776,6 +776,7 @@ export type SkillView = {
 // `references/` directory, for the detail/edit view.
 export type SkillDetailView = SkillView & {
   body: string
+  metadata: Record<string, string>
   references: SkillReferenceInfo[]
 }
 
@@ -802,6 +803,7 @@ export type CreateSkillRequest = {
   name: string
   description: string
   body: string
+  metadata?: Record<string, string>
   slug?: string
   references?: SkillReference[]
 }
@@ -812,6 +814,7 @@ export type UpdateSkillRequest = {
   name: string
   description: string
   body: string
+  metadata?: Record<string, string>
   references?: SkillReference[]
 }
 
@@ -839,6 +842,22 @@ export type PreviewSkillZipRequest = {
   dataBase64: string
 }
 
+// Read-only SKILL.md content shown before import. Every source adapter returns this renderer-safe
+// shape: sourceLabel is a display path/URL (never an absolute host path), metadata contains parsed
+// frontmatter fields other than name/description, and files contains relative names only.
+export type SkillImportPreviewContent = {
+  name: string
+  description: string
+  sourceLabel: string
+  metadata: Record<string, string>
+  body: string
+  files: string[]
+}
+
+export type PreviewGitHubSkillRequest = {
+  url: string
+}
+
 // Import several skills from ONE uploaded bundle in a single call, so a bundle holding many skills is
 // unpacked once instead of re-decoded per skill. Each item selects a skill root by subPath (and may
 // target an existing imported skill to replace).
@@ -852,7 +871,12 @@ export type ImportSkillZipBatchRequest = {
 // Per-item outcome: on success `status` (+ `id`) is set and `error` is absent; on failure `error` is
 // set and `status`/`id` are absent. The two are mutually exclusive, so a caller keys off `error`.
 export type ImportSkillZipBatchItemResult =
-  | { subPath: string; status: 'imported' | 'unchanged' | 'updated'; id: string; error?: undefined }
+  | {
+      subPath: string
+      status: 'imported' | 'unchanged' | 'updated' | 'quarantined'
+      id: string
+      error?: undefined
+    }
   | { subPath: string; status?: undefined; id?: undefined; error: string }
 
 export type ImportSkillZipBatchResult = {
@@ -868,6 +892,9 @@ export type SkillBundlePreview = {
   subPath: string
   name: string
   description: string
+  metadata: Record<string, string>
+  body: string
+  previewError?: string
   files: string[]
   alreadyImported: boolean
   replaceableId?: string
@@ -936,7 +963,7 @@ export type ScanRepoResult = {
 // Outcome of an import: newly imported, refreshed from upstream, or an already-imported no-op. The
 // refreshed skill list is included so the renderer can update in one round-trip.
 export type ImportSkillResult = {
-  status: 'imported' | 'unchanged' | 'updated'
+  status: 'imported' | 'unchanged' | 'updated' | 'quarantined'
   id: string
   skills: SkillView[]
 }

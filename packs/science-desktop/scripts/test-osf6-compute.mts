@@ -11,10 +11,7 @@ import {
   rejectDesktopLiveExecute,
 } from '../src/main/files/compute-plan.js'
 import { createComputeService } from '../src/main/files/compute-service.js'
-import {
-  setTrustedPreviewContext,
-  clearTrustedPreviewContext,
-} from '../src/main/files/session-identity.js'
+import type { TrustedPreviewContext } from '../src/main/files/session-identity.js'
 import {
   registerScienceIpcHandlers,
   type IpcMainLike,
@@ -81,8 +78,7 @@ async function run() {
     ok(!(local as { canSchedule: boolean }).canSchedule)
   })
 
-  clearTrustedPreviewContext()
-  const plan = fixture as {
+    const plan = fixture as {
     planId: string
     planHash: string
     clusterId: string
@@ -100,8 +96,7 @@ async function run() {
   await test('access denied without session', () => {
     ok(!assertComputePlanAccess(plan, null).ok)
   })
-  setTrustedPreviewContext({ ownerId: 'o1', projectId: 'p1' })
-  await test('access ok with session', () => {
+    await test('access ok with session', () => {
     ok(assertComputePlanAccess(plan, { ownerId: 'o1', projectId: 'p1' }).ok)
   })
 
@@ -123,16 +118,14 @@ async function run() {
     },
   })
 
-  clearTrustedPreviewContext()
-  const noSess = svc.plan({ hostname: 'hpc.example.com', targetKind: 'ssh_fixture' })
+    const noSess = svc.plan({ hostname: 'hpc.example.com', targetKind: 'ssh_fixture' }, null)
   await test('service plan needs session', () => ok((noSess as { ok?: boolean }).ok === false))
 
-  setTrustedPreviewContext({ ownerId: 'o1', projectId: 'p1' })
-  const planned = svc.plan({
+    const planned = svc.plan({
     hostname: 'hpc.example.com',
     targetKind: 'ssh_fixture',
     command: 'lumen-science pipeline offline ...',
-  })
+  }, { ownerId: "o1", projectId: "p1" })
   await test('service plan ok', () => {
     ok((planned as { ok?: boolean }).ok)
     ok((planned as { plan?: { canSchedule: boolean } }).plan?.canSchedule === false)
@@ -141,7 +134,7 @@ async function run() {
   const submitted = await svc.submitPlan({
     hostname: 'hpc.example.com',
     targetKind: 'ssh_fixture',
-  })
+  }, { ownerId: "o1", projectId: "p1" })
   await test('service submitPlan calls ACP dry-run', () => {
     ok((submitted as { ok?: boolean }).ok)
     strictEqual(acpCalls, 1)

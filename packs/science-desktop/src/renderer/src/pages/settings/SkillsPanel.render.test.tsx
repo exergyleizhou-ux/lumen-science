@@ -103,6 +103,29 @@ const setValue = (label: string, value: string): void => {
 }
 
 describe('SkillsPanel (list view)', () => {
+  it('S0-B: renders the migration-required banner when a shipping skill mutation was fail-closed', () => {
+    useSettingsStore.setState({ skillMutationBlocked: true })
+    act(() => {
+      root.render(<SkillsPanel view={{ kind: 'list' }} onNavigate={vi.fn()} />)
+    })
+
+    const alert = document.body.querySelector('[role="alert"]')
+    expect(alert?.textContent).toContain('waiting for the governed Skill Revision API')
+    expect(alert?.textContent).toContain('ZIP quarantine import stay available')
+    // The read-only list still renders underneath the banner.
+    expect(document.body.textContent).toContain('Alpha')
+    expect(document.body.textContent).toContain('Mine')
+  })
+
+  it('S0-B: no banner in the normal state', () => {
+    useSettingsStore.setState({ skillMutationBlocked: false })
+    act(() => {
+      root.render(<SkillsPanel view={{ kind: 'list' }} onNavigate={vi.fn()} />)
+    })
+
+    expect(document.body.querySelector('[role="alert"]')).toBeNull()
+  })
+
   it('renders skills grouped by source with one toggle each and an Add skill control', () => {
     act(() => {
       root.render(<SkillsPanel view={{ kind: 'list' }} onNavigate={vi.fn()} />)

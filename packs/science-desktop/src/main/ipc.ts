@@ -60,7 +60,7 @@ import { createAcpAuthoritativeMembershipAsserter } from './files/hybrid-members
 import { getDefaultLocalProjectCatalog } from './files/local-project-catalog'
 import { resolveStorageRoot } from './storage-root'
 import { runtimeRoot } from './notebook/runtime-paths'
-import { writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 
 type IpcRegistrationOptions = {
@@ -124,12 +124,21 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
   )
 
   // ── Science + OSF-2 product path (single registration site) ──
-  // ACP-wired store + hybrid membership (ACP then local UI catalog) + seed.
+  // ACP-wired store + ACP-authoritative membership + verified artifact seed.
   const acpTool = async (tool: string, args: Record<string, unknown>) =>
     acpCall(tool, args)
   const wiredStore = new AcpPreviewStore(acpTool)
   const catalogPath = join(app.getPath('userData'), 'lumen-ui-projects.json')
   const projectCatalog = getDefaultLocalProjectCatalog(catalogPath)
+  const biomniUniprotFixturePath = app.isPackaged
+    ? join(process.resourcesPath, 'science', 'fixtures', 'connector_uniprot_search.json')
+    : join(
+        __dirname,
+        '../../fixtures/connector_uniprot_search.json',
+      )
+  const biomniUniprotFixtureBase64 = (
+    await readFile(biomniUniprotFixturePath)
+  ).toString('base64')
 
   /**
    * Write an export to a path the USER chooses.
@@ -189,6 +198,30 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
     skillsRegistryPath: app.isPackaged
       ? join(process.resourcesPath, 'science', 'skills-registry.json')
       : join(__dirname, '../../../../packs/science/skills/registry.json'),
+    skillsEcosystemCatalogPaths: app.isPackaged
+      ? [
+          join(process.resourcesPath, 'science', 'ecosystem-skill-catalog.json'),
+          join(process.resourcesPath, 'science', 'biomni-tool-catalog.json'),
+          join(process.resourcesPath, 'science', 'biomni-resource-catalog.json'),
+        ]
+      : [
+          join(__dirname, '../../../../packs/science/skills/ecosystem/scp-catalog.json'),
+          join(
+            __dirname,
+            '../../../../packs/science/skills/ecosystem/biomni-tool-catalog.json',
+          ),
+          join(
+            __dirname,
+            '../../../../packs/science/skills/ecosystem/biomni-resource-catalog.json',
+          ),
+        ],
+    biomniUniprotFixtureBase64,
+    skillsAdmissionPath: app.isPackaged
+      ? join(process.resourcesPath, 'science', 'admissions', 'biomni-query-uniprot.json')
+      : join(
+          __dirname,
+          '../../../../docs/science/5.0/admissions/biomni-query-uniprot.admission.json',
+        ),
     connectorLockPath: app.isPackaged
       ? join(process.resourcesPath, 'science', 'fusion-sources.lock.json')
       : join(__dirname, '../../../../docs/science/fusion-sources.lock.json'),
@@ -197,8 +230,12 @@ export const registerIpcHandlers = async (_opts: IpcRegistrationOptions) => {
     assertMembership: createAcpAuthoritativeMembershipAsserter({
       acp: createAcpMembershipAsserter(acpTool),
     }),
-    listArtifacts: ({ projectId, runId }) =>
-      listArtifactsViaAcp(acpTool, { projectId, runId }),
+    listArtifacts: ({ ownerId, projectId, runId }) =>
+      listArtifactsViaAcp(acpTool, {
+        ownerId,
+        projectId,
+        runId,
+      }),
     projectCatalog,
     defaultOwnerId: process.env.LUMEN_DESKTOP_OWNER_ID || 'local-user',
     // LS5-K4: where this installation's environments live. Resolved here

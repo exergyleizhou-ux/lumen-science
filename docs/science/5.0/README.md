@@ -1,8 +1,23 @@
 # Lumen Science 5.0 — Governed Embodied Science
 
+> **Canonical execution book (2026-08-06):**
+> [`LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-06.md`](LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-06.md).
+> It is the sole source for global ordering, current gate semantics, the
+> single-Rust-base migration (re-oriented: push Science-only slices into
+> canonical Lumen, then de-copy), nine-source capability admission, NextGen
+> Agent control, macOS product proof, and the final definition of done.
+> The 2026-08-02 book
+> [`LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-02.md`](LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-02.md)
+> remains the detail oracle; older plans remain evidence/detail oracles; see
+> [`PLAN_SUPERSESSION_MAP.md`](PLAN_SUPERSESSION_MAP.md).
+> Its plan-only integrity lock is
+> [`NEXTGEN_CANONICAL_EXECUTION_BOOK.lock.json`](NEXTGEN_CANONICAL_EXECUTION_BOOK.lock.json);
+> the lock explicitly claims zero completed top-level gates. Granular gate
+> truth (PASS_UPSTREAM vs PASS) lives in
+> [`NEXTGEN_GATE_REGISTRY_V2.json`](NEXTGEN_GATE_REGISTRY_V2.json).
+
 **Target Version**: 5.0  
-**Status**: IN PROGRESS — WP-2～8 **software preview / contract** (not product GA)  
-**Prerequisite**: **Lumen Science CLI/MCP** formal release — **DONE** (`v1.0.0`, current line **`v1.0.1`**)
+**Status**: IN PROGRESS — 2026-08-06: canonical Lumen 2.2 released (kernel absorbed upstream); Science P0s (PR #28 red, Desktop skill bypass) still open; see canonical book §1/§4.1
 
 ## Evidence levels (how to read status)
 
@@ -53,6 +68,43 @@ FeatureGates            = RealDevice/DeviceCommand Disabled by default
 EvidenceGraph           = sole evidence relationship authority (V2+)
 Workflow                = white-listed StepKinds only; never arbitrary shell
 ```
+
+## Lumen core admission
+
+The newer Lumen core is the source of truth, but Science admits it in reviewed
+security/correctness slices until a shared-core Platform API exists. See
+[`CORE_V0_1_251_ADMISSION.md`](CORE_V0_1_251_ADMISSION.md) and the
+machine-readable
+[`core-v0.1.251-admission.lock.json`](core-v0.1.251-admission.lock.json).
+This is not a claim that the embedded `0.1.222` line already has complete
+v0.1.251 source or release parity.
+
+## External science ecosystem absorption
+
+Biomni, Motif, Open Science, OpenClaudeScience, and the transitive
+InternScience/SCP skill catalog are admitted through the component-level
+[`ECOSYSTEM_ABSORPTION_PLAN.md`](ECOSYSTEM_ABSORPTION_PLAN.md) and
+[`ecosystem-admission.lock.json`](ecosystem-admission.lock.json). The lock
+preserves the existing Science authority foundation, pins exact source and
+license hashes, rejects peer runtimes and restricted nested licenses, and
+keeps all unreviewed skills/data quarantined. The current local discovery
+surface contains 207 SCP skill documents, 224 Biomni tool descriptors, and 273
+Biomni data/software/protocol/knowledge records: 704 searchable candidates,
+zero newly approved. The first Open Science `fd2853` delta is also adapted:
+local/GitHub Skill candidates now have a bounded, media-disabled, read-only
+preview that preserves flat YAML metadata before any explicit import. Its
+streaming ZIP classifier and 28-case adversarial parity suite are also
+source-adapted, but remain disconnected from product import until a Rust
+SessionActor route owns approval and persistence. See
+[`open-science-fd2853-skill-preview.md`](../../../third_party/provenance/open-science-fd2853-skill-preview.md).
+Five Motif algorithm slices are now adapted into Rust `seqbench`: hardened
+FASTA parsing, nucleotide/protein metrics, full IUPAC reverse-complement, all
+24 single-valued NCBI translation tables, and table-aware six-frame ORF
+detection, plus the 30-enzyme restriction-site scanner with explicit
+linear/circular topology and bounded selected-enzyme digest fragments, run
+inside the existing SessionActor approval and hashed-artifact path. Exact
+source hashes and cross-language fixture results are in
+[`motif-876a-seqbench.md`](../../../third_party/provenance/motif-876a-seqbench.md).
 
 ## Quick start (WP-2～8 CLI surface)
 

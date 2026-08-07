@@ -1,14 +1,15 @@
 /**
  * Environment identity service (LS5-K4) — the driven adapter.
  *
- * Three verbs, in the order a caller needs them:
+ * Three verbs, with one execution authority:
  *
- *   discover()          what interpreters exist on this machine
- *   identify()          what exactly one of them IS
+ *   discover()          candidate paths that exist on this machine
+ *   identify()          fail closed: probing requires actor approval
  *   requestAdmission()  ask the engine whether it may back a kernel
  *
- * The first two answer questions about the machine and return observations.
- * The third answers nothing: it builds a request, hands it to the SessionActor
+ * Discovery enumerates paths without launching them. Identification, hashing
+ * and version probing are intentionally unavailable here. Admission builds a
+ * request, hands it to the SessionActor
  * over ACP, and returns whatever the actor said. If no transport is wired it
  * reports that it could not ask — it does not fall back to an opinion. A
  * desktop that answers "admitted" because it could not reach the engine is the
@@ -27,7 +28,7 @@ import type { NotebookLanguage } from '../../shared/notebook'
 import type { DiscoveredInterpreter } from '../../shared/notebook-runtime'
 import {
   defaultDiscoveryDeps,
-  discoverInterpreters,
+  enumerateInterpreterCandidates,
   type DiscoveryDeps,
 } from '../notebook/environment-discovery'
 import { micromambaCacheLockKey } from '../notebook/micromamba-cache'
@@ -38,17 +39,13 @@ import {
   type KernelAdmissionParams,
 } from './admission-request'
 import {
-  identifyInterpreter,
   type IdentificationResult,
   type IdentifyDeps,
   type IdentifyRequest,
   type KernelKindName,
 } from './interpreter-identity'
 
-export type AcpScienceCall = (
-  method: string,
-  args: Record<string, unknown>,
-) => Promise<unknown>
+export type AcpScienceCall = (method: string, args: Record<string, unknown>) => Promise<unknown>
 
 /** A candidate refused before it was probed, with the reason it was refused. */
 export type UnpinnedCandidate = { candidate: string; reason: string }
@@ -101,6 +98,8 @@ export type EnvironmentService = {
 
 export type AdmissionAsk = {
   sessionId: string
+  ownerId: string
+  projectId: string
   storeRoot: string
   kernelId: string
   kind: KernelKindName
@@ -108,6 +107,7 @@ export type AdmissionAsk = {
   packageLockPath?: string
   allowedRoot?: string
   probeTimeoutMs?: number
+  approvalTimeoutMs?: number
 }
 
 export type EnvironmentServiceOptions = {
@@ -138,40 +138,36 @@ export const createEnvironmentService = (
         : defaultDiscoveryDeps(runtimeRoot, options.manualPaths, {
             onUnpinnedCandidate: record,
           })
-      const interpreters = await discoverInterpreters(language, deps)
+      const interpreters = await enumerateInterpreterCandidates(language, deps)
       return { language, interpreters, unpinned }
     },
 
-    identify(request) {
-      return identifyInterpreter(request, options.identifyDeps ?? {})
+    async identify(request) {
+      return {
+        identified: false,
+        failure: {
+          code: 'actor_probe_required',
+          path: request.interpreterPath,
+          detail:
+            'desktop interpreter probing is disabled; use requestAdmission so the ' +
+            'SessionActor can request permission before hashing or executing it',
+        },
+      }
     },
 
     async requestAdmission(request) {
-      const identification = await identifyInterpreter(
-        {
-          kind: request.kind,
-          interpreterPath: request.interpreterPath,
-          packageLockPath: request.packageLockPath,
-          probeTimeoutMs: request.probeTimeoutMs,
-        },
-        options.identifyDeps ?? {},
-      )
-      if (!identification.identified) {
-        return {
-          asked: false,
-          reason:
-            `interpreter could not be identified (${identification.failure.code}): ` +
-            identification.failure.detail,
-        }
-      }
-
       const built = buildKernelAdmissionRequest({
         sessionId: request.sessionId,
+        ownerId: request.ownerId,
+        projectId: request.projectId,
         storeRoot: request.storeRoot,
         kernelId: request.kernelId,
-        identity: identification.identity,
+        kind: request.kind,
+        interpreterPath: request.interpreterPath,
+        packageLockPath: request.packageLockPath,
         allowedRoot: request.allowedRoot,
         probeTimeoutMs: request.probeTimeoutMs,
+        approvalTimeoutMs: request.approvalTimeoutMs,
       } satisfies BuildAdmissionRequest)
       if (!built.ok) return { asked: false, reason: built.reason }
 

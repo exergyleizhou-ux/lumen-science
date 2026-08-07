@@ -11,6 +11,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { PermissionPrompt } from '@/components/PermissionPrompt'
 import { describeError } from './describe-error'
 import { describeOpen, type OpenOutcome } from './describe-open'
+import {
+  filterEcosystemSkills,
+  parseEcosystemSkillInventory,
+  type EcosystemSkillInventory,
+} from './ecosystem-skills'
 
 type UiProject = {
   id: string
@@ -19,6 +24,15 @@ type UiProject = {
   ownerId: string
   defaultRunId: string
 }
+
+const ECOSYSTEM_SOURCE_LABELS = {
+  'skill-document': 'SCP 技能文档',
+  'tool-descriptor': 'Biomni 工具描述',
+  'data-resource': 'Biomni 数据资源',
+  'software-resource': 'Biomni 科研软件',
+  'protocol-reference': 'Biomni 协议索引',
+  'knowledge-document': 'Biomni 知识文档',
+} as const
 
 type TabId =
   | 'question'
@@ -30,6 +44,8 @@ type TabId =
   | 'skills'
   | 'compute'
   | 'connectors'
+
+type ReviewVerdict = 'pass' | 'warn' | 'fail' | 'needs_revision' | 'inconclusive'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'question', label: 'Question' },
@@ -70,6 +86,11 @@ export const ResearchShell = (): React.JSX.Element => {
   const [previewMeta, setPreviewMeta] = useState<string>('')
   const [nbCode, setNbCode] = useState('print("hello from lumen notebook plan")\n')
   const [nbOut, setNbOut] = useState<string>('')
+  const [lastNotebookRunId, setLastNotebookRunId] = useState('')
+  const [reviewArtifacts, setReviewArtifacts] = useState('')
+  const [reviewOut, setReviewOut] = useState('')
+  const [reviewVerdict, setReviewVerdict] = useState<ReviewVerdict | ''>('')
+  const [reviewSummary, setReviewSummary] = useState('')
 
   const lumen = window.api?.lumen
 
@@ -118,6 +139,11 @@ export const ResearchShell = (): React.JSX.Element => {
     // that nothing opened — two contradictory claims, one of them stale.
     setOpened(null)
     setQuestionStatus('')
+    setLastNotebookRunId('')
+    setReviewArtifacts('')
+    setReviewOut('')
+    setReviewVerdict('')
+    setReviewSummary('')
     setStatus('Opening (bind + seed)…')
     const res = (await lumen.openUiProject({
       projectId: project.id,
@@ -170,6 +196,11 @@ export const ResearchShell = (): React.JSX.Element => {
       setOpened(null)
       setQuestion('')
       setSavedQuestion('')
+      setLastNotebookRunId('')
+      setReviewArtifacts('')
+      setReviewOut('')
+      setReviewVerdict('')
+      setReviewSummary('')
     }
     await refresh()
   }
@@ -208,14 +239,15 @@ export const ResearchShell = (): React.JSX.Element => {
     try {
       const res = (await lumen.previewByArtifact({ artifactId })) as {
         access?: { ok?: boolean; reason?: string }
-        path?: string
         sha256?: string
+        contentBase64?: string
+        byteLength?: number
       }
       if (!res.access?.ok) {
         setPreviewMeta(res.access?.reason ?? 'denied')
         return
       }
-      setPreviewMeta(`ok path=${res.path ?? '?'} sha256=${res.sha256 ?? '?'}`)
+      setPreviewMeta(`ok bytes=${res.byteLength ?? '?'} sha256=${res.sha256 ?? '?'}`)
     } catch (e: unknown) {
       // A failed preview is a result to show, never an unhandled rejection.
       setPreviewMeta((e as Error)?.message || String(e))
@@ -233,7 +265,13 @@ export const ResearchShell = (): React.JSX.Element => {
       setNbOut('Open a project first (trusted session required for live execute).')
       return
     }
-    const res = await lumen.notebookExecuteCell({ language: 'python', code: nbCode })
+    const res = (await lumen.notebookExecuteCell({ language: 'python', code: nbCode })) as {
+      ok?: boolean
+      sourceRunId?: string
+    }
+    if (res.ok && res.sourceRunId && /^[A-Za-z0-9_-]{1,128}$/.test(res.sourceRunId)) {
+      setLastNotebookRunId(res.sourceRunId)
+    }
     setNbOut(JSON.stringify(res, null, 2))
   }
 
@@ -272,11 +310,8 @@ export const ResearchShell = (): React.JSX.Element => {
       setNbOut,
     )
 
-  const [reviewArtifacts, setReviewArtifacts] = useState('')
-  const [reviewOut, setReviewOut] = useState('')
-  const reviewPlan = async (): Promise<void> => {
-    if (!lumen) return
-    const artifacts = reviewArtifacts
+  const parseReviewArtifacts = (): { artifactId: string; expectedSha256: string }[] =>
+    reviewArtifacts
       .split('\n')
       .filter(Boolean)
       .map((line) => {
@@ -284,20 +319,47 @@ export const ResearchShell = (): React.JSX.Element => {
         return { artifactId: artifactId?.trim() ?? '', expectedSha256: expectedSha256?.trim() ?? '' }
       })
       .filter((a) => a.artifactId && a.expectedSha256)
-    const res = await lumen.reviewPlan({ artifacts })
+
+  const reviewRequest = ():
+    | {
+        artifacts: { artifactId: string; expectedSha256: string }[]
+        runId: string
+        verdict: ReviewVerdict
+        summary: string
+      }
+    | undefined => {
+    if (!lastNotebookRunId) {
+      setReviewOut('Run a notebook cell successfully before reviewing its evidence.')
+      return undefined
+    }
+    if (!reviewVerdict) {
+      setReviewOut('Choose an explicit verdict before planning or submitting the review.')
+      return undefined
+    }
+    if (!reviewSummary.trim()) {
+      setReviewOut('Explain the scientific basis for this verdict before planning or submitting.')
+      return undefined
+    }
+    return {
+      artifacts: parseReviewArtifacts(),
+      runId: lastNotebookRunId,
+      verdict: reviewVerdict,
+      summary: reviewSummary.trim(),
+    }
+  }
+
+  const reviewPlan = async (): Promise<void> => {
+    if (!lumen) return
+    const request = reviewRequest()
+    if (!request) return
+    const res = await lumen.reviewPlan(request)
     setReviewOut(JSON.stringify(res, null, 2))
   }
   const reviewSubmit = async (): Promise<void> => {
     if (!lumen) return
-    const artifacts = reviewArtifacts
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => {
-        const [artifactId, expectedSha256] = line.split(':')
-        return { artifactId: artifactId?.trim() ?? '', expectedSha256: expectedSha256?.trim() ?? '' }
-      })
-      .filter((a) => a.artifactId && a.expectedSha256)
-    const res = await lumen.reviewSubmit({ artifacts })
+    const request = reviewRequest()
+    if (!request) return
+    const res = await lumen.reviewSubmit(request)
     setReviewOut(JSON.stringify(res, null, 2))
   }
   const reviewExport = async (): Promise<void> =>
@@ -308,15 +370,50 @@ export const ResearchShell = (): React.JSX.Element => {
     )
 
   const [skillsOut, setSkillsOut] = useState('')
+  const [skillsInventory, setSkillsInventory] = useState<EcosystemSkillInventory | null>(null)
+  const [skillsQuery, setSkillsQuery] = useState('')
+  const [uniprotPrompt, setUniprotPrompt] = useState('human insulin')
   const skillsList = async (): Promise<void> => {
     if (!lumen) return
-    setSkillsOut(JSON.stringify(await lumen.skillsList(), null, 2))
+    const parsed = parseEcosystemSkillInventory(await lumen.skillsList())
+    if (!parsed.ok) {
+      setSkillsInventory(null)
+      setSkillsOut(parsed.reason)
+      return
+    }
+    setSkillsInventory(parsed.inventory)
+    setSkillsOut(
+      JSON.stringify(
+        {
+          total: parsed.inventory.total,
+          admittedExecutable: parsed.inventory.admittedExecutable,
+          stillQuarantined: parsed.inventory.stillQuarantined,
+          note: 'Biomni catalog: 1 of 224 executable (query_uniprot); 223 quarantined',
+        },
+        null,
+        2,
+      ),
+    )
   }
   const skillsBulkDeny = async (): Promise<void> => {
     if (!lumen) return
     setSkillsOut(
       JSON.stringify(
         await lumen.skillsBulkAdmit({ skillIds: ['a', 'b', 'c'] }),
+        null,
+        2,
+      ),
+    )
+  }
+  const skillsRunUniprot = async (): Promise<void> => {
+    if (!lumen) return
+    setSkillsOut(
+      JSON.stringify(
+        await lumen.skillsRunCapability({
+          capabilityId: 'ecosystem/biomni/query_uniprot',
+          prompt: uniprotPrompt,
+          maxResults: 5,
+        }),
         null,
         2,
       ),
@@ -742,19 +839,135 @@ export const ResearchShell = (): React.JSX.Element => {
                 >
                   <h2 className={cx.h2}>Skills</h2>
                   <p className={cx.muted}>
-                    Imported skills arrive quarantined and stay pending until someone
-                    admits them file by file — <strong>nothing is approved in bulk</strong>,
-                    and that includes anything asking for a GPU. Ask this window to admit
-                    them all at once and it will refuse.
+                    本地科研能力目录先隔离、后逐项验收。每项必须映射到受控的 Lumen
+                    工具，并由 Lumen 研究引擎管理权限、产物和证据；
+                    <strong>目录本身不能执行，也不能批量批准</strong>。
+                    Biomni 工具共 224 项，当前仅 <code>query_uniprot</code> 可通过
+                    Rust Lumen 运行（fixture/offline）；其余 223 项仍为隔离候选。
                   </p>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button type="button" className={cx.btn} onClick={() => void skillsList()}>
-                      List inventory
+                      加载本地科研能力
                     </button>
                     <button type="button" className={cx.btnQuiet} onClick={() => void skillsBulkDeny()}>
-                      Ask this window to admit all
+                      证伪：尝试批量批准
                     </button>
                   </div>
+                  {skillsInventory && (
+                    <div style={{ marginTop: 16 }}>
+                      <div className={cx.muted}>
+                        {skillsInventory.total} 项候选 · {skillsInventory.admittedExecutable}{' '}
+                        项可执行 · {skillsInventory.stillQuarantined} 项隔离中 · 执行权仅
+                        SessionActor
+                      </div>
+                      <input
+                        className={cx.input}
+                        style={{ width: '100%', marginTop: 10 }}
+                        value={skillsQuery}
+                        onChange={(event) => setSkillsQuery(event.target.value)}
+                        placeholder="搜索能力、学科或候选 Lumen 连接器…"
+                        aria-label="搜索本地科研能力目录"
+                      />
+                      <div
+                        style={{
+                          display: 'grid',
+                          gap: 10,
+                          marginTop: 12,
+                          maxHeight: 520,
+                          overflowY: 'auto',
+                        }}
+                      >
+                        {filterEcosystemSkills(skillsInventory.candidates, skillsQuery)
+                          .slice(0, 60)
+                          .map((candidate) => (
+                            <article
+                              key={candidate.skillId}
+                              style={{
+                                border: '1px solid var(--border)',
+                                borderRadius: 8,
+                                padding: 12,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  gap: 12,
+                                  alignItems: 'center',
+                                }}
+                              >
+                                <strong>{candidate.displayName}</strong>
+                                <span className={cx.muted}>
+                                  {candidate.canRunViaLumen
+                                    ? '可通过 Lumen 运行'
+                                    : '隔离中'}
+                                </span>
+                              </div>
+                              <div className={cx.muted} style={{ marginTop: 4 }}>
+                                {candidate.discipline} ·{' '}
+                                {ECOSYSTEM_SOURCE_LABELS[candidate.sourceKind]}
+                                {candidate.sourceKind === 'tool-descriptor'
+                                  ? ` · ${candidate.parameterCount} 个参数`
+                                  : candidate.sourceKind === 'skill-document'
+                                    ? ` · 上游工具引用 ${candidate.requiredUpstreamToolCount}`
+                                    : ' · 只读资源元数据'}
+                              </div>
+                              <p style={{ margin: '8px 0 0' }}>{candidate.description}</p>
+                              <div className={cx.muted} style={{ marginTop: 8 }}>
+                                本地化路线：{candidate.admissionTrack}
+                              </div>
+                              {candidate.candidateLumenRoutes.length > 0 && (
+                                <div className={cx.muted} style={{ marginTop: 8 }}>
+                                  候选 Lumen 路由：{candidate.candidateLumenRoutes.join(' · ')}
+                                </div>
+                              )}
+                              {candidate.riskFlags.length > 0 && (
+                                <div className={cx.muted} style={{ marginTop: 8 }}>
+                                  待审风险：{candidate.riskFlags.join(' · ')}
+                                </div>
+                              )}
+                              {candidate.canRunViaLumen && candidate.runVia && (
+                                <div
+                                  style={{
+                                    marginTop: 12,
+                                    padding: 10,
+                                    borderRadius: 6,
+                                    background: 'var(--muted-bg, rgba(0,0,0,0.04))',
+                                  }}
+                                >
+                                  <div className={cx.muted}>
+                                    来源 {candidate.runVia.source} · 执行器{' '}
+                                    {candidate.runVia.executor} · 数据源{' '}
+                                    {candidate.runVia.dataSource} · 模式{' '}
+                                    {candidate.runVia.mode} · connector 固定为{' '}
+                                    {candidate.runVia.connectorId}
+                                  </div>
+                                  <input
+                                    className={cx.input}
+                                    style={{ width: '100%', marginTop: 8 }}
+                                    value={uniprotPrompt}
+                                    onChange={(e) => setUniprotPrompt(e.target.value)}
+                                    placeholder="prompt（映射为 UniProt query）"
+                                    aria-label="UniProt prompt"
+                                  />
+                                  <button
+                                    type="button"
+                                    className={cx.btn}
+                                    style={{ marginTop: 8 }}
+                                    onClick={() => void skillsRunUniprot()}
+                                  >
+                                    通过 Lumen 运行（fixture/offline）
+                                  </button>
+                                </div>
+                              )}
+                            </article>
+                          ))}
+                      </div>
+                      {filterEcosystemSkills(skillsInventory.candidates, skillsQuery).length > 60 && (
+                        <p className={cx.muted}>仅显示前 60 项，请继续缩小搜索范围。</p>
+                      )}
+                    </div>
+                  )}
                   {skillsOut && <pre className={cx.pre}>{skillsOut}</pre>}
                 </section>
               )}
@@ -776,6 +989,9 @@ export const ResearchShell = (): React.JSX.Element => {
                   <p className={cx.muted}>
                     Evidence (one per line): <code>artifactId:expectedSha256</code>
                   </p>
+                  <p className={cx.muted}>
+                    Source run: <code>{lastNotebookRunId || 'no successful notebook run yet'}</code>
+                  </p>
                   <textarea
                     className={cx.textarea}
                     rows={4}
@@ -784,6 +1000,29 @@ export const ResearchShell = (): React.JSX.Element => {
                     spellCheck={false}
                     aria-label="Artifacts to review, one per line as id:expected-sha256"
                     placeholder={'artifact_id:expected_sha256 — one per line.\nRun a notebook cell, then use a hash from its report; the id IS the content hash.'}
+                  />
+                  <label>
+                    Verdict
+                    <select
+                      value={reviewVerdict}
+                      onChange={(e) => setReviewVerdict(e.target.value as ReviewVerdict | '')}
+                      aria-label="Review verdict"
+                    >
+                      <option value="">Choose a verdict…</option>
+                      <option value="pass">Pass</option>
+                      <option value="warn">Warn</option>
+                      <option value="fail">Fail</option>
+                      <option value="needs_revision">Needs revision</option>
+                      <option value="inconclusive">Inconclusive</option>
+                    </select>
+                  </label>
+                  <textarea
+                    className={cx.textarea}
+                    rows={3}
+                    value={reviewSummary}
+                    onChange={(e) => setReviewSummary(e.target.value)}
+                    aria-label="Review rationale"
+                    placeholder="Explain why this evidence supports the selected verdict."
                   />
                   <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                     <button type="button" className={cx.btn} onClick={() => void reviewPlan()}>

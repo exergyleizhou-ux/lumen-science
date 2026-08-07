@@ -61,8 +61,9 @@ function normalizeResolveResult(result: unknown): PreviewFileRecord | null {
   const sha256 = String(body.sha256 ?? body.digest ?? '')
   const ownerId = String(body.owner_id ?? body.ownerId ?? '')
   const projectId = String(body.project_id ?? body.projectId ?? '')
+  const runId = String(body.run_id ?? body.runId ?? '')
   if (!path || !sha256 || !ownerId || !projectId) return null
-  return { path, sha256, ownerId, projectId }
+  return { path, sha256, ownerId, projectId, ...(runId ? { runId } : {}) }
 }
 
 /** Shared singleton used by science IPC registration. */

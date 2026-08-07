@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "id": "biomni-query-uniprot-v1",
+  "source_id": "snap-stanford-biomni",
+  "source_commit": "400c1f366b96a35ca253e13c9b06c5076af41d65",
+  "rights": {
+    "root_spdx": "Apache-2.0",
+    "reuse_mode": "adapt",
+    "attribution": "The fixed capability mapping preserves the Biomni database tool-description path and exact source hash."
+  },
+  "source_files": [
+    {"path": "biomni/tool/tool_description/database.py", "sha256": "875473dc5473cf4f7615c2b4fd886f543ca8a295f7c58eca00fdceb22d2883b6"}
+  ],
+  "implementation": {
+    "path": "agent/crates/codegen/xai-grok-science/src/capability/biomni_uniprot.rs",
+    "authority": "Rust Lumen SessionActor",
+    "operation": "x.ai/science/capability_run",
+    "network": "denied",
+    "process_execution": "denied",
+    "artifact_commit": "store-owned hashed artifacts only"
+  },
+  "evidence": {
+    "intake_level": "E4",
+    "why_not_higher": "The listed local rebuilt-binary test proves only this exact offline fixture-backed ACP operation at the recorded source commit. Exact-head GitHub CI, release, installation, live UniProt access, provider billing, and wet-lab proof remain separate gates.",
+    "source_provenance": "agent/crates/codegen/xai-grok-science/src/capability/biomni_uniprot.rs",
+    "legacy_product_tests": "agent/crates/codegen/xai-grok-shell/tests/test_built_binary_e2e.rs",
+    "built_binary_proof": {
+      "source_commit": "7f0fce4b789e8d7883f09a59339e9e7747375393",
+      "binary_sha256": "9e2559a84012b3ad01a33c90e0a0d2c66fdffc9d6f3ee0bd9b0bb591bfdc3893",
+      "tests": [
+        "test_stdio_science_biomni_uniprot_capability_product_path"
+      ]
+    }
+  },
+  "next_gates": [
+    "No live UniProt call without separate user authorization.",
+    "Exact-head GitHub CI must pass before this record can claim E5.",
+    "Any source change to this capability operation requires a new rebuilt-binary SHA and repeat product proof."
+  ]
+}

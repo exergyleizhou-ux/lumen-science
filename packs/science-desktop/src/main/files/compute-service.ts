@@ -3,6 +3,8 @@
  *
  * Plans only (dry-run). Optional ACP call for plan registration.
  * Never constructs SystemSshRunner / SystemScpRunner / JobDispatcher.
+ *
+ * Trusted identity is always an explicit argument from the IPC boundary.
  */
 
 import {
@@ -12,7 +14,7 @@ import {
   type ComputePlanRequest,
   type ComputePlan,
 } from './compute-plan'
-import { getTrustedPreviewContext } from './session-identity'
+import type { TrustedPreviewContext } from './session-identity'
 
 export type AcpComputeCall = (
   toolName: string,
@@ -20,9 +22,9 @@ export type AcpComputeCall = (
 ) => Promise<unknown>
 
 export type ComputeService = {
-  plan: (req: ComputePlanRequest) => unknown
+  plan: (req: ComputePlanRequest, trusted: TrustedPreviewContext | null) => unknown
   /** Register plan hash via ACP (still dry-run); never live SSH */
-  submitPlan: (req: ComputePlanRequest) => Promise<unknown>
+  submitPlan: (req: ComputePlanRequest, trusted: TrustedPreviewContext | null) => Promise<unknown>
   /** Always denied at desktop */
   executeLive: (planId: string) => unknown
   history: () => ComputePlan[]
@@ -35,8 +37,7 @@ export function createComputeService(opts: {
   const history: ComputePlan[] = []
 
   return {
-    plan(req) {
-      const trusted = getTrustedPreviewContext()
+    plan(req, trusted) {
       if (!trusted) {
         return { ok: false, reason: 'no trusted session — open a project before compute plan' }
       }
@@ -54,8 +55,8 @@ export function createComputeService(opts: {
       }
     },
 
-    async submitPlan(req) {
-      const plannedResult = this.plan(req)
+    async submitPlan(req, trusted) {
+      const plannedResult = this.plan(req, trusted)
       if (!(plannedResult as { ok?: boolean }).ok) return plannedResult
       const plan = (plannedResult as { plan: ComputePlan }).plan
 
@@ -68,8 +69,11 @@ export function createComputeService(opts: {
         }
       }
 
+      if (!trusted) {
+        return { ok: false, reason: 'no trusted session — open a project before compute plan' }
+      }
+
       try {
-        const trusted = getTrustedPreviewContext()!
         const raw = await opts.acpCall('compute_plan', {
           project_id: trusted.projectId,
           hostname: plan.hostname,

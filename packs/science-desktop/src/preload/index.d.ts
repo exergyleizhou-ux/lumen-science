@@ -147,6 +147,8 @@ import type {
   ImportSkillZipBatchRequest,
   ImportSkillZipBatchResult,
   PreviewSkillZipRequest,
+  PreviewGitHubSkillRequest,
+  SkillImportPreviewContent,
   SkillBundlePreviewResult,
   ScanRepoRequest,
   ScanRepoResult,
@@ -285,6 +287,7 @@ interface OpenScienceAPI {
     importSkillZip(request: ImportSkillZipRequest): Promise<ImportSkillResult>
     importSkillZipBatch(request: ImportSkillZipBatchRequest): Promise<ImportSkillZipBatchResult>
     previewSkillZip(request: PreviewSkillZipRequest): Promise<SkillBundlePreviewResult>
+    previewGitHubSkill(request: PreviewGitHubSkillRequest): Promise<SkillImportPreviewContent>
     scanRepoSkills(request: ScanRepoRequest): Promise<ScanRepoResult>
     listAgentHomeSkills(): Promise<AgentHomeSkillView[]>
     importAgentHomeSkill(request: ImportAgentHomeSkillRequest): Promise<ImportSkillResult>
@@ -612,35 +615,28 @@ interface OpenScienceAPI {
     reviewPlan(request: {
       artifacts: { artifactId: string; expectedSha256: string; label?: string }[]
       rubricVersion?: string
+      runId: string
+      verdict: 'pass' | 'warn' | 'fail' | 'needs_revision' | 'inconclusive'
+      summary: string
     }): Promise<unknown>
     reviewSubmit(request: {
       artifacts: { artifactId: string; expectedSha256: string; label?: string }[]
       rubricVersion?: string
-      runId?: string
+      runId: string
+      verdict: 'pass' | 'warn' | 'fail' | 'needs_revision' | 'inconclusive'
+      summary: string
     }): Promise<unknown>
     reviewHistory(): Promise<unknown>
     reviewLatest(): Promise<unknown>
     reviewExportDossier(): Promise<unknown>
     skillsList(): Promise<unknown>
-    skillsImport(request: {
-      skillId: string
-      content: string
-      displayName?: string
-      fileLicense?: string
-      sourceRepository?: string
-      exactCommit?: string
-      sourcePath?: string
-    }): Promise<unknown>
-    skillsAdmit(request: {
-      skillId: string
-      reviewer: string
-      promptInjectionPass: boolean
-      runtimePermissionsReviewed: boolean
-      explicitApprove: boolean
-    }): Promise<unknown>
-    skillsReject(request: { skillId: string; reason?: string }): Promise<unknown>
     skillsQuarantineList(): Promise<unknown>
     skillsBulkAdmit(request: { skillIds: string[] }): Promise<unknown>
+    skillsRunCapability(request: {
+      capabilityId: string
+      prompt: string
+      maxResults?: number
+    }): Promise<unknown>
     computePlan(request: {
       hostname: string
       targetKind?: 'local_process' | 'ssh_fixture' | 'ssh_authorized' | 'slurm_fixture'

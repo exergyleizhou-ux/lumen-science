@@ -6,7 +6,7 @@
  *
  * Lumen Science Desktop: registerReviewerIpcHandlers is a no-op.
  * Reviewer execution is owned by Rust Lumen SessionActor.
- * route: x.ai/science/review_submit → SessionActor → EvidenceGraph
+ * route: x.ai/science/review_submit → SessionActor → ReviewLedger
  */
 
 const REVIEWER_IPC = {

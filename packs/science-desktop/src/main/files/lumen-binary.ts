@@ -97,18 +97,32 @@ export function probeLumenScienceBinary(
     encoding: 'utf-8',
     timeout,
   })
-  const helpOutput = `${help.stdout || ''}${help.stderr || ''}`
+  const stdioHelp = spawnSync(binaryPath, ['agent', 'stdio', '--help'], {
+    encoding: 'utf-8',
+    timeout,
+  })
+  const rootHelpOutput = `${help.stdout || ''}${help.stderr || ''}`
+  const stdioHelpOutput = `${stdioHelp.stdout || ''}${stdioHelp.stderr || ''}`
+  const helpOutput = `${rootHelpOutput}\n${stdioHelpOutput}`
   const helpOk =
     !help.error &&
     help.status === 0 &&
-    /SessionActor/i.test(helpOutput)
+    /Lumen TUI/i.test(rootHelpOutput) &&
+    !stdioHelp.error &&
+    stdioHelp.status === 0 &&
+    /Run the agent over stdio/i.test(stdioHelpOutput)
 
   const ok = isSha256Hex(binaryHash) && versionOk && helpOk
   let detail: string | undefined
   if (!ok) {
     const parts: string[] = []
     if (!versionOk) parts.push(`version: status=${version.status} out=${versionOutput.slice(0, 120)}`)
-    if (!helpOk) parts.push(`help: status=${help.status} out=${helpOutput.slice(0, 120)}`)
+    if (!helpOk) {
+      parts.push(
+        `help: root_status=${help.status} stdio_status=${stdioHelp.status} ` +
+          `out=${helpOutput.slice(0, 120)}`,
+      )
+    }
     detail = parts.join('; ') || 'probe failed'
   }
 

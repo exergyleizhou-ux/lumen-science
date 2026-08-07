@@ -158,6 +158,8 @@ import type {
   ImportAgentHomeSkillRequest,
   AgentHomeSkillView,
   PreviewSkillZipRequest,
+  PreviewGitHubSkillRequest,
+  SkillImportPreviewContent,
   SkillBundlePreviewResult,
   ScanRepoRequest,
   ScanRepoResult,
@@ -317,6 +319,7 @@ type OpenScienceAPI = {
     importSkillZip: (request: ImportSkillZipRequest) => Promise<ImportSkillResult>
     importSkillZipBatch: (request: ImportSkillZipBatchRequest) => Promise<ImportSkillZipBatchResult>
     previewSkillZip: (request: PreviewSkillZipRequest) => Promise<SkillBundlePreviewResult>
+    previewGitHubSkill: (request: PreviewGitHubSkillRequest) => Promise<SkillImportPreviewContent>
     scanRepoSkills: (request: ScanRepoRequest) => Promise<ScanRepoResult>
     listAgentHomeSkills: () => Promise<AgentHomeSkillView[]>
     importAgentHomeSkill: (request: ImportAgentHomeSkillRequest) => Promise<ImportSkillResult>
@@ -663,36 +666,33 @@ type OpenScienceAPI = {
     reviewPlan: (request: {
       artifacts: { artifactId: string; expectedSha256: string; label?: string }[]
       rubricVersion?: string
+      runId: string
+      verdict: 'pass' | 'warn' | 'fail' | 'needs_revision' | 'inconclusive'
+      summary: string
     }) => Promise<unknown>
     reviewSubmit: (request: {
       artifacts: { artifactId: string; expectedSha256: string; label?: string }[]
       rubricVersion?: string
-      runId?: string
+      runId: string
+      verdict: 'pass' | 'warn' | 'fail' | 'needs_revision' | 'inconclusive'
+      summary: string
     }) => Promise<unknown>
     reviewHistory: () => Promise<unknown>
     reviewLatest: () => Promise<unknown>
     reviewExportDossier: () => Promise<unknown>
-    /** OSF-5 Skills — quarantine import; single admit; bulk denied */
+    /** OSF-5 Skills — read-only catalog projections; bulk attempt is always denied */
     skillsList: () => Promise<unknown>
-    skillsImport: (request: {
-      skillId: string
-      content: string
-      displayName?: string
-      fileLicense?: string
-      sourceRepository?: string
-      exactCommit?: string
-      sourcePath?: string
-    }) => Promise<unknown>
-    skillsAdmit: (request: {
-      skillId: string
-      reviewer: string
-      promptInjectionPass: boolean
-      runtimePermissionsReviewed: boolean
-      explicitApprove: boolean
-    }) => Promise<unknown>
-    skillsReject: (request: { skillId: string; reason?: string }) => Promise<unknown>
     skillsQuarantineList: () => Promise<unknown>
     skillsBulkAdmit: (request: { skillIds: string[] }) => Promise<unknown>
+    /**
+     * Admitted ecosystem capability only (Biomni query_uniprot).
+     * Identity from main-process sender binding; connector_id fixed server-side.
+     */
+    skillsRunCapability: (request: {
+      capabilityId: string
+      prompt: string
+      maxResults?: number
+    }) => Promise<unknown>
     /** OSF-6 Compute — dry-run plan; live execute always denied on desktop */
     computePlan: (request: {
       hostname: string
@@ -902,6 +902,11 @@ const api: OpenScienceAPI = {
         'settings:preview-skill-zip',
         request
       ) as Promise<SkillBundlePreviewResult>,
+    previewGitHubSkill: (request: PreviewGitHubSkillRequest) =>
+      ipcRenderer.invoke(
+        'settings:preview-github-skill',
+        request
+      ) as Promise<SkillImportPreviewContent>,
     scanRepoSkills: (request: ScanRepoRequest) =>
       ipcRenderer.invoke('settings:scan-repo-skills', request) as Promise<ScanRepoResult>,
     // "From your agent home" import source: lists the skills under ~/.claude/skills/ for the
@@ -1341,16 +1346,12 @@ const api: OpenScienceAPI = {
     reviewExportDossier: () =>
       ipcRenderer.invoke('review:export-dossier') as Promise<unknown>,
     skillsList: () => ipcRenderer.invoke('skills:list') as Promise<unknown>,
-    skillsImport: (request) =>
-      ipcRenderer.invoke('skills:import', request) as Promise<unknown>,
-    skillsAdmit: (request) =>
-      ipcRenderer.invoke('skills:admit', request) as Promise<unknown>,
-    skillsReject: (request) =>
-      ipcRenderer.invoke('skills:reject', request) as Promise<unknown>,
     skillsQuarantineList: () =>
       ipcRenderer.invoke('skills:quarantine-list') as Promise<unknown>,
     skillsBulkAdmit: (request) =>
       ipcRenderer.invoke('skills:bulk-admit', request) as Promise<unknown>,
+    skillsRunCapability: (request) =>
+      ipcRenderer.invoke('skills:run-capability', request) as Promise<unknown>,
     computePlan: (request) =>
       ipcRenderer.invoke('compute:plan', request) as Promise<unknown>,
     computeSubmitPlan: (request) =>

@@ -112,6 +112,7 @@ export type InterpreterIdentity = {
  * bits lacked +x, not that permission was withheld.
  */
 export type IdentificationFailureCode =
+  | 'actor_probe_required'
   | 'interpreter_path_not_absolute'
   | 'interpreter_not_found'
   | 'interpreter_not_a_file'

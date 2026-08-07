@@ -12,13 +12,11 @@
  * method is `review_record`: it does not judge, it RECORDS a verdict under
  * SessionActor authority.
  *
- * The judgment itself happens here, and it is exactly one check: every cited
- * artifact resolves in the content-addressed store and its actual hash equals
- * the expected hash. Any miss or mismatch fails closed BEFORE anything is
- * recorded, so the verdict that reaches the engine is 'pass' by construction —
- * not because reviews cannot fail, but because a failed validation refuses to
- * produce a record at all. What is recorded is an attestation: "these exact
- * bytes were reviewed", bound to the project by the actor.
+ * Desktop validation is only an early UX failure. The judgment and rationale
+ * are explicit user input; the authoritative commit happens in Rust after
+ * permission. SessionActor reopens the cited succeeded run and ProjectStore
+ * hashes every registered artifact again before committing the review,
+ * evidence manifest, and provenance.
  */
 
 import {
@@ -32,7 +30,7 @@ import {
   type ReviewVerdictProjection,
   type ReviewEvidence,
 } from './review-plan'
-import { getTrustedPreviewContext } from './session-identity'
+import type { TrustedPreviewContext } from './session-identity'
 import type { PreviewFileStore } from './preview-resolver'
 
 export type AcpReviewCall = (
@@ -42,10 +40,15 @@ export type AcpReviewCall = (
 
 export type ReviewService = {
   plan: (req: ReviewRequest) => ReturnType<typeof planReview>
-  submit: (req: ReviewRequest) => Promise<unknown>
+  submit: (
+    req: ReviewRequest,
+    trusted: TrustedPreviewContext | null,
+  ) => Promise<unknown>
   history: () => ReviewVerdictProjection[]
   latest: () => ReviewVerdictProjection | null
-  exportDossier: () => DossierExportProjection | { ok: false; reason: string }
+  exportDossier: (
+    trusted: TrustedPreviewContext | null,
+  ) => DossierExportProjection | { ok: false; reason: string }
   /** Check if latest verdict has gone stale against fresh evidence */
   checkStale: (evidence: ReviewEvidence[]) => { stale: boolean; mismatches: string[] } | { ok: false; reason: string }
   clear: () => void
@@ -74,8 +77,7 @@ export function createReviewService(opts: {
       return planReview(req)
     },
 
-    async submit(req) {
-      const trusted = getTrustedPreviewContext()
+    async submit(req, trusted) {
       if (!trusted) {
         return { ok: false, reason: 'no trusted session — open a project before submitting review' }
       }
@@ -100,6 +102,17 @@ export function createReviewService(opts: {
           return {
             ok: false,
             reason: `artifact ${art.artifactId} not found in store — fail-closed`,
+            plan,
+          }
+        }
+        if (
+          record.ownerId !== trusted.ownerId ||
+          record.projectId !== trusted.projectId ||
+          record.runId !== req.runId
+        ) {
+          return {
+            ok: false,
+            reason: `artifact ${art.artifactId} is not bound to the trusted owner/project/source run`,
             plan,
           }
         }
@@ -138,28 +151,65 @@ export function createReviewService(opts: {
       }
 
       try {
-        const record = (await opts.acpCall('review_record', {
+        const response = (await opts.acpCall('review_record', {
           storeRoot: opts.storeRoot ?? 'science-store',
           projectId: trusted.projectId,
+          ownerId: trusted.ownerId,
           reviewerId: trusted.ownerId,
-          // Earned above, not asserted: a hash miss or mismatch has already
-          // returned before this line.
-          verdict: 'pass',
+          verdict: req.verdict,
+          summary: req.summary,
+          runId: req.runId,
+          artifactSha256s: resolved.map((artifact) => artifact.actualSha256 as string),
+          operationId: plan.reviewId,
           ...(req.claimId ? { claimId: req.claimId } : {}),
-        })) as { verdict?: string; notes?: string[] }
+        })) as Record<string, unknown>
+        if (
+          response?.runtimeAuthority !== 'SessionActor-gated ACP adapter' ||
+          response?.kind !== 'review_record' ||
+          !response?.result ||
+          typeof response.result !== 'object'
+        ) {
+          throw new Error('review_record returned no actor-owned durable mutation result')
+        }
+        const record = response.result as Record<string, unknown>
+        const recordArtifacts = Array.isArray(record.artifacts)
+          ? (record.artifacts as Record<string, unknown>[])
+          : []
+        const returnedHashes = recordArtifacts.map((artifact) => String(artifact.sha256 ?? '')).sort()
+        const expectedHashes = resolved.map((artifact) => String(artifact.actualSha256 ?? '')).sort()
+        if (
+          response.operationId !== plan.reviewId ||
+          response.projectId !== trusted.projectId ||
+          record.review_id !== plan.reviewId ||
+          record.operation_id !== plan.reviewId ||
+          record.project_id !== trusted.projectId ||
+          record.owner_id !== trusted.ownerId ||
+          record.reviewer_id !== trusted.ownerId ||
+          record.source_run_id !== req.runId ||
+          typeof record.authority_run_id !== 'string' ||
+          !/^[A-Za-z0-9_-]{1,128}$/.test(record.authority_run_id) ||
+          typeof record.evidence_fingerprint !== 'string' ||
+          !/^[a-f0-9]{64}$/.test(record.evidence_fingerprint) ||
+          record.verdict !== req.verdict ||
+          record.summary !== req.summary ||
+          recordArtifacts.some((artifact) => artifact.source_run_id !== req.runId) ||
+          returnedHashes.length !== expectedHashes.length ||
+          returnedHashes.some((hash, index) => hash !== expectedHashes[index])
+        ) {
+          throw new Error('review_record durable result does not match the trusted evidence request')
+        }
 
-        // The projection is built from facts this process verified plus the
-        // engine's own record — not parsed back out of a foreign response
-        // shape. `resolved` carries the actual hashes read from the store.
+        // Projection only after the engine confirms the durable record.
         const verdict = normalizeReviewResult(
           {
+            reviewer_id: record.reviewer_id,
             report: {
-              outcome: record?.verdict ?? 'pass',
-              summary: (record?.notes ?? []).join(' ') || 'Artifact hashes verified against the content-addressed store.',
+              outcome: record.verdict,
+              summary: String(record.summary),
               artifacts: resolved.map((a) => ({
                 artifact_id: a.artifactId,
-                passed: true,
-                reason: 'hash verified',
+                passed: null,
+                reason: 'integrity verified; no per-artifact scientific judgment recorded',
                 expected_sha256: a.expectedSha256,
                 actual_sha256: a.actualSha256,
               })),
@@ -173,7 +223,7 @@ export function createReviewService(opts: {
           plan,
           verdict,
           record,
-          authority: 'SessionActor/EvidenceGraph',
+          authority: 'SessionActor/ReviewLedger',
         }
       } catch (e: unknown) {
         return {
@@ -192,8 +242,7 @@ export function createReviewService(opts: {
       return history.length > 0 ? history[history.length - 1] : null
     },
 
-    exportDossier() {
-      const trusted = getTrustedPreviewContext()
+    exportDossier(trusted) {
       if (!trusted) {
         return { ok: false, reason: 'no trusted session for dossier export' }
       }

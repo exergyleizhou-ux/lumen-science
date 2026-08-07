@@ -38,7 +38,10 @@ import type { IpcMainLike } from './files/science-ipc'
 import { AcpSessionManager, type EngineState } from './acp-session-manager'
 import { PermissionBroker, type AskHuman } from './permission-broker'
 import { ENGINE_APPROVAL_TIMEOUT_MS } from './files/science-ipc'
-import { listScienceMethods } from './science-method-registry'
+import {
+  isGenericRendererScienceMethod,
+  listScienceMethods,
+} from './science-method-registry'
 
 // ── Engine singleton ─────────────────────────────────────────────
 
@@ -151,17 +154,57 @@ export function getLumenEngineState(): EngineState {
   return manager?.getState() ?? lastState
 }
 
-/** Spawn the engine and complete the ACP handshake. Rejects on failure. */
+/**
+ * Spawn the engine and complete the ACP handshake. Rejects on failure.
+ *
+ * Unlike the manager (which deliberately does not self-retry so a crash loop
+ * stays visible), the bridge retries transient failures a bounded number of
+ * times with backoff. The failure mode this guards against is real: on
+ * 2026-08-07 a loaded machine (load ~5, three stale TUI processes spinning)
+ * made `initialize`+`authenticate` exceed the old shared 60s budget, so
+ * `session/new` got ~1ms, the engine went `unavailable`, and stayed that way
+ * until the app was manually restarted. A retry after a few seconds lets the
+ * cold start finish. A genuinely broken binary still surfaces after
+ * START_RETRY_ATTEMPTS — the failure is bounded, logged, and visible.
+ */
+const START_RETRY_ATTEMPTS = 3
+const START_RETRY_BACKOFF_MS = [2_000, 8_000, 24_000] as const
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 export async function startLumen(): Promise<void> {
-  await ensureManager().start()
+  let lastError: unknown
+  for (let attempt = 1; attempt <= START_RETRY_ATTEMPTS; attempt++) {
+    try {
+      await ensureManager().start()
+      return
+    } catch (error: unknown) {
+      lastError = error
+      if (attempt < START_RETRY_ATTEMPTS) {
+        const backoff = START_RETRY_BACKOFF_MS[attempt - 1]
+        console.warn(
+          `[lumen] engine handshake failed (attempt ${attempt}/${START_RETRY_ATTEMPTS}), ` +
+            `retrying in ${backoff}ms: ${error instanceof Error ? error.message : String(error)}`,
+        )
+        await sleep(backoff)
+      }
+    }
+  }
+  throw lastError
 }
 
 /** Graceful shutdown: close the transport, SIGTERM, then SIGKILL. */
 export async function stopLumen(): Promise<void> {
   const current = manager
   manager = null
-  if (!current) return
+  // Invalidate identity before awaiting process shutdown. A stopped, crashed,
+  // or already-absent engine may never preserve a capability from its session.
+  const { clearAllTrustedSessions } = await import('./files/session-binding')
+  clearAllTrustedSessions()
   lastState = { status: 'stopped' }
+  if (!current) return
   await current.stop()
 }
 
@@ -206,10 +249,9 @@ export function safeHandle(
  *
  * `toolName` is a science method name — the registry decides whether it may go
  * on the wire. Three names this pack has been sending exist in neither engine
- * (`project_assert_membership`, `artifact_resolve`, `compute_plan`) and three
- * more are Go MCP tools rather than Rust ACP methods (`artifact_list`,
- * `notebook_execute`, `start_review`); all six are rejected here, by name, with
- * the reason. That rejection is deliberate and load-bearing: while the
+ * (`artifact_resolve`, `compute_plan`) and two more are Go MCP tools rather
+ * than Rust ACP methods (`notebook_execute`, `start_review`); all four are
+ * rejected here, by name, with the reason. That rejection is deliberate and load-bearing: while the
  * transport was fictional those calls failed with ECONNREFUSED, which read as
  * "engine down" instead of "this method does not exist".
  *
@@ -238,6 +280,10 @@ export async function listScienceTools(): Promise<unknown> {
       name: m.name,
       method: m.qualified,
       transport: 'acp-stdio',
+      genericRendererCallable: isGenericRendererScienceMethod(m.name),
+      route: isGenericRendererScienceMethod(m.name)
+        ? 'generic-acp-call'
+        : 'sender-bound-settings-ipc',
     })),
     authority: 'rust-acp-extension-methods',
   }

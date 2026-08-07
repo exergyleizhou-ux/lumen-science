@@ -24,7 +24,9 @@ from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parent.parent
 STATUS_REL = Path("docs/science/status/current.json")
+STATUS_EVIDENCE_REL = Path("docs/science/status/evidence.v1.json")
 VERIFIER = ROOT / "scripts" / "verify-science-status.py"
+GENERATOR = ROOT / "scripts" / "generate-science-status.py"
 
 results: list[tuple[str, bool, str]] = []
 
@@ -252,6 +254,41 @@ def test_generator_accepts_evidenced_pass() -> None:
             results.append(("generator accepts evidenced pass", False, f"got {gate}"))
 
 
+def test_status_evidence_rejects_stale_desktop_source() -> None:
+    """A Desktop code/workflow change must invalidate an older CI receipt."""
+    path = ROOT / STATUS_EVIDENCE_REL
+    original = path.read_bytes()
+    try:
+        evidence = json.loads(original.decode("utf-8"))
+        # This commit predates the tracked full-package workflow. It remains an
+        # ancestor, so failure proves protected-path drift rather than a
+        # missing-commit error.
+        evidence["gates"]["desktop"]["fullBuild"]["evidence"]["sourceAnchor"]["headCommit"] = (
+            "07310811b0def9a4a36b768b88c325aaca995d9b"
+        )
+        path.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
+        proc = subprocess.run(
+            [sys.executable, str(GENERATOR), "--stdout"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        output = proc.stdout + proc.stderr
+        if proc.returncode == 2 and "stale" in output:
+            results.append(("stale Desktop CI evidence is rejected", True, ""))
+        else:
+            results.append(
+                (
+                    "stale Desktop CI evidence is rejected",
+                    False,
+                    f"exit={proc.returncode}; output={output.strip()[:180]!r}",
+                )
+            )
+    finally:
+        path.write_bytes(original)
+
+
 def main() -> int:
     if not (ROOT / STATUS_REL).is_file():
         print(
@@ -279,6 +316,7 @@ def main() -> int:
     test_missing_status_file()
     test_generator_refuses_unevidenced_pass()
     test_generator_accepts_evidenced_pass()
+    test_status_evidence_rejects_stale_desktop_source()
 
     print("test-science-status")
     passed = 0

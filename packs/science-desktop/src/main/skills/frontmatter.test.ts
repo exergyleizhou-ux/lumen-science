@@ -1,6 +1,30 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseFrontmatter, splitFrontmatter } from './frontmatter'
+import { parseFrontmatter, parseSkillDocument, splitFrontmatter } from './frontmatter'
+
+describe('parseSkillDocument', () => {
+  it('separates identity fields from reusable metadata while preserving frontmatter presence', () => {
+    const raw = [
+      '---',
+      'Name: Demo',
+      'DESCRIPTION: Does a thing.',
+      'License: MIT',
+      'tags:',
+      '  - research',
+      '  - writing',
+      '---',
+      '# Body'
+    ].join('\n')
+
+    expect(parseSkillDocument(raw)).toEqual({
+      name: 'Demo',
+      description: 'Does a thing.',
+      metadata: { license: 'MIT', tags: 'research, writing' },
+      body: '# Body',
+      hasFrontmatter: true
+    })
+  })
+})
 
 describe('parseFrontmatter', () => {
   it('parses every scalar field into a lowercased map and strips the block', () => {
@@ -14,7 +38,7 @@ describe('parseFrontmatter', () => {
       '',
       '# Demo'
     ].join('\n')
-    const { fields, body } = parseFrontmatter(raw)
+    const { fields, body, hasFrontmatter } = parseFrontmatter(raw)
     expect(fields).toMatchObject({
       name: 'demo',
       description: 'Does a thing.',
@@ -22,12 +46,14 @@ describe('parseFrontmatter', () => {
       author: 'AIPOCH'
     })
     expect(body.startsWith('# Demo')).toBe(true)
+    expect(hasFrontmatter).toBe(true)
   })
 
   it('returns empty fields and full text when no frontmatter is present', () => {
-    const { fields, body } = parseFrontmatter('# Just a body')
+    const { fields, body, hasFrontmatter } = parseFrontmatter('# Just a body')
     expect(fields).toEqual({})
     expect(body).toBe('# Just a body')
+    expect(hasFrontmatter).toBe(false)
   })
 
   it('joins a folded block scalar (>) into a single spaced line', () => {

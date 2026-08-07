@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "corpus": "S2a shadow-only scenario corpus — class C: execution & liveness",
+  "pinned_binary": {
+    "lumen": "2.2.0 (098f7cd4)",
+    "binary_sha256": "f1aa406131f9db4b30f636770386738b289a5bcd65a695e7aac912f699073564"
+  },
+  "scenarios": [
+    {
+      "id": "C1-depth-hard-cap",
+      "description": "Depth 3 is the hard cap; a deeper node cannot exist in the projection.",
+      "driver": "governedTree/status node depths",
+      "assertions": ["max depth == 3", "leaf has no children"],
+      "forbidden_effects": ["no spawn at depth 3 (deny sandbox.leaf_spawn_denied)"]
+    },
+    {
+      "id": "C2-leaf-denied-write-network",
+      "description": "A depth-3 evidence leaf cannot write or reach the network.",
+      "driver": "governedTree deny records",
+      "assertions": ["sandbox.leaf_write_denied present", "sandbox.leaf_network_denied present"],
+      "forbidden_effects": ["no write", "no network"]
+    },
+    {
+      "id": "C3-sibling-isolation",
+      "description": "A child cannot read a sibling's scratch space.",
+      "driver": "governedTree deny records",
+      "assertions": ["sandbox.sibling_isolation present on child"],
+      "forbidden_effects": ["no cross-sibling read"]
+    },
+    {
+      "id": "C4-capability-ceiling",
+      "description": "A child's write capability is capped below the root's.",
+      "driver": "governedTree deny records",
+      "assertions": ["capability_ceiling deny present on child"],
+      "forbidden_effects": ["no child write escalation"]
+    }
+  ]
+}

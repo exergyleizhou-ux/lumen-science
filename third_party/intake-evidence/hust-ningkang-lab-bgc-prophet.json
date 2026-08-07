@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "source_id": "hust-ningkang-lab-bgc-prophet",
+  "exact_commit": "de5068695a381d117ae3829d9c2698d954b85efc",
+  "tree_sha": "cea7914da708f9d6f8dfa6d49d99385d42147beb",
+  "archive_sha256": "ed4da248d4af9acea88e29a7eebe5760edcc0ee0e1a62290b7da32ff1f308587",
+  "root_license": {"spdx": "MIT", "path": "LICENSE", "sha256": "4e459a5157c258922f9a2544350df6d2449c439950e7a5a24a5a8283c2d8e977"},
+  "nested_license_inventory": [["LICENSE", "4e459a5157c258922f9a2544350df6d2449c439950e7a5a24a5a8283c2d8e977"]],
+  "tree_inventory": {"path": "third_party/intake-inventories/hust-ningkang-lab-bgc-prophet-de506-tree-metadata.json", "sha256": "0c114158be6b3d1b8bd7e6970cedc4032f99aaf8f354164c502b84dc891fb648", "entry_count": 41},
+  "runtime_admission": "none"
+}

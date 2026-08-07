@@ -56,6 +56,7 @@ type SettingsApi = {
   importSkillZip: ReturnType<typeof vi.fn>
   importSkillZipBatch: ReturnType<typeof vi.fn>
   previewSkillZip: ReturnType<typeof vi.fn>
+  previewGitHubSkill: ReturnType<typeof vi.fn>
   listConnectors: ReturnType<typeof vi.fn>
   getConnectorDetail: ReturnType<typeof vi.fn>
   setConnectorEnabled: ReturnType<typeof vi.fn>
@@ -192,6 +193,7 @@ beforeEach(() => {
     importSkillZip: vi.fn().mockResolvedValue({ status: 'imported', id: 'z', skills: [] }),
     importSkillZipBatch: vi.fn().mockResolvedValue({ results: [], skills: [] }),
     previewSkillZip: vi.fn().mockResolvedValue({ previews: [], skipped: [] }),
+    previewGitHubSkill: vi.fn(),
     listConnectors: vi
       .fn()
       .mockResolvedValue({ connectors: [], customServers: [], ncbi: { hasApiKey: false } }),
@@ -939,6 +941,31 @@ describe('settings store: refreshProviderModels', () => {
     expect(api.setSkillEnabled).toHaveBeenCalledWith({ id: 'demo', enabled: false })
     expect(useSettingsStore.getState().skills[0].enabled).toBe(false)
   })
+
+  it('S0-B: a shipping skill mutation resolves false and surfaces the migration-required state on typed fail-close', async () => {
+    useSettingsStore.setState({ skills: [], skillMutationBlocked: false })
+    api.setSkillEnabled.mockRejectedValue(
+      new Error(
+        'SKILL_AUTHORITY_UNAVAILABLE: Skill mutation is disabled until the governed Skill Revision API ships (X-M1).'
+      )
+    )
+
+    const ok = await useSettingsStore.getState().setSkillEnabled('demo', true)
+
+    expect(ok).toBe(false)
+    expect(useSettingsStore.getState().skillMutationBlocked).toBe(true)
+    expect(useSettingsStore.getState().skills).toEqual([])
+  })
+
+  it('S0-B: a successful mutation clears the migration-required state', async () => {
+    useSettingsStore.setState({ skills: [], skillMutationBlocked: true })
+    api.setSkillEnabled.mockResolvedValue([])
+
+    const ok = await useSettingsStore.getState().setSkillEnabled('demo', false)
+
+    expect(ok).toBe(true)
+    expect(useSettingsStore.getState().skillMutationBlocked).toBe(false)
+  })
 })
 
 describe('settings store: openSettingsToSkill', () => {
@@ -978,6 +1005,8 @@ describe('settings store: skill bundle upload', () => {
           subPath: 'skills/alpha',
           name: 'Alpha',
           description: '',
+          metadata: {},
+          body: '# Alpha',
           files: ['SKILL.md'],
           alreadyImported: false
         },
@@ -985,6 +1014,8 @@ describe('settings store: skill bundle upload', () => {
           subPath: 'skills/beta',
           name: 'Beta',
           description: '',
+          metadata: {},
+          body: '# Beta',
           files: ['SKILL.md'],
           alreadyImported: true
         }
@@ -997,6 +1028,27 @@ describe('settings store: skill bundle upload', () => {
     expect(api.previewSkillZip).toHaveBeenCalledWith({ dataBase64: 'YmFzZTY0' })
     expect(previews.map((preview) => preview.name)).toEqual(['Alpha', 'Beta'])
     expect(skipped).toEqual([{ source: 'oversized.zip', reason: 'too large (limit 8 MB)' }])
+  })
+
+  it('forwards a read-only GitHub candidate preview', async () => {
+    const preview = {
+      name: 'Alpha',
+      description: 'Preview',
+      sourceLabel: 'github.com/acme/skills@main/alpha',
+      metadata: {},
+      body: '# Alpha',
+      files: ['SKILL.md']
+    }
+    api.previewGitHubSkill.mockResolvedValue(preview)
+
+    await expect(
+      useSettingsStore
+        .getState()
+        .previewGitHubSkill('https://github.com/acme/skills/tree/main/alpha')
+    ).resolves.toBe(preview)
+    expect(api.previewGitHubSkill).toHaveBeenCalledWith({
+      url: 'https://github.com/acme/skills/tree/main/alpha'
+    })
   })
 
   it('importSkillZipBatch forwards every item and reconciles the skill list once', async () => {
@@ -1056,6 +1108,43 @@ describe('settings store: skill bundle upload', () => {
     })
     expect(result.status).toBe('imported')
     expect(useSettingsStore.getState().skills.map((skill) => skill.id)).toEqual(['imported-alpha'])
+  })
+
+  it('keeps the installed skill projection unchanged for quarantine-only ZIP results', async () => {
+    const existing = {
+      id: 'existing-skill',
+      name: 'Existing',
+      description: '',
+      source: 'personal' as const,
+      updatedAt: '',
+      enabled: true
+    }
+    useSettingsStore.setState({ skills: [existing] })
+    api.importSkillZip.mockResolvedValue({
+      status: 'quarantined',
+      id: 'skill-quarantine-run',
+      skills: []
+    })
+    api.importSkillZipBatch.mockResolvedValue({
+      results: [
+        {
+          subPath: 'skills/alpha',
+          status: 'quarantined',
+          id: 'skill-quarantine-run'
+        }
+      ],
+      skills: []
+    })
+
+    await useSettingsStore.getState().importSkillZip('YmFzZTY0', {
+      subPath: 'skills/alpha'
+    })
+    expect(useSettingsStore.getState().skills).toEqual([existing])
+
+    await useSettingsStore
+      .getState()
+      .importSkillZipBatch('YmFzZTY0', [{ subPath: 'skills/alpha' }])
+    expect(useSettingsStore.getState().skills).toEqual([existing])
   })
 })
 

@@ -2,3 +2,42 @@ Lumen agent runtime is derived from SpaceXAI Grok Build
 (https://github.com/xai-org/grok-build), licensed under Apache License 2.0.
 See agent/LICENSE and agent/THIRD-PARTY-NOTICES.
 Vertical packs and modifications: Copyright Lumen authors.
+
+Lumen Science adapts deterministic molecular-biology algorithms from Motif at
+commit 876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0, licensed under MIT. The
+FASTA parser, nucleotide/protein metrics, IUPAC reverse-complement, and
+standard-code translation are reworked in Rust behind the Lumen SessionActor.
+See third_party/motif/LICENSE, THIRD_PARTY_NOTICES.md,
+third_party/provenance/motif.md, and
+third_party/provenance/motif-876a-seqbench.md. Motif's MCP server, installer,
+Node execution authority, and external alignment runners are not adopted.
+
+Lumen Science includes a sanitized, non-executable source corpus derived from
+InternScience/SCP at commit
+cea5398564032aea65a78e246d06c30ae945e03f, licensed under MIT.
+See third_party/internscience-scp/LICENSE, NOTICE.md, VENDOR_MANIFEST.json, and
+third_party/provenance/internscience-scp.md. Embedded remote endpoints and
+execution examples are not admitted product capabilities.
+
+Lumen Science includes the literal tool-description modules from Biomni at
+commit 400c1f366b96a35ca253e13c9b06c5076af41d65, licensed under Apache
+License 2.0. See third_party/biomni-tool-descriptions/LICENSE, NOTICE.md,
+VENDOR_MANIFEST.json, and third_party/provenance/biomni-tool-descriptions.md.
+The Biomni agent runtime, Python/R/Bash execution, downloaded datasets,
+pickled schemas, and device control are not included or authorized.
+
+Lumen Science also preserves Biomni's Apache-2.0 literal resource catalogs and
+two know-how documents that explicitly declare CC BY 4.0, at the same exact
+commit. See third_party/biomni-resource-catalog and
+third_party/provenance/biomni-resource-catalog.md. Underlying datasets,
+software packages, CRISPick/Addgene resources, and 82 publisher protocol
+bodies are not copied or authorized by this catalog.
+
+Lumen Science adapts the bounded Skill preview and metadata-preservation design
+from Open Science at commit
+fd2853f0b9bdb6c063ccc1e741687584ab94bf9a, licensed under Apache License
+2.0. See third_party/open-science/LICENSE and
+third_party/provenance/open-science-fd2853-skill-preview.md. The upstream
+streaming ZIP classifier and its adversarial tests are source-adapted as a
+tested foundation. The upstream conversation import runtime and Electron-owned
+approval authority are not adopted.

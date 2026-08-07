@@ -8,6 +8,8 @@
  *
  * Adversarial cases: path-based preview, cross-project id, unauthenticated
  * notebook execute, banned OS IPC symbols still unregistered.
+ *
+ * Identity is sender-scoped throughout — no process-global bag.
  */
 
 import { createHash } from 'node:crypto'
@@ -17,11 +19,14 @@ import nodePath from 'node:path'
 import { LocalProjectCatalog } from './local-project-catalog'
 import { AcpPreviewStore } from './acp-preview-store'
 import { createOfflineCatalogMembershipAsserter } from './hybrid-membership'
-import { bindTrustedSession, unbindTrustedSession } from './session-binding'
 import {
-  setTrustedPreviewContext,
-  clearTrustedPreviewContext,
-  getTrustedPreviewContext,
+  bindTrustedSession,
+  unbindTrustedSession,
+  clearAllTrustedSessions,
+} from './session-binding'
+import {
+  getTrustedPreviewContextForSender,
+  type TrustedPreviewContext,
 } from './session-identity'
 import { loadArtifactPreview } from './preview-service'
 import { resolvePreview } from './preview-resolver'
@@ -51,6 +56,8 @@ export type Osf9Report = {
   exportProjection?: unknown
 }
 
+const PROOF_SENDER = 9
+
 export async function runOsf9ProductPath(opts?: {
   connectorLockPath?: string
   registryPath?: string
@@ -60,7 +67,7 @@ export async function runOsf9ProductPath(opts?: {
     steps.push({ name, ok, detail })
   }
 
-  clearTrustedPreviewContext()
+  clearAllTrustedSessions()
   const catalog = new LocalProjectCatalog()
   const store = new AcpPreviewStore()
   const ownerId = 'osf9-owner'
@@ -69,13 +76,14 @@ export async function runOsf9ProductPath(opts?: {
     ownerId,
     description: 'offline product path',
   })
+  const trusted: TrustedPreviewContext = { ownerId, projectId: project.id }
 
   // Offline fixture: no engine to ask. Named explicitly so this file cannot be
   // mistaken for the production trust model — it grants from local state.
   const membership = createOfflineCatalogMembershipAsserter({ catalog })
   const bind = await bindTrustedSession(
     { ownerId, projectId: project.id },
-    { assertMembership: membership },
+    { assertMembership: membership, senderId: PROOF_SENDER },
   )
   push('bind-session', bind.ok === true, bind.ok ? project.id : (bind as { reason?: string }).reason)
 
@@ -90,31 +98,36 @@ export async function runOsf9ProductPath(opts?: {
     return { path: full, sha256: createHash('sha256').update(body).digest('hex') }
   }
   const arts = [
-    { id: 'art-lit-1', ...writeFixture('lit/pubmed.json', '{"pmid": "fixture"}\n'), label: 'literature' },
-    { id: 'art-db-1', ...writeFixture('db/uniprot.fa', '>fixture\nMKV\n'), label: 'uniprot_protein' },
-    { id: 'art-nb-1', ...writeFixture('nb/out.csv', 'col\n1\n'), label: 'notebook_output' },
-  ]
+    { ...writeFixture('lit/pubmed.json', '{"pmid": "fixture"}\n'), label: 'literature' },
+    { ...writeFixture('db/uniprot.fa', '>fixture\nMKV\n'), label: 'uniprot_protein' },
+    { ...writeFixture('nb/out.csv', 'col\n1\n'), label: 'notebook_output' },
+  ].map((artifact) => ({ ...artifact, id: artifact.sha256 }))
   for (const a of arts) {
     store.put(a.id, {
       path: a.path,
       sha256: a.sha256,
       ownerId,
       projectId: project.id,
+      runId: 'offline-fixture-run',
     })
   }
   push('seed-artifacts', true, `${arts.length} artifacts`)
 
-  // Preview by artifact_id
-  setTrustedPreviewContext({ ownerId, projectId: project.id })
+  // Preview by artifact_id under sender-bound trusted context
   const prev = await loadArtifactPreview(
-    { artifactId: 'art-lit-1', expectedSha256: arts[0].sha256 },
+    { artifactId: arts[0].id, expectedSha256: arts[0].sha256 },
     { store },
+    trusted,
   )
-  push('preview-by-artifact', prev.access.ok === true, prev.path)
+  push(
+    'preview-by-artifact',
+    prev.access.ok === true,
+    `${prev.byteLength ?? 0} verified bytes`,
+  )
 
   // Adversarial: path-style / wrong project
   const cross = await resolvePreview(
-    { artifactId: 'art-lit-1' },
+    { artifactId: arts[0].id },
     store,
     { ownerId: 'attacker', projectId: project.id },
   )
@@ -135,42 +148,59 @@ export async function runOsf9ProductPath(opts?: {
     acpCall: async () => ({ state: 'succeeded', refusedSteps: [] }),
     resolveInterpreter: async () => ({ ok: true, interpreterPath: '/usr/bin/python3' }),
   })
-  clearTrustedPreviewContext()
-  const nbDenied = await nb.execute({ language: 'python', code: 'print(1)\n' })
+  const nbDenied = await nb.execute({ language: 'python', code: 'print(1)\n' }, null)
   push(
     'notebook-execute-without-session-denied',
     (nbDenied as { ok?: boolean }).ok === false,
   )
-  setTrustedPreviewContext({ ownerId, projectId: project.id })
-  const nbOk = await nb.execute({ language: 'python', code: 'print(1)\n' })
+  const nbOk = await nb.execute({ language: 'python', code: 'print(1)\n' }, trusted)
   push('notebook-execute-with-session', (nbOk as { ok?: boolean }).ok === true)
 
   // Review
   const review = createReviewService({
-    acpCall: async () => ({
-      report: {
-        outcome: 'pass',
-        summary: 'fixture review',
-        artifacts: arts.map((a) => ({
-          artifact_id: a.id,
-          passed: true,
-          reason: 'ok',
-          expected_sha256: a.sha256,
+    acpCall: async (_tool, args) => ({
+      operationId: args.operationId,
+      kind: 'review_record',
+      projectId: args.projectId,
+      replayed: false,
+      runtimeAuthority: 'SessionActor-gated ACP adapter',
+      result: {
+        review_id: args.operationId,
+        operation_id: args.operationId,
+        reviewer_id: args.reviewerId,
+        owner_id: args.ownerId,
+        verdict: 'pass',
+        summary: args.summary,
+        project_id: args.projectId,
+        source_run_id: args.runId,
+        authority_run_id: 'osf9-review-authority-run',
+        evidence_fingerprint: createHash('sha256')
+          .update((args.artifactSha256s as string[]).join('|'))
+          .digest('hex'),
+        artifacts: (args.artifactSha256s as string[]).map((sha256) => ({
+          source_run_id: args.runId,
+          sha256,
         })),
       },
     }),
     previewStore: store,
   })
-  const rev = await review.submit({
-    artifacts: arts.map((a) => ({
-      artifactId: a.id,
-      expectedSha256: a.sha256,
-      label: a.label,
-    })),
-  })
+  const rev = await review.submit(
+    {
+      runId: 'offline-fixture-run',
+      verdict: 'pass',
+      summary: 'Offline OSF-9 fixture artifacts match the fixture review rubric.',
+      artifacts: arts.map((a) => ({
+        artifactId: a.id,
+        expectedSha256: a.sha256,
+        label: a.label,
+      })),
+    },
+    trusted,
+  )
   push('review-submit', (rev as { ok?: boolean }).ok === true)
 
-  const dossier = review.exportDossier()
+  const dossier = review.exportDossier(trusted)
   const dossierOk =
     !('ok' in dossier && (dossier as { ok: boolean }).ok === false) &&
     Array.isArray((dossier as { artifacts?: unknown[] }).artifacts) &&
@@ -202,7 +232,7 @@ export async function runOsf9ProductPath(opts?: {
   // Office fail-closed
   const office = assertOfficePreviewAdmission({
     format: 'docx',
-    artifactId: 'art-lit-1',
+    artifactId: arts[0].id,
     expectedSha256: arts[0].sha256,
   })
   push('office-fail-closed', office.ok === false)
@@ -220,19 +250,19 @@ export async function runOsf9ProductPath(opts?: {
     banned.join(','),
   )
 
-  // Restart simulation: clear session, rebind, preview still works after re-seed identity
-  unbindTrustedSession()
-  clearTrustedPreviewContext()
-  push('restart-clear-session', getTrustedPreviewContext() === null)
+  // Restart simulation: clear all senders, rebind, preview still works
+  unbindTrustedSession(PROOF_SENDER)
+  clearAllTrustedSessions()
+  push('restart-clear-session', getTrustedPreviewContextForSender(PROOF_SENDER) === null)
   const rebind = await bindTrustedSession(
     { ownerId, projectId: project.id },
-    { assertMembership: membership },
+    { assertMembership: membership, senderId: PROOF_SENDER },
   )
   push('restart-rebind', rebind.ok === true)
-  setTrustedPreviewContext({ ownerId, projectId: project.id })
   const prev2 = await loadArtifactPreview(
-    { artifactId: 'art-db-1', expectedSha256: arts[1].sha256 },
+    { artifactId: arts[1].id, expectedSha256: arts[1].sha256 },
     { store },
+    trusted,
   )
   push('restart-preview', prev2.access.ok === true)
 

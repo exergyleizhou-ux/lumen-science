@@ -29,7 +29,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 const PACK = process.cwd()
-const BINARY = process.env.LUMEN_BINARY ?? path.resolve(PACK, '../../agent/target/debug/lumen')
+const BINARY = process.env.LUMEN_BINARY ?? path.resolve(PACK, '../../../lumen/agent/target/debug/lumen')
 
 let app: ElectronApplication
 let page: Page
@@ -251,9 +251,9 @@ test('the run\'s artifacts are previewable and reviewable — the evidence chain
   // End of the chain the product exists for: a cell ran in the engine, the
   // engine committed hashed outputs, and now (a) the Evidence tab resolves one
   // of those hashes to a real local file and (b) a review of those exact bytes
-  // is recorded under actor authority. Before this branch, the store could
-  // never be seeded (artifact_list is a Go MCP tool this bridge cannot call),
-  // so both halves were structurally dead while every unit suite was green.
+  // is recorded under actor authority. Workflow outputs are seeded from the
+  // actor-owned commit report; durable ScienceStore runs are seeded through
+  // the Rust artifact_list query.
   const report = (await page.locator('#panel-notebook pre').textContent()) ?? ''
   // The manifest maps relative path → content hash; stdout.txt always exists
   // for a cell that printed.
@@ -267,7 +267,7 @@ test('the run\'s artifacts are previewable and reviewable — the evidence chain
   await page.getByRole('button', { name: 'Preview', exact: true }).click()
   await expect
     .poll(async () => page.locator('#panel-evidence pre').textContent(), { timeout: 15_000 })
-    .toContain('ok path=')
+    .toContain('ok bytes=')
   const meta = (await page.locator('#panel-evidence pre').textContent()) ?? ''
   // The record's hash is the id itself — content addressing, visibly.
   expect(meta).toContain(sha!)
@@ -275,8 +275,23 @@ test('the run\'s artifacts are previewable and reviewable — the evidence chain
   // (b) Review those bytes.
   await page.getByRole('tab', { name: 'Review', exact: true }).click()
   await page.locator('#panel-review').waitFor({ timeout: 10_000 })
-  await page.locator('#panel-review textarea').fill(`${sha}:${sha}`)
+  await expect(page.locator('#panel-review')).toContainText(/Source run:\s*[A-Za-z0-9_-]+/)
+  await page
+    .getByLabel('Artifacts to review, one per line as id:expected-sha256')
+    .fill(`${sha}:${sha}`)
+  await page.getByLabel('Review verdict').selectOption('pass')
+  await page
+    .getByLabel('Review rationale')
+    .fill('The recorded stdout bytes match the expected deterministic result.')
   await page.getByRole('button', { name: /submit review/i }).click()
+
+  // Recording a verdict is a new durable mutation, not a side effect of the
+  // notebook approval. It must ask independently; otherwise the UI either
+  // bypassed SessionActor or waits forever on a prompt this test never answers.
+  const allowReview = page.getByRole('button', { name: /allow/i }).first()
+  await allowReview.waitFor({ timeout: 30_000 })
+  await allowReview.click()
+
   await expect
     .poll(async () => page.locator('#panel-review pre').textContent(), { timeout: 30_000 })
     .toContain('"ok": true')
@@ -338,17 +353,22 @@ test('the Skills and Connectors catalogs actually load', async () => {
   // a packaged app at all.
   await page.getByRole('tab', { name: 'Skills', exact: true }).click()
   await page.locator('#panel-skills').waitFor({ timeout: 10_000 })
-  await page.getByRole('button', { name: 'List inventory', exact: true }).click()
+  // The isolation-first Skills panel loads the inventory with the local
+  // capability catalog button (not the former "List inventory" label).
+  await page.getByRole('button', { name: '加载本地科研能力', exact: true }).click()
   await expect
     .poll(async () => page.locator('#panel-skills pre').textContent(), { timeout: 15_000 })
-    .toContain('"ok": true')
+    .toContain('"total":')
 
   const skills = (await page.locator('#panel-skills pre').textContent()) ?? ''
-  // Non-empty: a green "ok" over a zero inventory is the exact failure this
+  // Non-empty: a green inventory over a zero registry is the exact failure this
   // replaced, so assert the registry actually had contents.
   const total = /"total":\s*(\d+)/.exec(skills)?.[1]
   expect(Number(total ?? 0)).toBeGreaterThan(0)
   expect(skills).not.toContain('unreadable')
+  // The isolation contract is part of the loaded inventory, not just prose:
+  // exactly the admitted capability may run, everything else stays quarantined.
+  expect(skills).toContain('"admittedExecutable": 1')
 
   await page.getByRole('tab', { name: 'Connectors', exact: true }).click()
   await page.locator('#panel-connectors').waitFor({ timeout: 10_000 })

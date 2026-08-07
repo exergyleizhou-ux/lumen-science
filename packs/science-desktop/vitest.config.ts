@@ -89,7 +89,6 @@ export default defineConfig({
       'src/main/reviewer/fix-loop.test.ts',
       'src/main/reviewer/lifecycle.test.ts',
       'src/main/settings/responses-bridge.integration.test.ts',
-      'src/main/settings/service.test.ts',
       // Prisma-backed persistence was not adopted (project state lives in the
       // Rust SessionActor; @prisma/client is excluded from the package too).
       'src/main/compute/prisma-client.test.ts',

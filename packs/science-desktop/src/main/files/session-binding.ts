@@ -5,12 +5,19 @@
  * (ACP project membership or fixture) must accept the claim first.
  * After bind, optional artifact_list results seed the preview store so
  * files:preview-by-artifact can resolve artifact_id without path open.
+ *
+ * Bind/rebind always requires an explicit senderId. There is no process-global
+ * identity bag for production or tests.
  */
 
 import {
-  setTrustedPreviewContext,
-  clearTrustedPreviewContext,
+  clearTrustedPreviewContextForSender,
+  clearAllTrustedPreviewContexts,
+  attachTrustedIdentitySenderCleanup,
+  beginTrustedPreviewContextBinding,
+  commitTrustedPreviewContextForSender,
   type TrustedPreviewContext,
+  type TrustedIdentitySender,
 } from './session-identity'
 import type { PreviewFileRecord } from './preview-resolver'
 
@@ -53,6 +60,8 @@ export type ArtifactListItem = {
   digest?: string
   project_id?: string
   projectId?: string
+  run_id?: string
+  runId?: string
   owner_id?: string
   ownerId?: string
 }
@@ -63,6 +72,13 @@ export type SeedableStore = {
 
 export type BindSessionOptions = {
   assertMembership: MembershipAsserter
+  /**
+   * Electron webContents.id of the invoking renderer. Required — identity is
+   * stored only for that sender. Missing senderId is a programming error.
+   */
+  senderId: number
+  /** Optional WebContents-like handle used to clear identity on teardown. */
+  sender?: TrustedIdentitySender
 }
 
 export type BindSessionResult =
@@ -70,29 +86,55 @@ export type BindSessionResult =
   | { ok: false; reason: string }
 
 /**
- * Assert membership then set main-process trusted preview context.
+ * Assert membership then set main-process trusted preview context for sender.
+ *
+ * Failed rebind for a senderId ALWAYS revokes that sender's prior binding so a
+ * denied membership cannot leave a stale capability in place (begin already
+ * deletes the prior map entry and bumps epoch).
  */
 export async function bindTrustedSession(
   claim: MembershipClaim,
   opts: BindSessionOptions,
 ): Promise<BindSessionResult> {
+  if (!Number.isInteger(opts.senderId) || opts.senderId < 0) {
+    return { ok: false, reason: 'bind requires a real non-negative senderId' }
+  }
+  const senderEpoch = beginTrustedPreviewContextBinding(opts.senderId)
+  if (opts.sender) {
+    attachTrustedIdentitySenderCleanup(opts.sender)
+  }
   if (!claim.ownerId || !claim.projectId) {
     return { ok: false, reason: 'ownerId and projectId are required' }
   }
   const result = await opts.assertMembership(claim)
   if (!result.ok) {
+    // begin already revoked this sender's prior binding; leave it unbound.
     return { ok: false, reason: result.reason || 'membership denied' }
   }
-  // Use asserted identity (not client claim) as the trusted context
-  setTrustedPreviewContext({
+  const trusted = {
     ownerId: result.ownerId,
     projectId: result.projectId,
-  })
+  }
+  if (!commitTrustedPreviewContextForSender(opts.senderId, senderEpoch, trusted)) {
+    return {
+      ok: false,
+      reason: 'membership result was superseded by navigation, unbind, restart, or a newer bind',
+    }
+  }
   return { ok: true, ownerId: result.ownerId, projectId: result.projectId }
 }
 
-export function unbindTrustedSession(): void {
-  clearTrustedPreviewContext()
+/** Clear one sender's trusted binding (remove-current-project / unbind). */
+export function unbindTrustedSession(senderId: number): void {
+  if (!Number.isInteger(senderId) || senderId < 0) {
+    return
+  }
+  clearTrustedPreviewContextForSender(senderId)
+}
+
+/** Engine stop/restart: invalidate every sender binding. */
+export function clearAllTrustedSessions(): void {
+  clearAllTrustedPreviewContexts()
 }
 
 /**
@@ -118,12 +160,15 @@ export function seedPreviewStoreFromList(
 
     const itemOwner = item.owner_id ?? item.ownerId
     if (itemOwner && itemOwner !== ownership.ownerId) continue
+    const runId = String(item.run_id ?? item.runId ?? '')
+    if (!runId) continue
 
     store.put(artifactId, {
       path,
       sha256,
       ownerId: ownership.ownerId,
       projectId: ownership.projectId,
+      runId,
     })
     n++
   }

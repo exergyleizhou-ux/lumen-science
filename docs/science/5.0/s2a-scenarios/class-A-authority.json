@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "corpus": "S2a shadow-only scenario corpus — class A: authority",
+  "pinned_binary": {
+    "lumen": "2.2.0 (098f7cd4)",
+    "binary_sha256": "f1aa406131f9db4b30f636770386738b289a5bcd65a695e7aac912f699073564"
+  },
+  "scenarios": [
+    {
+      "id": "A1-forged-parent-depth",
+      "description": "A caller cannot forge tree lineage: parent/depth come from the actor's real lineage, never from the request.",
+      "driver": "governedTree/status projection",
+      "assertions": [
+        "root node depth == 0",
+        "child depth == 1 and parentId == root",
+        "leaf depth == 3 (hard cap) and maySpawn == false",
+        "a depth-3 leaf carries sandbox.leaf_spawn_denied deny records"
+      ],
+      "forbidden_effects": ["no provider call", "no network", "no spawn"]
+    },
+    {
+      "id": "A2-unknown-method",
+      "description": "An unknown science/ACP method fails closed at dispatch before any session or store is touched.",
+      "driver": "ACP ext method _x.ai/science/<unknown>",
+      "assertions": ["error.code == -32601 Method not found"],
+      "forbidden_effects": ["no session created", "no store write"]
+    },
+    {
+      "id": "A3-forged-owner",
+      "description": "An ownerId that does not own the session cannot reach actor-gated execution.",
+      "driver": "run_csv with foreign ownerId",
+      "assertions": ["rejected before permission (invalid params / ownership)"],
+      "forbidden_effects": ["no approval prompt", "no artifact", "no execution"]
+    },
+    {
+      "id": "A4-unknown-tool-kind",
+      "description": "A leaf tool of unknown kind is denied by the tool filter.",
+      "driver": "governedTree deny records",
+      "assertions": ["deny code tool.unknown_kind present"],
+      "forbidden_effects": ["no tool dispatch"]
+    },
+    {
+      "id": "A5-caller-bypass",
+      "description": "A caller-supplied bypass is never honored.",
+      "driver": "governedTree deny records",
+      "assertions": ["deny code sandbox.caller_supplied_bypass present"],
+      "forbidden_effects": ["no bypass execution"]
+    }
+  ]
+}

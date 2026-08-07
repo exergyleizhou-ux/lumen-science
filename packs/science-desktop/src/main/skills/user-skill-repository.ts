@@ -15,6 +15,7 @@ import { SKILL_IMPORT_LIMITS } from '../../shared/skill-import-limits'
 import { createLogger } from '../logger'
 import {
   fetchSkillFiles,
+  fetchSkillPreview,
   parseGitHubSkillUrl,
   parseGitHubRepo,
   scanRepoForSkills,
@@ -22,8 +23,9 @@ import {
   type FetchedSkillFile,
   type ScannedSkill
 } from './github-import'
-import { parseFrontmatter } from './frontmatter'
+import { parseFrontmatter, parseSkillDocument } from './frontmatter'
 import type { BundledSkill } from './registry'
+import { selectSkillManifestRoots } from './skill-bundle-paths'
 import { readSkillFile } from './skill-files'
 import { extractZip, extractZipLenient } from './zip-extract'
 
@@ -80,7 +82,7 @@ const toSlug = (name: string): string =>
 // every field round-trips LOSSLESSLY and always as a string through any conformant YAML parser. The
 // leading `---`/trailing `---` document markers are added by the caller. `lineWidth: -1` disables line
 // folding so long descriptions aren't rewrapped (which would not be byte-lossless).
-const frontmatterBlock = (fields: { name: string; description: string }): string =>
+const frontmatterBlock = (fields: Record<string, string>): string =>
   dumpYaml(fields, { lineWidth: -1 })
 
 // A skill id is `<source>-<slug>`; parse it back to its source + slug (null for bundled/unknown ids).
@@ -101,6 +103,7 @@ type WriteSkillInput = {
   name: string
   description: string
   body: string
+  metadata?: Record<string, string>
   references?: SkillReference[]
 }
 
@@ -123,6 +126,30 @@ const signatureOf = (files: FetchedSkillFile[]): string => {
   return hash.digest('hex')
 }
 
+type ParsedSkillPreview = {
+  name: string
+  description: string
+  metadata: Record<string, string>
+  body: string
+  files: string[]
+}
+
+const parsedSkillPreview = (
+  raw: string,
+  files: string[],
+  fallbackName: string
+): ParsedSkillPreview => {
+  const { name: frontmatterName, description = '', metadata, body } = parseSkillDocument(raw)
+
+  return {
+    name: frontmatterName?.trim() || fallbackName,
+    description,
+    metadata,
+    body,
+    files: [...files].sort()
+  }
+}
+
 // One skill root inside an archive: the directory prefix holding a SKILL.md, plus that skill's files
 // re-based so SKILL.md sits at their root.
 type SkillRoot = { subPath: string; files: FetchedSkillFile[] }
@@ -132,31 +159,15 @@ type SkillRoot = { subPath: string; files: FetchedSkillFile[] }
 // `*/SKILL.md`, or `*/*/SKILL.md`); deeper SKILL.md files are ignored. A root nested under a shallower
 // one is dropped so a single skill is never counted twice. Archive paths always use forward slashes.
 const findSkillRoots = (entries: { path: string; content: Buffer }[]): SkillRoot[] => {
-  const candidates = new Set<string>()
-  for (const entry of entries) {
-    const segments = entry.path.split('/')
-    if (segments[segments.length - 1].toLowerCase() !== 'skill.md') continue
-    if (segments.length > 3) continue
-    candidates.add(segments.slice(0, -1).join('/'))
-  }
+  const roots = selectSkillManifestRoots(entries.map((entry) => entry.path))
 
-  // Keep only the shallowest root on each branch: a candidate under another (or under the archive
-  // root '') is that skill's own file, not a separate skill.
-  const all = [...candidates]
-  const roots = all.filter(
-    (subPath) =>
-      !all.some((other) => other !== subPath && (other === '' || subPath.startsWith(`${other}/`)))
-  )
-
-  return roots
-    .map((subPath) => {
-      const prefix = subPath === '' ? '' : `${subPath}/`
-      const files = entries
-        .filter((entry) => entry.path.startsWith(prefix))
-        .map((entry) => ({ relativePath: entry.path.slice(prefix.length), content: entry.content }))
-      return { subPath, files }
-    })
-    .sort((a, b) => a.subPath.localeCompare(b.subPath))
+  return roots.map((subPath) => {
+    const prefix = subPath === '' ? '' : `${subPath}/`
+    const files = entries
+      .filter((entry) => entry.path.startsWith(prefix))
+      .map((entry) => ({ relativePath: entry.path.slice(prefix.length), content: entry.content }))
+    return { subPath, files }
+  })
 }
 
 // True for an archive entry that is itself a skill bundle (a .zip / .skill nested inside the upload).
@@ -540,6 +551,21 @@ class UserSkillRepository {
     })
   }
 
+  // Lazily reads one scanned GitHub candidate for the read-only renderer preview. Unlike import,
+  // this downloads only SKILL.md while retaining the bounded directory walk for the file list.
+  async previewGitHubSkill(url: string, fetchImpl?: FetchLike): Promise<ParsedSkillPreview> {
+    const location = parseGitHubSkillUrl(url)
+    if (!location) throw new Error('Not a recognizable GitHub URL.')
+
+    const fetcher = fetchImpl ?? (globalThis.fetch as unknown as FetchLike | undefined)
+    if (!fetcher) throw new Error('No fetch implementation available.')
+
+    const { skillMd, files } = await fetchSkillPreview(location, fetcher)
+    const fallbackName = location.path.split('/').filter(Boolean).pop() ?? location.repo
+
+    return parsedSkillPreview(skillMd.toString('utf8'), files, fallbackName)
+  }
+
   // Finds an already-imported skill whose recorded source URL matches, for dedup. Only real slugs are
   // scanned, so a hidden transaction dir can never be returned as a (bogus) slug.
   private async findImportedSlugByUrl(url: string): Promise<string | undefined> {
@@ -563,13 +589,17 @@ class UserSkillRepository {
       await this.doRecoverImportedTransactions()
 
       const previews: SkillBundlePreview[] = []
+      let previewContentBytes = 0
       // A root that can't be parsed into a valid preview (no name, bad frontmatter) is skipped with a
       // reason instead of failing the whole bundle — so the importable skills still come through.
       for (const root of roots) {
         try {
           const skillMd = root.files.find((file) => file.relativePath.toLowerCase() === 'skill.md')!
-          const { fields } = parseFrontmatter(skillMd.content.toString('utf8'))
-          const name = fields.name?.trim()
+          const previewContentUnavailable =
+            previewContentBytes + skillMd.content.length >
+            SKILL_IMPORT_LIMITS.maxPreviewContentBytes
+          const parsed = parseSkillDocument(skillMd.content.toString('utf8'))
+          const name = parsed.name?.trim()
           if (!name) {
             skipped.push({ source: root.subPath || 'skill', reason: 'SKILL.md has no name' })
             continue
@@ -580,9 +610,15 @@ class UserSkillRepository {
           )
           const replaceableId = alreadyImported ? undefined : await this.replaceableImportedId(name)
 
+          if (!previewContentUnavailable) previewContentBytes += skillMd.content.length
           previews.push({
             name,
-            description: fields.description ?? '',
+            description: previewContentUnavailable ? '' : (parsed.description ?? ''),
+            metadata: previewContentUnavailable ? {} : parsed.metadata,
+            body: previewContentUnavailable ? '' : parsed.body,
+            previewError: previewContentUnavailable
+              ? `SKILL.md preview content exceeds the ${mb(SKILL_IMPORT_LIMITS.maxPreviewContentBytes)} cumulative limit. You can still import it.`
+              : undefined,
             files: root.files.map((file) => file.relativePath).sort(),
             alreadyImported,
             replaceableId,
@@ -908,7 +944,7 @@ class UserSkillRepository {
     return (await this.listSlugs(source)).includes(slug)
   }
 
-  // Writes a SKILL.md with a minimal frontmatter block (name/description) followed by the body.
+  // Writes a SKILL.md with authoritative name/description plus optional imported frontmatter.
   private async writeSkill(
     source: (typeof USER_SOURCES)[number],
     slug: string,
@@ -917,8 +953,23 @@ class UserSkillRepository {
     const dir = this.skillDir(source, slug)
     await mkdir(dir, { recursive: true })
 
+    // Renderer requests are untrusted: accept only the flat keys this app can read, keep every value
+    // a string, and never let imported metadata override the authoritative name or description.
+    const metadata = Object.fromEntries(
+      Object.entries(input.metadata ?? {}).filter(
+        ([key, value]) =>
+          key.toLowerCase() !== 'name' &&
+          key.toLowerCase() !== 'description' &&
+          /^[A-Za-z0-9_-]+$/.test(key) &&
+          typeof value === 'string'
+      )
+    )
     // js-yaml.dump already ends with a newline, so the closing fence follows directly.
-    const frontmatter = `---\n${frontmatterBlock({ name: input.name, description: input.description })}---`
+    const frontmatter = `---\n${frontmatterBlock({
+      name: input.name,
+      description: input.description,
+      ...metadata
+    })}---`
     const contents = `${frontmatter}\n\n${input.body.trimStart()}`
 
     await writeFile(join(dir, 'SKILL.md'), contents, 'utf8')

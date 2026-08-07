@@ -43,7 +43,11 @@ GENERATOR = ROOT / "scripts" / "generate-adoption-provenance.py"
 
 # A modified file must say so. Any of these phrasings counts — the requirement
 # is that a reader of the file learns it diverges from upstream, not that we
-# picked one wording.
+# picked one wording. Entries with `removed: true` carry an obligation record
+# only: the bytes are gone (M1 single-base de-copy) and there is nothing left
+# to attribute, so the license-obligation check skips them but the counts keep
+# them as shipped.
+# 
 CHANGE_MARKERS = (
     "adapted from open science",
     "adapted from the open science",
@@ -68,7 +72,11 @@ def ok(check: str, detail: str = "") -> None:
 
 
 def check_license_obligations(ledger: dict[str, Any]) -> None:
-    modified = [p for p, e in ledger["files"].items() if e["origin"] == "adopted-modified"]
+    modified = [
+        p
+        for p, e in ledger["files"].items()
+        if e["origin"] == "adopted-modified" and not e.get("removed")
+    ]
     missing: list[str] = []
     for rel in modified:
         path = ROOT / rel

@@ -1,0 +1,71 @@
+{
+  "book_path": "docs/science/5.0/LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-06.md",
+  "book_sha256": "f5b6a2efd2e9b330728845474b5fa3a2821d436077805510bc614a781eba1a4b",
+  "canonical_lumen_observation": {
+    "local_branch": "main",
+    "local_head": "7b8f385b183825f81b2497572b0e44e8d3eea7d4",
+    "nextgen_execution_book_tracked": true,
+    "observation_only": true,
+    "origin_main": "79a5c2d966e6591a2a8a5dd077ccc3a8d9eb29af",
+    "pin_eligible": true,
+    "r0_receipt": {
+      "ci_green": "5/5 SUCCESS on 7b8f385b183825f81b2497572b0e44e8d3eea7d4 (version-check / regenerate / Lumen crates+clippy / Offline gates / Expert v2 gate)",
+      "evidence_commit_b": "af2857a21ec4b1c5655d308231b89ba81596c4fd",
+      "observed_at": "2026-08-06T00:00:00+08:00",
+      "release_tags": [
+        "v2.0.0",
+        "v2.1.0",
+        "v2.2.0"
+      ],
+      "source_commit_a": "098f7cd424c1015bfe0d1cbd88c96570b36064ca"
+    },
+    "reason": "Canonical Lumen main is a released line: v2.0.0/v2.1.0/v2.2.0 signed tags all point to their source A commits, evidence B and readiness artifacts are committed, CI is green, release v2.2.0 has 19 assets. Science observes read-only; pin consumption still requires V0 verification card and X-C1 contract.",
+    "repository": "https://github.com/exergyleizhou-ux/lumen.git"
+  },
+  "feature_completion_claimed": false,
+  "pointer_files": [
+    "docs/science/5.0/README.md",
+    "docs/science/5.0/PLAN_SUPERSESSION_MAP.md"
+  ],
+  "purpose": "Hash-lock the canonical Lumen Science execution order (2026-08-06 dialectical revision against canonical Lumen 2.2) and its non-completion claims. This lock proves document integrity only; it does not admit a source, implement a gate, or prove CI, package, release, live provider, HPC, or device behavior. PASS_UPSTREAM statuses recorded in the gate registries are upstream facts with receipts, not Science completion.",
+  "recorded_at": "2026-08-06T23:10:00+08:00",
+  "required_headings": [
+    "# Lumen Science NextGen \u552f\u4e00\u6267\u884c\u603b\u7eb2",
+    "## 0. \u4e00\u9875\u7ed3\u8bba",
+    "## 1. 2026-08-06 \u4e8b\u5b9e\u51bb\u7ed3",
+    "## 4. \u6b63\u786e\u4f9d\u8d56\u56fe\uff1a2026-08-06 \u7248",
+    "## 5. \u65b0\u6267\u884c\u810a\u67f1",
+    "## 40. \u8fdb\u5ea6\u7b97\u6cd5",
+    "## 44. \u6700\u7ec8 Definition of Done",
+    "# Appendix A \u2014 Canonical gate crosswalk\uff0808-06 \u7248\uff09",
+    "# Appendix B \u2014 \u6587\u6863\u6743\u5a01\u548c supersession",
+    "# Appendix C \u2014 \u975e\u76ee\u6807"
+  ],
+  "required_terms": [
+    "P0_NR_SAFETY_GATE",
+    "LumenCoreSourceTupleV1",
+    "LumenPlatformApiReceiptV1",
+    "ScienceProductSourceTupleV1",
+    "GovernedRunEnvelopeV1",
+    "SINGLE_BASE_GATE",
+    "HARNESS_REGRESSION_GATE",
+    "SOURCE_INTAKE_ACTIVE_GATE",
+    "SCIENCE_MACOS_GA_GATE",
+    "SKILL_LIFECYCLE_AUTHORITY_GATE",
+    "PASS_UPSTREAM",
+    "098f7cd4",
+    "x.ai/science/",
+    "X-C1",
+    "V0",
+    "11ec961"
+  ],
+  "schema_version": 1,
+  "science_observation": {
+    "branch": "ls5-core-v0.1.251-sync",
+    "repository": "https://github.com/exergyleizhou-ux/lumen-science.git",
+    "source_commit": "11ec96178d0b4d7ee7b24f27ec6034b5e2d0aaf8",
+    "upstream": "origin/ls5-core-v0.1.251-sync"
+  },
+  "status": "execution_contract",
+  "top_level_gate_pass_count": 0
+}

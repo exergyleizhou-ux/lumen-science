@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "source_id": "aurekaresearch-opendde",
+  "exact_commit": "f607bb3c9ff299c0627ac20f5ef8e25d716ed46f",
+  "tree_sha": "778c6ad58a3393360d1b6fc5d20e2bfa6c80aabf",
+  "archive_sha256": "c134708412a1c6fb2b77d636171314792c147a1a4d4fcd8294fd6aee361b49b2",
+  "root_license": {"spdx": "Apache-2.0", "path": "LICENSE", "sha256": "9295103560df7e496d7420d897ece3b2e6365ab2571d3060d629fa10a2657cbd"},
+  "nested_license_inventory": [["LICENSE", "9295103560df7e496d7420d897ece3b2e6365ab2571d3060d629fa10a2657cbd"]],
+  "tree_inventory": {"path": "third_party/intake-inventories/aurekaresearch-opendde-f607-tree-metadata.json", "sha256": "ee2e7c647b88f12194e4bf4b2b9c025229e126687edf9560bb0361de222995e9", "entry_count": 223},
+  "runtime_admission": "none"
+}

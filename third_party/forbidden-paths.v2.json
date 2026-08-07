@@ -1,0 +1,54 @@
+{
+  "schema_version": 2,
+  "purpose": "Path-level restrictions that override a repository root license during source intake.",
+  "rules": [
+    {
+      "source_id": "qzzqzzb-openclaudescience",
+      "path": "skills/docx/**",
+      "required_disposition": "reject-license",
+      "copy_forbidden": true,
+      "clean_room_only": true,
+      "reason": "Nested Anthropic proprietary license; root MIT does not grant reuse."
+    },
+    {
+      "source_id": "qzzqzzb-openclaudescience",
+      "path": "skills/pdf/**",
+      "required_disposition": "reject-license",
+      "copy_forbidden": true,
+      "clean_room_only": true,
+      "reason": "Nested Anthropic proprietary license; root MIT does not grant reuse."
+    },
+    {
+      "source_id": "qzzqzzb-openclaudescience",
+      "path": "skills/pptx/**",
+      "required_disposition": "reject-license",
+      "copy_forbidden": true,
+      "clean_room_only": true,
+      "reason": "Nested Anthropic proprietary license; root MIT does not grant reuse."
+    },
+    {
+      "source_id": "qzzqzzb-openclaudescience",
+      "path": "skills/xlsx/**",
+      "required_disposition": "reject-license",
+      "copy_forbidden": true,
+      "clean_room_only": true,
+      "reason": "Nested Anthropic proprietary license; root MIT does not grant reuse."
+    },
+    {
+      "source_id": "ai4s-research-open-science",
+      "path": "runtime/opencode-profile/**",
+      "copy_forbidden": true,
+      "clean_room_only": false,
+      "required_disposition": "reject-authority",
+      "reason": "OpenCode profile and runtime configuration cannot become a parallel Lumen execution authority; fetched packs remain denied by intake policy."
+    },
+    {
+      "source_id": "aipoch-open-science",
+      "path": "src/main/connectors/mcp-client-manager.ts",
+      "copy_forbidden": true,
+      "clean_room_only": false,
+      "required_disposition": "reject-authority",
+      "reason": "Node stdio, SSE, and HTTP MCP client management cannot become a parallel Lumen capability authority."
+    }
+  ]
+}

@@ -40,11 +40,11 @@ python3 scripts/verify-science-status.py     # fresh + honest + non-contradictin
 
 **Versions (three lines — see `docs/VERSIONING.md`):**
 
-- Lumen Core (pager): `agent/.../xai-grok-pager` crate version (currently `0.1.222`)
-- Lumen Science CLI/MCP: `packs/science/VERSION` (currently **`1.0.1`**, GitHub Release `v1.0.1`)
+- Lumen Core (Rust): root `VERSION` + `agent/VERSION` + eight Core crates (currently **`0.1.222`**). **Single Rust base is not complete** — known Core drift against audited Lumen main head `dc563b1e…` is **134** files, machine-gated by `scripts/check-core-drift.py`. The `v0.1.251` tag (`88a204cf…`) is the admission target, not the drift comparison checkout.
+- Lumen Science CLI/MCP (frozen Go): `packs/science/VERSION` (currently **`1.0.1`**, GitHub Release `v1.0.1`)
 - Lumen Science Desktop: `packs/science-desktop/package.json` (currently `1.1.0-dev`, **not GA**)
 
-Root `VERSION` remains used by some science install scripts; prefer `packs/science/VERSION` going forward.
+Do not treat root `VERSION` as the Go CLI version, and do not bump Core to `0.1.251` until source parity is real.
 
 ## 快速开始
 

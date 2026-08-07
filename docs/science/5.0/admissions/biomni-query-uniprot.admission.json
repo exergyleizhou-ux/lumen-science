@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-07-29T00:00:00+00:00",
+  "purpose": "Admit exactly one Biomni tool as an executable Lumen capability mapping. Does not approve the remaining 223 Biomni tools.",
+  "biomni_catalog": {
+    "path": "packs/science/skills/ecosystem/biomni-tool-catalog.json",
+    "total": 224,
+    "admitted_executable": 1,
+    "still_quarantined": 223
+  },
+  "capability": {
+    "id": "ecosystem/biomni/query_uniprot",
+    "display_name": "query_uniprot",
+    "source": {
+      "repository": "https://github.com/snap-stanford/Biomni.git",
+      "exact_commit": "400c1f366b96a35ca253e13c9b06c5076af41d65",
+      "source_path": "biomni/tool/tool_description/database.py",
+      "source_sha256": "875473dc5473cf4f7615c2b4fd886f543ca8a295f7c58eca00fdceb22d2883b6",
+      "license": "Apache-2.0",
+      "reuse_mode": "adapted-capability-mapping"
+    },
+    "input_contract": {
+      "allowed_fields": ["prompt", "maxResults"],
+      "prompt": "non-empty string after trim, max 2000 UTF-8 bytes",
+      "maxResults": "integer 1..=50",
+      "forbidden_fields": [
+        "endpoint", "url", "baseUrl", "method", "headers", "body",
+        "command", "shell", "python", "filesystemPath", "provider", "model",
+        "ownerId", "projectId", "sessionId", "runId", "callId", "connectorId"
+      ]
+    },
+    "mapping": {
+      "lumen_method": "x.ai/science/connector_fetch",
+      "connector_id": "uniprot",
+      "prompt_maps_to": "query",
+      "controlled_tools": ["x.ai/science/connector_fetch"]
+    },
+    "execution_authority": "Rust SessionActor BeginScienceFetch → permission → FinishScienceFetch",
+    "product_mode": "fixture/offline only in this admission; live UniProt is not authorized here",
+    "status": "admitted-executable"
+  },
+  "explicit_non_claims": [
+    "Biomni is not fully integrated",
+    "223 other Biomni tools remain quarantined",
+    "Biomni Python runtime is not an execution authority",
+    "caller-supplied UniProt endpoints are never accepted"
+  ]
+}

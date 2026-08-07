@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "id": "motif-primer-thermodynamics-domain-v1",
+  "kind": "pure-domain-extraction",
+  "source_id": "jvogan-motif",
+  "source_commit": "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0",
+  "rights": {
+    "root_spdx": "MIT",
+    "reuse_mode": "adapt",
+    "attribution": "Primer secondary-structure screening is a source-level Motif adaptation with exact source digests preserved below."
+  },
+  "source_files": [
+    {"path": "src/bio/primer-thermodynamics.ts", "sha256": "464f85110fc071e5e30b95a7ff7c4b8e066a35d5e97f4fb003005554ad5ed72e"},
+    {"path": "src/bio/tm-calculator.ts", "sha256": "b6f5fc408a01d6dff5aef85adc7706466bfb22f478e5278aa6c087e5eb8eb0d2"}
+  ],
+  "implementation": {
+    "path": "agent/crates/codegen/xai-grok-science/src/primer_thermo.rs",
+    "execution_authority": "none",
+    "operation": "none",
+    "network": "denied",
+    "process_execution": "denied",
+    "store_mutation": "denied"
+  },
+  "evidence": {
+    "intake_level": "E2",
+    "why_not_higher": "This record describes the pure helper itself, not a second executable capability. Its current consumer is the E4 seq_analyze operation; the helper still owns no ACP route, durable authority, artifact commit, CI or release claim.",
+    "source_provenance": "agent/crates/codegen/xai-grok-science/src/primer_thermo.rs",
+    "legacy_product_tests": "agent/crates/codegen/xai-grok-science/src/primer_thermo.rs"
+  },
+  "next_gates": [
+    "Add cross-language reference vectors before changing user-visible analysis output.",
+    "Keep any future consumer bound into its durable request hash and replay context.",
+    "Do not create a separate execution authority; preserve SessionActor-only product admission."
+  ]
+}

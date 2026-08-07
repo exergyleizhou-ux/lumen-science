@@ -17,12 +17,16 @@ import type { ReviewService } from './review-service'
 import type { NotebookService } from './notebook-service'
 import { planNotebookCell } from './notebook-plan'
 import { planReview } from './review-plan'
-import { setTrustedPreviewContext, clearTrustedPreviewContext } from './session-identity'
+import {
+  clearAllTrustedPreviewContexts,
+  setTrustedPreviewContextForSender,
+  type TrustedPreviewContext,
+} from './session-identity'
 import type { MembershipAsserter } from './session-binding'
-import { bindTrustedSession } from './session-binding'
 
 export type DossierFixture = {
   projectId: string
+  runId: string
   question: string
   plan: string
   ownerId: string
@@ -74,7 +78,13 @@ export async function runDossierGoldPath(
     steps.push({ step, ok, metadata: meta, warnings: ok ? [] : [meta.reason as string ?? 'step failed'] })
   }
 
-  clearTrustedPreviewContext()
+  clearAllTrustedPreviewContexts()
+  // Product-proof composition is not multi-window Electron; use a fixed sender id.
+  const proofSenderId = 1
+  const trusted: TrustedPreviewContext = {
+    ownerId: fixture.ownerId,
+    projectId: fixture.projectId,
+  }
 
   // 1. Create project via catalog
   let projectId = fixture.projectId
@@ -116,12 +126,17 @@ export async function runDossierGoldPath(
       sha256: art.sha256,
       ownerId: fixture.ownerId,
       projectId,
+      runId: fixture.runId,
     })
   }
   addStep('seed', true, { count: fixture.artifacts.length })
 
   // 5. Bind trusted session (membership already asserted; now set identity)
-  setTrustedPreviewContext({ ownerId: fixture.ownerId, projectId })
+  setTrustedPreviewContextForSender(proofSenderId, {
+    ownerId: fixture.ownerId,
+    projectId,
+  })
+  trusted.projectId = projectId
   addStep('bind', true, { ownerId: fixture.ownerId, projectId })
 
   // 6. Literature / Database: artifacts are in preview store
@@ -151,6 +166,9 @@ export async function runDossierGoldPath(
 
   // 8. Review: plan + submit via shipped reviewService
   const reviewPlanResult = planReview({
+    runId: fixture.runId,
+    verdict: 'pass',
+    summary: 'Offline dossier fixture artifacts were reviewed against the fixture rubric.',
     artifacts: fixture.artifacts.map((a) => ({
       artifactId: a.artifactId,
       expectedSha256: a.sha256,
@@ -166,13 +184,19 @@ export async function runDossierGoldPath(
 
   if (!('ok' in reviewPlanResult)) {
     // Submit via review service with store for hash validation
-    const reviewResult = await deps.reviewService.submit({
-      artifacts: fixture.artifacts.map((a) => ({
-        artifactId: a.artifactId,
-        expectedSha256: a.sha256,
-        label: a.label,
-      })),
-    })
+    const reviewResult = await deps.reviewService.submit(
+      {
+        runId: fixture.runId,
+        verdict: 'pass',
+        summary: 'Offline dossier fixture artifacts were reviewed against the fixture rubric.',
+        artifacts: fixture.artifacts.map((a) => ({
+          artifactId: a.artifactId,
+          expectedSha256: a.sha256,
+          label: a.label,
+        })),
+      },
+      trusted,
+    )
     reviewOk = Boolean((reviewResult as { ok?: boolean }).ok)
     const verdict = (reviewResult as { verdict?: { outcome: string } }).verdict
     addStep('review', reviewOk, {
@@ -184,7 +208,7 @@ export async function runDossierGoldPath(
   }
 
   // 9. Export dossier projection from review service
-  const exp = deps.reviewService.exportDossier()
+  const exp = deps.reviewService.exportDossier(trusted)
   if ('ok' in exp && exp.ok === false) {
     addStep('export', false, { reason: exp.reason })
   } else {
@@ -195,7 +219,7 @@ export async function runDossierGoldPath(
     })
   }
 
-  clearTrustedPreviewContext()
+  clearAllTrustedPreviewContexts()
   return buildExport(fixture, steps, dossierProjection)
 }
 

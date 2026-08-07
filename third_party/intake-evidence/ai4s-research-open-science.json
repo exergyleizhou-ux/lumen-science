@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "source_id": "ai4s-research-open-science",
+  "exact_commit": "f3928bda37acfdbe3dfe18792fc1eca38c2e884f",
+  "tree_sha": "057b2d7631f0fd63c90e4b9ceadd5c87015122d6",
+  "archive_sha256": "5cd37c71206a5b9c55f820a454884c01b4731d01e06250f9883ed45c485292b4",
+  "root_license": {"spdx": "MIT", "path": "LICENSE", "sha256": "8f844b63f71cc8acb08d844081425183bc28fbb7312e1576651d2cf4cc013738"},
+  "license_metadata_reconciliation": {
+    "github_api": {
+      "repository_license_spdx_id": "NOASSERTION",
+      "license_blob_sha": "39738f6927a1af8ab05f682977046b5320ccdd95",
+      "observed_at": "2026-08-01T19:42:00+08:00"
+    },
+    "pinned_license_text": {"spdx": "MIT", "path": "LICENSE", "sha256": "8f844b63f71cc8acb08d844081425183bc28fbb7312e1576651d2cf4cc013738"},
+    "conclusion": "root-license-verified-from-pinned-file",
+    "scope": "Root license only; third-party skills remain subject to their own terms and no execution authority is granted."
+  },
+  "nested_license_inventory": [["LICENSE", "8f844b63f71cc8acb08d844081425183bc28fbb7312e1576651d2cf4cc013738"]],
+  "tree_inventory": {"path": "third_party/intake-inventories/ai4s-research-open-science-f392-tree-metadata.json", "sha256": "06d139dfba1f2393992c0540ee4d85a075057ad495dfc8bda33c74c06fa72f7a", "entry_count": 549},
+  "runtime_admission": "none",
+  "rights_status": "verified-root-license-only"
+}

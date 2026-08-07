@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "corpus": "S2a shadow-only scenario corpus — class E: UX & provenance",
+  "pinned_binary": {
+    "lumen": "2.2.0 (098f7cd4)",
+    "binary_sha256": "f1aa406131f9db4b30f636770386738b289a5bcd65a695e7aac912f699073564"
+  },
+  "scenarios": [
+    {
+      "id": "E1-actor-truth-over-ui",
+      "description": "The UI projection must mirror actor truth: nodes/denies come from the governed preview, not from client state.",
+      "driver": "governedTree/status full response",
+      "assertions": [
+        "fixtureId == m1-governed-tree-preview-v1",
+        "nodes, denies, acceptedSnapshotHash present",
+        "no field invented by the client can appear in the projection"
+      ],
+      "forbidden_effects": ["no client-side authority state"]
+    },
+    {
+      "id": "E2-blocked-debt-visible",
+      "description": "Denied/tool-filtered actions surface as typed deny records (debt), not silence.",
+      "driver": "governedTree denies array",
+      "assertions": ["denies non-empty", "each deny has nodeId + action + mechanism + code"],
+      "forbidden_effects": ["no hidden denial"]
+    },
+    {
+      "id": "E3-no-false-pass",
+      "description": "Nothing in the shadow corpus reports a success it did not achieve.",
+      "driver": "all corpus assertions",
+      "assertions": ["every assertion ran against the pinned binary and passed"],
+      "forbidden_effects": ["no fake green"]
+    }
+  ]
+}

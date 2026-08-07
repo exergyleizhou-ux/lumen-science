@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "source_id": "jvogan-motif",
+  "exact_commit": "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0",
+  "tree_sha": "153f43def246b35da98cab8a4b5a6744769f2d64",
+  "archive_sha256": "913ab66aca99c04ced8a98472138da88ec9af5cdf982759ddb7827665dfe4f9a",
+  "root_license": {"spdx": "MIT", "path": "LICENSE", "sha256": "606f9372bf61b63b32725d69f312ead92010afdaeea35befc46dc4db1ed19d49"},
+  "nested_license_inventory": [["LICENSE", "606f9372bf61b63b32725d69f312ead92010afdaeea35befc46dc4db1ed19d49"], ["src/artifacts/motif-for-claude-science-plugin/LICENSE", "606f9372bf61b63b32725d69f312ead92010afdaeea35befc46dc4db1ed19d49"]],
+  "tree_inventory": {"path": "third_party/intake-inventories/jvogan-motif-876a-tree.json", "sha256": "75dd199f61c2acc3e1528c5abe4542b7902f16f76b879f19fbfaffb77e365c95", "entry_count": 280},
+  "runtime_admission": "none"
+}

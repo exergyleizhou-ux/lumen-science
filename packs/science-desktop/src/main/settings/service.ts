@@ -57,6 +57,8 @@ import type {
   ImportSkillZipBatchRequest,
   ImportSkillZipBatchResult,
   PreviewSkillZipRequest,
+  PreviewGitHubSkillRequest,
+  SkillImportPreviewContent,
   ReasoningEffort,
   SkillBundlePreviewResult,
   ScanRepoRequest,
@@ -183,9 +185,11 @@ import { getConnectorTools } from '../connectors/registry'
 import { renderConnectorInstructions } from '../connectors/skill-doc'
 import { syncConnectorSkillDocs } from '../connectors/provision'
 import { SkillRegistry, type BundledSkill } from '../skills/registry'
+import { resolveEnabledSkillIds } from './skill-resolution'
 import { SAFE_SLUG, UserSkillRepository } from '../skills/user-skill-repository'
 import { netFetch, netFetchStandard } from '../skills/net-fetch'
 import { decodeBoundedBase64, SKILL_IMPORT_LIMITS } from '../skills/import-limits'
+import { parseGitHubSkillUrl } from '../skills/github-import'
 import { readSkillFile } from '../skills/skill-files'
 import { NOTEBOOK_MCP_SERVER_NAME, NOTEBOOK_RPC_TOOLS } from '../notebook/mcp-server'
 import { ARTIFACT_MCP_SERVER_NAME, writeArtifactFileToolSchema } from '../artifacts/mcp-server'
@@ -897,11 +901,13 @@ class SettingsService {
 
   // Returns the subset of forced ids that are currently disabled in settings — i.e. the picks that need
   // a respawn to materialize. Enabled picks are already present and need no reconnect.
-  async skillsNeedingForceLoad(forcedIds: string[]): Promise<string[]> {
-    const settings = await this.repository.getSettings()
-    const disabled = new Set(settings.disabledSkillIds ?? [])
-
-    return forcedIds.filter((id) => disabled.has(id))
+  //
+  // S0-B: task-level forced activation is fail-closed, so no disabled skill can
+  // ever be force-materialized; this query therefore always returns an empty
+  // list. It stays behind the same typed contract so a future governed
+  // Skill Revision API can re-open it per actor-approved revision.
+  async skillsNeedingForceLoad(_forcedIds: string[]): Promise<string[]> {
+    return []
   }
 
   // Resolves picker ids to the names the agent's Skill tool accepts. Bundled skills use their
@@ -1021,10 +1027,13 @@ class SettingsService {
     }
 
     const disabled = new Set(settings.disabledSkillIds ?? [])
-    const { body } = await readSkillFile(skill.sourceDir)
+    const { fields, body } = await readSkillFile(skill.sourceDir)
+    const metadata = Object.fromEntries(
+      Object.entries(fields).filter(([key]) => key !== 'name' && key !== 'description')
+    )
     const references = await this.listSkillReferences(skill.sourceDir)
 
-    return { ...this.toSkillView(skill, disabled), body, references }
+    return { ...this.toSkillView(skill, disabled), body, metadata, references }
   }
 
   // Lists the file names directly under a skill's `references/` directory (empty when absent).
@@ -1062,6 +1071,7 @@ class SettingsService {
       name: request.name,
       description: request.description,
       body: request.body,
+      metadata: request.metadata,
       references: request.references
     })
 
@@ -1120,6 +1130,22 @@ class SettingsService {
     return this.userSkills.previewZip(
       decodeBoundedBase64(request.dataBase64, SKILL_IMPORT_LIMITS.maxBundleBytes)
     )
+  }
+
+  // Lazily previews one GitHub candidate without importing it or downloading its bundled assets.
+  async previewGitHubSkill(
+    request: PreviewGitHubSkillRequest
+  ): Promise<SkillImportPreviewContent> {
+    const location = parseGitHubSkillUrl(request.url)
+    if (!location) throw new Error('Not a recognizable GitHub URL.')
+    const preview = await this.userSkills.previewGitHubSkill(request.url, netFetch)
+    const suffix = location.path ? `/${location.path}` : ''
+    const revision = location.ref ? `@${location.ref}` : ''
+
+    return {
+      ...preview,
+      sourceLabel: `github.com/${location.owner}/${location.repo}${revision}${suffix}`
+    }
   }
 
   // Scans a GitHub repo for importable skill directories (marking already-imported ones).
@@ -2681,17 +2707,23 @@ class SettingsService {
   }
 
   // Materializes the enabled skill set into opencode's isolated config dir (same skills/<name>/SKILL.md
-  // layout Claude uses), so opencode's native skill tool discovers them. A turn-forced skill overrides
-  // its disabled state, mirroring the Claude provisioning path.
+  // layout Claude uses), so opencode's native skill tool discovers them.
+  //
+  // S0-B: `forcedSkillIds` can no longer resurrect a disabled skill. The
+  // enabled/disabled split comes from the fail-closed resolver, which accepts
+  // no forced input at all.
   private async materializeAgentSkills(
     settings: StoredSettings,
     configRoot: string,
-    forcedSkillIds: ReadonlySet<string>
+    _forcedSkillIds: ReadonlySet<string>
   ): Promise<void> {
-    const disabled = new Set(
-      (settings.disabledSkillIds ?? []).filter((id) => !forcedSkillIds.has(id))
-    )
-    const enabled = (await this.skillCatalog()).filter((skill) => !disabled.has(skill.id))
+    const catalog = await this.skillCatalog()
+    const resolution = resolveEnabledSkillIds({
+      disabledSkillIds: settings.disabledSkillIds ?? [],
+      catalogIds: new Set(catalog.map((skill) => skill.id)),
+    })
+    const enabledIds = new Set(resolution.enabledIds)
+    const enabled = catalog.filter((skill) => enabledIds.has(skill.id))
 
     await new ClaudeCodeSkillMaterializer().sync(configRoot, enabled)
 
@@ -2705,15 +2737,20 @@ class SettingsService {
 
   private async provisionClaudeRuntimeConfig(
     settings: StoredSettings,
-    forcedSkillIds: ReadonlySet<string> = new Set()
+    _forcedSkillIds: ReadonlySet<string> = new Set()
   ): Promise<string> {
     const configDir = getAppClaudeConfigDir(this.storageRoot)
-    const disabledSkillIds = (settings.disabledSkillIds ?? []).filter(
-      (id) => !forcedSkillIds.has(id)
-    )
+    const catalog = await this.skillCatalog()
+    // S0-B: same fail-closed resolver as materializeAgentSkills — forced ids
+    // cannot resurrect disabled/unknown/revoked skills.
+    const resolution = resolveEnabledSkillIds({
+      disabledSkillIds: settings.disabledSkillIds ?? [],
+      catalogIds: new Set(catalog.map((skill) => skill.id)),
+    })
+    const disabledSkillIds = resolution.disabledIds
 
     await provisionAppClaudeConfigDir(configDir, {
-      skills: await this.skillCatalog(),
+      skills: catalog,
       disabledSkillIds
     })
 

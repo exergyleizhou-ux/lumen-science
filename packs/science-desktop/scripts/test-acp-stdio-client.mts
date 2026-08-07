@@ -119,10 +119,11 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lumen-acp-test-'))
 // The count is the point: it fails when the engine gains a method nobody
 // mirrored here. That is exactly how it caught workflow_execute, which LS5-K8
 // added to the engine while the desktop had no way to call it.
-await test('registry lists exactly the 27 engine methods', () => {
-  strictEqual(SCIENCE_METHODS.length, 27)
-  strictEqual(new Set(SCIENCE_METHODS).size, 27, 'no duplicates')
-  strictEqual(listScienceMethods().length, 27)
+await test('registry lists exactly the 30 engine methods', () => {
+  strictEqual(SCIENCE_METHODS.length, 31)
+  strictEqual(new Set(SCIENCE_METHODS).size, 31, 'no duplicates')
+  strictEqual(listScienceMethods().length, 31)
+  ok(SCIENCE_METHODS.includes('capability_run'))
 })
 
 await test('registry wire form carries the ACP ext prefix', () => {
@@ -166,6 +167,14 @@ await test('project_assert_membership is a real method now', () => {
   )
 })
 
+await test('artifact_list is served by the Rust engine now', () => {
+  strictEqual(isScienceMethod('artifact_list'), true)
+  strictEqual(
+    resolveScienceMethod('artifact_list').wireMethod,
+    '_x.ai/science/artifact_list',
+  )
+})
+
 await test('registry rejects the methods that exist in NEITHER engine', () => {
   // project_assert_membership was on this list until LS5-K18 implemented it in
   // the Rust engine. The fix was to add the method, not to keep routing round
@@ -181,7 +190,7 @@ await test('registry rejects the methods that exist in NEITHER engine', () => {
 })
 
 await test('registry rejects Go MCP tools with the surface distinction named', () => {
-  for (const goTool of ['artifact_list', 'notebook_execute', 'start_review']) {
+  for (const goTool of ['notebook_execute', 'start_review']) {
     const reason = explainRejection(goTool)
     ok(reason, `${goTool} must be rejected`)
     match(reason, /Go MCP tool/)
@@ -565,13 +574,13 @@ await test('handshake reaches ready and injects sessionId into science calls', a
   await manager.stop()
 })
 
-await test('a caller-supplied sessionId is never overwritten', async () => {
+await test('a caller-supplied sessionId cannot override the manager-owned actor', async () => {
   const manager = sessionManager('good')
   await manager.start()
   const result = (await manager.callScience('project_get', { sessionId: 'caller-owned' })) as {
     params: Record<string, unknown>
   }
-  strictEqual(result.params.sessionId, 'caller-owned')
+  strictEqual(result.params.sessionId, 'fake-session-1')
   await manager.stop()
 })
 

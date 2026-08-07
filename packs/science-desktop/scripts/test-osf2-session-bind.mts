@@ -16,8 +16,8 @@ import {
   type ArtifactListItem,
 } from '../src/main/files/session-binding.js'
 import {
-  getTrustedPreviewContext,
-  clearTrustedPreviewContext,
+  getTrustedPreviewContextForSender,
+  clearAllTrustedPreviewContexts,
 } from '../src/main/files/session-identity.js'
 import { AcpPreviewStore } from '../src/main/files/acp-preview-store.js'
 import { loadArtifactPreview } from '../src/main/files/preview-service.js'
@@ -66,33 +66,33 @@ const denyAll: MembershipAsserter = async () => ({
 })
 
 async function run() {
-  clearTrustedPreviewContext()
+  clearAllTrustedPreviewContexts()
 
   // ── Pure bind ────────────────────────────────────────────────
   const denied = await bindTrustedSession(
     { ownerId: 'evil', projectId: 'p1' },
-    { assertMembership: denyAll },
+    { assertMembership: denyAll, senderId: 1 },
   )
   await test('bind: rejects failed membership', () => {
     ok(!denied.ok)
-    strictEqual(getTrustedPreviewContext(), null)
+    strictEqual(getTrustedPreviewContextForSender(1), null)
   })
 
   const bound = await bindTrustedSession(
     { ownerId: 'o1', projectId: 'p1' },
-    { assertMembership: allowO1P1 },
+    { assertMembership: allowO1P1, senderId: 1 },
   )
   await test('bind: accepts asserted membership', () => {
     ok(bound.ok)
-    const ctx = getTrustedPreviewContext()
+    const ctx = getTrustedPreviewContextForSender(1)
     ok(ctx)
     strictEqual(ctx!.ownerId, 'o1')
     strictEqual(ctx!.projectId, 'p1')
   })
 
-  unbindTrustedSession()
+  unbindTrustedSession(1)
   await test('unbind: clears identity', () => {
-    strictEqual(getTrustedPreviewContext(), null)
+    strictEqual(getTrustedPreviewContextForSender(1), null)
   })
 
   // ── Seed store from artifact_list shape ──────────────────────
@@ -103,11 +103,13 @@ async function run() {
       path: OUT_CSV,
       sha256: OUT_SHA,
       project_id: 'p1',
+      run_id: 'run-1',
     },
     {
       artifact_id: 'art-2',
       path: '/data/p1/run1/seq.fa',
       sha256: 'hash2',
+      run_id: 'run-1',
     },
   ]
   const seeded = seedPreviewStoreFromList(store, items, {
@@ -120,34 +122,40 @@ async function run() {
 
   await bindTrustedSession(
     { ownerId: 'o1', projectId: 'p1' },
-    { assertMembership: allowO1P1 },
+    { assertMembership: allowO1P1, senderId: 1 },
   )
   const preview = await loadArtifactPreview(
     { artifactId: 'art-1', expectedSha256: OUT_SHA },
     { store },
+    { ownerId: 'o1', projectId: 'p1' },
   )
   await test('seed+bind: preview resolves seeded artifact', () => {
     ok(preview.access.ok, JSON.stringify(preview))
-    strictEqual(preview.path, OUT_CSV)
+    strictEqual(Buffer.from(preview.contentBase64 ?? '', 'base64').toString(), 'out,csv\n')
   })
 
   // Cross-owner still blocked even with seed
-  unbindTrustedSession()
+  unbindTrustedSession(1)
   await bindTrustedSession(
     { ownerId: 'o2', projectId: 'p2' },
     {
+      senderId: 1,
       assertMembership: async (c) =>
         c.ownerId === 'o2' && c.projectId === 'p2'
           ? { ok: true, ownerId: 'o2', projectId: 'p2' }
           : { ok: false, reason: 'no' },
     },
   )
-  const blocked = await loadArtifactPreview({ artifactId: 'art-1' }, { store })
+  const blocked = await loadArtifactPreview(
+    { artifactId: 'art-1' },
+    { store },
+    { ownerId: 'o2', projectId: 'p2' },
+  )
   await test('seed: other session cannot preview p1 artifact', () => {
     ok(!blocked.access.ok)
     ok((blocked.access.reason ?? '').includes('owner'))
   })
-  unbindTrustedSession()
+  unbindTrustedSession(1)
 
   // ── IPC product path ─────────────────────────────────────────
   const handlers = new Map<string, Function>()
@@ -187,6 +195,7 @@ async function run() {
           path: IPC_CSV,
           sha256: IPC_SHA,
           project_id: 'p1',
+          run_id: 'run-1',
         },
       ]
     },
@@ -203,20 +212,20 @@ async function run() {
     ok(handlers.has('files:unbind-session'))
   })
 
-  clearTrustedPreviewContext()
+  clearAllTrustedPreviewContexts()
   const bindHandler = handlers.get('files:bind-session')!
-  const bindDeny = await bindHandler({}, {
+  const bindDeny = await bindHandler({ sender: { id: 1, on() {} } }, {
     ownerId: 'evil',
     projectId: 'p1',
     runId: 'run-1',
   })
   await test('ipc bind: membership denial does not set identity', () => {
     ok(bindDeny && bindDeny.ok === false)
-    strictEqual(getTrustedPreviewContext(), null)
+    strictEqual(getTrustedPreviewContextForSender(1), null)
     ok(membershipCalls >= 1)
   })
 
-  const bindOk = await bindHandler({}, {
+  const bindOk = await bindHandler({ sender: { id: 1, on() {} } }, {
     ownerId: 'o1',
     projectId: 'p1',
     runId: 'run-1',
@@ -225,23 +234,23 @@ async function run() {
     ok(bindOk.ok, JSON.stringify(bindOk))
     strictEqual(bindOk.seeded, 1)
     ok(listCalls >= 1)
-    const ctx = getTrustedPreviewContext()
+    const ctx = getTrustedPreviewContextForSender(1)
     strictEqual(ctx?.ownerId, 'o1')
   })
 
   const previewHandler = handlers.get('files:preview-by-artifact')!
-  const prev = await previewHandler({}, {
+  const prev = await previewHandler({ sender: { id: 1, on() {} } }, {
     artifactId: 'ipc-a1',
     expectedSha256: IPC_SHA,
   })
   await test('ipc: preview after bind+seed works', () => {
     ok(prev.access.ok, JSON.stringify(prev))
-    strictEqual(prev.path, IPC_CSV)
+    strictEqual(Buffer.from(prev.contentBase64 ?? '', 'base64').toString(), 'ipc,a1\n')
   })
 
   const unbindHandler = handlers.get('files:unbind-session')!
-  await unbindHandler({})
-  const afterUnbind = await previewHandler({}, { artifactId: 'ipc-a1' })
+  await unbindHandler({ sender: { id: 1, on() {} } })
+  const afterUnbind = await previewHandler({ sender: { id: 1, on() {} } }, { artifactId: 'ipc-a1' })
   await test('ipc unbind: preview denied without session', () => {
     ok(!afterUnbind.access.ok)
   })

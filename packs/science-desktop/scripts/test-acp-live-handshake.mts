@@ -69,6 +69,28 @@ async function test(name: string, fn: () => void | Promise<void>): Promise<void>
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'lumen-live-home-'))
 const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'lumen-live-cwd-'))
 const storeRoot = path.join(workspace, 'science-store')
+const interpreterPath = path.join(workspace, 'test-python')
+const deniedInterpreterPath = path.join(workspace, 'denied-python')
+const deniedMarkerPath = path.join(workspace, 'denied-probe-ran')
+fs.writeFileSync(interpreterPath, "#!/bin/sh\necho 'Python 3.12.0 live-fixture'\n", {
+  mode: 0o755,
+})
+fs.writeFileSync(
+  deniedInterpreterPath,
+  `#!/bin/sh\nprintf ran > '${deniedMarkerPath}'\necho 'Python 3.12.0 denied-fixture'\n`,
+  { mode: 0o755 },
+)
+
+function countNamedFiles(root: string, name: string): number {
+  if (!fs.existsSync(root)) return 0
+  let count = 0
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const candidate = path.join(root, entry.name)
+    if (entry.isDirectory()) count += countNamedFiles(candidate, name)
+    else if (entry.isFile() && entry.name === name) count++
+  }
+  return count
+}
 
 console.log(`LIVE binary=${binaryPath}`)
 console.log(`LIVE sha256=${sha256OfFile(binaryPath)}`)
@@ -103,7 +125,10 @@ try {
   })
 
   await test('x.ai/science/project_list answers over the real wire', async () => {
-    const result = await manager.callScience('project_list', { storeRoot })
+    const result = await manager.callScience('project_list', {
+      storeRoot,
+      ownerId: 'live-test-owner',
+    })
     console.log(`LIVE project_list -> ${JSON.stringify(result)}`)
     ok(Array.isArray(result), `expected an array of projects, got ${JSON.stringify(result)}`)
   })
@@ -163,6 +188,7 @@ try {
 // transport's agent->client request path really works and that the only thing
 // standing between this client and a live SessionActor mutation is the missing
 // desktop permission UI.
+let approvingDecision: 'allow_once' | 'reject_once' = 'allow_once'
 const approving = new AcpSessionManager({
   cwd: workspace,
   handshakeTimeoutMs: 120_000,
@@ -172,9 +198,9 @@ const approving = new AcpSessionManager({
     if (method !== 'session/request_permission') {
       throw new Error(`unexpected agent request '${method}'`)
     }
-    const options = ((params as { options?: Array<{ optionId?: string; kind?: string }> })
-      ?.options ?? [])
-    const chosen = options.find((o) => o.kind === 'allow_once') ?? options[0]
+    const options =
+      (params as { options?: Array<{ optionId?: string; kind?: string }> })?.options ?? []
+    const chosen = options.find((o) => o.kind === approvingDecision) ?? options[0]
     return { outcome: { outcome: 'selected', optionId: chosen?.optionId } }
   },
   process: {
@@ -191,6 +217,7 @@ const approving = new AcpSessionManager({
 })
 
 try {
+  let createdProjectId = ''
   await test('an approved mutation routes through the SessionActor', async () => {
     await approving.start()
     const created = (await approving.callScience('project_create', {
@@ -208,10 +235,76 @@ try {
     strictEqual(created.runtimeAuthority, 'SessionActor-gated ACP adapter')
     strictEqual(created.replayed, false)
     ok(typeof created.projectId === 'string' && created.projectId.length > 0)
+    createdProjectId = String(created.projectId)
+  })
+
+  await test('approved kernel admission probes and commits only through the SessionActor', async () => {
+    ok(createdProjectId, 'project creation must complete before kernel admission')
+    const result = (await approving.callScience('kernel_admission', {
+      ownerId: 'live-test-owner',
+      projectId: createdProjectId,
+      storeRoot,
+      kernelId: 'live-python-fixture',
+      kind: 'python',
+      interpreterPath,
+      allowedRoot: workspace,
+      probeTimeoutMs: 10_000,
+      approvalTimeoutMs: 15_000,
+    })) as {
+      state?: string
+      admission?: {
+        admission_status?: string
+        executable_hash?: string
+        exact_version?: string
+      }
+      artifacts?: Array<{ sha256?: string; relative_path?: string }>
+      approvals?: Array<{ decision?: string }>
+      runtimeAuthority?: string
+    }
+    strictEqual(result.runtimeAuthority, 'SessionActor-gated ACP adapter')
+    strictEqual(result.state, 'succeeded')
+    strictEqual(result.admission?.admission_status, 'Admitted')
+    match(result.admission?.executable_hash ?? '', /^[a-f0-9]{64}$/)
+    match(result.admission?.exact_version ?? '', /^Python 3\.12\.0 live-fixture/)
+    strictEqual(result.artifacts?.length, 1)
+    match(result.artifacts?.[0]?.sha256 ?? '', /^[a-f0-9]{64}$/)
+    strictEqual(result.approvals?.[0]?.decision, 'allow')
+  })
+
+  await test('denied kernel admission neither executes nor creates an artifact', async () => {
+    approvingDecision = 'reject_once'
+    const artifactsBefore = countNamedFiles(storeRoot, 'kernel-admission.json')
+    let refused = false
+    try {
+      await approving.callScience('kernel_admission', {
+        ownerId: 'live-test-owner',
+        projectId: createdProjectId,
+        storeRoot,
+        kernelId: 'denied-python-fixture',
+        kind: 'python',
+        interpreterPath: deniedInterpreterPath,
+        allowedRoot: workspace,
+        probeTimeoutMs: 10_000,
+        approvalTimeoutMs: 15_000,
+      })
+    } catch (e: unknown) {
+      refused = true
+      strictEqual((e as { code?: string }).code, 'LUMEN_ACP_REMOTE_ERROR')
+    }
+    ok(refused, 'a rejected permission must terminate the admission call')
+    ok(!fs.existsSync(deniedMarkerPath), 'denied admission executed its interpreter')
+    strictEqual(
+      countNamedFiles(storeRoot, 'kernel-admission.json'),
+      artifactsBefore,
+      'denied admission created a kernel artifact',
+    )
   })
 
   await test('project_list now returns the project the desktop created', async () => {
-    const listed = (await approving.callScience('project_list', { storeRoot })) as unknown[]
+    const listed = (await approving.callScience('project_list', {
+      storeRoot,
+      ownerId: 'live-test-owner',
+    })) as unknown[]
     console.log(`LIVE project_list -> ${listed.length} project(s)`)
     strictEqual(listed.length, 1, `expected 1 project, got ${JSON.stringify(listed)}`)
   })
@@ -226,5 +319,7 @@ try {
   }
 }
 
-console.log(`\n${failures === 0 ? 'ALL LIVE HANDSHAKE TESTS PASSED' : `${failures} LIVE TESTS FAILED`}`)
+console.log(
+  `\n${failures === 0 ? 'ALL LIVE HANDSHAKE TESTS PASSED' : `${failures} LIVE TESTS FAILED`}`,
+)
 process.exit(failures > 0 ? 1 : 0)

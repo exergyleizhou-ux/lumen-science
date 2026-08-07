@@ -5,6 +5,7 @@
  */
 
 import type { MembershipAsserter, ArtifactListItem } from './session-binding'
+import { isAbsolute } from 'node:path'
 
 /**
  * Where project state lives, relative to the engine's session workspace.
@@ -93,13 +94,15 @@ export function createAcpMembershipAsserter(call: AcpToolCall): MembershipAssert
 
 export async function listArtifactsViaAcp(
   call: AcpToolCall,
-  args: { projectId: string; runId: string },
+  args: { ownerId: string; projectId: string; runId: string },
 ): Promise<ArtifactListItem[]> {
   const raw = await call('artifact_list', {
-    project_id: args.projectId,
-    run_id: args.runId,
+    ownerId: args.ownerId,
+    projectId: args.projectId,
+    runId: args.runId,
+    storeRoot: SCIENCE_STORE_DIR,
   })
-  return normalizeArtifactList(raw)
+  return normalizeArtifactList(raw, args)
 }
 
 function unwrap(raw: unknown): Record<string, unknown> | null {
@@ -121,15 +124,51 @@ function unwrap(raw: unknown): Record<string, unknown> | null {
   return r
 }
 
-export function normalizeArtifactList(raw: unknown): ArtifactListItem[] {
-  if (!raw) return []
-  if (Array.isArray(raw)) return raw as ArtifactListItem[]
-  const body = unwrap(raw)
-  if (!body) return []
-  if (Array.isArray(body)) return body as ArtifactListItem[]
-  if (Array.isArray(body.artifacts)) return body.artifacts as ArtifactListItem[]
-  if (Array.isArray(body.items)) return body.items as ArtifactListItem[]
-  // Single meta object
-  if (body.artifact_id || body.artifactId) return [body as ArtifactListItem]
-  return []
+export function normalizeArtifactList(
+  raw: unknown,
+  expected: { ownerId: string; projectId: string; runId: string },
+): ArtifactListItem[] {
+  let rows: unknown
+  if (Array.isArray(raw)) {
+    rows = raw
+  } else {
+    const body = unwrap(raw)
+    if (Array.isArray(body)) rows = body
+    else if (Array.isArray(body?.artifacts)) rows = body.artifacts
+    else if (Array.isArray(body?.items)) rows = body.items
+  }
+  if (!Array.isArray(rows)) {
+    throw new Error('artifact_list returned no explicit artifact array')
+  }
+
+  return rows.map((value, index) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error(`artifact_list row ${index} is not an object`)
+    }
+    const item = value as ArtifactListItem
+    const artifactId = item.artifact_id ?? item.artifactId
+    const sha256 = item.sha256 ?? item.digest
+    const artifactPath = item.path ?? item.storage_path
+    const ownerId = item.owner_id ?? item.ownerId
+    const projectId = item.project_id ?? item.projectId
+    const runId = item.run_id ?? item.runId
+    if (
+      typeof artifactId !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(artifactId) ||
+      artifactId !== sha256
+    ) {
+      throw new Error(`artifact_list row ${index} has no matching SHA-256 identity`)
+    }
+    if (typeof artifactPath !== 'string' || !isAbsolute(artifactPath)) {
+      throw new Error(`artifact_list row ${index} has no absolute verified path`)
+    }
+    if (
+      ownerId !== expected.ownerId ||
+      projectId !== expected.projectId ||
+      runId !== expected.runId
+    ) {
+      throw new Error(`artifact_list row ${index} identity does not match the bound request`)
+    }
+    return item
+  })
 }

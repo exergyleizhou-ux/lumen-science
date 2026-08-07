@@ -20,3 +20,4 @@ packs/science/dist/
 
 # Local e2e MCP binaries (built by CI / make)
 packs/science/lumen-mcp-*
+.tmp/

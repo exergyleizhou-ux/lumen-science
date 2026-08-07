@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "corpus": "S2a shadow-only scenario corpus — class D: provider & advisor",
+  "pinned_binary": {
+    "lumen": "2.2.0 (098f7cd4)",
+    "binary_sha256": "f1aa406131f9db4b30f636770386738b289a5bcd65a695e7aac912f699073564"
+  },
+  "scenarios": [
+    {
+      "id": "D1-default-profile",
+      "description": "New runs default to the least-privileged interactive profile.",
+      "driver": "governedTree/status defaultProfile",
+      "assertions": ["defaultProfile == interactive_single_turn"],
+      "forbidden_effects": ["no governed profile by default"]
+    },
+    {
+      "id": "D2-one-way-upgrade",
+      "description": "The governed profile is a one-way upgrade surface; downgrade is denied.",
+      "driver": "governedTree/status upgradeTarget + upgradeDenyOnDowngrade",
+      "assertions": ["upgradeTarget == governed_tree_development", "upgradeDenyOnDowngrade == profile.admission_upgrade_failed"],
+      "forbidden_effects": ["no silent downgrade"]
+    },
+    {
+      "id": "D3-advisor-shadow-only",
+      "description": "Advisor output is a projection; it cannot switch streams or accept claims in shadow mode.",
+      "driver": "assignmentRecommendation projection",
+      "assertions": ["recommendation reports conditions truthfully without a live assignment"],
+      "forbidden_effects": ["no assignment applied", "no stream switch"]
+    },
+    {
+      "id": "D4-no-provider",
+      "description": "The shadow corpus runs with zero provider traffic.",
+      "driver": "all class A/B/C drivers",
+      "assertions": ["no provider call made during corpus run"],
+      "forbidden_effects": ["no billable endpoint"]
+    }
+  ]
+}

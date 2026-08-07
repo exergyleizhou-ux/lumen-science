@@ -50,7 +50,7 @@ if (!probe.helpOk) {
   failures++
   console.log(`FAIL help: ${probe.detail || probe.helpOutput.slice(0, 200)}`)
 } else {
-  console.log('OK  help mentions SessionActor')
+  console.log('OK  root help + agent stdio help')
 }
 
 // doctor may need repo root — try without, allow soft fail as SKIP message

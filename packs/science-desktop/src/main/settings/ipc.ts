@@ -12,14 +12,9 @@ import {
   type ReasoningEffort,
   type SetAppIconVariantRequest,
   type SettingsSnapshot,
-  type CreateSkillRequest,
   type DeleteProviderRequest,
-  type DeleteSkillRequest,
-  type ImportAgentHomeSkillRequest,
-  type ImportSkillRequest,
-  type ImportSkillZipRequest,
-  type ImportSkillZipBatchRequest,
   type PreviewSkillZipRequest,
+  type PreviewGitHubSkillRequest,
   type ScanRepoRequest,
   type InstallClaudeRequest,
   type InstallCodexRequest,
@@ -39,13 +34,12 @@ import {
   type SetClosePreferenceRequest,
   type SetNotificationsEnabledRequest,
   type SetReasoningEffortRequest,
-  type SetSkillEnabledRequest,
   type SetToolPermissionRequest,
-  type UpdateSkillRequest,
   type UpsertProviderRequest,
   type ValidateProviderRequest
 } from '../../shared/settings'
 import { createDefaultSettingsService, SettingsService } from './service'
+import { skillAuthorityError } from '../../shared/skill-authority'
 import { createLogger } from '../logger'
 import { broadcastToRenderers } from '../renderer-broadcast'
 
@@ -90,7 +84,7 @@ const registerSettingsIpcHandlers = ({
   onActiveProviderChanged,
   onAgentFrameworkChanged,
   onReasoningEffortChanged,
-  onSkillsChanged,
+  onSkillsChanged: _onSkillsChanged,
   onConnectorsChanged,
   onAppIconVariantChanged,
   listAppIconPreviews
@@ -425,50 +419,37 @@ const registerSettingsIpcHandlers = ({
 
   ipcMain.handle('settings:list-skills', () => service.listSkills())
   ipcMain.handle('settings:get-skill-detail', (_event, id: string) => service.getSkillDetail(id))
-  ipcMain.handle('settings:set-skill-enabled', async (_event, request: SetSkillEnabledRequest) => {
-    const skills = await service.setSkillEnabled(request)
-
-    // A toggle takes effect on the next reconnect: the runtime re-provisions (re-materializes) the
-    // config dir and resumes the open session with full context on its next message.
-    onSkillsChanged?.()
-
-    return skills
+  ipcMain.handle('settings:set-skill-enabled', async () => {
+    // S0-B: shipping skill mutation fails closed until the governed Skill
+    // Revision API ships (X-M1). No service call, no runtime reload callback —
+    // the legacy mutable store is unreachable from this channel.
+    throw skillAuthorityError()
   })
-  ipcMain.handle('settings:create-skill', async (_event, request: CreateSkillRequest) => {
-    const skills = await service.createSkill(request)
-    onSkillsChanged?.()
-    return skills
+  ipcMain.handle('settings:create-skill', async () => {
+    throw skillAuthorityError()
   })
-  ipcMain.handle('settings:update-skill', async (_event, request: UpdateSkillRequest) => {
-    const skills = await service.updateSkill(request)
-    onSkillsChanged?.()
-    return skills
+  ipcMain.handle('settings:update-skill', async () => {
+    throw skillAuthorityError()
   })
-  ipcMain.handle('settings:delete-skill', async (_event, request: DeleteSkillRequest) => {
-    const skills = await service.deleteSkill(request)
-    onSkillsChanged?.()
-    return skills
+  ipcMain.handle('settings:delete-skill', async () => {
+    throw skillAuthorityError()
   })
-  ipcMain.handle('settings:import-skill', async (_event, request: ImportSkillRequest) => {
-    const result = await service.importSkill(request)
-    onSkillsChanged?.()
-    return result
+  // A GitHub URL is untrusted executable instruction content, not a UI preference.
+  // Do not delegate it to SettingsService: that legacy method writes directly into
+  // the imported-skill store and requests a runtime reload, bypassing the durable
+  // SessionActor approval/artifact/provenance path. Preview and scan remain
+  // read-only; a user can submit a bundle to the actor-gated quarantine route.
+  ipcMain.handle('settings:import-skill', async () => {
+    throw new Error(
+      'Direct GitHub skill import is disabled: preview it, then use the actor-gated bundle quarantine import.'
+    )
   })
-  ipcMain.handle('settings:import-skill-zip', async (_event, request: ImportSkillZipRequest) => {
-    const result = await service.importSkillZip(request)
-    onSkillsChanged?.()
-    return result
-  })
-  ipcMain.handle(
-    'settings:import-skill-zip-batch',
-    async (_event, request: ImportSkillZipBatchRequest) => {
-      const result = await service.importSkillZipBatch(request)
-      onSkillsChanged?.()
-      return result
-    }
-  )
   ipcMain.handle('settings:preview-skill-zip', (_event, request: PreviewSkillZipRequest) =>
     service.previewSkillZip(request)
+  )
+  ipcMain.handle(
+    'settings:preview-github-skill',
+    (_event, request: PreviewGitHubSkillRequest) => service.previewGitHubSkill(request)
   )
   ipcMain.handle('settings:scan-repo-skills', (_event, request: ScanRepoRequest) =>
     service.scanRepoSkills(request)
@@ -476,15 +457,15 @@ const registerSettingsIpcHandlers = ({
   // Lists the user's machine-level Claude skills (~/.claude/skills/) for the "From your agent home"
   // import source. Read-only — the renderer calls importAgentHomeSkill to actually copy one in.
   ipcMain.handle('settings:list-agent-home-skills', () => service.listAgentHomeSkills())
-  ipcMain.handle(
-    'settings:import-agent-home-skill',
-    async (_event, request: ImportAgentHomeSkillRequest) => {
-      const result = await service.importAgentHomeSkill(request)
-      onSkillsChanged?.()
-
-      return result
-    }
-  )
+  // Agent-home content has the same execution effect as a GitHub import once it
+  // is copied into the active runtime. Containment validation is useful but not
+  // sufficient authority: it cannot substitute for SessionActor approval and
+  // store-owned evidence. Keep listing read-only and fail this mutation closed.
+  ipcMain.handle('settings:import-agent-home-skill', async () => {
+    throw new Error(
+      'Direct agent-home skill import is disabled: submit a reviewed bundle through actor-gated quarantine.'
+    )
+  })
 
   ipcMain.handle('settings:list-connectors', () => service.listConnectors())
   ipcMain.handle('settings:get-connector-detail', (_event, id: string) =>

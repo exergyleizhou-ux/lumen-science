@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-08-06T00:00:00+08:00",
+  "purpose": "X-S1 seq_analyze byte/semantic parity corpus. Frozen from the science-repo copy (xai-grok-science 0.1.0, seqbench TOOL_VERSION 1.6.0) on 2026-08-06. The migration witness test (seqbench::parity_corpus::seq_analyze_parity_hashes_are_frozen) drives the REAL shipped functions (parse_fasta + request_sha256 + analyze) and asserts these hashes; after push-up into canonical lumen the same test must produce the same values.",
+  "fixture": {
+    "path": "fixtures/parity-demo.fasta",
+    "bytes": ">seq1 demo record\nACGTACGTACGT\n>seq2\nGGGCCCAAATTT\n",
+    "records": 2
+  },
+  "options": "SeqAnalyzeOptions::default()",
+  "frozen_values": {
+    "request_sha256": "82cdd918a8024afd2577eb53a3c74e7ef2a68611a495d8bc9650737d27a2b760",
+    "analysis_json_sha256": "36cfe71e27fbe4c48d928108e2857b710529036c9eea065855920ec65b64a3b0",
+    "analysis_schema_version": 7,
+    "tool_version": "1.6.0",
+    "motif_commit": "876a4f9e5d99af1bc3cf5caa639ce8f5402dfbe0"
+  },
+  "push_up_status": {
+    "state": "in-progress",
+    "lumen_branch": "science/push-up-seq-v1 (base 098f7cd4)",
+    "files_copied": ["src/seqbench.rs", "src/primer_thermo.rs"],
+    "lib_declared": ["pub mod primer_thermo;", "pub mod seqbench;"],
+    "blocker": "seqbench depends on science-repo store-layer increments absent from canonical lib.rs (SuccessfulCompletionManifest, append_recoverable_commit_event, persist/reject/verify_seq_authority_prefix, recover_exact_completion, load_run_optional, discard_running_outputs) — fusion of the store increment is the next X-M1 card",
+    "single_base_gate": "IMPLEMENTING (honest)"
+  }
+}

@@ -1,0 +1,4986 @@
+{
+  "entries": [
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c0b6b0017694a81f0a50d4940e4d277b8f39df2b",
+      "kind": "git-blob-metadata-only",
+      "path": ".env.example",
+      "size_bytes": 1209
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5c8eeae7b1c53f723b5677733a6687056521f837",
+      "kind": "git-blob-metadata-only",
+      "path": ".github/workflows/package.yml",
+      "size_bytes": 12409
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4c0d9e1cd093aa908b65ed3217b142de21dc169f",
+      "kind": "git-blob-metadata-only",
+      "path": ".github/workflows/pages.yml",
+      "size_bytes": 989
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "cc1ea779dd99fd704429e63531b9b56d793a631e",
+      "kind": "git-blob-metadata-only",
+      "path": ".github/workflows/release.yml",
+      "size_bytes": 12345
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "544fe054d0314d7824ec5877b3187942bd5ce1c8",
+      "kind": "git-blob-metadata-only",
+      "path": ".gitignore",
+      "size_bytes": 888
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8b137891791fe96927ad78e64b0aad7bded08bdc",
+      "kind": "git-blob-metadata-only",
+      "path": ".internagents/imported-skills/.gitkeep",
+      "size_bytes": 1
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f06f079592a26c15a8c2c14e86c6aa3f43b37c28",
+      "kind": "git-blob-metadata-only",
+      "path": "AGENTS.md",
+      "size_bytes": 7999
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c953ffeb4ac36a445e11139582013c3673f43fb1",
+      "kind": "git-blob-metadata-only",
+      "path": "LICENSE",
+      "size_bytes": 1082
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "38a8faa6317e018ceba69ff320daee5ea1f7ceff",
+      "kind": "git-blob-metadata-only",
+      "path": "README.md",
+      "size_bytes": 13725
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ce5633a0fe06b691ca3f13fd17a95415328bda89",
+      "kind": "git-blob-metadata-only",
+      "path": "README_CN.md",
+      "size_bytes": 13136
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b9522b31cfd7f911a38220749a17b000af322af6",
+      "kind": "git-blob-metadata-only",
+      "path": "SuperMe-docs/20-workflow-incidents.md",
+      "size_bytes": 1896
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "62d88268b89cc4463828b4cd47300d36578c705e",
+      "kind": "git-blob-metadata-only",
+      "path": "SuperMe-docs/assets/remote-compute-cards/claude-science-shell-permission-card.png",
+      "size_bytes": 111076
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b9793815038579893222e8c08e4e9b3ef79518ee",
+      "kind": "git-blob-metadata-only",
+      "path": "SuperMe-docs/assets/remote-compute-cards/openclaudescience-remote-compute-card.png",
+      "size_bytes": 106118
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e87cd87f3e6c48b3bd75f0d711f16d76805b4531",
+      "kind": "git-blob-metadata-only",
+      "path": "SuperMe-docs/remote-compute-permission-card-comparison.md",
+      "size_bytes": 2216
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "77254fda1f347f3967bff3c2f43d916a1f14fafc",
+      "kind": "git-blob-metadata-only",
+      "path": "agent.py",
+      "size_bytes": 294
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b37b0b6b13df4bbf6beabac6efcfcc466535270b",
+      "kind": "git-blob-metadata-only",
+      "path": "deepagent.config.json",
+      "size_bytes": 1753
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7e509ab7ad661021dcef37d9a6c9c59be6b06cae",
+      "kind": "git-blob-metadata-only",
+      "path": "desktop/electron/main.cjs",
+      "size_bytes": 23652
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3f841d874f2a39cca0c555af4bad6b042330d302",
+      "kind": "git-blob-metadata-only",
+      "path": "desktop/electron/splash.html",
+      "size_bytes": 5030
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "719cee47625c09924a1886013cd501c1e11da4e7",
+      "kind": "git-blob-metadata-only",
+      "path": "desktop/package-lock.json",
+      "size_bytes": 128793
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1f12e864a77d15cef201af978fca309a80fc450e",
+      "kind": "git-blob-metadata-only",
+      "path": "desktop/package.json",
+      "size_bytes": 2872
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "14456e0fb68815281aa18dca073f01148f3580d0",
+      "kind": "git-blob-metadata-only",
+      "path": "desktop/scripts/build-mac.mjs",
+      "size_bytes": 4331
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b1e11448c64196faa4ffd827d6a5ad96f87c0bf8",
+      "kind": "git-blob-metadata-only",
+      "path": "desktop/scripts/build-win.mjs",
+      "size_bytes": 3266
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4420b1c9b06e4b95121895d1ac63266f162c5e33",
+      "kind": "git-blob-metadata-only",
+      "path": "desktop/scripts/prepare-dist.mjs",
+      "size_bytes": 40936
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3dfae96ca5e9156319b0c4dbb4cd7844a5bd8973",
+      "kind": "git-blob-metadata-only",
+      "path": "desktop/templates/deepagent.config.json",
+      "size_bytes": 1422
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "cb8f14ec0ee8fbf0267c95986b77211e95d1d333",
+      "kind": "git-blob-metadata-only",
+      "path": "dev-docs/development-notes.md",
+      "size_bytes": 794
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "53947bb15b503a6dfcb96dd2e7aa8f5bd75e0b45",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/desktop-user-guide/01-first-setup.png",
+      "size_bytes": 55959
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e4b2a03caea9f84dc4b9219a0ee534b50f76691f",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/desktop-user-guide/02-workbench.png",
+      "size_bytes": 71843
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c257f893c53e51e94203aeeb814ed9916d46c4f5",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/desktop-user-guide/04-skills.png",
+      "size_bytes": 60658
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c451d1c40d5e94a7187c60887ecb5d502ad20fb0",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/readme-cn/caffeine-analysis.gif",
+      "size_bytes": 6572272
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e4fe823ecb45cefac6e1452f9aaecb9d9fcf5535",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/readme-cn/pbtio3-analysis.gif",
+      "size_bytes": 3719010
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "02c2c197dcdce57cb342b084ae4ff9248934f4da",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/readme-cn/y-mixer-model.gif",
+      "size_bytes": 5368768
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "be54e6537d8ea957065d416452908a102d3169d0",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/readme/caffeine-computational-chemistry.gif",
+      "size_bytes": 1111914
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "03dc77b0ac823932b767f38e6262e4935780ad50",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/readme/internagents-banner.png",
+      "size_bytes": 960095
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c1acb2c5c34de0a169d7f81929b04e2333f96a55",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/readme/pbtio3-ab-site-substitution.gif",
+      "size_bytes": 3016723
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8874b3f751ac350a885e76b5ea19a9bbf25b6de5",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/readme/workspace-preview-cn.jpeg",
+      "size_bytes": 397288
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "98ca5bab2659ab24cea897d694c3da439368e2bd",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/readme/workspace-preview-en.jpeg",
+      "size_bytes": 393751
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "99b22e2fe312bda15ba51ad539bdc93acd25a81e",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/readme/y-shaped-microfluidic-mixer.gif",
+      "size_bytes": 1700109
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0f1257b8e9133678e29c89e3e7271f5fb33ec6e4",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/user-manual/01-workbench-tour.png",
+      "size_bytes": 41670
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8649b419af18a7dc26277f0bc197d382d92c1814",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/user-manual/02-workbench.png",
+      "size_bytes": 39132
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "604564b4c65e02ff38e4117215e8c97e67bb93e0",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/user-manual/03-file-preview.png",
+      "size_bytes": 48815
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "85ef1e0cf327a3b8be46d0ccd6e67f860be4bcef",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/user-manual/04-config.png",
+      "size_bytes": 44668
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "237444921b2c55330ffc7b1ff71db7801b3fb04a",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/user-manual/05-connect.png",
+      "size_bytes": 29781
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "074ed7d8c7d74e88961008e6b139382b7aa65496",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/assets/user-manual/06-about.png",
+      "size_bytes": 25365
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9869e3a53d745533f477cbfc37358522b6d73fbf",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/context-management-analysis.md",
+      "size_bytes": 22746
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "bba1f99623ed9761bed0bd54e3d059c2af8b0850",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/desktop-user-guide.md",
+      "size_bytes": 6659
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f2ab0e6e9b16c339265fec65c06a315f965faf44",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/middleware-reports/README.md",
+      "size_bytes": 3230
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a1ddcff9ac5c0dbda599bd3b973a1a0a1496fb19",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/middleware-reports/cli-repl-deploy-middleware.md",
+      "size_bytes": 20656
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7b5fd2248c4c5937cd0c7a2461ea7896be763997",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/middleware-reports/core-utility-middleware.md",
+      "size_bytes": 15546
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "531111ae0e7d2e53be53e53a27def15ef769d8cb",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/middleware-reports/filesystem-middleware.md",
+      "size_bytes": 19430
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "786d100d84c9dffeadaeab3abda0153adf46dead",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/middleware-reports/memory-middleware.md",
+      "size_bytes": 15839
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "538e10c7b7bc81cbbadea36193b5f5169f3c085e",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/middleware-reports/skills-middleware.md",
+      "size_bytes": 22466
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e3ecb72d82af1ffce883705cfad7d4a1159f2eea",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/middleware-reports/subagent-middleware.md",
+      "size_bytes": 21785
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5b2cff881f697f4abd61e9a99febb5d8e39236e9",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/middleware-reports/summarization-middleware.md",
+      "size_bytes": 18769
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b62923b8af566b6060ee350dd68be2980290cbb6",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/project/PLAN.md",
+      "size_bytes": 4196
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "16d787844d35e73350c578b75e34ff044793f19b",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/project/PRODUCT.md",
+      "size_bytes": 1881
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6525a7b0bb05585e9e94ca80bfbae73eb2c72a48",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/project/importantnotes.md",
+      "size_bytes": 1325
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "dc0b2adad9cd522f6d185971a813799cb04a9453",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/user-manual.md",
+      "size_bytes": 23907
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c6fac5e4b721e528afb5404020b7d472df5377b9",
+      "kind": "git-blob-metadata-only",
+      "path": "docs/web-ui-remote-agent-change-summary.md",
+      "size_bytes": 1678
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e07e19a0c663487cce9a9f2b7ee46f312ffd9147",
+      "kind": "git-blob-metadata-only",
+      "path": "internagent.resources.example.json",
+      "size_bytes": 959
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "538774df492e66db04bd36564ee85570ae3e3e65",
+      "kind": "git-blob-metadata-only",
+      "path": "internagent.resources.json",
+      "size_bytes": 306
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "internagents/__init__.py",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d9995064adf2c9e373d4d70a1bea4e93b72190e7",
+      "kind": "git-blob-metadata-only",
+      "path": "internagents/agent_graph.py",
+      "size_bytes": 59407
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "10e2fb87cee09ff31f4e0fba095a69df4a0587d9",
+      "kind": "git-blob-metadata-only",
+      "path": "internagents/backend_cli.py",
+      "size_bytes": 7793
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "80c195bca0fc00cdc9851c5f44857339e4b3e126",
+      "kind": "git-blob-metadata-only",
+      "path": "internagents/date_middleware.py",
+      "size_bytes": 5595
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b6a38669d4afe05d3c586a82f69ecaee6b8e4690",
+      "kind": "git-blob-metadata-only",
+      "path": "internagents/dynamic_local_backend.py",
+      "size_bytes": 20236
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "60819d8448225313ca0f3201ca8ded0d14bf7043",
+      "kind": "git-blob-metadata-only",
+      "path": "internagents/goal_middleware.py",
+      "size_bytes": 6004
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2b3a416878c5d050ce280869e513526133f80ef0",
+      "kind": "git-blob-metadata-only",
+      "path": "internagents/goal_state.py",
+      "size_bytes": 4641
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8529b13274cd6019c2fe60e5ddea3dc86d2805c1",
+      "kind": "git-blob-metadata-only",
+      "path": "internagents/goal_tools.py",
+      "size_bytes": 3515
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8ae8b4927ef38cde15a4af9e44c6396e5eb6f96d",
+      "kind": "git-blob-metadata-only",
+      "path": "internagents/internagent_resources.py",
+      "size_bytes": 7658
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "62fc68a967582759d4cb726cf8d483e406d2be4b",
+      "kind": "git-blob-metadata-only",
+      "path": "internagents/kb_sync_middleware.py",
+      "size_bytes": 2353
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "25a0c92869bc2530c6564d8c3b81199bf9531a66",
+      "kind": "git-blob-metadata-only",
+      "path": "internagents/mcp_config.py",
+      "size_bytes": 10953
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9735b2c56e1bddc608be6042784623b636c8ae3a",
+      "kind": "git-blob-metadata-only",
+      "path": "internagents/mcp_tools.py",
+      "size_bytes": 7171
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "93f53f90de49f14de9cf76dd14a5a9a69f1209b9",
+      "kind": "git-blob-metadata-only",
+      "path": "internagents/remote_compute_tools.py",
+      "size_bytes": 5338
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b27176342f9fbdf08bb19e80fedb97124b4e00b8",
+      "kind": "git-blob-metadata-only",
+      "path": "internagents/ssh_backend.py",
+      "size_bytes": 14985
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8ca8e99a3287dcc1b0e579f67a2de9a536abc5a6",
+      "kind": "git-blob-metadata-only",
+      "path": "internagents/thread_skill_middleware.py",
+      "size_bytes": 18546
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fec3db388d530f90488287ad9977e3e8cee95df2",
+      "kind": "git-blob-metadata-only",
+      "path": "internagents/web_search_tools.py",
+      "size_bytes": 43257
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "cfece62774096c1681097f77dfd55ec20ac61650",
+      "kind": "git-blob-metadata-only",
+      "path": "kb_infra/.codex/skills/kb/SKILL.md",
+      "size_bytes": 1847
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "32cf669dad1855fef2efeef568371e221277a935",
+      "kind": "git-blob-metadata-only",
+      "path": "kb_infra/README.md",
+      "size_bytes": 6025
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "88f2da8d11fc66879a0fe2975243abde7bc80e27",
+      "kind": "git-blob-metadata-only",
+      "path": "kb_infra/bin/kb",
+      "size_bytes": 313
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2274bd7470c58c1b01ac3a7e229f26a1bae427d2",
+      "kind": "git-blob-metadata-only",
+      "path": "kb_infra/docs/kb-agent-guide.md",
+      "size_bytes": 3862
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d36d0b9c0cd45c395671e42d2927351b953197ff",
+      "kind": "git-blob-metadata-only",
+      "path": "kb_infra/docs/kb-bootstrap.md",
+      "size_bytes": 1986
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5982c3f090e1e7be59b856876821b95f0ef25f2b",
+      "kind": "git-blob-metadata-only",
+      "path": "kb_infra/docs/kb-cli-spec.md",
+      "size_bytes": 13489
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "49c43ff9c89278227434fc139139ddaa428171ba",
+      "kind": "git-blob-metadata-only",
+      "path": "kb_infra/docs/kb_bootstrap.md",
+      "size_bytes": 3984
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "16cf7c751199058ff5bf88d64ae3c5a55c4a63c6",
+      "kind": "git-blob-metadata-only",
+      "path": "kb_infra/docs/research-agent-collab-architecture.md",
+      "size_bytes": 27628
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "edef7c09d78be5148c353b70659825ccf038d953",
+      "kind": "git-blob-metadata-only",
+      "path": "kb_infra/docs/research-agent-collab-prd.md",
+      "size_bytes": 9705
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c9137f6dfce8bd3a069d463bb777fb462ea28e79",
+      "kind": "git-blob-metadata-only",
+      "path": "kb_infra/docs/runtime-event-schema.md",
+      "size_bytes": 8673
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ed63ef1d184c62f30b48e4ea0a14c24f901dd147",
+      "kind": "git-blob-metadata-only",
+      "path": "kb_infra/package.json",
+      "size_bytes": 535
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5445d0586d96958409db062d4c8d695ac383d8fc",
+      "kind": "git-blob-metadata-only",
+      "path": "kb_infra/scripts/check_kb_runtime.py",
+      "size_bytes": 1388
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "43b7846ce844db346d1fb68eb0ef2ab0c9d22160",
+      "kind": "git-blob-metadata-only",
+      "path": "kb_infra/tests/smoke_kb_cli.sh",
+      "size_bytes": 11234
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "976c1d6feb73b3a6f0b15fffc1c8f4fc4ce8d7b7",
+      "kind": "git-blob-metadata-only",
+      "path": "kb_infra/tools/kb/__init__.py",
+      "size_bytes": 43
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "541de84ec007a79d845e6d1830cd58c2aa70645e",
+      "kind": "git-blob-metadata-only",
+      "path": "kb_infra/tools/kb/kb_cli.py",
+      "size_bytes": 62678
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e6887155725886be51e9c8bb90eb6749172f2787",
+      "kind": "git-blob-metadata-only",
+      "path": "langgraph.json",
+      "size_bytes": 541
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fdae8ff115370660b9a7e5f7050838d4ace8794e",
+      "kind": "git-blob-metadata-only",
+      "path": "langgraph.runtime.json",
+      "size_bytes": 104
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "789863a2d73d8ab8fba831e3c3673de8a14b3b45",
+      "kind": "git-blob-metadata-only",
+      "path": "main.py",
+      "size_bytes": 327
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "11dedd4a1609049e3e6d2b5faadec90ad9f04ba7",
+      "kind": "git-blob-metadata-only",
+      "path": "mcp/langchain-docs-proxy/package-lock.json",
+      "size_bytes": 40252
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fe9c28bfdbb449edec7f6c775643cdd67346b40b",
+      "kind": "git-blob-metadata-only",
+      "path": "mcp/langchain-docs-proxy/package.json",
+      "size_bytes": 224
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ff7f3e409d134f66044c37fba656418f15f4e56b",
+      "kind": "git-blob-metadata-only",
+      "path": "mcp/langchain-docs-proxy/server.js",
+      "size_bytes": 2312
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "27cd15b5d1cebdca04a2f48ba8074a075c0a2dc2",
+      "kind": "git-blob-metadata-only",
+      "path": "pyproject.toml",
+      "size_bytes": 705
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4372a2edd9ef2ed350674f4ca251c52d5108db85",
+      "kind": "git-blob-metadata-only",
+      "path": "requirements.txt",
+      "size_bytes": 177
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "bf00222e354d7db161816ca3e8df5da251e84898",
+      "kind": "git-blob-metadata-only",
+      "path": "scripts/build-showcase-pages.mjs",
+      "size_bytes": 23273
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f63fd444db0359945f1f406251ee69328f2f96e0",
+      "kind": "git-blob-metadata-only",
+      "path": "scripts/dev.sh",
+      "size_bytes": 13355
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a7f7363ebef4089c1d69e7a2ba20f0ace72c8ff4",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-compress-image/SKILL.md",
+      "size_bytes": 2409
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6b3b7216d746e96fca322269c2419a17df2050bc",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-compress-image/scripts/main.ts",
+      "size_bytes": 10081
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a2924b23fcba09fb6323ce6fa22e2463000e30ba",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/SKILL.md",
+      "size_bytes": 28960
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fcd52640c45ba534854c5e07850e391f66012446",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/codex-imagegen.md",
+      "size_bytes": 3717
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "31c9a18c18ba68ee2213c1a5208f9be6dbcd4e71",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/config/first-time-setup.md",
+      "size_bytes": 3456
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c5a1cf02d84390dfa5959d63edb2f86f417b6337",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/config/preferences-schema.md",
+      "size_bytes": 4017
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9330014248675ebfa5c4ef9a7dfff43b68ea0587",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/config/watermark-guide.md",
+      "size_bytes": 1977
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d1696bab72f4038930392109ecf06a93615c3a48",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/confirmation.md",
+      "size_bytes": 3929
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "20262f50f1c0a5eb4a0b631954cd4f01a2a90022",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/elements/canvas.md",
+      "size_bytes": 3727
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f4fc36ab6c6f248bdb8bafba70580d916c9c2c0c",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/elements/decorations.md",
+      "size_bytes": 5049
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b5b8244232a7a7f74ffe14173839606ff4c55960",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/elements/image-effects.md",
+      "size_bytes": 2990
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6f5e369fc806a95266d23017b8b214c06b81faae",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/elements/typography.md",
+      "size_bytes": 3258
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ee952ec8808b74802b11f95ce33f83ebb4cc983e",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/palettes/macaron.md",
+      "size_bytes": 1437
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6091bd80bc2a6f6c0ffd2f5ffdd9f010dc230412",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/palettes/neon.md",
+      "size_bytes": 1271
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "dbc8641b6acba185bd5e84a321fd155087f1f904",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/palettes/warm.md",
+      "size_bytes": 1225
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0358478bb18cb56a0dfc14527ab4ca5a3dcd148c",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/presets/bold.md",
+      "size_bytes": 1577
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "68b5f71f0f315be588645e838cce06873d88637f",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/presets/chalkboard.md",
+      "size_bytes": 2324
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "da131042ddf177d5a4b6cd37695bca9a07ace69e",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/presets/cute.md",
+      "size_bytes": 1565
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b8403e77691e697658ee74131d8a8618073e3e6a",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/presets/fresh.md",
+      "size_bytes": 1496
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7baf4cc397f8d7f77759333004e80872b6010411",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/presets/minimal.md",
+      "size_bytes": 1418
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "44c5d4a91efa3a77f620c3b3fe0f39745da01be8",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/presets/notion.md",
+      "size_bytes": 1591
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "bd8fe5006e395681b2041113a961b63da0cb80e9",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/presets/pop.md",
+      "size_bytes": 1528
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ff4fa7e538db579f3a5af09c444ae458ebbb5b97",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/presets/retro.md",
+      "size_bytes": 1483
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0cb3e5e2fd71668dafb3c1ba413ec0bc5d3cc5d5",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/presets/screen-print.md",
+      "size_bytes": 2680
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9369439a9f127535449d6247c5d84013893fc97f",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/presets/sketch-notes.md",
+      "size_bytes": 3216
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3092f181dac23085ccd12f01d9ec9df4c0be6cd7",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/presets/study-notes.md",
+      "size_bytes": 2977
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "415086ee8895a63c98d5a0b3f46292c800714a8b",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/presets/warm.md",
+      "size_bytes": 1476
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a778687580de95d4f934a2ef042dde0753d6533a",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/style-presets.md",
+      "size_bytes": 1899
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "cf81bf57e4b9c4b9a6b69be1fae748eec3f6eb7a",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/workflows/analysis-framework.md",
+      "size_bytes": 7235
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1ca40b7d74374f1e065cbc50bf17660f906c156c",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/workflows/outline-template.md",
+      "size_bytes": 6101
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1e275d5cac5e9dea7bde798dd9ea3e292feb020a",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/baoyu-xhs-images/references/workflows/prompt-assembly.md",
+      "size_bytes": 10328
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "379b38cf141ddde796aa3784a09e65806592f656",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/codex/local-release-test/SKILL.md",
+      "size_bytes": 7441
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c55ab42224874608473643de0a85736b7fec0730",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/LICENSE.txt",
+      "size_bytes": 1467
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2951e559989765293b6fbf83942378a3c2d0cba6",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/SKILL.md",
+      "size_bytes": 20084
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8b137891791fe96927ad78e64b0aad7bded08bdc",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/__init__.py",
+      "size_bytes": 1
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8e363161915d3720409bb8b6ef9bc4ade33b64e4",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/accept_changes.py",
+      "size_bytes": 4051
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "36e1c935f2aac390ed468d0637e83cea18decd64",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/comment.py",
+      "size_bytes": 10694
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/helpers/__init__.py",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ad7c25eec0d064fbd9f5624b17b60e5dd49b5903",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/helpers/merge_runs.py",
+      "size_bytes": 5567
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "db963bb998d7d5a8517d8252ce82ec9ab28665bc",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/helpers/simplify_redlines.py",
+      "size_bytes": 5754
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "db29ed8b1c3676a4980b2d67e9dfe432556d2e58",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/pack.py",
+      "size_bytes": 4991
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6454ef9a94d52512e4905df61280a3fd1dafc0a4",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-chart.xsd",
+      "size_bytes": 74984
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "afa4f463e3140a3f626c73f7966d689270d89b2c",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-chartDrawing.xsd",
+      "size_bytes": 6956
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "64e66b8abd496d2e450c08110e40607e90b3fe13",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-diagram.xsd",
+      "size_bytes": 51302
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "687eea8297caa298581aa06c40ca40ef7b8a58bc",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-lockedCanvas.xsd",
+      "size_bytes": 624
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6ac81b06b7a3ef916d677953084ae225504a77bc",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-main.xsd",
+      "size_bytes": 152039
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1dbf05140d07fa014f18a5630acc0613d8058e52",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-picture.xsd",
+      "size_bytes": 1231
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f1af17db4e83b1c40152577eca4a575ab63a1ca7",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-spreadsheetDrawing.xsd",
+      "size_bytes": 8862
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0a185ab6ed0c2dd9b383a403c56c909bbab8b9a1",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-wordprocessingDrawing.xsd",
+      "size_bytes": 14795
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "14ef488865f3ae6150776220ebbcf4788f89066a",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/pml.xsd",
+      "size_bytes": 83612
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c20f3bf14720d34247e8e1302dc3c40f7b832099",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-additionalCharacteristics.xsd",
+      "size_bytes": 1269
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ac60252262534e7b87523fd04d252f085b38bec0",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-bibliography.xsd",
+      "size_bytes": 7328
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "424b8ba8d1f9ebb22ba72cdd174c8a2ade0ecf89",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-commonSimpleTypes.xsd",
+      "size_bytes": 6382
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2bddce29214882eb9fdf2be8a50ed5bdd0c69dfc",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-customXmlDataProperties.xsd",
+      "size_bytes": 1248
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8a8c18ba2d5caa7e60a365e77ae0d1b872141bb0",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-customXmlSchemaProperties.xsd",
+      "size_bytes": 880
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5c42706a0d53c5e8b96818d9c29a292d1504f720",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-documentPropertiesCustom.xsd",
+      "size_bytes": 2608
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "853c341c87feb51e10d757aea28b4185ae4c2731",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-documentPropertiesExtended.xsd",
+      "size_bytes": 3507
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "da835ee82d5cc31be9fa9792512930f7ae3fb5ce",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-documentPropertiesVariantTypes.xsd",
+      "size_bytes": 7507
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "87ad2658fa51cb4c172f82d0fdf33a492a750eca",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-math.xsd",
+      "size_bytes": 23313
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9e86f1b2be0d431cd3c250ddeaf4efabdbcb088b",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-relationshipReference.xsd",
+      "size_bytes": 1367
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d0be42e757f3cce533c1c80770239f0097d3de6b",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/sml.xsd",
+      "size_bytes": 242277
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8821dd183caf9c8c3b809e0e2d9e0df56c4e9ed9",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/vml-main.xsd",
+      "size_bytes": 26148
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ca2575c753be78cdaa96de56b3ff8770173c324d",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/vml-officeDrawing.xsd",
+      "size_bytes": 25279
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "dd079e603f5770176212776a1d565b108875cf64",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/vml-presentationDrawing.xsd",
+      "size_bytes": 535
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3dd6cf625a740398c2a4dc8abbe18e25e0ac5e9f",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/vml-spreadsheetDrawing.xsd",
+      "size_bytes": 5712
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f1041e34ef365926f5670b896f5bb23e553ac36d",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/vml-wordprocessingDrawing.xsd",
+      "size_bytes": 4010
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9c5b7a633411c2313ce839f748e4623bb0a70efe",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/wml.xsd",
+      "size_bytes": 171367
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0f13678d80a762375223f060e23b56c7b2eac89e",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/xml.xsd",
+      "size_bytes": 4646
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a6de9d2733d3f0eea12ae87b24122495df1f0928",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ecma/fouth-edition/opc-contentTypes.xsd",
+      "size_bytes": 1963
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "10e978b661fc291cbeea9ab0c248601cf216f96d",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ecma/fouth-edition/opc-coreProperties.xsd",
+      "size_bytes": 2515
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4248bf7a39c793c9f319bae7d09f92983efe5368",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ecma/fouth-edition/opc-digSig.xsd",
+      "size_bytes": 2856
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "56497467120b52b742756379959d4b2536be6df7",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/ecma/fouth-edition/opc-relationships.xsd",
+      "size_bytes": 1344
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ef725457cf39116672e285d021be69b7ad022574",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/mce/mc.xsd",
+      "size_bytes": 3127
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f65f777730d82162f4248f03c703b1b85fda5fe2",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/microsoft/wml-2010.xsd",
+      "size_bytes": 26549
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6b00755a9a8733f0fb171a47b25d0d7b4c70dee8",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/microsoft/wml-2012.xsd",
+      "size_bytes": 3745
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f321d333a5e6ef98cbdfeeeaa334923e4cfc8a6c",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/microsoft/wml-2018.xsd",
+      "size_bytes": 901
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "364c6a9b8df6e252bb5ae39e2ca031fcbfc4e8a5",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/microsoft/wml-cex-2018.xsd",
+      "size_bytes": 1778
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fed9d15b7f504e14ac82793d79db2d7ad83d56ed",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/microsoft/wml-cid-2016.xsd",
+      "size_bytes": 1002
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "680cf15400cd57ce2bf17a58ecd29caa0d8a8422",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/microsoft/wml-sdtdatahash-2020.xsd",
+      "size_bytes": 600
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "89ada90837b2db3f3d453212ae426520acedbbea",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/schemas/microsoft/wml-symex-2015.xsd",
+      "size_bytes": 745
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c7f7e3289fdff196399fd6f3d6668b9aa68eec87",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/soffice.py",
+      "size_bytes": 5301
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "00152533ac0fa95109f74253ac6a475401fa6afe",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/unpack.py",
+      "size_bytes": 4052
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "03b01f6e3ba40e1408d0bd16d587154fa9798a87",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/validate.py",
+      "size_bytes": 3668
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "db092ece7e21de98f87bd81471578259a1bc642f",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/validators/__init__.py",
+      "size_bytes": 336
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "db4a06a2291abf80bd9b000b6ff3b7f012e6dd2f",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/validators/base.py",
+      "size_bytes": 32651
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fec405e694790259824feebb95061f56a705621c",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/validators/docx.py",
+      "size_bytes": 16376
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "09842aa99866fe270ecfeec6f7993495e1865f2b",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/validators/pptx.py",
+      "size_bytes": 9824
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "71c81b6bf4cacda322db32c87df7b2301c469933",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/office/validators/redlining.py",
+      "size_bytes": 8918
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "cd01a7d7155f9a78cf3d11470e2ce2b5ccdac640",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/templates/comments.xml",
+      "size_bytes": 2603
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "411003cc485356c560e29687ca359d64cd89d4b4",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/templates/commentsExtended.xml",
+      "size_bytes": 2611
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f5572d710826dd7a1f455af7487e2157ef01ada0",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/templates/commentsExtensible.xml",
+      "size_bytes": 2707
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "32f1629f2a8bb9aafebb0699349d0d799edce9f3",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/templates/commentsIds.xml",
+      "size_bytes": 2619
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3803d2de0faa635687a48947b52ab98b9655f631",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/docx/scripts/templates/people.xml",
+      "size_bytes": 115
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0ed58c96737fd38ea2af9bcaebff19d85f0ee052",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/.gitignore",
+      "size_bytes": 256
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "08b36b2f193762e8ea857bc78d535083c55ff073",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/INSTALL.md",
+      "size_bytes": 4027
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "acf80faba115012ec308f8524e59a50019477214",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/LICENSE",
+      "size_bytes": 1070
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1d4375480a108967c947420cb4cdf4a6295bcb10",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/README.md",
+      "size_bytes": 8986
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4dedeefaeec861d99098307c9584b7d7a070ead7",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/SKILL.md",
+      "size_bytes": 10668
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ed9ee61ea94c0cb25383544c5dacad732d5e19de",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/docs/PRD.md",
+      "size_bytes": 3131
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c345e467358b4d3aed4a0f2e0ef91d1c9c21fe66",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/docs/skill-structure.md",
+      "size_bytes": 2597
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1fd9083035a847815830b6cd4c28b2cb4c7c2bb8",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/docs/thanks.jpg",
+      "size_bytes": 146142
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fbb395a44edd60538b94b7e1119c84f5cc307aa6",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/docs/\u6548\u679c\u4f8b-\u521d\u7248\u751f\u6210.jpg",
+      "size_bytes": 233396
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4d83ea969ff9519e5778b91827da68e1e80471b3",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/docs/\u6548\u679c\u4f8b-\u8fed\u4ee3\u66f4\u65b0.jpg",
+      "size_bytes": 55327
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "49589cad232813d4564875c6a8695b589003a8db",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/examples/README.md",
+      "size_bytes": 3026
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e0d562a2a80d972afaed174b7a6e60219a4d7ea7",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/examples/example_batch_job_scheduler/README.md",
+      "size_bytes": 577
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8d0b37529785deb9b7b58500a7e2e2b541013388",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/examples/example_batch_job_scheduler/knowledge/docs/README.md",
+      "size_bytes": 1087
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "deee9f6dcd005377bdf1f1f500d7c3a916553e24",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/examples/example_batch_job_scheduler/knowledge/docs/architecture.md",
+      "size_bytes": 2159
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3caf86eed76ab6045a172e1d8d2f732cd39525d3",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/examples/example_batch_job_scheduler/knowledge/docs/sample_architecture_review.docx",
+      "size_bytes": 38804
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3a3d9f623b16df656bea143fdad7b655148c368d",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/examples/example_batch_job_scheduler/knowledge/docs/sample_assets/sample_fig_modules.png",
+      "size_bytes": 2540
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "61b2f14a2d4e954a5b23c1cdf03c661799e4edc1",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/examples/example_batch_job_scheduler/knowledge/docs/sample_assets/sample_fig_queue.png",
+      "size_bytes": 1741
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3ceca0032c22772ebef2adc1f05696f9225a156b",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/examples/example_batch_job_scheduler/knowledge/docs/sample_scheduler_deck.pptx",
+      "size_bytes": 33772
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b819afe2c80cca4f3e4de150241e12cfdee60e21",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/examples/example_batch_job_scheduler/knowledge/meeting_notes_intake_example.md",
+      "size_bytes": 731
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a68a8870494c10ef84337b8120eae77fc5ff1060",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/examples/example_batch_job_scheduler/knowledge/pkg/scheduler/heartbeat.go",
+      "size_bytes": 553
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "93342ecd46e709a31b541bfd3818b506378c4bcd",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/examples/example_batch_job_scheduler/knowledge/pkg/scheduler/reorder.go",
+      "size_bytes": 1404
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "09cebfcf050079d8382717b5ba200e90dcaf1c51",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/examples/example_batch_job_scheduler/knowledge/pkg/scheduler/scorer.go",
+      "size_bytes": 497
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7780fcfc58c9a00d4f0fe8e32c37c14c7f4ffe59",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/examples/example_batch_job_scheduler/knowledge/pkg/scheduler/types.go",
+      "size_bytes": 866
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fe02c9721bf61252caaf1c8d2550b194b469c986",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/prompts/correction_handler.md",
+      "size_bytes": 2850
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "872aa58f71671c7c8968ddfecb1b81d6cb33743e",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/prompts/disclosure_builder.md",
+      "size_bytes": 11925
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "abed60aad54a7409f22ac0e16589fc7303f2381a",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/prompts/disclosure_preview.md",
+      "size_bytes": 917
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "990839e580438da6a6c1a3f88ea045f3691860bf",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/prompts/disclosure_self_check.md",
+      "size_bytes": 6070
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f0b5ddab747ee437504186000b56f13cda69ec03",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/prompts/intake.md",
+      "size_bytes": 943
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9f077c9de575ae3a638ddc36d5ded5d38bacfc23",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/prompts/iteration_context.md",
+      "size_bytes": 4387
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "02d77f68a96e2cde9d5a1234b606da6f4cbf9fc3",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/prompts/merger.md",
+      "size_bytes": 3412
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ea012514bc97343da8ef9b92713ecb451c7fd861",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/prompts/patent_points_analyzer.md",
+      "size_bytes": 951
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8054ea21e6d9ed178a42aafb802e14800a519c28",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/prompts/prior_art_search.md",
+      "size_bytes": 10347
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "99e4b59ecfca8403c1ee24a000d8d5c299dfc62f",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/prompts/project_scan.md",
+      "size_bytes": 4264
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1ae550e9d0a25f353148d5a0467833652f841b99",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/prompts/template_reference.md",
+      "size_bytes": 8765
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6721cc1269fe40947a37e27a4ba46a8217a32fe1",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/requirements.txt",
+      "size_bytes": 485
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "71b5031b90e5c50059a733cb165028261bd5f2b6",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/tests/test_cnipa_epub_chain.py",
+      "size_bytes": 1463
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0c5249fd8a156e7b8d8923ee1be13a63d318a8b8",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/tests/test_math_render.py",
+      "size_bytes": 1922
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "15fc4774ef9b2e6dabd02af0521c1324d689b600",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/tests/test_md_to_docx_table.py",
+      "size_bytes": 1155
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d846ebc33147af1657ea7b8e4b102eb733f2e8c3",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/tools/README.md",
+      "size_bytes": 15136
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d5988e1c372765e15f4e8e5216b6ba9bc430db24",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/tools/cnipa_epub_crawler.py",
+      "size_bytes": 10763
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "44b9ceb6a3fa3067a160a90dda57edbc775250d4",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/tools/cnipa_epub_parse.py",
+      "size_bytes": 8826
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "37924d727a8e63156ec37db14fc9116f8252dca2",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/tools/cnipa_epub_search.py",
+      "size_bytes": 5784
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ab49e8bb5b0d6afcb690daadd131a095dca56c5f",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/tools/docx_to_md.py",
+      "size_bytes": 3835
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "480767f66b741c15662dd2bff3b3b6111fa8cad4",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/tools/iteration_dialog_log.py",
+      "size_bytes": 3231
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9808b206b1ca2c06c351d29f95773d32a491f04b",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/tools/math_render.py",
+      "size_bytes": 12912
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "aca1200a9af7e46aefa8e5bc080fca39f593c6b5",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/tools/md_to_docx.py",
+      "size_bytes": 32805
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "71dcc70616ad94483009a862b89e6899136a4d7a",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/tools/mermaid_render.py",
+      "size_bytes": 16162
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f758cdf8ad65b808c396f40aeda1b5dc30556649",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/tools/package-lock.json",
+      "size_bytes": 86410
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3da82a30a76ebdf91885511ecae39f5a9acb921c",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/tools/package.json",
+      "size_bytes": 269
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "068385192cb2a43335668af45bf019f01a1a7ca5",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/tools/pptx_to_md.py",
+      "size_bytes": 5040
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7f685d892a3d2e7fb7ceaa3240a71ffb0c47b4b7",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/patent-disclosure-skill/tools/requirements-cnipa.txt",
+      "size_bytes": 159
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c55ab42224874608473643de0a85736b7fec0730",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pdf/LICENSE.txt",
+      "size_bytes": 1467
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d3e046a5ae107a6cb23cfb16c219837094ab35d3",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pdf/SKILL.md",
+      "size_bytes": 8072
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6e7e1e0d9e6ae17215db3e130aea3c3c546487e6",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pdf/forms.md",
+      "size_bytes": 11854
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "41400bf4fc67f15fb062d43695ec92f078226023",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pdf/reference.md",
+      "size_bytes": 16692
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2cc5e348f359b7aa7179e6a26772dacfdbbeba53",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pdf/scripts/check_bounding_boxes.py",
+      "size_bytes": 2774
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "36dfb9513e2f54e051820b58c3cdd1f09bc6ff37",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pdf/scripts/check_fillable_fields.py",
+      "size_bytes": 268
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7939cef56c1220dd9dd0d04ec9594b2fe089ee74",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pdf/scripts/convert_pdf_to_images.py",
+      "size_bytes": 1008
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "10eadd8124b1f94f9b1a78708c2d947a3f6773e7",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pdf/scripts/create_validation_image.py",
+      "size_bytes": 1258
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "64cd4703a4af80bf6abe16f4c3065d8abd55d173",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pdf/scripts/extract_form_field_info.py",
+      "size_bytes": 4300
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f219e7d5b5e30616b2259abb924253afd0240aee",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pdf/scripts/extract_form_structure.py",
+      "size_bytes": 3945
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "51c2600f3895723cac15ec3ffcd8a482e42f95d7",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pdf/scripts/fill_fillable_fields.py",
+      "size_bytes": 3819
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b430069fd016cff11560d0f2b95c63074736e5e4",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pdf/scripts/fill_pdf_form_with_annotations.py",
+      "size_bytes": 3235
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c55ab42224874608473643de0a85736b7fec0730",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/LICENSE.txt",
+      "size_bytes": 1467
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "df5000e17ef60ecf400e65bfcd3c58ff88b604c3",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/SKILL.md",
+      "size_bytes": 9182
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f873e8a04ab20b5a79543ea28729149cfd70ef2c",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/editing.md",
+      "size_bytes": 6885
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6bfed908c9001d047b65995a8eb8b2097340da76",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/pptxgenjs.md",
+      "size_bytes": 12819
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/__init__.py",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "13700df012007ae73e63e12555182b75d3899a4a",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/add_slide.py",
+      "size_bytes": 6872
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3d13994cfeb46b70ca2d8ba2839688bc85021fd0",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/clean.py",
+      "size_bytes": 9583
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/helpers/__init__.py",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ad7c25eec0d064fbd9f5624b17b60e5dd49b5903",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/helpers/merge_runs.py",
+      "size_bytes": 5567
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "db963bb998d7d5a8517d8252ce82ec9ab28665bc",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/helpers/simplify_redlines.py",
+      "size_bytes": 5754
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "db29ed8b1c3676a4980b2d67e9dfe432556d2e58",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/pack.py",
+      "size_bytes": 4991
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6454ef9a94d52512e4905df61280a3fd1dafc0a4",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-chart.xsd",
+      "size_bytes": 74984
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "afa4f463e3140a3f626c73f7966d689270d89b2c",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-chartDrawing.xsd",
+      "size_bytes": 6956
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "64e66b8abd496d2e450c08110e40607e90b3fe13",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-diagram.xsd",
+      "size_bytes": 51302
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "687eea8297caa298581aa06c40ca40ef7b8a58bc",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-lockedCanvas.xsd",
+      "size_bytes": 624
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6ac81b06b7a3ef916d677953084ae225504a77bc",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-main.xsd",
+      "size_bytes": 152039
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1dbf05140d07fa014f18a5630acc0613d8058e52",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-picture.xsd",
+      "size_bytes": 1231
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f1af17db4e83b1c40152577eca4a575ab63a1ca7",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-spreadsheetDrawing.xsd",
+      "size_bytes": 8862
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0a185ab6ed0c2dd9b383a403c56c909bbab8b9a1",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-wordprocessingDrawing.xsd",
+      "size_bytes": 14795
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "14ef488865f3ae6150776220ebbcf4788f89066a",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/pml.xsd",
+      "size_bytes": 83612
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c20f3bf14720d34247e8e1302dc3c40f7b832099",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-additionalCharacteristics.xsd",
+      "size_bytes": 1269
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ac60252262534e7b87523fd04d252f085b38bec0",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-bibliography.xsd",
+      "size_bytes": 7328
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "424b8ba8d1f9ebb22ba72cdd174c8a2ade0ecf89",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-commonSimpleTypes.xsd",
+      "size_bytes": 6382
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2bddce29214882eb9fdf2be8a50ed5bdd0c69dfc",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-customXmlDataProperties.xsd",
+      "size_bytes": 1248
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8a8c18ba2d5caa7e60a365e77ae0d1b872141bb0",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-customXmlSchemaProperties.xsd",
+      "size_bytes": 880
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5c42706a0d53c5e8b96818d9c29a292d1504f720",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-documentPropertiesCustom.xsd",
+      "size_bytes": 2608
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "853c341c87feb51e10d757aea28b4185ae4c2731",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-documentPropertiesExtended.xsd",
+      "size_bytes": 3507
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "da835ee82d5cc31be9fa9792512930f7ae3fb5ce",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-documentPropertiesVariantTypes.xsd",
+      "size_bytes": 7507
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "87ad2658fa51cb4c172f82d0fdf33a492a750eca",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-math.xsd",
+      "size_bytes": 23313
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9e86f1b2be0d431cd3c250ddeaf4efabdbcb088b",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-relationshipReference.xsd",
+      "size_bytes": 1367
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d0be42e757f3cce533c1c80770239f0097d3de6b",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/sml.xsd",
+      "size_bytes": 242277
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8821dd183caf9c8c3b809e0e2d9e0df56c4e9ed9",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/vml-main.xsd",
+      "size_bytes": 26148
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ca2575c753be78cdaa96de56b3ff8770173c324d",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/vml-officeDrawing.xsd",
+      "size_bytes": 25279
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "dd079e603f5770176212776a1d565b108875cf64",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/vml-presentationDrawing.xsd",
+      "size_bytes": 535
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3dd6cf625a740398c2a4dc8abbe18e25e0ac5e9f",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/vml-spreadsheetDrawing.xsd",
+      "size_bytes": 5712
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f1041e34ef365926f5670b896f5bb23e553ac36d",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/vml-wordprocessingDrawing.xsd",
+      "size_bytes": 4010
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9c5b7a633411c2313ce839f748e4623bb0a70efe",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/wml.xsd",
+      "size_bytes": 171367
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0f13678d80a762375223f060e23b56c7b2eac89e",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/xml.xsd",
+      "size_bytes": 4646
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a6de9d2733d3f0eea12ae87b24122495df1f0928",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ecma/fouth-edition/opc-contentTypes.xsd",
+      "size_bytes": 1963
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "10e978b661fc291cbeea9ab0c248601cf216f96d",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ecma/fouth-edition/opc-coreProperties.xsd",
+      "size_bytes": 2515
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4248bf7a39c793c9f319bae7d09f92983efe5368",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ecma/fouth-edition/opc-digSig.xsd",
+      "size_bytes": 2856
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "56497467120b52b742756379959d4b2536be6df7",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/ecma/fouth-edition/opc-relationships.xsd",
+      "size_bytes": 1344
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ef725457cf39116672e285d021be69b7ad022574",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/mce/mc.xsd",
+      "size_bytes": 3127
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f65f777730d82162f4248f03c703b1b85fda5fe2",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/microsoft/wml-2010.xsd",
+      "size_bytes": 26549
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6b00755a9a8733f0fb171a47b25d0d7b4c70dee8",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/microsoft/wml-2012.xsd",
+      "size_bytes": 3745
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f321d333a5e6ef98cbdfeeeaa334923e4cfc8a6c",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/microsoft/wml-2018.xsd",
+      "size_bytes": 901
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "364c6a9b8df6e252bb5ae39e2ca031fcbfc4e8a5",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/microsoft/wml-cex-2018.xsd",
+      "size_bytes": 1778
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fed9d15b7f504e14ac82793d79db2d7ad83d56ed",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/microsoft/wml-cid-2016.xsd",
+      "size_bytes": 1002
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "680cf15400cd57ce2bf17a58ecd29caa0d8a8422",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/microsoft/wml-sdtdatahash-2020.xsd",
+      "size_bytes": 600
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "89ada90837b2db3f3d453212ae426520acedbbea",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/schemas/microsoft/wml-symex-2015.xsd",
+      "size_bytes": 745
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c7f7e3289fdff196399fd6f3d6668b9aa68eec87",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/soffice.py",
+      "size_bytes": 5301
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "00152533ac0fa95109f74253ac6a475401fa6afe",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/unpack.py",
+      "size_bytes": 4052
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "03b01f6e3ba40e1408d0bd16d587154fa9798a87",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/validate.py",
+      "size_bytes": 3668
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "db092ece7e21de98f87bd81471578259a1bc642f",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/validators/__init__.py",
+      "size_bytes": 336
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "db4a06a2291abf80bd9b000b6ff3b7f012e6dd2f",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/validators/base.py",
+      "size_bytes": 32651
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fec405e694790259824feebb95061f56a705621c",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/validators/docx.py",
+      "size_bytes": 16376
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "09842aa99866fe270ecfeec6f7993495e1865f2b",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/validators/pptx.py",
+      "size_bytes": 9824
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "71c81b6bf4cacda322db32c87df7b2301c469933",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/office/validators/redlining.py",
+      "size_bytes": 8918
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "edcbdc0f81e7919fb2e6bb5b4a9f15bfa131f036",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/pptx/scripts/thumbnail.py",
+      "size_bytes": 8785
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2b1b3f66ee036715253f56ea3e9f81c1c3fe9406",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/skill-creator/SKILL.md",
+      "size_bytes": 4202
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c55ab42224874608473643de0a85736b7fec0730",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/LICENSE.txt",
+      "size_bytes": 1467
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c5c881be9ebaa2bfcdd02f97de2ebd711ab78803",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/SKILL.md",
+      "size_bytes": 11463
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/helpers/__init__.py",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ad7c25eec0d064fbd9f5624b17b60e5dd49b5903",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/helpers/merge_runs.py",
+      "size_bytes": 5567
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "db963bb998d7d5a8517d8252ce82ec9ab28665bc",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/helpers/simplify_redlines.py",
+      "size_bytes": 5754
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "db29ed8b1c3676a4980b2d67e9dfe432556d2e58",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/pack.py",
+      "size_bytes": 4991
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6454ef9a94d52512e4905df61280a3fd1dafc0a4",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-chart.xsd",
+      "size_bytes": 74984
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "afa4f463e3140a3f626c73f7966d689270d89b2c",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-chartDrawing.xsd",
+      "size_bytes": 6956
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "64e66b8abd496d2e450c08110e40607e90b3fe13",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-diagram.xsd",
+      "size_bytes": 51302
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "687eea8297caa298581aa06c40ca40ef7b8a58bc",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-lockedCanvas.xsd",
+      "size_bytes": 624
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6ac81b06b7a3ef916d677953084ae225504a77bc",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-main.xsd",
+      "size_bytes": 152039
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1dbf05140d07fa014f18a5630acc0613d8058e52",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-picture.xsd",
+      "size_bytes": 1231
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f1af17db4e83b1c40152577eca4a575ab63a1ca7",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-spreadsheetDrawing.xsd",
+      "size_bytes": 8862
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0a185ab6ed0c2dd9b383a403c56c909bbab8b9a1",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-wordprocessingDrawing.xsd",
+      "size_bytes": 14795
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "14ef488865f3ae6150776220ebbcf4788f89066a",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/pml.xsd",
+      "size_bytes": 83612
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c20f3bf14720d34247e8e1302dc3c40f7b832099",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-additionalCharacteristics.xsd",
+      "size_bytes": 1269
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ac60252262534e7b87523fd04d252f085b38bec0",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-bibliography.xsd",
+      "size_bytes": 7328
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "424b8ba8d1f9ebb22ba72cdd174c8a2ade0ecf89",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-commonSimpleTypes.xsd",
+      "size_bytes": 6382
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2bddce29214882eb9fdf2be8a50ed5bdd0c69dfc",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-customXmlDataProperties.xsd",
+      "size_bytes": 1248
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8a8c18ba2d5caa7e60a365e77ae0d1b872141bb0",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-customXmlSchemaProperties.xsd",
+      "size_bytes": 880
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5c42706a0d53c5e8b96818d9c29a292d1504f720",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-documentPropertiesCustom.xsd",
+      "size_bytes": 2608
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "853c341c87feb51e10d757aea28b4185ae4c2731",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-documentPropertiesExtended.xsd",
+      "size_bytes": 3507
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "da835ee82d5cc31be9fa9792512930f7ae3fb5ce",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-documentPropertiesVariantTypes.xsd",
+      "size_bytes": 7507
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "87ad2658fa51cb4c172f82d0fdf33a492a750eca",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-math.xsd",
+      "size_bytes": 23313
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9e86f1b2be0d431cd3c250ddeaf4efabdbcb088b",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/shared-relationshipReference.xsd",
+      "size_bytes": 1367
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d0be42e757f3cce533c1c80770239f0097d3de6b",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/sml.xsd",
+      "size_bytes": 242277
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8821dd183caf9c8c3b809e0e2d9e0df56c4e9ed9",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/vml-main.xsd",
+      "size_bytes": 26148
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ca2575c753be78cdaa96de56b3ff8770173c324d",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/vml-officeDrawing.xsd",
+      "size_bytes": 25279
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "dd079e603f5770176212776a1d565b108875cf64",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/vml-presentationDrawing.xsd",
+      "size_bytes": 535
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3dd6cf625a740398c2a4dc8abbe18e25e0ac5e9f",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/vml-spreadsheetDrawing.xsd",
+      "size_bytes": 5712
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f1041e34ef365926f5670b896f5bb23e553ac36d",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/vml-wordprocessingDrawing.xsd",
+      "size_bytes": 4010
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9c5b7a633411c2313ce839f748e4623bb0a70efe",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/wml.xsd",
+      "size_bytes": 171367
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0f13678d80a762375223f060e23b56c7b2eac89e",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/xml.xsd",
+      "size_bytes": 4646
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a6de9d2733d3f0eea12ae87b24122495df1f0928",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ecma/fouth-edition/opc-contentTypes.xsd",
+      "size_bytes": 1963
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "10e978b661fc291cbeea9ab0c248601cf216f96d",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ecma/fouth-edition/opc-coreProperties.xsd",
+      "size_bytes": 2515
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4248bf7a39c793c9f319bae7d09f92983efe5368",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ecma/fouth-edition/opc-digSig.xsd",
+      "size_bytes": 2856
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "56497467120b52b742756379959d4b2536be6df7",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/ecma/fouth-edition/opc-relationships.xsd",
+      "size_bytes": 1344
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ef725457cf39116672e285d021be69b7ad022574",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/mce/mc.xsd",
+      "size_bytes": 3127
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f65f777730d82162f4248f03c703b1b85fda5fe2",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/microsoft/wml-2010.xsd",
+      "size_bytes": 26549
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6b00755a9a8733f0fb171a47b25d0d7b4c70dee8",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/microsoft/wml-2012.xsd",
+      "size_bytes": 3745
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f321d333a5e6ef98cbdfeeeaa334923e4cfc8a6c",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/microsoft/wml-2018.xsd",
+      "size_bytes": 901
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "364c6a9b8df6e252bb5ae39e2ca031fcbfc4e8a5",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/microsoft/wml-cex-2018.xsd",
+      "size_bytes": 1778
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fed9d15b7f504e14ac82793d79db2d7ad83d56ed",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/microsoft/wml-cid-2016.xsd",
+      "size_bytes": 1002
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "680cf15400cd57ce2bf17a58ecd29caa0d8a8422",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/microsoft/wml-sdtdatahash-2020.xsd",
+      "size_bytes": 600
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "89ada90837b2db3f3d453212ae426520acedbbea",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/schemas/microsoft/wml-symex-2015.xsd",
+      "size_bytes": 745
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c7f7e3289fdff196399fd6f3d6668b9aa68eec87",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/soffice.py",
+      "size_bytes": 5301
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "00152533ac0fa95109f74253ac6a475401fa6afe",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/unpack.py",
+      "size_bytes": 4052
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "03b01f6e3ba40e1408d0bd16d587154fa9798a87",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/validate.py",
+      "size_bytes": 3668
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "db092ece7e21de98f87bd81471578259a1bc642f",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/validators/__init__.py",
+      "size_bytes": 336
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "db4a06a2291abf80bd9b000b6ff3b7f012e6dd2f",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/validators/base.py",
+      "size_bytes": 32651
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fec405e694790259824feebb95061f56a705621c",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/validators/docx.py",
+      "size_bytes": 16376
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "09842aa99866fe270ecfeec6f7993495e1865f2b",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/validators/pptx.py",
+      "size_bytes": 9824
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "71c81b6bf4cacda322db32c87df7b2301c469933",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/office/validators/redlining.py",
+      "size_bytes": 8918
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f472e9a5d04583dc14869f36aa4252a533639ad6",
+      "kind": "git-blob-metadata-only",
+      "path": "skills/xlsx/scripts/recalc.py",
+      "size_bytes": 5782
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6d3d0e09320603ae275a2471e3cf3640ca078a4d",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_date_middleware.py",
+      "size_bytes": 3475
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2d8a9f134f1912fb9c5703d68cd9f938a58acec7",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_dynamic_local_backend.py",
+      "size_bytes": 4400
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9f30f9f2f2113bbf495af71aec1d3a974f56b217",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_goal_state.py",
+      "size_bytes": 3690
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ac4c07bdfa5ec5829f78508e603c6f234d836c75",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_mcp_config.py",
+      "size_bytes": 5689
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3bdfd4cbed1abee998de045200556b3976d0618f",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_model_provider_config.py",
+      "size_bytes": 3803
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a45c7d66a9241ca8787a63e1c5dc6a49ff6cfa9f",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_remote_runtime_image_compat.py",
+      "size_bytes": 16153
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "28bea813359d478ff9220e1dc81288c05de78fa0",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_thread_skill_middleware.py",
+      "size_bytes": 3192
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "abd1d98d8458e18ccd64716cce2cc96e4bdd9827",
+      "kind": "git-blob-metadata-only",
+      "path": "tests/test_web_search_tools.py",
+      "size_bytes": 23466
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/.codespellignore",
+      "size_bytes": 0
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7fa0b920007df935c4174bb9ea3067a2b80ce02d",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/.github/dependabot.yml",
+      "size_bytes": 695
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5848a493532e286e75e2ac13bb1666f6f9dec216",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/.github/workflows/ci.yml",
+      "size_bytes": 2605
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a9edf1c8dfd7903978947ffdf4050f84c9152829",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/.github/workflows/pr_lint.yml",
+      "size_bytes": 824
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5ef6a520780202a1d6addd833d800ccb1ecac0bb",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/.gitignore",
+      "size_bytes": 480
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "35f49783c4401d44386f95291c9c35bce8d13c9a",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/.nvmrc",
+      "size_bytes": 4
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3283dd27635f015a6f258b11d93bc02e47364f56",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/.prettierignore",
+      "size_bytes": 282
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c38f6f284dc464af69e9f618bc0304d299d0bdf0",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/LICENSE",
+      "size_bytes": 1066
+    },
+    {
+      "candidate_asset_kind": "document",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0672ae2e5af7462582b4f0fbe0699ac67a217e9d",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/README.md",
+      "size_bytes": 3491
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "dba50c6077156bd5a79f18041c813a351785bd3e",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/components.json",
+      "size_bytes": 419
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a39749b616932460752d80b278da227162b32a73",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/deepagent-ui.config.example.json",
+      "size_bytes": 461
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "78013d8bfd80959ec527c96bdfa96b0f32c72995",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/deepagent-ui.config.json",
+      "size_bytes": 355
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d9a3107ebaf0bdd74fb3bf5e2371af29493084b2",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/eslint.config.js",
+      "size_bytes": 958
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "cea7850cbe306c38d3a8894fe2181f1c73845ddc",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/next.config.ts",
+      "size_bytes": 170
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "98dabaa5a203c56cafcd0892e4f6abb5069e99ab",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/package-lock.json",
+      "size_bytes": 407393
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4f51361665ea48fc4e6f8e66be7fbe8a21c12b0b",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/package.json",
+      "size_bytes": 2929
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "cbfea5ea20fc50641382475965350e24836c80cb",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/postcss.config.cjs",
+      "size_bytes": 114
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "253d4831e421ee2c2e32bff5551a8b30811a41ad",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/prettier.config.cjs",
+      "size_bytes": 235
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "017591cf9a8a289b026db419591c1ab50a7b7966",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/examples/caffeine.sdf",
+      "size_bytes": 3950
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fef362223c74dcc2dae4d6768a4f5d9c572fa759",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/examples/crystal-perovskite.cif",
+      "size_bytes": 594
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f77eb6e89db828e36ec813a625f819d2ef6a5823",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/examples/microscopy-volume.vti",
+      "size_bytes": 2033
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "bb4ccaccf344c4c8a8b05cdb7169bdad5d879858",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/examples/orbital-isosurface.cube",
+      "size_bytes": 936
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "95119a520a872d266ca1023b82eb2ad6a2fb7738",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/examples/reaction-flow.vtk",
+      "size_bytes": 1432
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "91892528bf67256cb9c5f94a8cbb666306a5b353",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/examples/spectrum-link.jdx",
+      "size_bytes": 708
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ac5211c1ac3e8e123b1bd0dc0b86b7830d54032d",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/examples/ubiquitin-1ubq.pdb",
+      "size_bytes": 78570
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "004145cddf3f9db91b57b9cb596683c8eb420862",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/file.svg",
+      "size_bytes": 391
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "567f17b0d7c7fb662c16d4357dd74830caf2dccb",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/globe.svg",
+      "size_bytes": 1035
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5174b28c565c285e3e312ec5178be64fbeca8398",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/next.svg",
+      "size_bytes": 1375
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "074ed7d8c7d74e88961008e6b139382b7aa65496",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/showcase/about.png",
+      "size_bytes": 25365
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a0ca81185e50e07662845fd5c74a214dcbddc7f2",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/showcase/approval-mode.png",
+      "size_bytes": 119358
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8a47ad57f3cc16db0d1db2a181e207f3dc1174a1",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/showcase/caffeine-analysis.gif",
+      "size_bytes": 14370174
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "1b695b2d4fda46f2812203847491b4b0cfcdd999",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/showcase/compute-resources.png",
+      "size_bytes": 177793
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "85ef1e0cf327a3b8be46d0ccd6e67f860be4bcef",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/showcase/config.png",
+      "size_bytes": 44668
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "237444921b2c55330ffc7b1ff71db7801b3fb04a",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/showcase/connect.png",
+      "size_bytes": 29781
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "347c592dc2f13e9d77c3e168cdb3d406aa22ae09",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/showcase/connectors.png",
+      "size_bytes": 216176
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "604564b4c65e02ff38e4117215e8c97e67bb93e0",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/showcase/file-preview.png",
+      "size_bytes": 48815
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "03dc77b0ac823932b767f38e6262e4935780ad50",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/showcase/internagentS.png",
+      "size_bytes": 960095
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ccf64243ee82ca3bec4049496bcc42ebf870767b",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/showcase/pbtio3-analysis.gif",
+      "size_bytes": 16861723
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b9793815038579893222e8c08e4e9b3ef79518ee",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/showcase/remote-compute-card.png",
+      "size_bytes": 106118
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4cb79efebca31de30951549544e2892df04038d3",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/showcase/science-data-formats.mov",
+      "size_bytes": 4768325
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2c79601f0f4db29413096dd57003e257c362c40a",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/showcase/skills-library.png",
+      "size_bytes": 290519
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0f1257b8e9133678e29c89e3e7271f5fb33ec6e4",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/showcase/workbench-tour.png",
+      "size_bytes": 41670
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8649b419af18a7dc26277f0bc197d382d92c1814",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/showcase/workbench.png",
+      "size_bytes": 39132
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8874b3f751ac350a885e76b5ea19a9bbf25b6de5",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/showcase/workspace-preview-cn.jpeg",
+      "size_bytes": 397288
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9f778ccaf922bbebc683ac4a2e988e65b8b70de9",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/showcase/y-mixer-model.gif",
+      "size_bytes": 8359303
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "77053960334e2e34dc584dea8019925c3b4ccca9",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/vercel.svg",
+      "size_bytes": 128
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b2b2a44f6ebc70c450043c05a002e7a93ba5d651",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/public/window.svg",
+      "size_bytes": 385
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "59551cc5b9be61de58cc60803df8d5171d68ef4d",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/about/page.tsx",
+      "size_bytes": 19586
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6a27916b1263c1743597e7ad02e0b0d8fcf1653e",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/_lib/local-folder-picker.ts",
+      "size_bytes": 4126
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "05c02c85bf289554e1d6650a9522cebe55986400",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/compute/_lib/compute-auth.ts",
+      "size_bytes": 2204
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "51fdc8e382a002eb14ce2c7292c4eb71955c3644",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/compute/_lib/ssh-remote-jobs.ts",
+      "size_bytes": 23908
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "749c1019780aada065021d0721638917d1b7bf57",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/compute/remote-jobs/[jobId]/route.ts",
+      "size_bytes": 591
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7e48868f33a2605ab7ac5ed4f28c6ccd0dc1a9d2",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/compute/remote-jobs/route.ts",
+      "size_bytes": 759
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "56047d50e278a8eda39c0d1473a929f459d53b76",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/compute/ssh-hosts/route.ts",
+      "size_bytes": 775
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "905d205f05193c1bbacf854dde1cc3121e37c2eb",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/config/route.ts",
+      "size_bytes": 16959
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "aa4ce72c0a35bbbe75529afe97fafef8f6c04fba",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/remote-connections/_lib/remote-connections.ts",
+      "size_bytes": 74517
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0cea87c83c40a7bb23519366a8a64917f91115b7",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/remote-connections/ensure/route.ts",
+      "size_bytes": 1741
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d69b23593048acd4aa40f866d6ded68186934f14",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/remote-connections/push-backend-cli/route.ts",
+      "size_bytes": 1477
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "36d4742b33bfdd4babf9752e7a3464094602c739",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/remote-connections/setup/route.ts",
+      "size_bytes": 1476
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b194d31ab4e54c7c94e82dc8f34339945f0ab5c1",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/remote-connections/ssh-hosts/route.ts",
+      "size_bytes": 453
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "05e99203b288eca2c5af61fe703a32518e6b1117",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/remote-connections/test/route.ts",
+      "size_bytes": 719
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3045721b3c476f784245ee02a6a284029823f237",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/resources/route.ts",
+      "size_bytes": 664
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "775e38c357ad6a3c3dbc0590092f9ccc3274a399",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/runtime/_lib/backend.ts",
+      "size_bytes": 20878
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "aea2387a1a2d32312a57f5b180137006daec1664",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/runtime/backend/ready/route.ts",
+      "size_bytes": 1171
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d4108971610b192223ba7f67a18c732127a9722a",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/runtime/backend/restart/route.ts",
+      "size_bytes": 316
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5a5af04832efe0f0b3276f30250939bcc2a371fe",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/runtime/backend/status/route.ts",
+      "size_bytes": 321
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ee735bf1fbbb3247bdfb85c1a1d56b7786e21e9e",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/runtime/desktop-config/route.ts",
+      "size_bytes": 4759
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3176a24d6f33d208efb39833c2d43b675d2382de",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/skills/_lib/skill-frontmatter.ts",
+      "size_bytes": 3712
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0024ee7537b23428b086658e18cdf325613542ad",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/skills/_lib/skills.ts",
+      "size_bytes": 24938
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8a5a70c2b9def9b5b8ded4bcc6cf3b348ef8c057",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/skills/connections/route.ts",
+      "size_bytes": 6709
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3ee0070a384cecb4b4bd91b05a167b0a03ecf7d4",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/skills/import/route.ts",
+      "size_bytes": 1074
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5c0d927a1f5e174f5b8fb155d53f310712ffc682",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/skills/local-picker/route.ts",
+      "size_bytes": 723
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "86e18e7c50c70eb03913d93600927d4e82971bb9",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/skills/route.ts",
+      "size_bytes": 1328
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fdacff926659ae395ffd6943f2fa7a74d9069cbf",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/update/_lib/update.ts",
+      "size_bytes": 34881
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9a0e08c1ab925c2cf2ce1741073948bc6d0909a1",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/update/apply/route.ts",
+      "size_bytes": 345
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "dfe8f77e5f52fcca563dd92c9b46d519a3d83805",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/update/check/route.ts",
+      "size_bytes": 350
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7516855de56f63c53d7544de000777db9259cd36",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/update/rollback/route.ts",
+      "size_bytes": 351
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "6c665d5f3995bcf2331a59f1692bb2d646e201f6",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/update/status/route.ts",
+      "size_bytes": 293
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "78c448f3bff9cd087a367dd0d15cec3d8080e0e1",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/workspace/_lib/office-preview.ts",
+      "size_bytes": 33644
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9d7bcbe3b76a497f0c0e47a48174251b4ba1798e",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/workspace/_lib/open-folder.ts",
+      "size_bytes": 3377
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "51f7fc4a260c2de6c460466b89fc8acb5a883bce",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/workspace/_lib/workspace.ts",
+      "size_bytes": 57898
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "563a13d52f5cdb923f63675bb89f5b0ba41d6175",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/workspace/attachments/route.ts",
+      "size_bytes": 14663
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8c4f587edbba0bd4f46bdd10cd6d75c2c93553bf",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/workspace/file/raw/route.ts",
+      "size_bytes": 2973
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2abd39c6fc8d14669af58987d0577b62cbf96cc2",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/workspace/file/route.ts",
+      "size_bytes": 2833
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "77da0cbf74e23ca38812adeb3a0b3d89374dff71",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/workspace/files/route.ts",
+      "size_bytes": 1399
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ce9b78dacd5edba478eb5fdab6b8c753c4a08149",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/workspace/open-file/route.ts",
+      "size_bytes": 2204
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2850f1a738501cfa50bdb17286a7096a914c0401",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/workspace/open-folder/route.ts",
+      "size_bytes": 1142
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d719bb94cc008cbd0547b4703860ca16f3f4178d",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/workspace/search/route.ts",
+      "size_bytes": 1179
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "74fc69272009b00f05685ab93d5a1c820e19a066",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/api/workspaces/route.ts",
+      "size_bytes": 4003
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "cbe7bf2f5bedbc50c4697ee743b5743348d04bae",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/components/AppFooter.tsx",
+      "size_bytes": 366
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a5fd02fefe7f80a2cb2367fbda6715ffa38e8423",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/components/ChatInterface.tsx",
+      "size_bytes": 147355
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4e3053be39b4f55e567ebb17aac51b6ae61e7b9f",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/components/ChatMessage.tsx",
+      "size_bytes": 12515
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "88fd5f801a803c5413663d3c57a5a5aacaacad5f",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/components/FileViewDialog.tsx",
+      "size_bytes": 9097
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "24a842fb6ab07031caad93d557aa709e50a70eec",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/components/LanguageToggle.tsx",
+      "size_bytes": 1237
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b60eb7cabe5ca77dd89a9621022854d50d565246",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/components/MarkdownContent.tsx",
+      "size_bytes": 8870
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0c51aba13fab2e17e5daf90638edff8b3d42aea1",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/components/MoleculeViewer.tsx",
+      "size_bytes": 11350
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "58e6cc44c81b4b3d196c48783301401e54e33b00",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/components/RemoteConnectionDialog.tsx",
+      "size_bytes": 19500
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ad2f59c5eaedbabcdc561d4ed80f9eb22a429bca",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/components/ScienceSceneViewer.tsx",
+      "size_bytes": 60536
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "247c7068585fdd1ad84b744cdbbd46dc3025153d",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/components/SubAgentIndicator.tsx",
+      "size_bytes": 2195
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "51787704fdb837fd3ca3d2b2ad5c8b843bed092e",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/components/TasksFilesSidebar.tsx",
+      "size_bytes": 9192
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ca5c746e184d6139f37961e2ddb07c2a437e45bd",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/components/ThreadList.tsx",
+      "size_bytes": 17107
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fa8e036907556efe6db42cdacbe3dbc176a2f49d",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/components/ToolApprovalInterrupt.tsx",
+      "size_bytes": 17248
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0b08377d5c72684228260d4c2f3c8134ad60f350",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/components/ToolCallBox.tsx",
+      "size_bytes": 10978
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5f39573464ae87c211f8f2332fee870f1985dcff",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/components/WorkspaceExplorer.tsx",
+      "size_bytes": 13325
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a6fcec8371c7cd8b1560d492f6310caa5f10a0cf",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/components/WorkspacePanel.tsx",
+      "size_bytes": 5136
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5d0603eea1f1a36a1919671c8b73f8650d7c20dc",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/components/WorkspaceViewer.tsx",
+      "size_bytes": 20855
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "79f11206f8a80049e10e31fb329ee8703d1e21d3",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/config/components/ArchivedThreadsCard.tsx",
+      "size_bytes": 7623
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d074d9f745a15c57e6e67c24a82878dd81a110bd",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/config/components/ComputeSettingsCard.tsx",
+      "size_bytes": 14088
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b414f1355d3c9feb3f90136630bd552fc67fa8c4",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/config/components/RemoteProjectsSettingsCard.tsx",
+      "size_bytes": 13421
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "31500175cab29f91b08c05f166a41e3900e7e85c",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/config/page.tsx",
+      "size_bytes": 44518
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "63310188a3e2d07e8d82799d6aa0283299fb1650",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/connect/page.tsx",
+      "size_bytes": 6696
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "718d6fea4835ec2d246af9800eddb7ffb276240c",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/favicon.ico",
+      "size_bytes": 25931
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3e9312a0e636bc0c0eb5a3b8903ddb16995a1483",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/globals.css",
+      "size_bytes": 38403
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "fe3246daebbeb5d068645517403fbb2e7b59bdfe",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/hooks/useChat.ts",
+      "size_bytes": 68458
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "42b8029fbd53f804a4a907550ca6c571bd65ee4c",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/hooks/useLanguage.ts",
+      "size_bytes": 1846
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e31b7da398e2b764e019cdf38dd001a6c00e8587",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/hooks/useStreamEventLayer.ts",
+      "size_bytes": 3079
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "778e769f2f91394b248b7b70594ba3247f6db570",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/hooks/useThreads.ts",
+      "size_bytes": 5935
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a22d6e5d982e00d713759bcd7bb934980bd892dd",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/hooks/useWorkspaceFiles.ts",
+      "size_bytes": 5265
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9631179fc6a1d032c2b581c1917adedf62319268",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/knowledge/page.tsx",
+      "size_bytes": 106
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7e7f18b045f4cfc103c8db31042839ffcdc35b9e",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/layout.tsx",
+      "size_bytes": 3425
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "8d9e2a643bca2db1ff16ae239d2b5857726cbd9c",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/page.tsx",
+      "size_bytes": 67706
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "bb27496bae3eecfeb5a653916f3b9a615d1a101a",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/projects/page.tsx",
+      "size_bytes": 18584
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c54f6560077983d1bfc1a21a805dd13fc41ba69e",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/showcase/page.tsx",
+      "size_bytes": 27081
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f9d4798ce1e6a6f900e3f8997df7951e7f40e559",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/skills/components/SkillsMarketplace.tsx",
+      "size_bytes": 82415
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e1705d43dc908e2e2e4539abc14cbc7656898ecc",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/skills/page.tsx",
+      "size_bytes": 936
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9c9d277628861a5b0e23db570e55ba75001ac148",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/skills/science-skill-catalog.ts",
+      "size_bytes": 126910
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c13e1ef7130f7a04558d3fb93ce39b617ac595b5",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/skills/science-skill-display.ts",
+      "size_bytes": 14612
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "217bb60aabcf5a8a8395fc2efc5b7c4bb361e0f9",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/skills/skill-search.ts",
+      "size_bytes": 5489
+    },
+    {
+      "candidate_asset_kind": "skill",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0956fbf4372649286fa18c219acdddaddf6d4f1d",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/skills/types.ts",
+      "size_bytes": 1551
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ae4b84f8dc5f3836f6edefd3f9fc2c57bccf25dd",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/types/types.ts",
+      "size_bytes": 2045
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "076cff676f55c8d09c52308a72a4dc82f407e2fa",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/types/workspace.ts",
+      "size_bytes": 1525
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2457073807e1f66642ebf19af7cd1ea0f5a996d6",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/utils/navigationContext.ts",
+      "size_bytes": 3129
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a339f18a5df3fa6805fb99ac4f8a7c0205e56bb0",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/utils/threadTitle.ts",
+      "size_bytes": 2079
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0fa74d59ebe45a39ed5c066fe589f0ae06a7dcfa",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/utils/toolDisplayNames.ts",
+      "size_bytes": 2582
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4bc80ce96e16a6a33d7ad55a6b13a0bbd04bcad8",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/utils/utils.ts",
+      "size_bytes": 7614
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f0f57a4c2d58b5d119d6137f8b2c93cf13ced52c",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/utils/workspaceDrag.ts",
+      "size_bytes": 1748
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b17b7f1906398c232625ceb84cb2ee01bbb1c1db",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/app/utils/workspacePathLinks.ts",
+      "size_bytes": 6791
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "4d2886947d9f5878ad0ac817c65de359f766d973",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/components/ui/button.tsx",
+      "size_bytes": 2253
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3effd5b9abcc4e789db65c9935cb60a6c720eee7",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/components/ui/dialog.tsx",
+      "size_bytes": 4103
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "95e7e0777980374f63719178e806cb14a31d9e04",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/components/ui/input.tsx",
+      "size_bytes": 1069
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "40378d43a03402c219a8c9905ff369a6c31e4b66",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/components/ui/label.tsx",
+      "size_bytes": 733
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "dfe05ea1d37fc1e1d181fc2bb168ca25daefae96",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/components/ui/resizable.tsx",
+      "size_bytes": 1773
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "e356d2d040aa1e171cea0f77286a889b20c13563",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/components/ui/scroll-area.tsx",
+      "size_bytes": 1652
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "51aeb1cf44f1909bc6bb1bdd32c5e72a0b297624",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/components/ui/select.tsx",
+      "size_bytes": 5877
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "2cdf440dcbf2ce5993844a06c2c60953074fcaf8",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/components/ui/skeleton.tsx",
+      "size_bytes": 264
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0eff09b08d729dc665ffc3a515aeb5d21f4f3bbd",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/components/ui/switch.tsx",
+      "size_bytes": 1014
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3e6e7f60443edde0ee54c114f3ce45fd12ccc439",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/components/ui/tabs.tsx",
+      "size_bytes": 1978
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c092f7078f1193d830362388a08b2d3e275ba67d",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/components/ui/textarea.tsx",
+      "size_bytes": 784
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "373a1de2011dfbff3c019ab1116f93c5a2e4abb1",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/components/ui/tooltip-icon-button.tsx",
+      "size_bytes": 808
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "651f876b3360d34bd824b6f1431f8ee958e69b21",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/components/ui/tooltip.tsx",
+      "size_bytes": 1972
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "641fa15762164ce1478718a36ee6d85773bbfd46",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/lib/chat-errors.ts",
+      "size_bytes": 3167
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "dbc8b0c07f56b0e097ffab563137c21bdfd54458",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/lib/config.ts",
+      "size_bytes": 6797
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "c390b21bc7dce0b5bad8cd2772fc6162fdbab297",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/lib/i18n.ts",
+      "size_bytes": 76069
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "9d332e12cec4f0686e4a4ee5cf3b09cac097824e",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/lib/pending-run-input.ts",
+      "size_bytes": 2328
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3a64645e0097daa43052111fe400c9f57d293dc5",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/lib/remote-agent.ts",
+      "size_bytes": 6282
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "745adf8697d43c596317984a03f0b12a7a89690b",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/lib/ssh-command.ts",
+      "size_bytes": 2286
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "3c20f96cbe3d7b3d863d439dd652de3daeda78f9",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/lib/theme.ts",
+      "size_bytes": 847
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7f1ae459a87bad5d38d3ce78b7c43140d8f6ea02",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/lib/thread-state.ts",
+      "size_bytes": 3666
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "365058cebd7d2bdb327ca1c081b16e4937e11050",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/lib/utils.ts",
+      "size_bytes": 169
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "722b577759deccee4a8eb7f30f2dd1660542dd90",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/providers/ChatProvider.tsx",
+      "size_bytes": 1642
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ab94c7457c20d142bb8bc5809e5f41f4b7737dde",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/src/providers/ClientProvider.tsx",
+      "size_bytes": 1476
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "5c5273bd29f8665721d0d40c3717896bbfea0774",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/tailwind.config.mjs",
+      "size_bytes": 15182
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a178fb91f5d609cb2e4636ee7b97ba35b7841bdd",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/tests/chat-errors.test.mts",
+      "size_bytes": 993
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7a5de69eefabcea8ec530540e23b4019d097bbc9",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/tests/local-folder-picker.test.mts",
+      "size_bytes": 1136
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "da2daa86380c9ad34bc362bcf5aae586bc0d04f8",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/tests/office-preview.test.mts",
+      "size_bytes": 5668
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "d559cb10fd66341140f550a7f9ebadb677976781",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/tests/open-folder.test.mts",
+      "size_bytes": 919
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ed35c2d5beb24bce13454f2e2f4c79716076d7bd",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/tests/remote-agent.test.mts",
+      "size_bytes": 822
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "ff28fa468ece450bd539a815b1598c0af68eef57",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/tests/remote-compute.test.mts",
+      "size_bytes": 656
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "0f011adf94ed22a14601f5a9a021279071c73dd9",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/tests/skill-frontmatter.test.mts",
+      "size_bytes": 1138
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "cf63d0c734cba028b4ee641529fbc9454a27ac32",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/tests/think-tags.test.mts",
+      "size_bytes": 2548
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "7182d18f31077861b1f30fbf5c9de2cb6ae370f0",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/tests/thread-state.test.mts",
+      "size_bytes": 4913
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "f346b3d962242467c256b31437d745cd3c646e8c",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/tests/workspace-path-links.test.mts",
+      "size_bytes": 2330
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "a3c936f25fe45ce3a2279d6369229216d647138d",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/tests/workspace-preview-limits.test.mts",
+      "size_bytes": 1110
+    },
+    {
+      "candidate_asset_kind": "code",
+      "disposition": "quarantine",
+      "execution_authority": "none",
+      "git_blob_sha": "b575f7dac742447c79dd92f8b471b7d5e18c32cc",
+      "kind": "git-blob-metadata-only",
+      "path": "ui/tsconfig.json",
+      "size_bytes": 702
+    }
+  ],
+  "exact_commit": "4a5f2ab2879ebd4f806155c796e247da94bb1625",
+  "recorded_at": "2026-08-01T17:58:00+08:00",
+  "schema_version": 1,
+  "scope": "Git tree metadata only; no source blob content was fetched or retained; every entry remains quarantined.",
+  "source_id": "qzzqzzb-openclaudescience"
+}

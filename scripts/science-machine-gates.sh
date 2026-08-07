@@ -7,6 +7,95 @@ cd "$ROOT"
 fail() { echo "GATE FAIL: $*" >&2; exit 1; }
 ok() { echo "GATE OK: $*"; }
 
+# M1 single base: the authority surface markers live in the canonical Lumen
+# repo. Checkout the pinned tuple (read from the admission lock — the single
+# source of truth) so the ecosystem gate can verify them upstream-owned.
+LUMEN_PIN_ROOT="${LUMEN_PIN_ROOT:-}"
+if [[ -z "$LUMEN_PIN_ROOT" ]]; then
+  PIN="$(python3 -c "
+import json
+l=json.load(open('docs/science/5.0/core-v0.1.251-admission.lock.json'))
+print(l['comparison']['lumen_head'])
+")"
+  rm -rf .tmp/lumen-pin
+  git clone --quiet --filter=blob:none https://github.com/exergyleizhou-ux/lumen.git .tmp/lumen-pin
+  git -C .tmp/lumen-pin fetch --quiet --depth 1 origin "$PIN"
+  git -C .tmp/lumen-pin checkout --quiet "$PIN"
+  LUMEN_PIN_ROOT="$(pwd)/.tmp/lumen-pin"
+fi
+export LUMEN_PIN_ROOT
+echo "pinned Lumen tuple: $(git -C "$LUMEN_PIN_ROOT" rev-parse --short HEAD)"
+
+LUMEN_PIN_ROOT="$LUMEN_PIN_ROOT" python3 scripts/verify-ecosystem-admission.py || fail "ecosystem admission"
+ok "ecosystem admission"
+
+# F0 records a current, auditable input set.  Verify both the real snapshot
+# and its negative corpus before treating later migration gates as meaningful.
+python3 scripts/verify-nextgen-baseline.py || fail "NextGen F0 baseline"
+python3 scripts/test-nextgen-baseline.py || fail "NextGen F0 baseline tamper corpus"
+ok "NextGen F0 baseline and gate registry"
+
+# The 2026-08-02 book supersedes the older plans for ordering only.  Hash-lock
+# it, verify the dependency DAG, and prove that document drift cannot invent a
+# passed gate.  This remains plan evidence, not a runtime/product gate.
+python3 scripts/verify-nextgen-canonical-book.py || fail "canonical NextGen execution book"
+python3 scripts/test-nextgen-canonical-book.py || fail "canonical execution-book tamper corpus"
+ok "canonical NextGen execution book (plan only; zero gates claimed)"
+
+# The 2026-08-06 granular registry re-maps upstream facts: PASS_UPSTREAM
+# records upstream-delivered capabilities with receipts (never Science
+# completion), PASS requires Science-side receipts, and the dependency graph
+# must stay acyclic with no gate wired through an unresolved dependency.
+python3 scripts/verify-nextgen-gates-v2.py || fail "granular gate registry v2"
+python3 scripts/test-nextgen-gates-v2.py || fail "granular gate registry tamper corpus"
+ok "granular gate registry v2 (receipt-backed)"
+
+# X-C1: the versioned platform API v1 catalog + compatibility manifest pin
+# the 7-method ACP seam to the canonical tuple; consumer-side negatives and
+# the strict compile fixture must stay green.
+python3 scripts/verify-platform-api-v1.py || fail "platform API v1 catalog + manifest"
+python3 scripts/test-platform-api-v1.py || fail "platform API v1 negatives + fixture"
+ok "platform API v1 contract (7 methods, pinned tuple)"
+
+# I1-A: nine-source intake ledger closure — coverage, exact-one dispositions,
+# adapted-source receipts and the transitive bridge must stay verifiable.
+python3 scripts/verify-i1a-completeness.py || fail "I1-A nine-source completeness"
+python3 scripts/test-i1a-completeness.py || fail "I1-A completeness tamper corpus"
+ok "I1-A nine-source completeness (draft lock; active admission is a later gate)"
+
+# S2a: the shadow-only scenario corpus (five classes) must stay complete and
+# the in-repo runner must pass against the pinned canonical binary (zero
+# provider, zero network, zero arbitrary shell).
+python3 scripts/verify-s2a-corpus.py || fail "S2a scenario corpus"
+ok "S2a scenario corpus (20 scenarios, 5 classes, pinned binary)"
+
+# W0-A: the read-only Science catalog keeps the six-state admission ladder
+# with receipts; Cataloged can never report runnable.
+python3 scripts/verify-w0-catalog.py || fail "W0-A catalog"
+python3 scripts/test-w0-catalog.py || fail "W0-A catalog tamper corpus"
+ok "W0-A read-only catalog (six-state ladder)"
+
+# v2 is deliberately a draft intake lock, so the verifier itself returns 2.
+# Its focused tests prove that draft status cannot be mistaken for a product
+# admission and that every selected source path is present in its exact tree.
+python3 scripts/test-upstream-intake-v2.py || fail "upstream v2 intake contract"
+python3 scripts/test-upstream-intake-dashboard.py || fail "upstream v2 intake dashboard"
+python3 scripts/test-upstream-git-tree-inventory.py || fail "metadata tree inventory"
+python3 scripts/test-upstream-tree-inventory.py || fail "checkout tree inventory"
+python3 scripts/test-upstream-component-coverage.py || fail "upstream component coverage"
+python3 scripts/test-upstream-containment.py || fail "external source containment"
+python3 scripts/test-motif-provenance-lock.py || fail "Motif product provenance lock"
+ok "v2 intake and Motif provenance contracts"
+
+# The Lumen consumer pin remains a deliberate non-pass until its upstream R0
+# and public extension contract have immutable evidence.  Its tests ensure a
+# later activation cannot omit source, API, CI, binary, or rollback evidence.
+python3 scripts/test-lumen-platform-pin.py || fail "canonical Lumen consumer pin contract"
+ok "canonical Lumen consumer pin contract"
+
+python3 scripts/test-capability-intake.py || fail "capability intake contracts"
+ok "capability intake contracts"
+
 python3 - <<'PY' || fail "fusion-sources.lock.json"
 import json
 from pathlib import Path
@@ -48,6 +137,32 @@ print(f"skills: approved={d['summary']['approved']} pending={d['summary'].get('p
 PY
 ok "skills registry"
 
+python3 - <<'PY' || fail "independent Go release is frozen"
+from pathlib import Path
+
+workflow = Path(".github/workflows/science-release.yml").read_text()
+code = "\n".join(
+    line for line in workflow.splitlines()
+    if not line.lstrip().startswith("#")
+)
+for forbidden in (
+    "push:",
+    "tags:",
+    "contents: write",
+    "independentFromCore",
+    "actions/checkout",
+    "actions/upload-artifact",
+    "gh release",
+    "make release",
+    "go build",
+):
+    assert forbidden not in code, f"legacy release regained authority: {forbidden}"
+assert "workflow_dispatch:" in code
+assert "Legacy Science Go Release (frozen)" in workflow
+print("legacy Go release: manual notice only; no tag/build/publish authority")
+PY
+ok "independent Go release freeze"
+
 test -f docs/science/MOTIF_SUPPLY_CHAIN_AUDIT.md || fail "missing Motif audit"
 test -f third_party/provenance/motif.md || fail "missing motif provenance"
 test -f third_party/motif/NOTICE || fail "missing motif NOTICE"
@@ -61,13 +176,67 @@ test -f docs/science/LUMEN_SCIENCE_1_0_STATUS.md -o -f docs/science/LUMEN_SCIENC
   || fail "missing 1.0 status doc"
 ok "honesty docs"
 
-# Release checksum evidence for current VERSION
-VER=$(cat VERSION | tr -d '[:space:]')
+# Release checksum evidence for frozen Go Science CLI version (not Rust Core).
+VER=$(tr -d '[:space:]' < packs/science/VERSION)
 if [[ -f "outputs/release/${VER}/SHA256SUMS" ]]; then
-  ok "release checksums present for ${VER}"
+  python3 - "${VER}" <<'PY' || fail "release checksum evidence"
+import hashlib
+import re
+import sys
+from pathlib import Path
+
+version = sys.argv[1]
+path = Path("outputs/release") / version / "SHA256SUMS"
+expected = {"1.0.1": "aba8906a4973564ae5cddc7d81fff5a285727325363046c5213bf73254b30635"}
+if version not in expected:
+    raise SystemExit(f"no pinned SHA256SUMS asset digest for Science CLI {version}")
+actual = hashlib.sha256(path.read_bytes()).hexdigest()
+if actual != expected[version]:
+    raise SystemExit(f"SHA256SUMS asset digest mismatch: {actual}")
+lines = path.read_text(encoding="utf-8").splitlines()
+if len(lines) < 1 or any(re.fullmatch(r"[0-9a-f]{64}  [^/][^\\]*", line) is None for line in lines):
+    raise SystemExit("SHA256SUMS has malformed checksum entries")
+for required in (f"lumen-science-{version}-darwin-arm64.tar.gz", "lumen-science-darwin-arm64"):
+    if not any(line.endswith(f"  {required}") for line in lines):
+        raise SystemExit(f"SHA256SUMS is missing {required}")
+print(f"release checksums: {version} entries={len(lines)} asset_sha256={actual}")
+PY
+  ok "release checksums verified for Science CLI ${VER}"
 else
-  echo "WARN  outputs/release/${VER}/SHA256SUMS not present (run make release + copy sums)"
+  echo "WARN  outputs/release/${VER}/SHA256SUMS not present"
 fi
+
+# Go release/sign entry points must never fall back to root VERSION. Root is
+# the Rust Core line and intentionally differs from packs/science/VERSION.
+grep -Fq 'SCRIPT_DIR/VERSION' packs/science/release.sh \
+  || fail "packs/science/release.sh does not use its component VERSION"
+grep -Fq 'ROOT/packs/science/VERSION' scripts/sign-release.sh \
+  || fail "scripts/sign-release.sh does not use packs/science/VERSION"
+if grep -Eq '(\.\./\.\./VERSION|ROOT/VERSION)' \
+  packs/science/release.sh scripts/sign-release.sh; then
+  fail "Go release/sign entry point still reads root Rust Core VERSION"
+fi
+ok "Go release/sign version source boundary"
+
+# Science root version truth: the root VERSION stays parseable SemVer and the
+# Rust product version is owned by the pinned Lumen tuple (its VERSION lives in
+# the canonical repo). The admission lock records the tuple.
+python3 - <<'PY' || fail "root VERSION contract"
+import re
+from pathlib import Path
+version = Path("VERSION").read_text().strip()
+assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?", version), version
+PY
+ok "Science root VERSION contract (Rust product line owned by the Lumen pin)"
+
+# M1 single base: the Science repo owns no Rust product copy. Product tests
+# consume the pinned Lumen tuple; this gate asserts zero-copy end to end.
+python3 scripts/verify-single-base.py || fail "zero-copy single base"
+ok "zero-copy single base (no agent/ copy; pinned Lumen consumption)"
+
+# Anti-growth: no copied Core authority surface may be reintroduced. The
+# zero-copy gate above already fails on any Cargo.toml/Cargo.lock outside
+# packs/, so no separate ownership manifest is needed.
 
 echo
 echo "All science machine gates passed (documentation + lock integrity)."

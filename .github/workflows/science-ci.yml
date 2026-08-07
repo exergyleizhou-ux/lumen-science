@@ -7,35 +7,33 @@ on:
       - 'packs/science/**'
       - 'scripts/dogfood-science-offline.sh'
       - 'scripts/science-machine-gates.sh'
+      - 'scripts/verify-nextgen-baseline.py'
+      - 'scripts/test-nextgen-baseline.py'
+      - 'scripts/verify-nextgen-canonical-book.py'
+      - 'scripts/test-nextgen-canonical-book.py'
       - 'scripts/science-go-module-boundary.sh'
       - 'scripts/verify-release-assets.sh'
       - 'scripts/generate-science-status.py'
       - 'scripts/verify-science-status.py'
       - 'scripts/test-science-status.py'
       - 'docs/science/status/current.json'
+      - 'docs/science/5.0/NEXTGEN_BASELINE.json'
+      - 'docs/science/5.0/NEXTGEN_GATE_REGISTRY.json'
+      - 'docs/science/5.0/NEXTGEN_CANONICAL_EXECUTION_BOOK.lock.json'
+      - 'docs/science/5.0/LUMEN_SCIENCE_NEXTGEN_CANONICAL_EXECUTION_BOOK_2026-08-02.md'
+      - 'docs/science/5.0/PLAN_SUPERSESSION_MAP.md'
+      - 'docs/science/5.0/README.md'
       - 'docs/science/fusion-sources.lock.json'
-      # agent/**: same reasoning as the pull_request trigger below — core
-      # changes reach main through merges, and the record on main should carry
-      # the same evidence the PR gate demanded.
-      - 'agent/**'
+      - 'packs/science-desktop/**'
+      - '.github/workflows/science-ci.yml'
       - 'VERSION'
       - 'packs/science/VERSION'
+  # No path filters on pull_request: the M1 de-copy showed that narrow
+  # filters silently skip runs for commits touching only workflows,
+  # desktop packs, or docs — the exact commits that need CI most. Every
+  # branch commit re-runs the full gate set (concurrency serializes).
   pull_request:
     branches: [main]
-    paths:
-      - 'packs/science/**'
-      - 'scripts/**'
-      - 'docs/science/**'
-      # agent/** (not just the science crate): three of main's four REQUIRED
-      # status contexts live in this workflow, and required checks that never
-      # fire never report — so a PR touching only core crates (exactly what a
-      # core-security sync is) was unmergeable by construction. PR #12 had to
-      # be unblocked by manual workflow_dispatch; this makes the next one
-      # merge like any other PR. Core changes genuinely can break the science
-      # crate — one cargo workspace — so running these jobs on them is not
-      # merely ritual.
-      - 'agent/**'
-      - 'packs/science/VERSION'
   workflow_dispatch:
 
 concurrency:
@@ -97,6 +95,14 @@ jobs:
       - name: Science machine gates
         run: bash scripts/science-machine-gates.sh
 
+      # The F0 snapshot is a contract, not a status claim.  Run both the
+      # checked-in verification and its tamper corpus so a plan input, dirty
+      # Lumen observation, or mandatory gate cannot silently drift on main.
+      - name: NextGen baseline and gate registry
+        run: |
+          python3 scripts/verify-nextgen-baseline.py
+          python3 scripts/test-nextgen-baseline.py
+
       - name: Go module boundary (product vs legacy)
         run: bash scripts/science-go-module-boundary.sh
 
@@ -135,13 +141,102 @@ jobs:
 
   rust-science:
     name: Rust xai-grok-science (test + clippy)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
     defaults:
       run:
-        working-directory: agent
+        working-directory: .tmp/lumen-pin/agent
     steps:
       - uses: actions/checkout@v4
+
+      # M1 single base: the Science repo owns no Rust copy. Every Rust step
+      # runs against the pinned Lumen tuple read from the admission lock.
+      - name: Read pinned Lumen tuple from admission lock
+        working-directory: ${{ github.workspace }}
+        run: |
+          PIN="$(python3 -c "import json; print(json.load(open('docs/science/5.0/core-v0.1.251-admission.lock.json'))['comparison']['lumen_head'])")"
+          echo "LUMEN_PIN=$PIN" >> "$GITHUB_ENV"
+          echo "pinned lumen tuple: $PIN"
+
+      - name: Checkout pinned Lumen (single Rust base)
+        working-directory: ${{ github.workspace }}
+        run: |
+          git clone --quiet --filter=blob:none https://github.com/exergyleizhou-ux/lumen.git .tmp/lumen-pin
+          git -C .tmp/lumen-pin fetch --quiet --depth 1 origin "$LUMEN_PIN"
+          git -C .tmp/lumen-pin checkout --quiet "$LUMEN_PIN"
+          git -C .tmp/lumen-pin rev-parse --short HEAD
+
+      # The Linux sandbox deliberately trusts only a root-owned, non-writable
+      # /usr chain. GitHub runner images have occasionally shipped /usr owned
+      # by the unprivileged runner user even though the directory remains
+      # protected. Repair only that exact, auditable hosted-image condition;
+      # self-hosted/unknown runners, symlinks, writable modes, unexpected
+      # ownership, or an ineffective chown stay red.
+      - name: Establish Linux workflow trust root
+        env:
+          EXPECTED_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_RUNNER_ENVIRONMENT" == "github-hosted" \
+            && "${RUNNER_OS:-}" == "Linux" \
+            && "${GITHUB_ACTIONS:-}" == "true" ]] || {
+            echo "::error::trust-root repair is restricted to GitHub-hosted Linux runners"
+            exit 1
+          }
+
+          python_path="$(readlink -e /usr/bin/python3)"
+          [[ "$python_path" == /usr/* ]] || {
+            echo "::error::python3 canonicalized outside /usr: $python_path"
+            exit 1
+          }
+          runner_uid="$(id -u)"
+
+          id
+          stat -Lc '%n uid=%u gid=%g mode=%a type=%F dev=%d ino=%i' \
+            / /usr /usr/bin "$python_path"
+          namei -l /usr/bin/python3
+
+          [[ ! -L /usr && -d /usr ]] || {
+            echo "::error::/usr must be a real directory"
+            exit 1
+          }
+          usr_uid="$(stat -Lc '%u' /usr)"
+          usr_mode="$(stat -Lc '%a' /usr)"
+          (( (8#$usr_mode & 8#022) == 0 )) || {
+            echo "::error::/usr is group/other writable (mode=$usr_mode)"
+            exit 1
+          }
+
+          case "$usr_uid" in
+            0) ;;
+            "$runner_uid")
+              sudo chown --no-dereference root:root -- /usr
+              ;;
+            *)
+              echo "::error::/usr has unexpected owner uid=$usr_uid"
+              exit 1
+              ;;
+          esac
+
+          for protected_path in / /usr /usr/bin "$python_path"; do
+            [[ ! -L "$protected_path" ]] || {
+              echo "::error::$protected_path must not be a symlink"
+              exit 1
+            }
+            protected_uid="$(stat -Lc '%u' "$protected_path")"
+            protected_mode="$(stat -Lc '%a' "$protected_path")"
+            [[ "$protected_uid" == 0 ]] || {
+              echo "::error::$protected_path is not root-owned (uid=$protected_uid)"
+              exit 1
+            }
+            (( (8#$protected_mode & 8#022) == 0 )) || {
+              echo "::error::$protected_path is group/other writable (mode=$protected_mode)"
+              exit 1
+            }
+          done
+
+          stat -Lc '%n uid=%u gid=%g mode=%a type=%F dev=%d ino=%i' \
+            / /usr /usr/bin "$python_path"
 
       - name: Install protoc
         run: |
@@ -160,13 +255,33 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            agent/target
-          key: ${{ runner.os }}-cargo-science-${{ hashFiles('agent/Cargo.lock') }}
+            .tmp/lumen-pin/agent/target
+          key: ${{ runner.os }}-cargo-science-${{ hashFiles('.tmp/lumen-pin/agent/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-science-
 
       - name: cargo test -p xai-grok-science --lib
         run: cargo test -p xai-grok-science --lib --locked -- --test-threads=2
+
+      - name: Workflow authority cancellation, replay, and rollback proofs
+        run: |
+          set -euo pipefail
+          tests=(
+            session::acp_session::science::workflow_authority_failure_tests::undelivered_begin_interrupts_pending_approval_without_probe_or_execution
+            session::acp_session::science::workflow_authority_failure_tests::terminal_replay_rejects_missing_duplicate_nonfinal_or_tampered_finish_event
+            session::acp_session::science::workflow_authority_failure_tests::recoverable_finish_event_failure_rolls_back_before_failed_terminal
+          )
+          for test_name in "${tests[@]}"; do
+            output="$(
+              CARGO_TERM_COLOR=never \
+                cargo test -p xai-grok-shell --lib --locked \
+                  "$test_name" -- --exact 2>&1
+            )"
+            printf '%s\n' "$output"
+            printf '%s\n' "$output" | grep -Fqx "test ${test_name} ... ok"
+            printf '%s\n' "$output" | grep -Eq \
+              'test result: ok\. 1 passed; 0 failed; 0 ignored; 0 measured; [0-9]+ filtered out; finished in .+$'
+          done
 
       # xai-grok-workspace + xai-grok-tools ran in NO job, and both were red:
       # 15 failures from fixtures that fed uncanonicalized temp paths into the
@@ -185,6 +300,288 @@ jobs:
 
       - name: cargo clippy -p xai-grok-science -D warnings
         run: cargo clippy -p xai-grok-science --all-targets --locked -- -D warnings
+
+      # Unit tests prove the protocol functions in-process. These selected
+      # product tests prove that the shipped `lumen` composition root exposes
+      # the same authority chain over ACP stdio: SessionActor, production
+      # permission prompt, durable terminal state, and store-owned artifacts.
+      # Every test is offline and uses the local mock inference server. The
+      # binary and the built-binary corpus both come from the pinned Lumen
+      # tuple — the Science repo contributes no Rust of its own.
+      - name: Build pinned Lumen composition-root binary
+        run: cargo build -p xai-grok-pager-bin --bin lumen --locked
+
+      # Each `cargo test` invocation re-evaluates the workspace fingerprint and
+      # relinks the composition-root test harness on this runner (observed
+      # 11–18 min per invocation, independent of the test's own 6–10 s runtime),
+      # so 38 sequential invocations blew the 60 min job timeout after only
+      # ~3 tests. Build the harness once and drive libtest directly for each
+      # per-test proof, keeping the exact-one-passing-test semantics.
+      - name: Build built-binary test harness once
+        run: |
+          set -euo pipefail
+          TEST_BIN="$(
+            cargo test -p xai-grok-shell --test test_built_binary_e2e --locked --no-run \
+              --message-format=json 2>/dev/null |
+              python3 -c '
+          import json, sys
+          for line in sys.stdin:
+              line = line.strip()
+              if not line:
+                  continue
+              try:
+                  m = json.loads(line)
+              except Exception:
+                  continue
+              if (
+                  m.get("reason") == "compiler-artifact"
+                  and m.get("target", {}).get("name") == "test_built_binary_e2e"
+                  and m.get("profile", {}).get("test")
+                  and m.get("executable")
+              ):
+                  print(m["executable"])
+                  break
+          '
+          )"
+          test -n "$TEST_BIN" || {
+            echo "::error::could not locate test_built_binary_e2e executable"
+            exit 1
+          }
+          echo "TEST_BIN=$TEST_BIN" >> "$GITHUB_ENV"
+
+      - name: Required offline Science built-binary authority proofs
+        env:
+          GROK_BINARY: ${{ github.workspace }}/.tmp/lumen-pin/agent/target/debug/lumen
+        run: |
+          set -euo pipefail
+          tests=(
+            test_stdio_science_seq_analyze_is_actor_gated_and_store_owned
+            test_stdio_science_seq_analyze_same_operation_is_single_flight
+            test_stdio_science_seq_analyze_restart_reprompts_exact_pending_once
+            test_stdio_science_seq_analyze_restart_resumes_allow_without_reprompt
+            test_stdio_science_seq_analyze_boundaries_fail_closed
+            test_stdio_science_seq_analyze_denied_writes_nothing
+            test_stdio_science_seq_analyze_cancelled_writes_nothing
+            test_stdio_science_seq_analyze_permission_timeout_writes_nothing
+            test_stdio_science_seq_analyze_malformed_input_fails_without_outputs
+            test_stdio_science_seq_analyze_allow_rejects_project_revision_race
+            test_stdio_science_project_mutation_is_actor_gated_and_idempotent
+            test_stdio_science_project_mutation_denied_writes_nothing
+            test_stdio_science_project_mutation_fails_closed
+            test_stdio_science_project_migrate_is_actor_gated_and_idempotent
+            test_stdio_science_project_migrate_refusal_writes_no_project
+            test_stdio_science_project_migrate_cancel_writes_no_project
+            test_stdio_science_project_migrate_requires_migration_chain_gate
+            test_stdio_science_project_migrate_timeout_writes_no_project
+            test_stdio_science_project_migrate_allow_rejects_source_tamper
+            test_stdio_science_project_migrate_recovers_journal_before_copy
+            test_stdio_science_review_record_is_actor_gated_artifact_bound_and_idempotent
+            test_stdio_science_review_record_denied_writes_no_review_or_artifact
+            test_stdio_science_kernel_admission_is_actor_gated_and_store_owned
+            test_stdio_science_kernel_admission_denied_writes_nothing
+            test_stdio_science_skill_quarantine_is_actor_gated_store_owned_and_replayable
+            test_stdio_science_skill_quarantine_denied_and_cancelled_write_nothing
+            test_stdio_science_skill_quarantine_permission_timeout_writes_nothing
+            test_stdio_science_skill_quarantine_boundaries_fail_closed
+            test_stdio_science_workflow_execute_is_actor_gated_and_idempotent
+            test_stdio_science_workflow_partial_artifact_registration_rolls_back
+            test_stdio_science_workflow_deterministic_reuse_refuses_tampered_cas
+            test_stdio_science_workflow_execute_retains_store_across_approval
+            test_stdio_science_workflow_execute_retains_store_and_interpreter_across_approval
+            test_stdio_science_workflow_execute_fails_closed
+            test_stdio_science_workflow_execute_non_allow_terminals_run_nothing
+            test_stdio_science_connector_fetch_product_path
+            test_stdio_science_biomni_uniprot_capability_product_path
+          )
+
+          # libtest exits successfully when an exact filter matches zero tests.
+          # Prove every required product test exists exactly once in the ignored
+          # inventory before relying on the individual exit codes below.
+          listed_tests="$(
+            "$TEST_BIN" --list --ignored
+          )"
+          printf '%s\n' "$listed_tests"
+          for test_name in "${tests[@]}"; do
+            match_count="$(
+              printf '%s\n' "$listed_tests" |
+                awk -v expected="${test_name}: test" \
+                  '$0 == expected { count += 1 } END { print count + 0 }'
+            )"
+            if [[ "$match_count" -ne 1 ]]; then
+              echo "::error::required built-binary test '$test_name' appears $match_count times in the ignored test inventory"
+              exit 1
+            fi
+          done
+
+          for test_name in "${tests[@]}"; do
+            set +e
+            test_output="$(
+              "$TEST_BIN" "$test_name" --ignored --exact --test-threads=1 2>&1
+            )"
+            test_status=$?
+            set -e
+            printf '%s\n' "$test_output"
+            if [[ "$test_status" -ne 0 ]]; then
+              echo "::error::required built-binary test '$test_name' exited $test_status"
+              exit "$test_status"
+            fi
+
+            passed_test_lines="$(
+              printf '%s\n' "$test_output" |
+                grep -Fxc "test ${test_name} ... ok" || true
+            )"
+            passed_summary_lines="$(
+              printf '%s\n' "$test_output" |
+                grep -Ecx 'test result: ok\. 1 passed; 0 failed; 0 ignored; [0-9]+ measured; [0-9]+ filtered out; finished in .+$' ||
+                true
+            )"
+            if [[ "$passed_test_lines" -ne 1 || "$passed_summary_lines" -ne 1 ]]; then
+              echo "::error::required built-binary test '$test_name' did not prove exactly one passing test (test lines=$passed_test_lines, summaries=$passed_summary_lines)"
+              exit 1
+            fi
+          done
+
+  rust-science-macos-product:
+    name: Rust Science macOS built-binary sandbox proof
+    runs-on: macos-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: .tmp/lumen-pin/agent
+    steps:
+      - uses: actions/checkout@v4
+
+      # M1 single base: consume the pinned Lumen tuple, never a local copy.
+      - name: Read pinned Lumen tuple from admission lock
+        working-directory: ${{ github.workspace }}
+        run: |
+          PIN="$(python3 -c "import json; print(json.load(open('docs/science/5.0/core-v0.1.251-admission.lock.json'))['comparison']['lumen_head'])")"
+          echo "LUMEN_PIN=$PIN" >> "$GITHUB_ENV"
+          echo "pinned lumen tuple: $PIN"
+
+      - name: Checkout pinned Lumen (single Rust base)
+        working-directory: ${{ github.workspace }}
+        run: |
+          git clone --quiet --filter=blob:none https://github.com/exergyleizhou-ux/lumen.git .tmp/lumen-pin
+          git -C .tmp/lumen-pin fetch --quiet --depth 1 origin "$LUMEN_PIN"
+          git -C .tmp/lumen-pin checkout --quiet "$LUMEN_PIN"
+          git -C .tmp/lumen-pin rev-parse --short HEAD
+
+      - name: Install protoc
+        run: brew install protobuf
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            .tmp/lumen-pin/agent/target
+          key: ${{ runner.os }}-cargo-science-product-${{ hashFiles('.tmp/lumen-pin/agent/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-science-product-
+            ${{ runner.os }}-cargo-science-
+
+      - name: Build pinned Lumen composition-root binary
+        run: cargo build -p xai-grok-pager-bin --bin lumen --locked
+
+      # Same harness-once pattern as the Linux job: per-invocation fingerprint
+      # re-evaluation + relink cost 11–18 min per `cargo test` call here, so 8
+      # sequential invocations exceeded the 60 min job timeout. Drive libtest
+      # directly against the one built harness instead.
+      - name: Build built-binary test harness once
+        run: |
+          set -euo pipefail
+          TEST_BIN="$(
+            cargo test -p xai-grok-shell --test test_built_binary_e2e --locked --no-run \
+              --message-format=json 2>/dev/null |
+              python3 -c '
+          import json, sys
+          for line in sys.stdin:
+              line = line.strip()
+              if not line:
+                  continue
+              try:
+                  m = json.loads(line)
+              except Exception:
+                  continue
+              if (
+                  m.get("reason") == "compiler-artifact"
+                  and m.get("target", {}).get("name") == "test_built_binary_e2e"
+                  and m.get("profile", {}).get("test")
+                  and m.get("executable")
+              ):
+                  print(m["executable"])
+                  break
+          '
+          )"
+          test -n "$TEST_BIN" || {
+            echo "::error::could not locate test_built_binary_e2e executable"
+            exit 1
+          }
+          echo "TEST_BIN=$TEST_BIN" >> "$GITHUB_ENV"
+
+      - name: Required macOS workflow sandbox product proofs
+        env:
+          GROK_BINARY: ${{ github.workspace }}/.tmp/lumen-pin/agent/target/debug/lumen
+        run: |
+          set -euo pipefail
+          tests=(
+            test_stdio_science_workflow_execute_is_actor_gated_and_idempotent
+            test_stdio_science_workflow_partial_artifact_registration_rolls_back
+            test_stdio_science_workflow_deterministic_reuse_refuses_tampered_cas
+            test_stdio_science_workflow_execute_fails_closed
+            test_stdio_science_workflow_execute_non_allow_terminals_run_nothing
+            test_stdio_science_workflow_execute_macos_rejects_unprotected_interpreter_before_permission
+            test_stdio_science_connector_fetch_product_path
+            test_stdio_science_biomni_uniprot_capability_product_path
+          )
+
+          listed_tests="$(
+            "$TEST_BIN" --list --ignored
+          )"
+          printf '%s\n' "$listed_tests"
+          for test_name in "${tests[@]}"; do
+            match_count="$(
+              printf '%s\n' "$listed_tests" |
+                awk -v expected="${test_name}: test" \
+                  '$0 == expected { count += 1 } END { print count + 0 }'
+            )"
+            if [[ "$match_count" -ne 1 ]]; then
+              echo "::error::required macOS built-binary test '$test_name' appears $match_count times"
+              exit 1
+            fi
+          done
+
+          for test_name in "${tests[@]}"; do
+            set +e
+            test_output="$(
+              "$TEST_BIN" "$test_name" --ignored --exact --test-threads=1 2>&1
+            )"
+            test_status=$?
+            set -e
+            printf '%s\n' "$test_output"
+            if [[ "$test_status" -ne 0 ]]; then
+              echo "::error::required macOS built-binary test '$test_name' exited $test_status"
+              exit "$test_status"
+            fi
+            passed_test_lines="$(
+              printf '%s\n' "$test_output" |
+                grep -Fxc "test ${test_name} ... ok" || true
+            )"
+            passed_summary_lines="$(
+              printf '%s\n' "$test_output" |
+                grep -Ecx 'test result: ok\. 1 passed; 0 failed; 0 ignored; [0-9]+ measured; [0-9]+ filtered out; finished in .+$' ||
+                true
+            )"
+            if [[ "$passed_test_lines" -ne 1 || "$passed_summary_lines" -ne 1 ]]; then
+              echo "::error::required macOS built-binary test '$test_name' did not prove exactly one passing test"
+              exit 1
+            fi
+          done
 
   build:
     name: Cross-compile (${{ matrix.target.os }}-${{ matrix.target.arch }})

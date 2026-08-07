@@ -32,8 +32,18 @@ files:
 extraResources:
   - from: ../../packs/science/skills/registry.json
     to: science/skills-registry.json
+  - from: ../../packs/science/skills/ecosystem/scp-catalog.json
+    to: science/ecosystem-skill-catalog.json
+  - from: ../../packs/science/skills/ecosystem/biomni-tool-catalog.json
+    to: science/biomni-tool-catalog.json
+  - from: ../../packs/science/skills/ecosystem/biomni-resource-catalog.json
+    to: science/biomni-resource-catalog.json
   - from: ../../docs/science/fusion-sources.lock.json
     to: science/fusion-sources.lock.json
+  - from: fixtures/connector_uniprot_search.json
+    to: science/fixtures/connector_uniprot_search.json
+  - from: ../../docs/science/5.0/admissions/biomni-query-uniprot.admission.json
+    to: science/admissions/biomni-query-uniprot.json
 
 asarUnpack:
   - resources/**

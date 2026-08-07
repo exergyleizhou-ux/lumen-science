@@ -18,13 +18,18 @@ import {
 } from './session-binding'
 import type { LocalProjectCatalog } from './local-project-catalog'
 import { SCIENCE_STORE_DIR } from './acp-membership'
-import { getTrustedPreviewContext } from './session-identity'
+import {
+  getTrustedPreviewContextForSender,
+  requireSenderTrustedContext,
+  trySenderTrustedContext,
+  senderIdFromEvent,
+  type TrustedIdentitySender,
+} from './session-identity'
 import { createNotebookService, type NotebookService } from './notebook-service'
 import type { NotebookCellRequest } from './notebook-plan'
 import { createReviewService, type ReviewService } from './review-service'
 import type { ReviewRequest } from './review-plan'
 import { createSkillService, type SkillService } from './skill-service'
-import type { SkillImportRequest, SkillAdmitRequest } from './skill-plan'
 import { createComputeService, type ComputeService } from './compute-service'
 import type { ComputePlanRequest } from './compute-plan'
 import {
@@ -41,8 +46,12 @@ import {
   type AdmissionAsk,
   type EnvironmentService,
 } from '../environment/service'
+import {
+  isGenericRendererScienceMethod,
+  resolveScienceMethod,
+} from '../science-method-registry'
 import type { KernelKindName } from '../environment/interpreter-identity'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -61,6 +70,7 @@ export type SafeHandleFn = (
 ) => void
 
 export type ListArtifactsFn = (args: {
+  ownerId: string
   projectId: string
   runId: string
 }) => Promise<ArtifactListItem[]>
@@ -101,6 +111,14 @@ export type ScienceIpcDeps = {
   skillService?: SkillService
   /** Override path to Lumen skills registry.json */
   skillsRegistryPath?: string
+  /** Read-only ecosystem skill catalog; entries remain quarantined. */
+  skillsEcosystemCatalogPath?: string
+  /** Complete set of read-only ecosystem catalogs; all must validate. */
+  skillsEcosystemCatalogPaths?: string[]
+  /** Machine-backed, exact-source Biomni capability admission dossier. */
+  skillsAdmissionPath?: string
+  /** Main-owned packaged UniProt fixture; never supplied by the renderer. */
+  biomniUniprotFixtureBase64?: string
   /** Optional inject compute service (tests). */
   computeService?: ComputeService
   /** Path to docs/science/fusion-sources.lock.json */
@@ -128,9 +146,119 @@ export type ScienceIpcDeps = {
  * an operation the engine has already given up on.
  */
 export const ENGINE_APPROVAL_TIMEOUT_MS = 110_000
+// ACP uses a 64 MiB newline-delimited JSON frame. Canonical base64 for a
+// 32 MiB archive is ~42.7 MiB, leaving bounded room for the request envelope.
+const MAX_SKILL_QUARANTINE_ARCHIVE_BYTES = 32 * 1024 * 1024
+
+function senderHandleFromEvent(event: unknown): TrustedIdentitySender | undefined {
+  const sender = (event as { sender?: TrustedIdentitySender } | null)?.sender
+  if (!sender || typeof sender.id !== 'number' || typeof sender.on !== 'function') {
+    return undefined
+  }
+  return sender
+}
+
+function decodeSkillQuarantineArchive(dataBase64: unknown): Buffer {
+  if (typeof dataBase64 !== 'string' || dataBase64.length === 0) {
+    throw new Error('skill archive must be non-empty base64')
+  }
+  const maxEncoded = Math.ceil(MAX_SKILL_QUARANTINE_ARCHIVE_BYTES / 3) * 4 + 4
+  if (
+    dataBase64.length > maxEncoded ||
+    dataBase64.length % 4 !== 0 ||
+    !/^[A-Za-z0-9+/]*={0,2}$/.test(dataBase64)
+  ) {
+    throw new Error('skill archive base64 is malformed or exceeds the quarantine cap')
+  }
+  const bytes = Buffer.from(dataBase64, 'base64')
+  if (
+    bytes.length === 0 ||
+    bytes.length > MAX_SKILL_QUARANTINE_ARCHIVE_BYTES ||
+    bytes.toString('base64') !== dataBase64
+  ) {
+    throw new Error('skill archive base64 is non-canonical or exceeds the quarantine cap')
+  }
+  return bytes
+}
 
 const noTransport = async (): Promise<never> => {
   throw new Error('no science engine transport wired: callScienceTool was not provided')
+}
+
+export type NotebookInterpreterResolution =
+  | { ok: true; interpreterPath: string }
+  | { ok: false; reason: string }
+
+/**
+ * Pick the least-surprising request from an observation-only discovery report.
+ *
+ * A Desktop candidate is not an admission verdict: the SessionActor remains
+ * the only component that opens, pins, hashes, probes, and executes it after
+ * permission.  On macOS and Linux, though, a PATH-preferred Homebrew/venv
+ * Python is predictably rejected by the actor's immutable-executable policy.
+ * Prefer the OS-owned system Python when discovery found it, so an ordinary
+ * notebook has a usable, still actor-gated baseline instead of unnecessarily
+ * selecting a user-writable binary first.  This is deliberately a narrow
+ * preference, not a recreation of the Rust protection check in TypeScript.
+ *
+ * A signed app-managed runtime remains a separate product capability.  Until
+ * it exists, this function must not describe a user-owned runtime as trusted
+ * or try a rejected candidate behind the user's back.
+ */
+export function selectNotebookInterpreter(
+  interpreters: readonly { interpreterPath: string }[],
+  platform: NodeJS.Platform = process.platform,
+): { interpreterPath: string } | undefined {
+  if (platform === 'darwin') {
+    const commandLineToolsRuntime = interpreters.find((interpreter) =>
+      /^\/Library\/Developer\/CommandLineTools\/Library\/Frameworks\/Python3\.framework\/Versions\/[^/]+\/Resources\/Python\.app\/Contents\/MacOS\/Python$/.test(
+        interpreter.interpreterPath,
+      ),
+    )
+    if (commandLineToolsRuntime) return commandLineToolsRuntime
+  }
+  const protectedSystemPaths =
+    platform === 'darwin' || platform === 'linux'
+      ? ['/usr/bin/python3', '/usr/bin/python']
+      : []
+  for (const path of protectedSystemPaths) {
+    const candidate = interpreters.find((interpreter) => interpreter.interpreterPath === path)
+    if (candidate) return candidate
+  }
+  return interpreters[0]
+}
+
+/**
+ * Select an observation-only, absolute candidate for the SessionActor.
+ *
+ * Discovery is deliberately not a readiness probe: executing `--version`
+ * before approval would move authority back into Desktop. The actor receives
+ * the pinned path and decides, after permission, whether it is a valid Python
+ * kernel. `runnable` must therefore not be used as a precondition here.
+ */
+export async function resolveNotebookInterpreter(
+  environment: Pick<EnvironmentService, 'discover'> | null | undefined,
+): Promise<NotebookInterpreterResolution> {
+  if (!environment) {
+    return {
+      ok: false,
+      reason:
+        'no runtime root configured for this process — cannot name the interpreter ' +
+        'this cell would run on, so nothing was executed',
+    }
+  }
+  const report = await environment.discover('python')
+  const candidate = selectNotebookInterpreter(report.interpreters)
+  if (!candidate) {
+    return {
+      ok: false,
+      reason:
+        `no absolute Python interpreter candidate was discovered on this machine ` +
+        `(pinned=0 unpinned=${report.unpinned.length}). ` +
+        'Add a Python interpreter in Settings, install python3, or check PATH.',
+    }
+  }
+  return { ok: true, interpreterPath: candidate.interpreterPath }
 }
 
 export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIpcDeps): void {
@@ -151,30 +279,10 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
       approvalTimeoutMs: ENGINE_APPROVAL_TIMEOUT_MS,
       // Resolves lazily at execute time (`environment` is declared further
       // down this function; by the time a cell runs, it is initialised). The
-      // first runnable Python is taken in DISCOVERY order, which is
-      // deterministic: manual settings entries, then PATH, then well-known
-      // install dirs — so a user's explicit choice wins over a system default.
-      resolveInterpreter: async () => {
-        if (!environment) {
-          return {
-            ok: false as const,
-            reason:
-              'no runtime root configured for this process — cannot name the interpreter ' +
-              'this cell would run on, so nothing was executed',
-          }
-        }
-        const report = await environment.discover('python')
-        const usable = report.interpreters.find((i) => i.runnable)
-        if (!usable) {
-          return {
-            ok: false as const,
-            reason:
-              'no runnable Python interpreter was discovered on this machine — ' +
-              'add one in Settings or install python3, then retry',
-          }
-        }
-        return { ok: true as const, interpreterPath: usable.interpreterPath }
-      },
+      // Discovery order is deterministic: manual settings entries, PATH, then
+      // well-known install dirs. The selected absolute path is only a request;
+      // SessionActor probes and admits it after approval.
+      resolveInterpreter: () => resolveNotebookInterpreter(environment),
     })
 
   safeHandle(ipcMain, 'acp:call', async (_event, toolName: unknown, args: unknown) => {
@@ -187,6 +295,14 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
       return { _lumenError: true, message: 'acp:call requires a non-empty tool name' }
     }
     try {
+      const method = resolveScienceMethod(toolName)
+      if (!isGenericRendererScienceMethod(method.name)) {
+        return {
+          _lumenError: true,
+          message:
+            `${method.name} requires a sender-bound Desktop IPC route; generic acp:call cannot carry trusted identity`,
+        }
+      }
       return await callTool(toolName, (args as Record<string, unknown>) ?? {})
     } catch (e: unknown) {
       return { _lumenError: true, message: (e as Error).message || String(e) }
@@ -203,11 +319,23 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
 
   safeHandle(ipcMain, 'app:get-lumen-hash', async () => getLumenBinaryHash())
 
-  safeHandle(ipcMain, 'files:preview-by-artifact', async (_event, payload: unknown) => {
+  safeHandle(ipcMain, 'files:preview-by-artifact', async (event, payload: unknown) => {
     const req = (payload ?? {}) as {
       artifactId?: string
       expectedSha256?: string
       mimeType?: string
+      // Renderer may try to spoof ownership — ignore entirely.
+      ownerId?: unknown
+      projectId?: unknown
+    }
+    const identity = trySenderTrustedContext(event)
+    if (!identity.ok) {
+      return {
+        access: {
+          ok: false,
+          reason: identity.reason,
+        },
+      }
     }
     return loadArtifactPreview(
       {
@@ -216,10 +344,11 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
         mimeType: req.mimeType,
       },
       { store: previewStore },
+      identity.trusted,
     )
   })
 
-  safeHandle(ipcMain, 'files:bind-session', async (_event, payload: unknown) => {
+  safeHandle(ipcMain, 'files:bind-session', async (event, payload: unknown) => {
     const p = (payload ?? {}) as {
       ownerId?: string
       projectId?: string
@@ -229,9 +358,17 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     if (!assertMembership) {
       return { ok: false, reason: 'no membership asserter configured — fail closed' }
     }
+    const senderId = senderIdFromEvent(event)
+    if (senderId === null) {
+      return { ok: false, reason: 'bind requires a real IPC sender identity' }
+    }
     const bound = await bindTrustedSession(
       { ownerId: p.ownerId ?? '', projectId: p.projectId ?? '' },
-      { assertMembership },
+      {
+        assertMembership,
+        senderId,
+        sender: senderHandleFromEvent(event),
+      },
     )
     if (!bound.ok) return bound
 
@@ -239,6 +376,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     if (deps.listArtifacts && p.runId && 'put' in previewStore) {
       try {
         const items = await deps.listArtifacts({
+          ownerId: bound.ownerId,
           projectId: bound.projectId,
           runId: p.runId,
         })
@@ -266,8 +404,13 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     }
   })
 
-  safeHandle(ipcMain, 'files:unbind-session', async () => {
-    unbindTrustedSession()
+  safeHandle(ipcMain, 'files:unbind-session', async (event) => {
+    const senderId = senderIdFromEvent(event)
+    // Only clear this sender — never wipe every window's binding.
+    if (senderId === null) {
+      return { ok: false, reason: 'unbind requires a real IPC sender identity' }
+    }
+    unbindTrustedSession(senderId)
     return { ok: true, cleared: true }
   })
 
@@ -342,16 +485,21 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     }
   })
 
-  safeHandle(ipcMain, 'files:update-question', async (_event, payload: unknown) => {
-    const p = (payload ?? {}) as { researchQuestion?: string }
+  safeHandle(ipcMain, 'files:update-question', async (event, payload: unknown) => {
+    const p = (payload ?? {}) as {
+      researchQuestion?: string
+      ownerId?: unknown
+      projectId?: unknown
+    }
     const question = (p.researchQuestion ?? '').trim()
     if (!question) {
       return { ok: false, reason: 'a research question cannot be empty' }
     }
-    const bound = getTrustedPreviewContext()
-    if (!bound) {
-      return { ok: false, reason: 'no trusted session — open a project before editing its question' }
+    const identity = trySenderTrustedContext(event)
+    if (!identity.ok) {
+      return { ok: false, reason: identity.reason }
     }
+    const bound = identity.trusted
     // The question is part of the durable record, so refining it is a record
     // MUTATION: SessionActor route, permission prompt, idempotent operation
     // id. The alternative — keeping edits in renderer state — is how the
@@ -376,7 +524,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
    * Open workspace: catalog lookup → membership bind → artifact seed.
    * Single product action for renderer (Question/Plan shell entry).
    */
-  safeHandle(ipcMain, 'files:open-ui-project', async (_event, payload: unknown) => {
+  safeHandle(ipcMain, 'files:open-ui-project', async (event, payload: unknown) => {
     if (!deps.projectCatalog) {
       return { ok: false, reason: 'project catalog not configured' }
     }
@@ -390,9 +538,17 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     if (!assertMembership) {
       return { ok: false, reason: 'no membership asserter configured — fail closed' }
     }
+    const senderId = senderIdFromEvent(event)
+    if (senderId === null) {
+      return { ok: false, reason: 'open-ui-project requires a real IPC sender identity' }
+    }
     const bound = await bindTrustedSession(
       { ownerId, projectId: project.id },
-      { assertMembership },
+      {
+        assertMembership,
+        senderId,
+        sender: senderHandleFromEvent(event),
+      },
     )
     if (!bound.ok) return bound
 
@@ -402,6 +558,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     if (deps.listArtifacts && 'put' in previewStore) {
       try {
         const items = await deps.listArtifacts({
+          ownerId: bound.ownerId,
           projectId: bound.projectId,
           runId,
         })
@@ -423,6 +580,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
       const bundle = (await callTool('project_get', {
         storeRoot: SCIENCE_STORE_DIR,
         projectId: bound.projectId,
+        ownerId: bound.ownerId,
       })) as { project?: { research_question?: string } }
       researchQuestion = bundle?.project?.research_question
     } catch {
@@ -454,12 +612,22 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
    * The `authority: 'ui-local'` is the honest label, and the UI says "Remove
    * from list" rather than "Delete" so the two are not confused.
    */
-  safeHandle(ipcMain, 'files:delete-ui-project', async (_event, payload: unknown) => {
+  safeHandle(ipcMain, 'files:delete-ui-project', async (event, payload: unknown) => {
     if (!deps.projectCatalog) {
       return { ok: false, reason: 'project catalog not configured' }
     }
     const p = (payload ?? {}) as { projectId?: string }
-    const ok = deps.projectCatalog.delete(p.projectId ?? '')
+    const projectId = p.projectId ?? ''
+    const ok = deps.projectCatalog.delete(projectId)
+    // Remove-from-list only clears THIS sender if it is bound to the removed
+    // project — never a process-wide identity wipe.
+    const senderId = senderIdFromEvent(event)
+    if (ok && senderId !== null) {
+      const bound = getTrustedPreviewContextForSender(senderId)
+      if (bound?.projectId === projectId) {
+        unbindTrustedSession(senderId)
+      }
+    }
     return {
       ok,
       reason: ok ? undefined : 'no such project in this list',
@@ -479,28 +647,33 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     return notebook.dryRun(req)
   })
 
-  safeHandle(ipcMain, 'notebook:execute-cell', async (_event, payload: unknown) => {
+  safeHandle(ipcMain, 'notebook:execute-cell', async (event, payload: unknown) => {
     const req = normalizeCellRequest(payload)
-    const out = await notebook.execute(req)
+    const identity = trySenderTrustedContext(event)
+    const trusted = identity.ok ? identity.trusted : null
+    const out = await notebook.execute(req, trusted)
 
     // Register the run's committed artifacts for preview and review.
     //
-    // This is the seeding that `artifact_list` was supposed to provide and
-    // structurally cannot (Go MCP tool; this bridge speaks Rust ACP) — which
-    // left the preview store permanently empty, the Evidence tab inert, and
-    // every review submission fail-closed on a store miss. The workflow report
-    // carries the same facts from a better source: the engine's own commit
-    // records, hashed by the executor rather than trusted from the cell.
+    // Workflow outputs use the executor's commit store, not ScienceStore's
+    // run-artifact registry served by `artifact_list`. Seed them directly from
+    // the engine's commit report: those are the authoritative hashes and paths
+    // for this just-completed workflow.
     //
     // Artifact ids are the content hashes themselves. Content addressing means
     // a re-run that produces identical output re-seeds the same id — no
     // duplicates, and the id a user quotes in a review IS the hash the review
     // verifies.
-    const bound = getTrustedPreviewContext()
+    const bound = trusted
     const result = (out as { ok?: boolean; result?: Record<string, unknown> })?.result
+    const sourceRunId =
+      result?.state === 'succeeded' &&
+      typeof result.runId === 'string' &&
+      /^[A-Za-z0-9_-]{1,128}$/.test(result.runId)
+        ? result.runId
+        : undefined
     let artifactsSeeded = 0
     if ((out as { ok?: boolean })?.ok && bound && deps.workspaceRoot && result && previewStore.put) {
-      const runId = typeof result.runId === 'string' ? result.runId : ''
       const commits = Array.isArray(result.commits)
         ? (result.commits as {
             stepId?: string
@@ -509,7 +682,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
           }[])
         : []
       for (const commit of commits) {
-        if (!runId || !commit.stepId || !commit.committedByAttempt) continue
+        if (!sourceRunId || !commit.stepId || !commit.committedByAttempt) continue
         for (const [rel, sha256] of Object.entries(commit.outputManifest ?? {})) {
           if (!/^[0-9a-f]{64}$/.test(sha256)) continue
           previewStore.put!(sha256, {
@@ -519,7 +692,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
               deps.workspaceRoot,
               SCIENCE_STORE_DIR,
               'workflow-outputs',
-              runId,
+              sourceRunId,
               commit.stepId,
               commit.committedByAttempt,
               rel,
@@ -527,12 +700,13 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
             sha256,
             ownerId: bound.ownerId,
             projectId: bound.projectId,
+            runId: sourceRunId,
           })
           artifactsSeeded += 1
         }
       }
     }
-    return { ...(out as Record<string, unknown>), artifactsSeeded }
+    return { ...(out as Record<string, unknown>), artifactsSeeded, sourceRunId }
   })
 
   safeHandle(ipcMain, 'notebook:history', async () => ({
@@ -540,7 +714,10 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     authority: 'ui-history-only',
   }))
 
-  safeHandle(ipcMain, 'notebook:export-ipynb', async () => notebook.exportIpynb())
+  safeHandle(ipcMain, 'notebook:export-ipynb', async (event) => {
+    const identity = trySenderTrustedContext(event)
+    return notebook.exportIpynb(identity.ok ? identity.trusted : null)
+  })
 
   // ── OSF-4 Reviewer (plan/submit; no fix-loop authority) ──────
   const review =
@@ -558,9 +735,10 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     return review.plan(req)
   })
 
-  safeHandle(ipcMain, 'review:submit', async (_event, payload: unknown) => {
+  safeHandle(ipcMain, 'review:submit', async (event, payload: unknown) => {
     const req = (payload ?? {}) as ReviewRequest
-    return review.submit(req)
+    const identity = trySenderTrustedContext(event)
+    return review.submit(req, identity.ok ? identity.trusted : null)
   })
 
   safeHandle(ipcMain, 'review:history', async () => ({
@@ -573,7 +751,10 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     authority: 'in-memory-projection-only',
   }))
 
-  safeHandle(ipcMain, 'review:export-dossier', async () => review.exportDossier())
+  safeHandle(ipcMain, 'review:export-dossier', async (event) => {
+    const identity = trySenderTrustedContext(event)
+    return review.exportDossier(identity.ok ? identity.trusted : null)
+  })
 
   // ── OSF-5 Skills (quarantine import; no bulk auto-approve) ───
   const skills =
@@ -582,22 +763,133 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
       registryPath:
         deps.skillsRegistryPath ||
         path.resolve(process.cwd(), '../../packs/science/skills/registry.json'),
+      ecosystemCatalogPath:
+        deps.skillsEcosystemCatalogPath,
+      ecosystemCatalogPaths:
+        deps.skillsEcosystemCatalogPaths ?? [
+          path.resolve(
+            process.cwd(),
+            '../../packs/science/skills/ecosystem/scp-catalog.json',
+          ),
+          path.resolve(
+            process.cwd(),
+            '../../packs/science/skills/ecosystem/biomni-tool-catalog.json',
+          ),
+          path.resolve(
+            process.cwd(),
+            '../../packs/science/skills/ecosystem/biomni-resource-catalog.json',
+          ),
+        ],
+      admissionPath: deps.skillsAdmissionPath,
     })
 
+  const quarantineSkillBundle = async (
+    event: unknown,
+    payload: unknown,
+    items: { subPath: string; replaceId?: string }[],
+  ): Promise<{ operationId: string; runId: string }> => {
+    // Sender-scoped only — never process-global identity.
+    const trusted = requireSenderTrustedContext(event)
+    if (
+      items.length === 0 ||
+      items.some((item) => typeof item.subPath !== 'string')
+    ) {
+      throw new Error('skill quarantine requires at least one explicit previewed subPath')
+    }
+    if (items.some((item) => item.replaceId !== undefined)) {
+      throw new Error('quarantine cannot replace or auto-enable an installed skill')
+    }
+    // Renderer payload may not supply owner/project/session/workspace/path.
+    const request = (payload ?? {}) as {
+      dataBase64?: unknown
+      ownerId?: unknown
+      projectId?: unknown
+      sessionId?: unknown
+      workspaceRoot?: unknown
+      storeRoot?: unknown
+      path?: unknown
+    }
+    if (
+      request.ownerId !== undefined ||
+      request.projectId !== undefined ||
+      request.sessionId !== undefined ||
+      request.workspaceRoot !== undefined ||
+      request.storeRoot !== undefined ||
+      request.path !== undefined
+    ) {
+      throw new Error(
+        'renderer may not supply ownerId/projectId/sessionId/workspace/storeRoot/path for skill quarantine',
+      )
+    }
+    const bytes = decodeSkillQuarantineArchive(request.dataBase64)
+    const archiveSha256 = createHash('sha256').update(bytes).digest('hex')
+    const selectedSubPaths = items.map((item) => item.subPath).sort()
+    const operationId = `skillq-${createHash('sha256')
+      .update(
+        JSON.stringify({
+          ownerId: trusted.ownerId,
+          projectId: trusted.projectId,
+          archiveSha256,
+          selectedSubPaths,
+        }),
+      )
+      .digest('hex')
+      .slice(0, 40)}`
+    const result = (await callTool('skill_quarantine_import', {
+      ownerId: trusted.ownerId,
+      projectId: trusted.projectId,
+      storeRoot: SCIENCE_STORE_DIR,
+      operationId,
+      archiveBase64: bytes.toString('base64'),
+      archiveSha256,
+      archiveBytes: bytes.length,
+      items: selectedSubPaths.map((subPath) => ({ subPath })),
+      approvalTimeoutMs: ENGINE_APPROVAL_TIMEOUT_MS,
+    })) as {
+      operationId?: string
+      run?: { context?: { run_id?: string } }
+    }
+    const runId = result.run?.context?.run_id
+    if (result.operationId !== operationId || !runId) {
+      throw new Error('Rust skill quarantine returned an invalid durable result')
+    }
+    return { operationId, runId }
+  }
+
+  safeHandle(ipcMain, 'settings:import-skill-zip', async (event, payload: unknown) => {
+    const request = (payload ?? {}) as { subPath?: string; replaceId?: string }
+    if (typeof request.subPath !== 'string') {
+      throw new Error('preview and select the skill root before quarantine import')
+    }
+    const result = await quarantineSkillBundle(event, payload, [
+      { subPath: request.subPath, replaceId: request.replaceId },
+    ])
+    return {
+      status: 'quarantined',
+      id: result.runId,
+      operationId: result.operationId,
+      skills: [],
+    }
+  })
+
+  safeHandle(ipcMain, 'settings:import-skill-zip-batch', async (event, payload: unknown) => {
+    const request = (payload ?? {}) as {
+      items?: { subPath: string; replaceId?: string }[]
+    }
+    const items = request.items ?? []
+    const result = await quarantineSkillBundle(event, payload, items)
+    return {
+      results: items.map((item) => ({
+        subPath: item.subPath,
+        status: 'quarantined',
+        id: result.runId,
+      })),
+      operationId: result.operationId,
+      skills: [],
+    }
+  })
+
   safeHandle(ipcMain, 'skills:list', async () => skills.listInventory())
-
-  safeHandle(ipcMain, 'skills:import', async (_event, payload: unknown) => {
-    return skills.import((payload ?? {}) as SkillImportRequest)
-  })
-
-  safeHandle(ipcMain, 'skills:admit', async (_event, payload: unknown) => {
-    return skills.admit((payload ?? {}) as SkillAdmitRequest)
-  })
-
-  safeHandle(ipcMain, 'skills:reject', async (_event, payload: unknown) => {
-    const p = (payload ?? {}) as { skillId?: string; reason?: string }
-    return skills.reject(p.skillId ?? '', p.reason ?? 'rejected')
-  })
 
   safeHandle(ipcMain, 'skills:quarantine-list', async () => ({
     skills: skills.quarantineList(),
@@ -606,6 +898,96 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
   safeHandle(ipcMain, 'skills:bulk-admit', async (_event, payload: unknown) => {
     const p = (payload ?? {}) as { skillIds?: string[] }
     return skills.bulkAdmit(p.skillIds ?? [])
+  })
+
+  /**
+   * Admitted ecosystem capability entry (currently Biomni query_uniprot only).
+   * Identity from sender binding only. connector_id is fixed server-side by
+   * capability_run → uniprot; renderer cannot choose a connector.
+   */
+  safeHandle(ipcMain, 'skills:run-capability', async (event, payload: unknown) => {
+    const identity = trySenderTrustedContext(event)
+    if (!identity.ok) {
+      return { ok: false, reason: identity.reason }
+    }
+    const request = (payload ?? {}) as {
+      capabilityId?: unknown
+      prompt?: unknown
+      maxResults?: unknown
+      fixturePaths?: unknown
+      ownerId?: unknown
+      projectId?: unknown
+      sessionId?: unknown
+      connectorId?: unknown
+      endpoint?: unknown
+      url?: unknown
+    }
+    if (
+      request.ownerId !== undefined ||
+      request.projectId !== undefined ||
+      request.sessionId !== undefined ||
+      request.connectorId !== undefined ||
+      request.endpoint !== undefined ||
+      request.url !== undefined ||
+      request.fixturePaths !== undefined
+    ) {
+      return {
+        ok: false,
+        reason:
+          'renderer may not supply ownerId/projectId/sessionId/connectorId/endpoint/url/fixturePaths for capability run',
+      }
+    }
+    if (request.capabilityId !== 'ecosystem/biomni/query_uniprot') {
+      return {
+        ok: false,
+        reason:
+          'capability is not admitted for execution (Biomni catalog: 1 of 224 executable; rest quarantined)',
+      }
+    }
+    const prompt = typeof request.prompt === 'string' ? request.prompt : ''
+    const maxResults = request.maxResults === undefined ? 5 : request.maxResults
+    if (
+      typeof maxResults !== 'number' ||
+      !Number.isInteger(maxResults) ||
+      maxResults < 1 ||
+      maxResults > 50
+    ) {
+      return {
+        ok: false,
+        reason: 'maxResults must be an integer in 1..=50',
+      }
+    }
+    if (!deps.biomniUniprotFixtureBase64) {
+      return { ok: false, reason: 'packaged UniProt offline fixture is unavailable' }
+    }
+    // Engine session id is the ACP session, not a renderer-forged identity.
+    // Desktop callScienceTool must bind session; owner/project come from sender.
+    try {
+      const raw = await callTool('capability_run', {
+        // sessionId filled by the ACP bridge from the live engine session when
+        // the bridge injects it; if the tool surface requires it in-args, the
+        // bridge is responsible. We never take it from the renderer payload.
+        projectId: identity.trusted.projectId,
+        ownerId: identity.trusted.ownerId,
+        storeRoot: SCIENCE_STORE_DIR,
+        artifactRoot: path.join(SCIENCE_STORE_DIR, 'runs'),
+        capabilityId: 'ecosystem/biomni/query_uniprot',
+        input: { prompt, maxResults },
+        fixtureDataBase64: [deps.biomniUniprotFixtureBase64],
+        approvalTimeoutMs: ENGINE_APPROVAL_TIMEOUT_MS,
+      })
+      return {
+        ok: true,
+        result: raw,
+        authority: 'SessionActor/capability_run',
+        source: 'Biomni',
+        executor: 'Rust Lumen',
+        dataSource: 'UniProt',
+        mode: 'fixture/offline',
+      }
+    } catch (e: unknown) {
+      return { ok: false, reason: (e as Error).message || String(e) }
+    }
   })
 
   // ── OSF-6 Remote Compute (dry-run plan only) ──────────────────
@@ -618,12 +1000,20 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
       },
     })
 
-  safeHandle(ipcMain, 'compute:plan', async (_event, payload: unknown) => {
-    return compute.plan((payload ?? {}) as ComputePlanRequest)
+  safeHandle(ipcMain, 'compute:plan', async (event, payload: unknown) => {
+    const identity = trySenderTrustedContext(event)
+    return compute.plan(
+      (payload ?? {}) as ComputePlanRequest,
+      identity.ok ? identity.trusted : null,
+    )
   })
 
-  safeHandle(ipcMain, 'compute:submit-plan', async (_event, payload: unknown) => {
-    return compute.submitPlan((payload ?? {}) as ComputePlanRequest)
+  safeHandle(ipcMain, 'compute:submit-plan', async (event, payload: unknown) => {
+    const identity = trySenderTrustedContext(event)
+    return compute.submitPlan(
+      (payload ?? {}) as ComputePlanRequest,
+      identity.ok ? identity.trusted : null,
+    )
   })
 
   safeHandle(ipcMain, 'compute:execute-live', async (_event, payload: unknown) => {
@@ -719,7 +1109,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
       interpreterPath: typeof p.interpreterPath === 'string' ? p.interpreterPath : '',
       packageLockPath: typeof p.packageLockPath === 'string' ? p.packageLockPath : undefined,
     })
-    return { ok: true, ...result, authority: 'observation-only' }
+    return { ok: true, ...result, authority: 'SessionActor-required' }
   })
 
   safeHandle(ipcMain, 'environment:request-admission', async (_event, payload: unknown) => {
@@ -727,6 +1117,8 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
     const p = (payload ?? {}) as Partial<AdmissionAsk> & { kind?: string }
     const outcome = await environment.requestAdmission({
       sessionId: typeof p.sessionId === 'string' ? p.sessionId : '',
+      ownerId: typeof p.ownerId === 'string' ? p.ownerId : '',
+      projectId: typeof p.projectId === 'string' ? p.projectId : '',
       storeRoot: typeof p.storeRoot === 'string' ? p.storeRoot : '',
       kernelId: typeof p.kernelId === 'string' ? p.kernelId : '',
       kind: normalizeKernelKind(p.kind),
@@ -734,6 +1126,7 @@ export function registerScienceIpcHandlers(ipcMain: IpcMainLike, deps: ScienceIp
       packageLockPath: typeof p.packageLockPath === 'string' ? p.packageLockPath : undefined,
       allowedRoot: typeof p.allowedRoot === 'string' ? p.allowedRoot : undefined,
       probeTimeoutMs: typeof p.probeTimeoutMs === 'number' ? p.probeTimeoutMs : undefined,
+      approvalTimeoutMs: typeof p.approvalTimeoutMs === 'number' ? p.approvalTimeoutMs : undefined,
     })
     return { ok: true, ...outcome, authority: 'SessionActor/kernel_admission' }
   })

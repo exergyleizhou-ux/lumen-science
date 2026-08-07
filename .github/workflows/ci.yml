@@ -37,23 +37,37 @@ jobs:
       - name: Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      # M1 single base: expert gate runs against the pinned Lumen tuple.
+      - name: Read pinned Lumen tuple from admission lock
+        working-directory: ${{ github.workspace }}
+        run: |
+          PIN="$(python3 -c "import json; print(json.load(open('docs/science/5.0/core-v0.1.251-admission.lock.json'))['comparison']['lumen_head'])")"
+          echo "LUMEN_PIN=$PIN" >> "$GITHUB_ENV"
+
+      - name: Checkout pinned Lumen (single Rust base)
+        working-directory: ${{ github.workspace }}
+        run: |
+          git clone --quiet --filter=blob:none https://github.com/exergyleizhou-ux/lumen.git .tmp/lumen-pin
+          git -C .tmp/lumen-pin fetch --quiet --depth 1 origin "$LUMEN_PIN"
+          git -C .tmp/lumen-pin checkout --quiet "$LUMEN_PIN"
+
       - name: Cache cargo
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            agent/target
-          key: ${{ runner.os }}-cargo-expert-${{ hashFiles('agent/Cargo.lock') }}
+            .tmp/lumen-pin/agent/target
+          key: ${{ runner.os }}-cargo-expert-${{ hashFiles('.tmp/lumen-pin/agent/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-expert-
 
       - name: cargo check xai-grok-shell
-        working-directory: agent
+        working-directory: .tmp/lumen-pin/agent
         run: cargo check -p xai-grok-shell
 
       - name: Expert unit gate
-        working-directory: agent
+        working-directory: .tmp/lumen-pin/agent
         run: |
           set -euo pipefail
           cargo test -p xai-grok-shell --lib expert_consultant_tools -- --test-threads=1

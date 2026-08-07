@@ -25,7 +25,7 @@ function check(label: string, condition: boolean, detail = ''): void {
 
 console.log('test-describe-open')
 
-const STRUCTURAL =
+const OLD_STRUCTURAL_ERROR =
   "science method 'artifact_list' rejected by registry: Go MCP tool, not a Rust ACP " +
   'extension method. The Rust engine dispatches only x.ai/science/* ' +
   '(extensions/science.rs); this call site needs the Go MCP client, not this bridge.'
@@ -48,12 +48,11 @@ const STRUCTURAL =
 }
 
 {
-  const out = describeOpen({ seeded: 0, seedError: STRUCTURAL })
-  check('a structural absence is expected, not an alarm', out.expected)
+  const out = describeOpen({ seeded: 0, seedError: OLD_STRUCTURAL_ERROR })
+  check('the former structural absence is now an unexpected mismatch', !out.expected)
   check('the headline is a plain sentence', !out.headline.includes('artifact_list'), out.headline)
   check('the headline names no source file', !out.headline.includes('.rs'), out.headline)
-  // The whole point: quieter, NOT quieter by deletion.
-  check('the engine text is kept verbatim', out.detail === STRUCTURAL)
+  check('the engine text is kept verbatim', out.detail === OLD_STRUCTURAL_ERROR)
 }
 
 {

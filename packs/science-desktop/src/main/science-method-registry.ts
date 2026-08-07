@@ -7,7 +7,7 @@
  * names (`project_assert_membership`, `artifact_resolve`, `compute_plan`) look
  * like transport problems for as long as the transport was broken.
  *
- * The real science surface is the 24 `x.ai/science/*` ACP extension methods
+ * The real science surface is the `x.ai/science/*` ACP extension methods
  * dispatched by
  * agent/crates/codegen/xai-grok-shell/src/extensions/science.rs:109-139.
  * This module is the single place that decides whether a name may go on the
@@ -35,7 +35,7 @@ export const SCIENCE_METHOD_NAMESPACE = 'x.ai/science/'
 export const ACP_EXT_WIRE_PREFIX = '_'
 
 /**
- * The 24 methods the Rust engine dispatches. Order and spelling mirror
+ * The methods the Rust engine dispatches. Order and spelling mirror
  * extensions/science.rs; a name absent from that match arm must be absent
  * here, or the desktop would claim a capability the engine does not have.
  */
@@ -43,9 +43,15 @@ export const SCIENCE_METHODS = [
   'run_csv',
   'import_preview',
   'connector_fetch',
+  // Admitted ecosystem capability entry (Biomni UniProt first). Maps to
+  // connector_fetch with a server-fixed connector_id; not a second authority.
+  'capability_run',
+  'evidence_dossier',
   'ssh_scp_fixture',
   'goal_host_verify',
   'seq_analyze',
+  'skill_quarantine_import',
+  'artifact_list',
   'project_create',
   'project_get',
   // Implemented in LS5-K18. It was on the invented list for as long as the
@@ -77,6 +83,12 @@ export const SCIENCE_METHODS = [
 export type ScienceMethodName = (typeof SCIENCE_METHODS)[number]
 
 const ALLOWED = new Set<string>(SCIENCE_METHODS)
+const SENDER_BOUND_METHODS = new Set<ScienceMethodName>([
+  'skill_quarantine_import',
+  // Capability run must use Desktop sender-bound IPC so renderer cannot choose
+  // owner/project/connector_id. Generic acp:call is rejected for this method.
+  'capability_run',
+])
 
 /**
  * Names the desktop sends that exist in NEITHER engine — not in the Rust ACP
@@ -102,7 +114,6 @@ const NONEXISTENT_METHODS: Record<string, string> = {
  * rejected here with the distinction spelled out.
  */
 const GO_MCP_TOOLS: Record<string, string> = {
-  artifact_list: 'Go MCP tool, not a Rust ACP extension method',
   notebook_execute: 'Go MCP tool, not a Rust ACP extension method',
   start_review: 'Go MCP tool, not a Rust ACP extension method',
 }
@@ -135,6 +146,15 @@ function normalize(name: string): string {
 
 export function isScienceMethod(name: string): name is ScienceMethodName {
   return ALLOWED.has(normalize(name))
+}
+
+/**
+ * Whether renderer code may invoke this method through the generic ACP proxy.
+ * Identity-bearing routes must instead use their sender-bound main-process
+ * adapter, which derives owner/project rather than accepting renderer fields.
+ */
+export function isGenericRendererScienceMethod(name: unknown): boolean {
+  return !SENDER_BOUND_METHODS.has(resolveScienceMethod(name).name)
 }
 
 export type ResolvedScienceMethod = {

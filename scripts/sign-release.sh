@@ -2,7 +2,10 @@
 # Detached GPG signature over release SHA256SUMS (integrity, not Apple notarization).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${1:-$(cat "$ROOT/VERSION")}"
+# These sums are produced by packs/science (the frozen Go CLI/MCP line), so the
+# default signature/output version must come from that component, never the
+# root Rust Core VERSION.
+VERSION="${1:-$(tr -d '[:space:]' < "$ROOT/packs/science/VERSION")}"
 SUMS_DIR="$ROOT/packs/science/dist/science-release"
 OUT_DIR="$ROOT/outputs/release/${VERSION}"
 mkdir -p "$OUT_DIR"
