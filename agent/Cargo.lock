@@ -2656,32 +2656,11 @@ dependencies = [
 
 [[package]]
 name = "dirs"
-version = "5.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44c45a9d03d6676652bcb5e724c7e988de1acad23a711b5217ab9cbecbec2225"
-dependencies = [
- "dirs-sys 0.4.1",
-]
-
-[[package]]
-name = "dirs"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3e8aa94d75141228480295a7d0e7feb620b1a5ad9f12bc40be62411e38cce4e"
 dependencies = [
- "dirs-sys 0.5.0",
-]
-
-[[package]]
-name = "dirs-sys"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "520f05a5cbd335fae5a99ff7a6ab8627577660ee5cfd6a94a6a929b52ff0321c"
-dependencies = [
- "libc",
- "option-ext",
- "redox_users 0.4.6",
- "windows-sys 0.48.0",
+ "dirs-sys",
 ]
 
 [[package]]
@@ -2692,7 +2671,7 @@ checksum = "e01a3366d27ee9890022452ee61b2b63a67e6f13f58900b651ff5665f0bb1fab"
 dependencies = [
  "libc",
  "option-ext",
- "redox_users 0.5.2",
+ "redox_users",
  "windows-sys 0.61.2",
 ]
 
@@ -7983,7 +7962,7 @@ dependencies = [
  "axum",
  "chrono",
  "clap",
- "dirs 5.0.1",
+ "dirs",
  "env_logger",
  "ptyctl",
  "reqwest 0.12.24",
@@ -8302,17 +8281,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed2bf2547551a7053d6fdfafda3f938979645c44812fbfcda098faae3f1a362d"
 dependencies = [
  "bitflags 2.13.0",
-]
-
-[[package]]
-name = "redox_users"
-version = "0.4.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba009ff324d1fc1b900bd1fdb31564febe58a8ccc8a6fdbb93b543d33b13ca43"
-dependencies = [
- "getrandom 0.2.16",
- "libredox",
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -9461,7 +9429,7 @@ version = "3.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32824fab5e16e6c4d86dc1ba84489390419a39f97699852b66480bb87d297ed8"
 dependencies = [
- "dirs 6.0.0",
+ "dirs",
 ]
 
 [[package]]
@@ -12960,7 +12928,7 @@ dependencies = [
  "axum",
  "base64",
  "chrono",
- "dirs 5.0.1",
+ "dirs",
  "dunce",
  "filetime",
  "futures",
@@ -13027,7 +12995,7 @@ name = "xai-grok-agent"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "dirs 6.0.0",
+ "dirs",
  "dunce",
  "git2",
  "ignore",
@@ -13318,7 +13286,7 @@ dependencies = [
  "criterion",
  "crossterm",
  "derive_more 2.1.1",
- "dirs 5.0.1",
+ "dirs",
  "dunce",
  "enum_delegate",
  "flate2",
@@ -13477,7 +13445,7 @@ dependencies = [
  "base64",
  "crossterm",
  "dark-light",
- "dirs 5.0.1",
+ "dirs",
  "documented",
  "dunce",
  "image",
@@ -13534,7 +13502,7 @@ name = "xai-grok-plugin-marketplace"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "dirs 5.0.1",
+ "dirs",
  "dunce",
  "fs2",
  "git2",
@@ -13595,7 +13563,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "dirs 5.0.1",
+ "dirs",
  "dunce",
  "globset",
  "ignore",
@@ -13646,7 +13614,7 @@ dependencies = [
  "anyhow",
  "arboard",
  "base64",
- "dirs 6.0.0",
+ "dirs",
  "dunce",
  "image",
  "libc",
@@ -13687,7 +13655,7 @@ dependencies = [
  "clap",
  "criterion",
  "dashmap",
- "dirs 6.0.0",
+ "dirs",
  "dunce",
  "filetime",
  "flate2",
@@ -13882,7 +13850,7 @@ dependencies = [
  "axum",
  "bytes",
  "chrono",
- "dirs 5.0.1",
+ "dirs",
  "filetime",
  "futures-executor",
  "git2",
@@ -13961,7 +13929,7 @@ dependencies = [
  "command-fds",
  "crc32fast",
  "derive_more 2.1.1",
- "dirs 5.0.1",
+ "dirs",
  "dunce",
  "educe",
  "flate2",
@@ -14105,7 +14073,7 @@ dependencies = [
  "chrono",
  "clap",
  "dashmap",
- "dirs 6.0.0",
+ "dirs",
  "dunce",
  "fastrace",
  "filetime",
